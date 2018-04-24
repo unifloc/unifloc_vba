@@ -1,0 +1,471 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+'
+'
+' Класс для описания характеристик погружного двигателя (как ассинхронного, так и вентильного)
+'
+Option Explicit
+' параметры асинхронного двигателя номинальные
+Private p_Pnom_kW As Double        ' номиналная мощность двигателя
+Private p_Unom_V As Double         ' номинальное фазное напряжение работы двигателя
+Private p_Inom_A As Double         ' номинальный фазный ток, А
+Private p_Fnom_Hz As Double        ' номинальная частота вращения  магнитного поля статора, Гц
+Private p_Effnom_d As Double       ' номинальный КПД установки
+Private p_CosPhinom As Double      ' номинальный косинус фи (коэф мощности)
+Private p_Mnom_Nm As Double        ' номинальный момент развиваемый двигателем Нм
+Private p_Snom_d As Double         ' номинальное скольжение
+Private p_lambda_d As Double       ' отношение максимального момента к номинальному для АД
+Private p_Istart_A As Double       ' пусковой ток для двигателя
+' параметры работы асинхронного двигателя рабочие
+Private p_U_V As Double        ' рабочее фазной напряжение двигателя
+Private p_I_A As Double        ' рабочий фазный ток  двигателя
+Private p_S_d As Double        ' рабочее скольжение двигателя
+Private p_F0_Hz As Double      ' синхронная частота вращения поля (питающего напряжения)
+Private p_CosPhi As Double
+Private p_Eff_d As Double     ' КПД асинхронного двигателя
+Private p_Pel_kW As Double    ' электрическая мощность потребляемая при текущих параметрах работы
+Private p_Pm_kW As Double     ' мощность на валу при текущих параметрах работы
+Private p_M_Nm As Double   ' момент развиваемый при текущих параметрах
+' параметры холостого хода
+Private p_Ix_A As Double      ' ток холостого хода
+Private p_cosPhix_d As Double    ' коэф мощности при холостом ходе
+Private p_Phix_d As Double    ' коэф мощности при холостом ходе
+' параметры двигателя по схеме замещения
+Private p_R1  As Double     ' активное сопротивление обмотки статора для схемы замещения
+Private p_R2_ As Double     ' активное сопротивление обмотки ротока приведеное к обмотке статора
+Private p_xk  As Double     ' индуктивное сопротивление обмоток для режима короткого замыкания
+Private p_xi  As Double
+Private c1    As Double     ' коээфициент приведения Т образной схемы к Г образной
+' параметры из каталога, которые потенциально могут пригодится
+Private p_minDcas_mm As Double  ' минимальный диаметр скважины, мм
+Private p_minVliq_msec As Double '  минимально допустимая скорость жидкости для охлаждения, м/с
+Private p_NumSections As Integer      ' количество секций
+Private p_Legth_m  As Double      ' установочная длина, м  вместе с гидрозащитой
+Private p_HmesTop As Double                 ' глубина установки ЭЦН (по верхней части)
+Private p_M_kg  As Double         ' масса, кг
+Private p_Diam_mm As Double       ' диаметр насоса - габарит
+Private p_ID As Integer
+Private p_MotorName As String
+Private p_ManufacturerName As String
+Private p_PowerMotor_Wt As Double           ' Мощность потребляемая двигателем (электрическая)
+Private p_EffMotor_d As Double              ' КПД двигателя
+Private c_PCurve As New TInterpolation         ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
+Private c_TCurve As New TInterpolation         ' кривая распределения температуры флюида вдоль насоса
+ ' блок оценки качества данных
+ 'Public' LogMsg As New CLogger                ' логгер
+'публичное свойство для номинального момента двигателя
+Public Property Get Mnom_Nm() As Double
+    Mnom_Nm = p_Mnom_Nm    ' так скорее всего не сработает, так как момент не задается таблично
+    Mnom_Nm = Pnom_W / OmegaNoms_radsec
+End Property
+' максимальный момент двигателя
+Public Property Get Mmax_Nm() As Double
+' рассчитывается из перегрузочной способности
+    Mmax_Nm = Mnom_Nm * Lambda_d
+End Property
+' отношение максимального момента к номинальному
+Public Property Get Lambda_d() As Double
+    Lambda_d = p_lambda_d
+End Property
+Public Property Let Lambda_d(val As Double)
+    p_lambda_d = val
+End Property
+' номинальное фазное напряжение на двигателе
+Public Property Get Unom_phase_V() As Double
+    Unom_phase_V = p_Unom_V
+End Property
+Public Property Let Unom_phase_V(val As Double)
+    p_Unom_V = val
+End Property
+' номинальное линейное напряжение на двигателе
+Public Property Get Unom_lin_V() As Double
+    Unom_phase_V = p_Unom_V * (3 ^ 0.5)
+End Property
+Public Property Let Unom_lin_V(val As Double)
+    p_Unom_V = val / (3 ^ 0.5)
+End Property
+' фактическое фазное напряжение на двигателе
+Public Property Get Uphase_V() As Double
+    Uphase_V = p_U_V
+End Property
+Public Property Let Uphase_V(val As Double)
+    p_U_V = val
+End Property
+' фактическое фазное напряжение на двигателе
+Public Property Get Ulin_V() As Double
+    Ulin_V = p_U_V * (3 ^ 0.5)
+End Property
+Public Property Let Ulin_V(val As Double)
+    p_U_V = val / (3 ^ 0.5)
+End Property
+' номинальный ток (фазный)
+Public Property Get Inom_A() As Double
+   Inom_A = Pnom_W / Unom_lin_V / (3 ^ 0.5) / CosPhinom_d / Effnom_d
+  ' Inom_A = p_Inom_A
+End Property
+Public Property Let Inom_A(val As Double)
+    p_Inom_A = val
+End Property
+' номинальное скольжение на двигателе (при других номинальных параметрах)
+Public Property Get Snom_d() As Double
+    Snom_d = p_Snom_d
+End Property
+Public Property Let Snom_d(val As Double)
+    If val > 0 And val < 1 Then p_Snom_d = val
+End Property
+' номинальная мощность двигателя при номинальной частоте тока
+Public Property Get Pnom_W() As Double
+    Pnom_W = p_Pnom_kW * 1000
+End Property
+Public Property Get Pnom_kW() As Double
+    Pnom_kW = p_Pnom_kW
+End Property
+Public Property Let Pnom_kW(val As Double)
+    If val > 0 Then p_Pnom_kW = val
+End Property
+' потребляемая мощность электрическая двигателем
+Public Property Get Pel_kW() As Double
+     Pel_kW = p_Pel_kW
+End Property
+' потребляемая мощность электрическая двигателем
+Public Property Get Pm_kW() As Double
+     Pm_kW = p_Pm_kW
+End Property
+' загрузка двигателя при текущих параметрах работы
+Public Property Get Load_d() As Double
+' определяется как оношение текущей мощности к номинальной
+    Load_d = Pel_kW / (Pnom_kW / Effnom_d * fnom_Hz / f_Hz)
+    
+ ' здесь делаем линейную поправку на номинальную мощность двигателя в зависимости от частоты
+End Property
+' номинальный КПД двигателя
+Public Property Get Effnom_d() As Double
+    Effnom_d = p_Effnom_d
+End Property
+Public Property Let Effnom_d(val As Double)
+    If val > 0 And val <= 1 Then
+        p_Effnom_d = val
+    End If
+End Property
+' номинальный коэффициент мощности двигателя
+Public Property Get CosPhinom_d() As Double
+    CosPhinom_d = p_CosPhinom
+End Property
+Public Property Let CosPhinom_d(val As Double)
+    If val > 0 And val <= 1 Then
+        p_CosPhinom = val
+    End If
+End Property
+' номинальная скорость вращения поля статора
+Public Property Get nnom_obmin() As Double
+    nnom_obmin = fnom_Hz * 60
+End Property
+' номинальная скорость вращения ротора с учетом проскальзования
+Public Property Get nnoms_obmin() As Double
+    nnoms_obmin = fnoms_Hz * 60 '* (1 - p_Snom_d)
+End Property
+Public Property Get fnom_Hz() As Double
+    fnom_Hz = p_Fnom_Hz
+End Property
+Public Property Get fnoms_Hz() As Double
+    fnoms_Hz = p_Fnom_Hz * (1 - Snom_d)
+End Property
+Public Property Let fnom_Hz(val As Double)
+    p_Fnom_Hz = val
+End Property
+' фактическое проскальзование для текущего режима работы
+Public Property Get S_d() As Double
+    S_d = p_S_d
+End Property
+Public Property Let S_d(val As Double)
+    p_S_d = val
+    Call calc_ADGridin(val)
+End Property
+' частота вращения поля статора для двигателя. Равна частоте тока питающего двигатель
+Public Property Get f_Hz() As Double
+    f_Hz = p_F0_Hz
+End Property
+Public Property Let f_Hz(val As Double)
+    p_F0_Hz = val
+End Property
+Public Property Get n_obmin() As Double
+    n_obmin = f_Hz * 60
+End Property
+' частота вращения ротора с учетом проскальзования
+Public Property Get fs_Hz() As Double
+    fs_Hz = f_Hz * (1 - p_S_d)
+End Property
+' скорость вращения ротора с учетом проскальзования
+Public Property Get ns_obmin() As Double
+    ns_obmin = fs_Hz * 60
+End Property
+' синхронная угловая частота частота вращения при расчетном режиме
+Public Property Get Omega_radsec() As Double
+  Omega_radsec = f_Hz * (2 * const_Pi)   ' n_obmin / 9.55
+End Property
+' угловая частота вращения при расчетном режиме
+Public Property Get Omegas_radsec() As Double
+  Omegas_radsec = fs_Hz * (2 * const_Pi) ' n_obmin / 9.55 * (1 - p_S_d)
+End Property
+' номинальная частота вращения вала (с учетом проскальзования)
+Public Property Get OmegaNoms_radsec() As Double
+  OmegaNoms_radsec = fnoms_Hz * 2 * const_Pi ' nnoms_obmin / 9.55 * (1 - Snom_d)
+End Property
+' номинальная синхронная частота вращения вала
+Public Property Get OmegaNom_radsec() As Double
+  OmegaNom_radsec = fnom_Hz * 2 * const_Pi ' nnoms_obmin / 9.55
+End Property
+' свойства схемы замещения
+' параметры c коррекцией на реальные показатели работы
+' индуктивное сопротивление обмоток для режима короткого замыкания, при неподвижном роторе
+Public Property Get xk() As Double
+' сразу корректируем индуктивность обмотки на частоту
+    xk = p_xk * f_Hz / fnom_Hz
+End Property
+' активное сопротивление обмотки статора
+Public Property Get R1() As Double
+    R1 = p_R1
+End Property
+' активное сопротивление обмотки ротора приведенное к обмотке статора
+Public Property Get R2_() As Double
+    R2_ = p_R2_
+End Property
+' расчет  тока холостого хода при произвольном напряжении и частоте
+Public Property Get Ix_A() As Double
+    Dim UUn_fnf As Double
+    Dim Kn As Double
+    
+    UUn_fnf = Uphase_V / Unom_phase_V * fnom_Hz / f_Hz
+    
+    Kn = 1.2786 * UUn_fnf - 0.2689   ' поправка по Гридину для учета намагничивающего тока
+    
+    Ix_A = Kn * p_Ix_A * UUn_fnf
+    
+End Property
+Public Property Get cosPhix_d() As Double
+    cosPhix_d = p_cosPhix_d
+End Property
+Public Property Get Phix_d() As Double
+    Phix_d = p_Phix_d
+End Property
+' оценка момента на холостом ходу
+Public Property Get M0_Nm() As Double
+  M0_Nm = Mnom_Nm * (p_xi - 1)
+End Property
+' расчет текущих параметров работы двигателя при заданных частоте и напряжении и при вращении
+Public Sub calc_ADGridin(s As Double)
+ Dim R2_s As Double
+ Dim I2_ As Double
+ Dim phi2 As Double
+ Dim M0 As Double
+ 
+ ' сохраняем скольжение
+ p_S_d = s
+ 
+ ' вычисляем вспомогательный параметр - активное сопротивление обмотки ротора деленное на скольжение
+ R2_s = R2_ / s
+ 
+ 
+ p_M_Nm = 3 * Uphase_V ^ 2 * R2_s / (Omega_radsec * ((R1 + R2_s) ^ 2 + xk ^ 2)) - M0_Nm
+ 
+ I2_ = Uphase_V / ((R1 + R2_s) ^ 2 + xk ^ 2) ^ 0.5
+ 
+ phi2 = Atn(xk / (R1 + R2_s))
+ 
+ p_I_A = (Ix_A ^ 2 + I2_ ^ 2 + 2 * Ix_A * I2_ * Cos(Phix_d - phi2)) ^ 0.5
+ 
+ p_CosPhi = (Ix_A * Cos(Phix_d) + I2_ * Cos(phi2)) / p_I_A
+ 
+' p_n_Hz = p_F_Hz * (1 - s)
+ 
+ Dim P1 As Double, P2 As Double
+ p_Pel_kW = 3 * Uphase_V * p_I_A * (p_CosPhi) / 1000
+ 
+ 
+ p_Pm_kW = p_M_Nm * Omegas_radsec / 1000
+ 
+ p_Eff_d = p_Pm_kW / p_Pel_kW
+End Sub
+' процедура расчета скольжения по заданному моменту на валу двигателя
+Public Function calc_s_d(M_Nm As Double) As Double
+    Dim Rs As Double
+   
+    Rs = 3 * (Uphase_V ^ 2) / (2 * (M_Nm + M0_Nm) * Omega_radsec) - R1
+    
+    p_S_d = R2_ / (Rs + (Rs ^ 2 - (R1 ^ 2 + xk ^ 2)) ^ 0.5)
+    
+    calc_s_d = p_S_d
+    
+    Call calc_ADGridin(p_S_d)
+End Function
+' свойство выдает сумарную кривую по давлениям
+Public Property Get PCurve() As TInterpolation
+    Set PCurve = c_PCurve
+End Property
+Public Property Get TCurve() As TInterpolation
+    Set TCurve = c_TCurve
+End Property
+' метод расчета момента в зависимости от скольжения
+Public Property Get M_Nm() As Double
+' Call calc_ADGridin(S_d)
+ M_Nm = p_M_Nm
+End Property
+' расчет потребляемого тока в зависимости от скольжения
+Public Property Get I_A() As Double
+'    Call calc_ADGridin(s)
+    I_A = p_I_A
+End Property
+Public Property Get CosPhi_d() As Double
+'    Call calc_ADGridin(s)
+    CosPhi_d = p_CosPhi
+End Property
+Public Property Get Eff_d() As Double
+'    Call calc_ADGridin(s)
+    Eff_d = p_Eff_d
+End Property
+' процедура расчета параметров схемы замещения по Гридину
+Public Sub CalcModelGridin()
+' при расчете модели идет расчет на номинальной частоте вращения и номинальном напряжении
+ 
+ Dim alpha0 As Double
+ Dim A As Double
+ Dim b As Double
+ Dim Rm As Double
+ Dim g As Double
+ 
+ alpha0 = 0.45  ' константа рекомендованная в методичке Гридина
+ p_xi = 1.05
+ 
+ 
+ ' расчитываем показатели схемы замещения. Сначала вспомогательные переменные
+ A = alpha0 / p_xi * (1 - Effnom_d) / Effnom_d * (1 - Snom_d) / Snom_d - 1
+ 
+ Rm = 3 * Unom_phase_V ^ 2 * (1 - Snom_d) / (2 * Pnom_W * (p_lambda_d + p_xi - 1))
+ 
+ g = 1 / Snom_d ^ 2 + 2 * A / Snom_d + A ^ 2
+ 
+ b = (p_lambda_d + p_xi - 1) / p_xi
+ 
+ ' далее считаем сопротивления статора и ротора и индуктивность
+ p_R2_ = Rm / g * (b / Snom_d + A + ((b / Snom_d + A) ^ 2 - g) ^ 0.5)
+ 
+ p_R1 = A * p_R2_ '* 2
+ 
+ p_xk = (Rm ^ 2 - 2 * Rm * p_R1) ^ 0.5
+ ' теперь считаем показатели холостого хода при номинальной частоте вращения
+ 
+ Dim P1n_W As Double  ' потребляемая мощность двигателя
+ Dim I1n_A As Double  ' фазный ток
+ 
+ P1n_W = Pnom_W / Effnom_d
+ I1n_A = P1n_W / (3 * Unom_phase_V * CosPhinom_d)  ' оценили номинальный ток, хотя он может быть и задан
+ 
+ ' найдем ток в обмотке ротока приведенный к обмотке статора
+ Dim I2n__A As Double
+ 
+ I2n__A = Unom_phase_V / ((p_R1 + p_R2_ / Snom_d) ^ 2 + p_xk ^ 2) ^ 0.5
+ 
+ Dim phinom As Double
+ Dim phi2n As Double
+ 
+ phinom = ArcCos(CosPhinom_d)
+ phi2n = ArcTan(p_xk / (p_R1 + p_R2_ / Snom_d)) ' * 3
+ 
+' phi2n = phinom
+ 
+ p_Ix_A = (I1n_A ^ 2 + I2n__A ^ 2 - 2 * I1n_A * I2n__A * Cos(phinom - phi2n)) ^ 0.5
+ p_cosPhix_d = (I1n_A * CosPhinom_d - I2n__A * Cos(phi2n)) / p_Ix_A
+ p_Phix_d = ArcCos(p_cosPhix_d)
+End Sub
+ Sub Class_Initialize()
+ ' проинициализируем параметры двигателя значениями по  умолчанию, чтобы с ходу можно было счиатать
+ p_Pnom_kW = 40     ' номиналная мощность двигателя
+ 
+ p_Unom_V = 1050    ' номинальное напряжение работы двигателя
+ p_Inom_A = 25       ' номинальный фазный ток, А
+ p_Fnom_Hz = 50        ' номинальная частота вращения  магнитного поля статора, Гц
+ p_Effnom_d = 0.83       ' номинальный КПД установки
+ p_CosPhinom = 0.84      ' номинальный косинус фи (коэф мощности)
+' p_Mnom_Nm         ' номинальный момент развиваемый двигателем Нм
+ p_Snom_d = 0.05         ' номинальное скольжение
+ p_lambda_d = 3    ' отношение максимального момента к номинальному для АД
+' p_Istart_A        ' пусковой ток для двигателя
+' параметры работы асинхронного двигателя рабочие
+ p_U_V = 1050
+ p_F0_Hz = 50
+' p_I_A
+' p_S_d
+' p_CosPhi
+' p_Eff_d      ' КПД асинхронного двигателя
+' параметры холостого хода
+' p_Ix_A        ' ток холостого хода
+' p_cosPhix_d     ' коэф мощности при холостом ходе
+ 
+End Sub
+Public Property Get minDcas_mm() As Double
+    minDcas_mm = p_minDcas_mm
+End Property
+Public Property Let minDcas_mm(ByVal vNewValue As Double)
+   p_minDcas_mm = vNewValue
+End Property
+Public Property Get minVliq_msec() As Double
+   minVliq_msec = p_minVliq_msec
+End Property
+Public Property Let minVliq_msec(ByVal vNewValue As Double)
+   p_minVliq_msec = vNewValue
+End Property
+Public Property Get NumSections() As Integer
+   NumSections = p_NumSections
+End Property
+Public Property Let NumSections(ByVal vNewValue As Integer)
+   p_NumSections = vNewValue
+End Property
+ ' глубина установки  (верхняя точка)
+ Public Property Get HmesTop_m() As Double
+    HmesTop_m = p_HmesTop
+ End Property
+ 
+ Public Property Let HmesTop_m(val As Double)
+    p_HmesTop = val
+ End Property
+ ' глубина нижней точки установки
+ Public Property Get HmesDown_m() As Double
+    HmesDown_m = HmesTop_m + Length_m
+ End Property
+Public Property Get Length_m() As Double
+   Length_m = p_Legth_m
+End Property
+Public Property Let Length_m(ByVal vNewValue As Double)
+   Length_m = vNewValue
+End Property
+Public Property Get M_kg() As Double
+   M_kg = p_M_kg
+End Property
+Public Property Let M_kg(ByVal vNewValue As Double)
+   p_M_kg = vNewValue
+End Property
+Public Property Get ID() As Integer
+   ID = p_ID
+End Property
+Public Property Let ID(ByVal vNewValue As Integer)
+   p_ID = vNewValue
+End Property
+Public Property Get MotorName() As String
+    MotorName = p_MotorName
+End Property
+Public Property Let MotorName(val As String)
+    p_MotorName = val
+End Property
+Public Property Get ManufacturerName() As String
+    ManufacturerName = p_ManufacturerName
+End Property
+Public Property Let ManufacturerName(val As String)
+    p_ManufacturerName = val
+End Property
+Property Get PowerMotor_Wt() As Double
+    PowerMotor_Wt = p_PowerMotor_Wt
+End Property

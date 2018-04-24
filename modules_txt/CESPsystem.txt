@@ -1,0 +1,219 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+'
+'
+' класс описывает систему ЭЦН с целом
+' Система ЭЦН (УЭЦН) состоит из насоса, приемного модуля/газосепаратора, двигателя с гидрозащитой, ТМС и других узлов
+'
+' класс отвечает за расчет всех процессов в зоне ЭЦН - сепарации, перепада давления в насосе и пр
+'
+ Private Parts As New Collection                 ' все части насоса имеющие геометричесие размеры
+ Private p_Pumps As New CESPpumps               ' набор насосов в системе. надо несколько, чтобы поддерживать конусную сборку
+ Private p_GasSeparator As New CESPGasSep       ' газосопаратор или приеменый модуль
+ Private p_Motor As New CESPMotor               ' двигатель в комлекте с гидрозащитой
+ Private p_CableLine As New CESPCableLine       ' набор кабелей, составляющих кабельную линию
+ 
+ Private p_Transformer As New CESPTranformer   ' трансформатор
+ Private p_ESP_CS As New CESPControlStation     ' станция управления
+ Private p_PressureDegradation As Double
+ 
+ Private c_PCurve As New TInterpolation         ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
+ Private c_TCurve As New TInterpolation         ' кривая распределения температуры флюида вдоль насоса
+ 
+ Private p_Ksep_d As Double
+ 
+ 'геометрические параметры системы ЭЦН
+ Private p_Dintake_m As Double               ' диаметр приемной сетки ЭЦН - необходим для оценки коэффициента сепарации только для чтения - меняется насосом
+ Private p_Dcas_m As Double                  ' диамер эксплуатационной колонны в месте установки ЭЦН. Предполагаем, что он постоянен для всей установки
+ 
+ Private p_HmesTop As Double                ' глубина установки ЭЦН (по верхней части - по глубине спуска НКТ)
+ 
+ Private p_M_Nm As Double                   ' общие момент на валу
+ 
+ ' общие параметры
+ Private p_Fluid As CPVT
+' Private p_FluidTub As CPVT
+' Private p_FluidCas As CPVT
+ 
+ ' Электрические параметры
+ '  напряжение питания станции управления
+ '
+ '
+ '
+ '
+ '
+ '
+ '
+ '
+ '
+ '
+ 
+ 
+  ' блок оценки качества данных
+ 'Public' LogMsg As New CLogger                ' логгер
+ Public Property Get Ksep_d() As Double
+    Ksep_d = p_Ksep_d
+ End Property
+ Public Property Get KsepNat_d() As Double
+    KsepNat_d = p_KsepNatural
+ End Property
+ Public Property Get KsepGasSep_d() As Double
+    KsepGasSep_d = p_KsepGasSep_d
+ End Property
+ Public Property Get HeadTotal_m() As Double
+    HeadTotal_m = p_Pumps.Head_m
+ End Property
+ 
+ ' общая длина установки УЭЦН - погружной части
+ Public Property Get Length_m() As Double
+    Length_m = p_Pumps.Length_m ' + p_GasSeparator
+ End Property
+ 
+ 
+ ' глубина установки ЭЦН по глубине спуска НКТ (верхняя точка)
+ Public Property Get HmesTop_m() As Double
+    HmesTop_m = p_HmesTop
+ End Property
+ 
+ Public Property Let HmesTop_m(val As Double)
+    
+    p_HmesTop = val
+    p_Pumps.HmesTop_m = val
+    p_GasSeparator.HmesTop_m = p_Pumps.HmesDown_m
+    p_Motor.HmesTop_m = p_GasSeparator.HmesDown_m
+    
+ End Property
+ ' глубина нижней точки установки ЭЦН.  точка ниже которой поток идет по эксплуатационной колонне (или хвостовику)
+ Public Property Get HmesDown_m() As Double
+    HmesDown_m = HmesTop_m + Length_m
+ End Property
+ ' глубина приема насоса. Точка в которой поток попадает внутрь насоса
+ Public Property Get HmesIntake_m() As Double
+   HmesIntake_m = HmesTop_m + p_Pump.Length_m
+ End Property
+ 
+ ' глубина выкида насоса. Точка в которой поток выходит из насоса и идет по НКТ
+ Public Property Get HmesDischarge_m() As Double
+    HmesDischarge_m = HmesTop_m
+ End Property
+ Public Property Get Fluid() As CPVT
+    Set Fluid = p_Fluid
+ End Property
+ 
+' Public Property Get FluidTub() As CPVT
+'    Set FluidTub = p_FluidTub
+' End Property
+'
+' Public Property Get Fluidcas() As CPVT
+'    Set Fluidcas = p_FluidCas
+' End Property
+ 
+ Public Property Set Fluid(val As CPVT)
+    Set p_Fluid = val       ' берем новый объект в работу
+    ' дальше установим новый флюид для насоса
+    Set p_Pumps.Fluid = val
+    'и для газосепаратора
+    Set p_GasSeparator.Fluid = val
+ End Property
+Public Property Get Tdischarge_C() As Double
+ Tdischarge_C = p_Tdischarge_C
+ End Property
+ 
+ ' свойства для доступа к кривым распределения давления
+ Public Property Get PCurve() As TInterpolation
+    Set PCurve = c_PCurve
+ End Property
+ 
+ Public Property Get TCurve() As TInterpolation
+    Set TCurve = c_TCurve
+ End Property
+ 
+ 
+ ' набор свойст для доступа к ключевым объектам системы
+ Public Property Get Pumps() As CESPpumps                ' набор насосов в системе. надо несколько, чтобы поддерживать конусную сборку
+    Set Pumps = p_Pumps
+ End Property
+  
+Public Property Get GasSeparator() As CESPGasSep      ' газосопаратор или приеменый модуль
+    Set GasSeparator = p_GasSeparator
+End Property
+Public Property Get Motor() As CESPMotor              ' двигатель в комлекте с гидрозащитой
+    Set Motor = p_Motor
+End Property
+Public Property Get CableLine() As CESPCableLine      ' набор кабелей, составляющих кабельную линию
+    Set CableLine = p_CableLine
+End Property
+Public Property Get Transformer() As CESPTranformer  ' трансформатор
+    Set Transformer = p_Transformer
+End Property
+Public Property Get ESP_CS() As CESPControlStation    ' станция управления
+    Set ESP_CS = p_ESP_CS
+End Property
+' метод для добавления насоса в систему. добвляет насос и задает его глубину
+Public Function AddESPpump(pmp As CESPpump)
+    
+    p_Pumps.AddPump pmp
+    p_Pumps.HmesTop_m = HmesTop_m   ' задали глубину расположения
+End Function
+Public Sub ClearESPumps()
+    p_Pumps.ClearPumps
+End Sub
+' общий метод расчета состояния системы при заданном давлении и температуре
+' после расчета можно считать все параметры, которые изменились
+Public Function Calc(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
+' считает сепарацию  (нужны довольно гибкие методы управления расчетов сепарации)
+' потом считает распределение давления в насосе
+'
+'
+    Dim slip As Double
+    Dim PTintake_temp As PTtype
+    
+    PTintake_temp = PT
+    
+    c_PCurve.ClearPoints
+    c_TCurve.ClearPoints
+    
+    If p_Pumps.StageNum > 0 Then
+    
+        p_Ksep_d = p_GasSeparator.Calc_Separation(PT)     ' получили сепарацию и модифицированные флюида
+    
+    
+    
+        Set p_Pumps.Fluid = p_GasSeparator.FluidTub                 ' сохранили модифицированный флюид в насосе
+        Calc = p_Pumps.Calc_ESP_DownUp(PT, Tdis_C)                             ' рассчитали перепад давления в насосе
+    
+        p_M_Nm = p_GasSeparator.M_Nm + p_Pumps.M_Nm
+    
+'    slip = p_Motor.calc_s_d(p_Pumps.M_Nm)                         ' по моменту потребляемому насосом определяем параметры работы двигателя
+    
+    ' если стоит опция детального расчета - тогда пересчитываем насос и двигатель с учетом проскальзования и нагрева жидкости на двигателе
+    
+        Call c_PCurve.AddPointsCurve(p_Pumps.PCurve, p_GasSeparator.PCurve) ', p_Motor.PCurve
+        Call c_TCurve.AddPointsCurve(p_Pumps.TCurve, p_GasSeparator.TCurve) ', p_Motor.TCurve)
+    Else
+        p_Ksep_d = 0
+        Calc = PT
+    End If
+    PT = PTintake_temp
+End Function
+Function Calc_ESP_dP_atma(P_atma As Double, Tin_C As Double, Optional ByRef Tdis_C As Double, Optional calc_dir As Integer = 1)
+ 
+End Function
+Public Property Get PressureDegradation() As Double
+  PressureDegradation = p_PressureDegradation
+End Property
+Public Property Let PressureDegradation(val As Double)
+  p_PressureDegradation = val
+  p_Pumps.PressureDegradation = PressureDegradation
+End Property
+Private Sub Class_Initialize()
+    
+    Parts.Add p_Pumps
+    Parts.Add p_GasSeparator
+    Parts.Add p_Motor
+    p_PressureDegradation = 0
+End Sub

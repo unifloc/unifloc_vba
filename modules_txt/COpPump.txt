@@ -1,0 +1,135 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+'
+' класс для решения прикладных задач (верхний уровень)
+' здесь должны формировать и формулироваться задачи которые должна решать система
+'
+'
+Option Explicit
+Public Fluid As CPVT
+Public Fluid_norma As CPVT      ' для того чтобы сохранить дебит из расчета нормального
+Public WithEvents PS As CProdSystem   ' система добычи, которая собственно и проводит прикладные расчеты
+Public WithEvents PS_norma As CProdSystem
+' набор полей описывающих систему
+Public Event ReportProgress(msg As String)
+ ' блок оценки качества данных
+ 'Public' LogMsg As CLogger                 ' логгер
+Private Sub Class_Initialize()
+' конструктор для класса - тут создаем готовый объект с данными по умолчанию, чтобы можно было его использовать
+  Set PS = New CProdSystem
+  Set PS_norma = New CProdSystem
+  
+  Set Fluid = New CPVT
+  Set Fluid_norma = New CPVT
+  
+  Set PS.Fluid = Fluid
+  Set PS_norma.Fluid = Fluid_norma
+  
+'  'Set' LogMsg = getLogMsg
+' '' LogMsg.ClearAll
+'
+'  Set PS.LogMsg =' LogMsg
+'  Set PS_norma.LogMsg =' LogMsg
+  
+End Sub
+Public Sub SetESP(name As String, Rate, Head, Power, Eff, Optional ByVal Hz As Double = 50, Optional ByVal Stages As Integer = 1)
+    Call p_SetESP(PS, name, Rate, Head, Power, Eff, Hz, Stages, Fluid)
+    Call p_SetESP(PS_norma, name, Rate, Head, Power, Eff, Hz, Stages, Fluid_norma)
+  
+End Sub
+Private Sub p_SetESP(PrSys As CProdSystem, name As String, Rate, Head, Power, Eff, Optional ByVal Hz As Double = 50, Optional ByVal Stages As Integer = 1, Optional fl As CPVT)
+    Set PrSys.well.ESP = New CESPsystem
+    Set PrSys.well.ESP.Fluid = fl
+'    Call PrSys.Well.ESP.LoadESP_points(name, Rate, Head, Power, Eff)
+'
+'    PrSys.Well.ESP.StageNum = Stages
+'    PrSys.Well.ESP.Frequency = Hz
+End Sub
+'Public Sub SetConstruction(Hmes_m, Hvert_m, Dcas_m, Dtub_m, Optional Dchoke_m As Double = -1, Optional arr_roughness_m = 0.0001)
+'' метод инициализации конструкции
+'    Call p_SetConstruction(PS, Hmes_m, Hvert_m, Dcas_m, Dtub_m, Dchoke_m, arr_roughness_m)
+'    Call p_SetConstruction(PS_norma, Hmes_m, Hvert_m, Dcas_m, Dtub_m, Dchoke_m, arr_roughness_m)
+'
+'End Sub
+'
+'Private Sub p_SetConstruction(PrSys As CProdSystem, Hmes_m, Hvert_m, Dcas_m, Dtub_m, Optional Dchoke_m As Double = -1, Optional arr_roughness_m = 0.0001)
+'' метод инициализации конструкции
+'    Call PrSys.Well.InitWell(Hmes_m, Hvert_m, Dcas_m, Dtub_m)
+'
+'    If Dchoke_m >= 0 Then PrSys.Well.Dchoke_m = Dchoke_m
+'
+'End Sub
+Public Sub SetReservoir(Optional ByVal Pres_atma = -1, Optional ByVal PI_m3dayatm = -1)
+' метод инициализации конструкции скважины
+    Call p_SetReservoir(PS, Pres_atma, PI_m3dayatm)
+    Call p_SetReservoir(PS_norma, Pres_atma, PI_m3dayatm)
+    
+End Sub
+Private Sub p_SetReservoir(PrSys As CProdSystem, Optional ByVal Pres_atma = -1, Optional ByVal PI_m3dayatm = -1)
+' метод инициализации конструкции скважины
+    If Pres_atma > 0 Then PrSys.Reservoir.Pres_atma = Pres_atma
+    If PI_m3dayatm > 0 Then PrSys.Reservoir.PI_m3dayatm = PI_m3dayatm
+    
+End Sub
+Public Sub SetPVT(Optional ByVal Rp_m3m3 As Double = -1, Optional ByVal rsb_m3m3 As Double = -1, _
+                  Optional ByVal gamma_gas = -1, Optional ByVal gamma_oil = -1, Optional ByVal gamma_water As Double = 1, _
+                  Optional ByVal Pb_atma As Double = -1, Optional Bob_m3m3 As Double = -1)
+' метод инициализации PVT свойств
+' можно дополнительно задать только те параметры которые нужны, если какие то параметры не будут заданы, то будут использованы значения по умолчанию
+    Call p_SetPVT(Fluid, Rp_m3m3, rsb_m3m3, gamma_gas, gamma_oil, gamma_water, Pb_atma, Bob_m3m3)
+    Call p_SetPVT(Fluid_norma, Rp_m3m3, rsb_m3m3, gamma_gas, gamma_oil, gamma_water, Pb_atma, Bob_m3m3)
+ 
+End Sub
+Private Sub p_SetPVT(fl As CPVT, _
+                  Optional ByVal Rp_m3m3 As Double = -1, Optional ByVal rsb_m3m3 As Double = -1, _
+                  Optional ByVal gamma_gas = -1, Optional ByVal gamma_oil = -1, Optional ByVal gamma_water As Double = 1, _
+                  Optional ByVal Pb_atma As Double = -1, Optional Bob_m3m3 As Double = -1)
+' метод инициализации PVT свойств
+' можно дополнительно задать только те параметры которые нужны, если какие то параметры не будут заданы, то будут использованы значения по умолчанию
+    If Rp_m3m3 > 0 Then
+        If rsb_m3m3 < 0 Then rsb_m3m3 = Rp_m3m3   ' если использовано значение по умолчанию тогда его сбрасываем
+        fl.SetRpRsb Rp_m3m3, rsb_m3m3
+    End If
+    If gamma_gas > 0 Then fl.gamma_g = gamma_gas
+    If gamma_oil > 0 Then fl.gamma_o = gamma_oil
+    If gamma_water > 0 Then fl.gamma_w = gamma_water
+    
+    If Pb_atma > 0 Then fl.Pb_atma = Pb_atma
+    If Bob_m3m3 > 0 Then fl.Bob_m3m3 = Bob_m3m3
+End Sub
+Public Sub CalcAnalysis(ByVal Qliqtest_m3day As Double, ByVal wc_perc As Double, ByVal Plin_atma As Double, ByVal Pbuf_atma As Double, _
+                         Optional ByVal Pwf_atma As Double = -1, Optional ByVal Tbh_C As Double = -1, _
+                         Optional Pintake_atma As Double = -1, Optional Hdyn_m As Double = -1, Optional Pan_atma As Double = -1, _
+                         Optional CalcForecast As Boolean = False, Optional calcFast As Boolean = False)
+' расчет анализа скважины на текущий режим работы
+' Fluid.Qliq_scm3day = Qliqtest_m3day
+' Fluid.wc_perc = wc_perc
+ On Error Resume Next
+ 
+ Call PS.Calc_Analysis(Qliqtest_m3day, wc_perc, Plin_atma, Pbuf_atma, Pwf_atma, Tbh_C, Pintake_atma, Tbh_C, Hdyn_m, Pan_atma)
+ PS_norma.Reservoir.PI_m3dayatm = PS.Reservoir.PI_m3dayatm
+ PS_norma.Fluid.wc_perc = wc_perc
+ 
+ Call PS_norma.Calc_Forecast(Plin_atma, Tbh_C)
+ 'Call' LogMsg.SaveToFile
+End Sub
+Public Sub CalcForecast()
+' расчет прогноза на измеренный режим работы
+End Sub
+Public Sub CalcDesign()
+' расчет дизайна оборудования на заданные условия
+End Sub
+Private Sub PS_norma_ReportProgress(msg As String)
+' передадим событие полученное от ПродСистемы наверх
+    RaiseEvent ReportProgress("norm | " & msg)
+    addLogMsg "norm | " & msg, msgLog
+End Sub
+Private Sub PS_ReportProgress(msg As String)
+' передадим событие полученное от ПродСистемы наверх
+    RaiseEvent ReportProgress(msg)
+    addLogMsg msg, msgLog
+End Sub

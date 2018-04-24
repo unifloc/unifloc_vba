@@ -1,0 +1,251 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2017 г
+'
+'=======================================================================================
+' набор функций для расчета притока из пласта
+'
+Option Explicit
+Public Function Calc_Q_IPR_m3Day(ByVal Ptest As Double, ByVal Pr As Double, _
+                          ByVal Pb As Double, ByVal PI As Double, ByVal Wc As Double, Optional calc_method As Integer = 1)
+'
+If Ptest >= Pr Then
+ Debug.Print "Предупреждение. функция calc_PI_IPR. тестовое забойное давление " & Ptest & " больше чем пластовое давление " & Pr & ". дебит 0"
+ Calc_Q_IPR_m3Day = 0
+ Exit Function
+End If
+Select Case calc_method
+ Case 1
+ Calc_Q_IPR_m3Day = Calc_QliqVogel_m3Day(Ptest, Pr, Pb, PI, Wc)
+End Select
+End Function
+Public Function Calc_Pwf_IPR_atma(ByVal qtest As Double, ByVal Pr As Double, _
+                          ByVal Pb As Double, ByVal PI As Double, ByVal Wc As Double, Optional calc_method As Integer = 1)
+Select Case calc_method
+ Case 1
+ Calc_Pwf_IPR_atma = Calc_PwfVogel_atma(qtest, Pr, Pb, PI, Wc)
+End Select
+End Function
+Public Function Calc_PI_IPR_m3DayAtm(ByVal qtest As Double, ByVal Ptest As Double, _
+                                ByVal Pr As Double, ByVal Pb As Double, ByVal Wc As Double, Optional calc_method As Integer = 1)
+If Ptest >= Pr Then
+ Debug.Print "Ошибка. функция calc_PI_IPR. тестовое забойное давление " & Ptest & " больше чем пластовое давление " & Pr & ". расчет продуктивности невозможен"
+ Calc_PI_IPR_m3DayAtm = -1
+ Exit Function
+End If
+Select Case calc_method
+ Case 1
+ Calc_PI_IPR_m3DayAtm = Calc_PIVogel_m3DayAtm(qtest, Ptest, Pr, Pb, Wc)
+End Select
+End Function
+'Расчет забойного давления по Вогелю с учетом поправки на обводненность
+'
+'
+'
+'
+Public Function Calc_QliqVogel_m3Day(ByVal P_test As Double, ByVal Pr As Double, _
+                          ByVal Pb As Double, ByVal PI As Double, ByVal Wc As Double)
+ '
+ ' Q_test    - дебит жидкости при котором надо определить заб. давл. м3/сут
+ ' Pr        - пластовое давление, атм
+ ' Pb        - давление насыщения, атм
+ ' PI - коэфициент продуктивности, м3/сут/атм
+ ' wc        - обводненность, %
+ 
+ Dim qb As Double
+ Dim qo_max As Double
+ Dim Pwfg As Double
+ Dim CG As Double
+ Dim CD As Double
+ Dim fw As Double
+ Dim fo As Double
+ 
+ If P_test < 0 Then
+  Calc_QliqVogel_m3Day = "P_test<0!"
+  Exit Function
+ End If
+ If Pr < 0 Then
+  Calc_QliqVogel_m3Day = "Pr<0!"
+  Exit Function
+ End If
+ If Pb < 0 Then
+  Calc_QliqVogel_m3Day = "Pb<0!"
+  Exit Function
+ End If
+ If PI < 0 Then
+  Calc_QliqVogel_m3Day = "PI<0!"
+  Exit Function
+ End If
+ If Pr < Pb Then
+  Pb = Pr
+ End If
+ 
+ ' вычисляем дебит при давлении равном давлению насыщения.
+ qb = PI * (Pr - Pb)
+ If Wc > 100 Then
+   Wc = 100
+ End If
+ If Wc < 0 Then
+  Wc = 0
+ End If
+ 
+ If (Wc = 100) Or (P_test >= Pb) Then
+ 
+   Calc_QliqVogel_m3Day = PI * (Pr - P_test)
+ 
+ Else
+   fw = Wc / 100
+   fo = 1 - fw
+   ' максимальный дебит чистой нефти
+   qo_max = qb + (PI * Pb) / 1.8
+ '  Dim Pwf_g As Double
+   Pwfg = fw * (Pr - qo_max / PI)
+   
+   If P_test > Pwfg Then
+     Dim A As Double: Dim b As Double: Dim c As Double: Dim d As Double
+     A = 1 + (P_test - (fw * Pr)) / (0.125 * fo * Pb)
+     b = fw / (0.125 * fo * Pb * PI)
+     c = (2 * A * b) + 80 / (qo_max - qb)
+     d = (A ^ 2) - (80 * qb / (qo_max - qb)) - 81
+     If b = 0 Then
+       Calc_QliqVogel_m3Day = Abs(d / c)
+     Else
+       Calc_QliqVogel_m3Day = (-c + ((c * c - 4 * b * b * d) ^ 0.5)) / (2 * b ^ 2)
+     End If
+     
+   Else
+      CG = 0.001 * qo_max
+      CD = fw * (CG / PI) + _
+           fo * 0.125 * Pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
+      Calc_QliqVogel_m3Day = (Pwfg - P_test) / (CD / CG) + qo_max
+   End If
+   
+ End If
+End Function
+' Расчет забойного давления по Вогелю с учетом поправки на обводненность
+'
+'
+'
+'
+Public Function Calc_PwfVogel_atma(ByVal Q_test As Double, ByVal Pr As Double, _
+                          ByVal Pb As Double, ByVal PI As Double, ByVal Wc As Double)
+ '
+ ' Q_test    - дебит жидкости при котором надо определить заб. давл. м3/сут
+ ' Pr        - пластовое давление, атм
+ ' Pb  - давление насыщения, атм
+ ' PI - коэфициент продуктивности, м3/сут/атм
+ ' wc        - обводненность, %
+ 
+ Dim qb As Double
+ Dim qo_max As Double
+ Dim Pwfg As Double
+ Dim CG As Double
+ Dim CD As Double
+ Dim fw As Double
+ Dim fo As Double
+ 
+ 'проверка  данных
+ 
+ If Pr < Pb Then
+  Pb = Pr
+ End If
+ 
+ If Q_test < 0 Then
+  Calc_PwfVogel_atma = "Q<0!"
+  Exit Function
+ End If
+ If Pr <= 0 Then
+  Calc_PwfVogel_atma = "Pr<=0!"
+  Exit Function
+ End If
+ If Pb < 0 Then
+  Calc_PwfVogel_atma = "Pb<0!"
+  Exit Function
+ End If
+ If PI <= 0 Then
+  Calc_PwfVogel_atma = "PI<=0!"
+  Exit Function
+ End If
+ 
+ ' вычисляем дебит при давлении равном давлению насыщения.
+ qb = PI * (Pr - Pb)
+ If Wc > 100 Then
+   Wc = 100
+ End If
+ If Wc < 0 Then
+  Wc = 0
+ End If
+ If (Wc = 100) Or (Q_test <= qb) Or (Pb = 0) Then
+ 
+   Calc_PwfVogel_atma = (Pr - Q_test / PI)
+   
+ Else
+   fw = Wc / 100
+   fo = 1 - fw
+   ' максимальный дебит чистой нефти
+   qo_max = qb + (PI * Pb) / 1.8
+   
+   If Q_test < qo_max Then
+     
+     Calc_PwfVogel_atma = fw * (Pr - Q_test / PI) + _
+                 fo * 0.125 * Pb * (-1 + (1 - 80 * ((Q_test - qo_max) / (qo_max - qb))) ^ 0.5)
+   Else
+      CG = 0.001 * qo_max
+      CD = fw * (CG / PI) + _
+           fo * 0.125 * Pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
+      Calc_PwfVogel_atma = fw * (Pr - qo_max / PI) - (Q_test - qo_max) * (CD / CG)
+   End If
+ End If
+ If Calc_PwfVogel_atma < 0 Then
+       Calc_PwfVogel_atma = 0
+ End If
+End Function
+' определение продуктивности по Вогелю с коррекцией на обводненность
+Public Function Calc_PIVogel_m3DayAtm(ByVal Q_test As Double, ByVal P_test As Double, _
+                                ByVal Pres As Double, ByVal Pb As Double, ByVal Wc As Double)
+ 
+ Dim j As Double
+ Dim Q_calibr As Double
+ 
+ If P_test < 0 Then
+  P_test = 0
+  Calc_PIVogel_m3DayAtm = 0
+  Exit Function
+ End If
+  
+ If Pres < Pb Then
+  Pb = Pres
+ End If
+ 
+ If Q_test <= 0 Then
+  Calc_PIVogel_m3DayAtm = 0 ' "Q<=0!"
+  addLogMsg "Calc_PIVogel_m3DayAtm  ошибка Q<=0!"
+  Exit Function
+ End If
+ If P_test <= 0 Then
+  Calc_PIVogel_m3DayAtm = 0
+  addLogMsg "Calc_PIVogel_m3DayAtm  ошибка P_test<=0!"
+  Exit Function
+ End If
+ If Pb < 0 Then
+  Calc_PIVogel_m3DayAtm = 0
+  addLogMsg "Calc_PIVogel_m3DayAtm  ошибка Pb<0!!"
+  Exit Function
+ End If
+ If Pres <= 0 Then
+  Calc_PIVogel_m3DayAtm = 0
+  addLogMsg "Calc_PIVogel_m3DayAtm  ошибка Pres<=0!"
+  Exit Function
+ End If
+ ' первое приближение для Кпр считаем
+ j = Q_test / (Pres - P_test)
+ ' оцениваем его
+ Q_calibr = Calc_QliqVogel_m3Day(P_test, Pres, Pb, j, Wc)
+ ' кривая нелинейная надо подбирать значение
+ j = j / ((Q_calibr) / Q_test)
+ Q_calibr = Calc_QliqVogel_m3Day(P_test, Pres, Pb, j, Wc)
+ If Abs(Q_calibr - Q_test) > 0.001 Then Debug.Assert False   ' если сработало, то алгоритм сломался
+ Calc_PIVogel_m3DayAtm = j
+  
+End Function

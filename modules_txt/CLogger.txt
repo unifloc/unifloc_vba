@@ -1,0 +1,141 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+'
+'  Clogger - класс описывающий объект логирования и контроля качества расчетов
+'  Logger живет паралельно с расчетныим классами и умеет принимать от них сообщения о нештатных ситуациях при проведении расчетов
+'           он копит информацию и теоретически может ее анализировать и строить статистику
+'
+'
+'
+Public MsgList As New Collection    ' список всех сообщений об ошибках
+Private p_ContextStack As New Collection ' стек текущего контекста вычислений
+Private p_ContextLevel As Integer ' уровень вложенности текущего контекста
+'Public' LogMsg As CLogMsg             ' отдельная ошибка - может понадобится
+Private Sub Class_Initialize()
+    p_ContextLevel = 0 ' изначально уровень равен нулю - контекста нет
+End Sub
+Public Function NumError() As Integer
+End Function
+Public Function NumWarnings() As Integer
+End Function
+Public Sub ClearAll()
+ Set MsgList = Nothing
+ Set MsgList = New Collection
+End Sub
+Public Function GetContext() As CLogContext
+   Dim last As Integer
+   last = p_ContextStack.count
+   GetContext = p_ContextStack.Item(last)
+End Function
+ ' функция для передачи сообщения о предупреждении или ошибки для обработки
+ ' параметры
+ '      - описание ошибки
+ '      - уровень ошибки  - критическая ошибка, предупреждение, коррекция данных
+ '      - контекст в котором вызвана ошибка - название функции, тип расчета который ведется (как собрать? можно сделать общий параметр у класса отвественный за контекст проведения расчета)
+ 
+ 
+ Public Function AddMsg(msg As String, Optional MsgType As MESSAGE_TYPE = msgWarning, Optional MsgNum As Integer = 0, Optional level As MESSAGE_LEVEL = mlLow) As Long
+   
+  On Error Resume Next
+   Dim lm As CLogMsg
+   Set lm = New CLogMsg    ' создали новый объект
+   
+   lm.name = msg
+   lm.Rating = level
+   lm.TypeErr = MsgType
+   
+   MsgList.Add lm          ' добавляем сообщение в список
+   
+   AddMsg = MsgList.count
+   
+   If MsgType = msgError Then
+     Err.Raise vbObjectError + MsgNum, , msg
+   End If
+ End Function
+ ' установка текущего контекста проведения расчетов
+ ' контекст  используется для контроля качества проведения расчетов
+ ' может накапливаться по мере проведения расчетов в глубиину - интерфейсная функция может брать значение сверху и дополнять его как то
+ ' возвращает текущий уровень вложенности контекста
+ '
+ 
+ 
+ Public Function ContextSet(Optional conDescription As String = "", Optional func As String = "") As Integer
+ 
+   ' p_context.description = conDescription
+   ' p_context.description_out = context_description_out '& " : " & context_description     ' создание сложного описания отдельная задача
+    Dim LogCon As CLogContext
+    Set LogCon = New CLogContext
+    
+    LogCon.Description = conDescription
+    
+    p_ContextStack.Add LogCon
+    
+    ContextSet = p_ContextStack.count
+ End Function
+' выход из текущего контекста - возвращает текущий уровень вложенности
+ Public Function ContextOut() As Integer
+    
+    Dim last As Integer
+    Dim lastCon As CLogContext
+    
+    last = p_ContextStack.count
+    Set lastCon = p_ContextStack.Item(last)
+    
+    p_ContextStack.Remove last
+    
+    Set lastCon = Nothing
+    
+ End Function
+Public Function SaveToFile()
+    Dim FullFileName As String
+    FullFileName = ThisWorkbook.Path & "\" & "oppump.log"
+    Dim dir As String
+    
+    
+    
+    Dim FSO As FileSystemObject, ts As TextStream, fil As File
+    
+    Set FSO = CreateObject("scripting.filesystemobject")
+    
+    If FSO.FileExists(FullFileName) Then Kill FullFileName
+    
+    Set ts = FSO.OpenTextFile(FullFileName, ForWriting, True)
+    Dim st As CLogMsg
+    For Each st In MsgList
+        ts.WriteLine st.TypeErr & " " & st.name:
+    Next
+    
+    ts.Close: Set ts = Nothing: Set FSO = Nothing
+End Function
+'==================================================================================
+'  контроль качества данных и расчетов
+'==================================================================================
+' Public Sub QCrestart()
+'' сброс оценок по анализу качества данных и результатов расчетов  Quality Control restart
+'
+' p_WarningsLevel = 0        ' уровень предупреждений в ходе расчетов
+' p_ErrorLevel = 0           ' уровень  ошибок в ходе проведения расчетов
+' p_DataQualityLevel = 0     ' уровень достоверности данных
+' p_CalcQualityLevel = 0     ' уровень достоверности расчета
+'
+' End Sub
+'
+' Public Sub AddWarning(Optional Level As Double = 1, Optional Msg As String = "")
+'    p_WarningsLevel = p_WarningsLevel + Level
+'    addLogMsg "Warning | ", Msg
+' End Sub
+'
+' Public Sub AddError(Optional Level As Double = 1, Optional Msg As String = "", Optional ErrNum As Integer = 100)
+'    p_ErrorLevel = p_ErrorLevel + Level
+'    addLogMsg "Error | ", Msg
+'    Err.Raise vbObjectError + ErrNum, , Msg
+' End Sub
+'
+' Public Sub AddDataQualityReport(Optional Level As Double = 1, Optional Msg As String = "")
+'    p_DataQualityLevel = p_DataQualityLevel + Level
+'    addLogMsg "DataQualityWarning | ", Msg
+' End Sub

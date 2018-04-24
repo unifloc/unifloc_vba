@@ -1,0 +1,263 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+'
+' сборка нескольких насосов
+' необходима для поддержки расчета конусного насоса
+'
+'
+Option Explicit
+ 
+ Private p_Pumps As New Collection    ' набор насосов для которых проводится расчет
+                                      ' один насос обязательно должен быть в списке, чтобы все работало
+ 
+ 
+ Private p_Tintake_C As Double               ' температура потока на приемной сетке УЭЦН (учитывается нагрев двигателем)
+ Private p_Tdischarge_C As Double            ' температура потока на выкиде насоса (учитывается нагрев в насосе)
+ Private p_Pintake_atma As Double             ' давление на приеме насоса (используется для расчета рабочих характеристик)
+ Private p_Pdis_atma As Double                ' давление на выкиде насоса
+ Private p_Fluid As CPVT                  ' флюид движущийся через насос (с учетом сепарации газа)
+ 
+ Private c_PCurve As New TInterpolation         ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
+ Private c_TCurve As New TInterpolation         ' кривая распределения температуры флюида вдоль насоса
+ Private p_PressureDegradation As Double
+ ' блок оценки качества данных
+ 'Public' LogMsg As New CLogger                ' логгер
+' =======================  геометрия
+Public Property Get PressureDegradation() As Double
+  PressureDegradation = p_PressureDegradation
+End Property
+Public Property Let PressureDegradation(val As Double)
+  Dim i As Integer
+  Dim pmp As CESPpump
+  p_PressureDegradation = val
+    For i = 1 To p_Pumps.count
+       Set pmp = p_Pumps.Item(i)
+       pmp.PressureDegradation = val
+    Next i
+  p_PressureDegradation = val
+End Property
+ ' общая длина установки ЭЦН - погружной части
+ Public Property Get Length_m() As Double
+    Dim len_sum As Double
+    Dim i As Integer
+    len_sum = 0
+    For i = 1 To p_Pumps.count
+       len_sum = len_sum + p_Pumps(i).Length_m
+    Next i
+    Length_m = len_sum
+ End Property
+ ' глубина установки ЭЦН по глубине спуска НКТ (верхняя точка)
+ Public Property Get HmesTop_m() As Double
+    If p_Pumps.count > 0 Then
+        HmesTop_m = p_Pumps(1).HmesTop_m
+    Else
+        HmesTop_m = 0 ' если нет насоса - выдаем нулевую
+    End If
+ End Property
+ 
+ ' глубина установки секции будет устанавливаться извне
+ Public Property Let HmesTop_m(val As Double)
+    Dim len_sum As Double
+    Dim i As Integer
+    len_sum = val
+    For i = 1 To p_Pumps.count
+       p_Pumps(i).HmesTop_m = len_sum
+       len_sum = len_sum + p_Pumps(i).Length_m
+    Next i
+ End Property
+ ' глубина нижней точки установки ЭЦН.  точка ниже которой поток идет по эксплуатационной колонне (или хвостовику)
+ Public Property Get HmesDown_m() As Double
+    HmesDown_m = HmesTop_m + Length_m
+ End Property
+ ' глубина приема насоса. Точка в которой поток попадает внутрь насоса
+ Public Property Get HmesIntake_m() As Double
+   HmesIntake_m = HmesDown_m
+ End Property
+ 
+ ' глубина выкида насоса. Точка в которой поток выходит из насоса и идет по НКТ
+ Public Property Get HmesDischarge_m() As Double
+    HmesDischarge_m = HmesTop_m
+ End Property
+ 
+ ' для нескольких секций диамент потенциально может менятся - дадим тут пока первый
+ Public Property Get Diam_m() As Double
+    Dim maxD As Double
+    Dim pmp As CESPpump
+    maxD = 0
+    For Each pmp In p_Pumps
+        If pmp.Diam_m > maxD Then maxD = pmp.Diam_m
+    Next
+    Diam_m = maxD
+ End Property
+ 
+ ' угол к горизонтали под которым установлена установка
+ ' угол задается извне системой скважиной при установке системы в скважину
+ Public Property Get AngleHor_deg() As Double
+    AngleHor_deg = p_Pumps(1).angle_deg
+ End Property
+ 
+ Public Property Get AngleVert_deg() As Double
+    AngleVert_deg = AngleVert_deg - 90
+ End Property
+ 
+ Public Property Let AngleHor_deg(val As Double)
+    ' установили теперь продавим вниз во все ступени
+    Dim pmp As CESPpump
+    For Each pmp In p_Pumps
+        pmp.AngleHor_deg = val
+    Next
+ End Property
+' ========================  конец блока описания геометрии
+Public Property Get Head_m() As Double
+    Dim pmp As CESPpump
+    Head_m = 0
+    For Each pmp In p_Pumps
+        Head_m = Head_m + pmp.Head_m
+    Next
+End Property
+ Public Property Get Fluid() As CPVT
+    Set Fluid = p_Fluid
+ End Property
+ 
+ Public Property Set Fluid(val As CPVT)
+    
+    Set p_Fluid = val       ' записываем ссылку на новый объект
+    Dim pmp As CESPpump
+    For Each pmp In p_Pumps
+        Set pmp.Fluid = val
+    Next
+    ' в результате все насосы ссылаются на один и тот объект флюида
+ End Property
+ 
+ Public Property Get Tdischarge_C() As Double
+ Tdischarge_C = p_Tdischarge_C
+ End Property
+' свойство выдает момент на валу потребляемый насосом
+Public Property Get M_Nm() As Double
+    Dim pmp As CESPpump
+    For Each pmp In p_Pumps
+        M_Nm = M_Nm + pmp.M_Nm
+    Next
+End Property
+Public Property Get StageNum() As Integer
+    Dim pmp As CESPpump
+    For Each pmp In p_Pumps
+        StageNum = StageNum + pmp.StageNum
+    Next
+End Property
+' свойство выдает сумарную кривую по давлениям
+Public Property Get PCurve() As TInterpolation
+    Set PCurve = c_PCurve
+End Property
+Public Property Get TCurve() As TInterpolation
+    Set TCurve = c_TCurve
+End Property
+' частный метод для сборки кривых отдельных насосов в одну кривую
+Private Sub FillCurvePT()
+    c_PCurve.ClearPoints
+    c_TCurve.ClearPoints
+    
+    Dim pmp As CESPpump
+    For Each pmp In p_Pumps
+        c_PCurve.AddPointsCurve pmp.PCurve
+        c_TCurve.AddPointsCurve pmp.TCurve
+    Next
+End Sub
+' метод расчета работы насоса
+Public Function Calc_ESP_DownUp(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
+    
+    Dim pmp As CESPpump
+    Dim i As Integer
+    Dim dPump As PTtype, dPumpSum As PTtype
+    
+    dPumpSum = SetPT(P:=0, T:=0)
+     
+    For i = 1 To p_Pumps.count
+        Set pmp = p_Pumps(i)
+        dPump = pmp.Calc_ESP_DownUp(PT, Tdis_C)     ' ищем изменение термобарических условий
+        dPumpSum = SumPT(dPumpSum, dPump)
+        PT = SumPT(PT, dPumpSum)
+    Next i
+    
+    Calc_ESP_DownUp = PT
+    Call FillCurvePT
+   
+End Function
+' расчет распределения давления в ЭЦН сверху вниз
+Public Function Calc_ESP_UpDown(PTup As PTtype, Tdown_C As Double) As PTtype
+    
+    Dim pmp As CESPpump
+    Dim i As Integer
+    Dim dPump As PTtype, dPumpSum As PTtype
+    
+    dPumpSum = SetPT(P:=0, T:=0)
+     
+    For i = p_Pumps.count To 1 Step -1
+        Set pmp = p_Pumps(i)
+        dPump = pmp.Calc_ESP_UpDown(PTup, Tdown_C)  ' ищем изменение термобарических условий
+        dPumpSum = SumPT(dPumpSum, dPump)
+        PTup = SubtractPT(PTup, dPumpSum)
+    Next i
+    
+    Calc_ESP_UpDown = PTup
+   ' Call FillCurvePT
+End Function
+'
+' заданы давление на выкиде, и температуры на входе и выходе  - решение ищется только по давлению
+'
+Public Function CheckMechnicalStrength() As Boolean
+' функция для проверки механической прочности ЭЦН - проверка прочности валов и проверка корпуса
+    Dim pmp As CESPpump
+    Dim i As Integer
+    Dim MPump As Double, MPumpSum As Double
+    CheckMechnicalStrength = True
+    MPumpSum = 0
+     
+    For i = p_Pumps.count To 1 Step -1
+        Set pmp = p_Pumps(i)
+        MPump = pmp.M_Nm
+        MPumpSum = MPumpSum + MPump
+        CheckMechnicalStrength = CheckMechnicalStrength And pmp.CheckShaft(MPumpSum)
+       
+    Next i
+    
+End Function
+Public Function Get_ESP_effeciency_fr(Q_m3Day As Double) As Double
+End Function
+Public Function Get_ESP_Head_m(Q_m3Day As Double) As Double
+End Function
+Public Function Get_ESP_Power_W(Q_m3Day As Double) As Double
+End Function
+Public Function Get_ESP_MaxOptimRate_m3day() As Double
+End Function
+Public Function Get_ESP_MinOptimRate_m3day() As Double
+End Function
+Public Function Get_Max_RateForGraph_m3day() As Double
+End Function
+' функция установки заданного напора путем подбора количества ступеней
+Public Sub SetHead(Head As Double)
+End Sub
+' метод для добавления насоса в сборку по номеру насоса из базы данных
+Public Sub AddPumpID(PumpID, NumStages, Optional Position As Integer = -1)
+ Dim pmp As New CESPpump
+ pmp.ID = PumpID
+ pmp.StageNum = NumStages
+ Call AddPump(pmp, Position)
+End Sub
+'метод для добавления насоса в сборку из уже загруженного насоса
+Public Sub AddPump(pmp As CESPpump, Optional ByVal Position As Integer = -1)
+    
+    If Position <= 0 Or Position > p_Pumps.count Then
+        Position = p_Pumps.count
+    End If
+    p_Pumps.Add pmp ', Before:=Position
+    
+End Sub
+Public Sub ClearPumps()
+   Set p_Pumps = Nothing
+   Set p_Pumps = New Collection
+End Sub

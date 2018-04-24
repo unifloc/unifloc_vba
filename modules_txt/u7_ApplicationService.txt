@@ -1,0 +1,115 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2017 г
+'
+'=======================================================================================
+' Набор сервисных функций для управления приложением Excel
+Option Explicit
+Public timePVTtotal
+Public timeAnsariTotal
+Public timedPipeTotal
+' подготовка Excel к проведению расчета по нажатию кнопки
+Public Sub TurnOn_Application_CalcMode()
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+    ActiveSheet.DisplayPageBreaks = False
+    Application.DisplayStatusBar = False
+    Application.DisplayAlerts = False
+End Sub
+Public Sub TurnOff_Application_CalcMode()
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    ActiveSheet.DisplayPageBreaks = True
+    Application.DisplayStatusBar = True
+    Application.DisplayAlerts = True
+End Sub
+' @function print_all_code_of_current_project
+' @brief Выводит код модулей, в названии которых подмодуль GeneralFindString
+Sub SaveAllCodeOfCurrentProject()
+    ' пишет весь код данной программы в файл c:\code.vb
+   Dim save_text As String
+   Dim cur_path As String
+   Dim txt_path As String
+   Dim iVBComponent As Variant, iVBComponents
+   Dim i As Integer
+   Dim codeline
+   txt_path = ThisWorkbook.Path + "\" + "modules_txt"
+   
+   If (dir(txt_path, vbDirectory) = "") Then
+    MkDir (txt_path) 'создаём папку
+   End If
+   On Error Resume Next
+    Set iVBComponents = ThisWorkbook.VBProject.VBComponents
+    For Each iVBComponent In iVBComponents
+        If (InStr(iVBComponent.CodeModule.name, "u7_") > 0) Or _
+           (InStr(iVBComponent.CodeModule.name, "tr_") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "u2_") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "u_") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "C") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "T") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "К") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "F") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "Л") = 1) Or _
+           (InStr(iVBComponent.CodeModule.name, "Э") = 1) Then
+            Select Case iVBComponent.Type
+                Case 1 To 100:
+                    With iVBComponent.CodeModule
+                        ' save_text = "==============  " & .Name & "  ==============" & vbNewLine
+                        save_text = ""
+                        For i = 1 To .CountOfLines
+                            codeline = (.Lines(i, 1))
+                            If Len(codeline) > 0 Then save_text = save_text & codeline & vbNewLine
+                        Next
+                    End With
+                Call SaveToFile(txt_path + "\" + iVBComponent.CodeModule.name + ".txt", save_text)
+            End Select
+            
+        End If
+    Next
+  '  Set FSO = Nothing
+End Sub
+' @function FullFileName
+' @brief Сохраняет строку в файл
+' @param FullFileName - полный путь до файла
+' @param SaveText - сохраняемый текст
+Function SaveToFile(FullFileName, SaveText As String)
+    Dim FSO As FileSystemObject, ts As TextStream, fil As File
+    Set FSO = CreateObject("scripting.filesystemobject")
+    If FSO.FileExists(FullFileName) Then Kill FullFileName
+    Set ts = FSO.OpenTextFile(FullFileName, 8, True)
+    ts.Write SaveText: ts.Close: Set ts = Nothing: Set FSO = Nothing
+End Function
+' процедуры обеспечения сохранения классов
+ Public Sub AddS(stor, Row, col, name, Optional val = "")
+   stor(Row, col) = name
+   stor(Row, col + 1) = val
+ End Sub
+Public Sub AddSCurve(stor, Row, col, curv As TInterpolation)
+' сейчас алгоритм не корректно отображает функции с большими перепадами значений (например из за штуцера и критического режима)
+'
+'
+On Error GoTo ErrorHandler:
+    
+    Const PointsOut = const_OutputCurveNumPoints
+    Dim i As Integer
+    Dim StepX As Double
+    StepX = (curv.maxx - curv.minx) / (PointsOut - 1)
+    If curv.numPoints > 1 Then
+        If curv.numPoints <= PointsOut Then
+            If curv.numPoints < PointsOut Then curv.ConvertPointsToNum (PointsOut)
+            For i = 0 To PointsOut - 1
+                AddS stor, Row + i, col, curv.pointX(i + 1), curv.PointY(i + 1) '   minx + i * StepX, curv.GetPoint(curv.minx + i * StepX)
+            Next i
+        Else
+            For i = 0 To PointsOut - 1
+                AddS stor, Row + i, col, curv.minx + i * StepX, curv.GetPoint(curv.minx + i * StepX)
+            Next i
+        End If
+    End If
+    Exit Sub
+ErrorHandler:
+    addLogMsg "AddSCurve: ошибка во время выполнения. i = " & i & " ", Err.Number, Err.Description
+End Sub

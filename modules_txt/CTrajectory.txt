@@ -1,0 +1,304 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+'
+Option Explicit
+' Класс описывающий траекторию скважины. Содержит методы для работы с инклинометрией
+' На вход подаются данные по конструкции скважины в исходном виде (из базы данных)
+' На выходе могут быть получены данные пригодные для проведения расчетов с использованием класса скважины
+'
+'
+'
+'
+' История
+' 2016.01.18    Хабибуллин Ринат
+'
+'
+'
+' тип описывающий полную конструкцию скважины в заданной точке
+Private Type WELL_POINT_FULL
+    Hmes_m As Double  ' измеренная глубина
+    Ang_deg As Double ' угол  от вертикали
+    Habs_m As Double  ' абсолютная глубина
+    DcasIn_m As Double  ' диаметр эксплуатационной колонны, внутренний
+    DtubIn_m As Double  ' диаметр НКТ внутренний
+    DtubOut_m As Double ' диаметр НКТ внешний
+    RoughnessCas_m As Double    ' шероховатость
+    RoughnessTub_m As Double    ' шероховатость
+End Type
+Private p_HabsInit_m As New TInterpolation      ' исходный массив абсолютных глубин
+Private p_AngInit_deg As New TInterpolation    ' исходный массив углов
+Private p_AngAzimuthInit_deg As New TInterpolation ' значения азимутального угла
+Private p_AngZenithInit_deg As New TInterpolation  ' значения зенитного угла
+Private p_DcasInit_m As New TInterpolation  ' исходный массив значений диаметров эксплуатационных колонн
+Private p_DtubInit_m As New TInterpolation  ' исходный массив значений диаметров НКТ
+Private p_TubThick_mm '           пока считаем что НКТ всегда имеет одинаковую толщину - потом можно будет учесть
+Private p_Roughness_m '           пока также считаем, что шероховатость везде тоже одинакова
+Private p_WellTrajctory() As WELL_POINT_FULL   ' полная конструкция скважины пригодная для расчетов - итоговое свойство класса
+Private p_Hperf_m As Double  ' глубина перфорации
+Private p_Hpump_m As Double  ' глубина спуска насоса
+Private p_HGasLiftValve_m() As Double   ' точки установки газлифтных клапанов
+Private p_NumPointsOut As Integer   ' количество точек в выходном массиве
+Private p_LengthBetweenPoints As Double  ' мин растояние между точками при генерации исходного массива
+Private p_ConstructionPoints As New TInterpolation  ' точки которые должны быть добавлены (измеренная глубина - абсолютная глубина)
+Private p_HPoints As New TInterpolation    ' результирующие точки для заполнения массивов
+Private p_HvalveGL_m() As Double     ' массив глубин расположения газлифтных клапанов
+Private p_NumValve As Integer        ' количество клапанов газлифтных
+Private Sub Class_Initialize()
+' установка значений по умолчанию
+  p_TubThick_mm = 10
+  p_Roughness_m = 0.0001
+  
+  p_LengthBetweenPoints = 100     ' по умолчанию ставим расстояние между точками инклинометрии 100 м
+  
+  p_HabsInit_m.isStepFunction = False   ' абсолютные глубины линейно интерполируются
+  p_AngInit_deg.isStepFunction = True   ' углы - ступенчатая функция
+  p_DcasInit_m.isStepFunction = True   ' диаметры - ступенчатая функция
+  p_DtubInit_m.isStepFunction = True   ' диаметры - ступенчатая функция
+  
+  
+End Sub
+Public Property Get NumValve() As Integer
+    NumValve = p_NumValve
+End Property
+Public Sub ClearValves()
+    ReDim p_HvalveGL_m(0)
+    p_NumValve = 0
+End Sub
+Public Sub AddValve(Hvalve)
+    p_NumValve = p_NumValve + 1
+    ReDim Preserve p_HvalveGL_m(p_NumValve)
+End Sub
+Public Sub InitTrajectoryHabs(HabsCurve_m As TInterpolation, DcasCurve_mm As TInterpolation, DtubCurve_mm As TInterpolation, _
+               Hperf_m As Double, Hpump_m As Double)
+' загрузка первичных данных по конструкции скважины
+'
+'
+' HabsCurve_m  - кривая значений абсолютных глубин относительно измеренных глубин (траектория упрощенная)
+' DtubCurve_mm  - кривая значений диаматров НКТ
+' DcasCurve_mm  - кривая значений диаметров эксплуатационной колонны
+'
+ Dim i As Integer
+ Dim ang
+ Dim sina As Double, cosa As Double
+ 
+ p_Hperf_m = Hperf_m
+ p_Hpump_m = Hpump_m
+ p_AngInit_deg.ClearPoints
+ 
+ ' насос обязательно должен быть выше перфорации
+ If p_Hpump_m >= p_Hperf_m Then
+    p_Hpump_m = p_Hperf_m - const_ESP_length - 1   ' насос должен быть выше перфорации
+ End If
+ Set p_HabsInit_m = HabsCurve_m
+ 
+ Set p_DtubInit_m = DtubCurve_mm.Transform(multY:=const_convert_mm_m)
+ 
+ ' поправим кривую для НКТ - вставим принудительно точку глубины спука насоса и ниже ее диаметры занулим
+ DtubCurve_mm.isStepFunction = True
+ p_DtubInit_m.AddPoint p_Hpump_m, DtubCurve_mm.GetPoint(p_Hpump_m)     ' добавляем значение глубины спуска НКТ в компоновку НКТ
+ 
+ If p_DtubInit_m.maxx > p_Hpump_m Then
+    For i = 1 To p_DtubInit_m.numPoints
+        If p_DtubInit_m.pointX(i) > p_Hpump_m Then p_DtubInit_m.AddPoint p_DtubInit_m.pointX(i), 0
+    Next i
+ End If
+ Set p_DcasInit_m = DcasCurve_mm.Transform(multY:=const_convert_mm_m)
+ p_DcasInit_m.isStepFunction = True   ' диаметры - ступенчатая функция
+ p_DtubInit_m.isStepFunction = True   ' диаметры - ступенчатая функция
+ For i = 2 To HabsCurve_m.numPoints
+    sina = (HabsCurve_m.PointY(i) - HabsCurve_m.PointY(i - 1)) / (HabsCurve_m.pointX(i) - HabsCurve_m.pointX(i - 1))
+    cosa = Sqr(max(1 - sina ^ 2, 0))
+    If cosa = 0 Then
+        ang = 90
+    Else
+        ang = Atn(sina / cosa) * 180 / const_Pi
+    End If
+    
+    p_AngInit_deg.AddPoint HabsCurve_m.pointX(i), ang
+ Next i
+ 
+ CalcTrajectory
+ 
+End Sub
+'Public Sub InitTrajectoryHabsSimple(HabsCurve_m As TInterpolation, DCurve_mm As TInterpolation)
+'' загрузка первичных данных по конструкции скважины
+''
+''
+'' HabsCurve_m  - кривая значений абсолютных глубин относительно измеренных глубин (траектория упрощенная)
+'' DtubCurve_mm  - кривая значений диаматров НКТ
+'' DcasCurve_mm  - кривая значений диаметров эксплуатационной колонны
+''
+'
+' Dim i As Integer
+' Dim ang
+' Dim sina As Double, cosa As Double
+'
+'
+' p_Hperf_m = Hperf_m
+' p_Hpump_m = Hpump_m
+' p_AngInit_deg.ClearPoints
+'
+' ' насос обязательно должен быть выше перфорации
+' If p_Hpump_m >= p_Hperf_m Then
+'    p_Hpump_m = p_Hperf_m - const_ESP_length - 1   ' насос должен быть выше перфорации
+' End If
+'
+' Set p_HabsInit_m = HabsCurve_m
+'
+' Set p_DtubInit_m = DtubCurve_mm.Transform(multY:=const_convert_mm_m)
+'
+' ' поправим кривую для НКТ - вставим принудительно точку глубины спука насоса и ниже ее диаметры занулим
+' DtubCurve_mm.isStepFunction = True
+' p_DtubInit_m.AddPoint p_Hpump_m, DtubCurve_mm.GetPoint(p_Hpump_m)     ' добавляем значение глубины спуска НКТ в компоновку НКТ
+'
+' If p_DtubInit_m.maxx > p_Hpump_m Then
+'    For i = 1 To p_DtubInit_m.numPoints
+'        If p_DtubInit_m.pointX(i) > p_Hpump_m Then p_DtubInit_m.AddPoint p_DtubInit_m.pointX(i), 0
+'    Next i
+' End If
+' Set p_DcasInit_m = DcasCurve_mm.Transform(multY:=const_convert_mm_m)
+' p_DcasInit_m.isStepFunction = True   ' диаметры - ступенчатая функция
+' p_DtubInit_m.isStepFunction = True   ' диаметры - ступенчатая функция
+' For i = 2 To HabsCurve_m.numPoints
+'    sina = (HabsCurve_m.PointY(i) - HabsCurve_m.PointY(i - 1)) / (HabsCurve_m.pointX(i) - HabsCurve_m.pointX(i - 1))
+'    cosa = Sqr(max(1 - sina ^ 2, 0))
+'    If cosa = 0 Then
+'        ang = 90
+'    Else
+'        ang = Atn(sina / cosa) * 180 / const_Pi
+'    End If
+'
+'    p_AngInit_deg.AddPoint HabsCurve_m.pointX(i), ang
+' Next i
+'
+' CalcTrajectory
+'
+'End Sub
+Public Sub InitTrajectoryAngles(Hmes_m, AngAz_deg, AngZn_deg, HmesDcas_m, Dcas_mm, HmeasDtub_m, dtub_mm, Hpert_m, Hpump_m)
+ ' загрузка первичных данных по зенитному и азимутальному углам
+End Sub
+Public Sub InitGasLift(HGLValve_m)
+' включение данных по глубинам газлифтных клапанов
+End Sub
+Public Function CalcTrajectory() As Boolean
+' функция расчета траектории скважины - из исходных данных считает нормализованные выходные данные и готовит данные для скважины
+ Dim i As Integer
+ Dim allDone As Boolean
+ Dim i_constrPoint As Integer
+ Dim Hmes As Double, HmesNext As Double
+ Call FillConstructionPoints     ' заполним все необходимые точки, которые надо добавить в конструкцию
+  
+ Hmes = 0
+ i = 0
+ i_constrPoint = 1
+ allDone = False
+ 
+ ' начинаем цикл, в котором формируем набор точек из которых должна состоять траетория скважины
+ ' учитывая минимальное расстояние между точками и присутствие в списке всех обязательных точек
+ Do
+    HmesNext = Hmes + p_LengthBetweenPoints    ' смотрим куда должна попасть след точка
+    
+    If p_ConstructionPoints.pointX(i_constrPoint) < HmesNext Then
+        Hmes = p_ConstructionPoints.pointX(i_constrPoint)
+        i_constrPoint = i_constrPoint + 1
+    Else
+        Hmes = HmesNext
+    End If
+ 
+    If Hmes >= p_Hperf_m Then
+        Hmes = p_Hperf_m
+        allDone = True
+    End If
+    p_HPoints.AddPoint Hmes, p_HabsInit_m.GetPoint(Hmes)   ' сохраняем измеренную и абсолютную глубины тут
+ Loop Until allDone
+ ' набор точек для траектории сформирован
+ 
+ ' дальше надо по данному набору заполнить все элементы массива конструкции
+ 
+ ReDim p_WellTrajctory(p_HPoints.numPoints - 1)
+ For i = 0 To p_HPoints.numPoints - 1
+    Hmes = p_HPoints.pointX(i + 1)
+    With p_WellTrajctory(i)
+        .Hmes_m = Hmes
+        .Habs_m = p_HPoints.PointY(i + 1)
+        .Ang_deg = p_AngInit_deg.GetPoint(Hmes)
+        .DcasIn_m = p_DcasInit_m.GetPoint(Hmes)
+        .DtubIn_m = p_DtubInit_m.GetPoint(Hmes)
+        .DtubOut_m = p_DtubInit_m.GetPoint(Hmes) + p_TubThick_mm * const_convert_mm_m
+        .RoughnessCas_m = p_Roughness_m
+        .RoughnessTub_m = p_Roughness_m
+    End With
+ Next i
+ ' траекторию сформировали
+ ' надо теперь подготовить массивы для класса скважина
+End Function
+Private Sub FillConstructionPoints()
+    Dim i As Integer
+    Dim h As Double
+    
+    p_ConstructionPoints.ClearPoints
+    p_ConstructionPoints.AddPoint 0, 0   ' на всякий случай добавим в конструкцию нулевую точку из которой стартуем
+    h = p_Hperf_m:     p_ConstructionPoints.AddPoint h, p_HabsInit_m.GetPoint(h)
+    h = p_Hpump_m:     p_ConstructionPoints.AddPoint h, p_HabsInit_m.GetPoint(h)
+    For i = 1 To p_DcasInit_m.numPoints
+        h = p_DcasInit_m.pointX(i):      p_ConstructionPoints.AddPoint h, p_HabsInit_m.GetPoint(h)
+    Next i
+    For i = 1 To p_DtubInit_m.numPoints
+        h = p_DtubInit_m.pointX(i):      p_ConstructionPoints.AddPoint h, p_HabsInit_m.GetPoint(h)
+    Next i
+    
+    ' если надо тут надо добавить другие точки в конструкцию, например газлифтные клапана, глубины установки оборудования
+    ' также тут хорошо бы проверить потенциальные ошибки - отсутствие точек и тому подобное
+End Sub
+Public Property Get Hpump_m() As Double
+    Hpump_m = p_Hpump_m
+End Property
+Public Property Get Hperf_m() As Double
+    Hperf_m = p_Hperf_m
+End Property
+Public Property Get numPoints() As Integer
+    numPoints = p_HPoints.numPoints
+End Property
+Public Property Get Ang_deg(i As Integer) As Double
+    Ang_deg = p_WellTrajctory(i).Ang_deg
+End Property
+Public Property Get AngZ_deg(Hmes_m As Double) As Double
+    AngZ_deg = p_AngInit_deg.GetPoint(Hmes_m)
+End Property
+Public Property Get Hmes_m(i As Integer) As Double
+    Hmes_m = p_WellTrajctory(i).Hmes_m
+End Property
+Public Property Get Habs_m(i As Integer) As Double
+    Habs_m = p_WellTrajctory(i).Habs_m
+End Property
+Public Property Get HabsZ_m(Hmes_m As Double) As Double
+    HabsZ_m = p_HPoints.GetPoint(Hmes_m)
+End Property
+Public Property Get Dcas_m(i As Integer) As Double
+    Dcas_m = p_WellTrajctory(i).DcasIn_m
+End Property
+Public Property Get DcasZ_m(Hmes_m As Double) As Double
+    DcasZ_m = p_DcasInit_m.GetPoint(Hmes_m)
+End Property
+Public Property Get Dtub_m(i As Integer) As Double
+    Dtub_m = p_WellTrajctory(i).DtubIn_m
+End Property
+Public Property Get DtubZ_m(Hmes_m As Double) As Double
+    DtubZ_m = p_DtubInit_m.GetPoint(Hmes_m)
+End Property
+Public Property Get RoughnessCas_m(i As Integer) As Double
+    RoughnessCas_m = p_WellTrajctory(i).RoughnessCas_m
+End Property
+Public Property Get RoughnessCasZ_m(Hmes_m As Double) As Double
+    RoughnessCasZ_m = p_Roughness_m
+End Property
+Public Property Get RoughnessTub_m(i As Integer) As Double
+    RoughnessTub_m = p_WellTrajctory(i).RoughnessTub_m
+End Property
+Public Property Get RoughnessTubZ_m(Hmes_m As Double) As Double
+    RoughnessTubZ_m = p_Roughness_m
+End Property

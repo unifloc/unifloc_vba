@@ -1,0 +1,150 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2017 г
+'
+'=======================================================================================
+Option Explicit
+Dim lm As New CLogger           ' лог который накапливает все сообщения. поддерживает сохранение сообщений в файл
+Private Function MakeLogMsg(msg, Optional msg1, Optional msg2, Optional msg3, Optional tag As String = "") As String
+ Dim msg_str As String
+ msg_str = Format(Date, "Long Date") & " : " & Format(Time, "Long Time") & " : " & tag & " : "
+ 
+ If Not IsMissing(msg) Then
+    msg_str = msg_str & " : " & msg
+ End If
+ If Not IsMissing(msg1) Then
+    msg_str = msg_str & " : " & msg1
+ End If
+ If Not IsMissing(msg2) Then
+    msg_str = msg_str & " : " & msg2
+ End If
+ If Not IsMissing(msg3) Then
+    msg_str = msg_str & " : " & msg3
+ End If
+ MakeLogMsg = msg_str          '  сохраняем строку
+End Function
+Public Function addLogMsg_debug(msg, Optional msg1, Optional msg2, Optional msg3)
+' вывод сообщения в лог и в окно отладки
+' можно задать до 3 строк, которые автоматически склеиваются в одну перед выводом
+'
+ Dim msg_str As String
+ msg_str = MakeLogMsg(msg, msg1, msg2, msg3, "degub")       '   помечаем
+ Debug.Print msg_str                                        '   пишем в окно отладки
+ lm.AddMsg msg_str                                          '   пишем в лог
+End Function
+Public Function addLogMsg(msg, Optional msg1, Optional msg2, Optional msg3)
+' вывод сообщения в лог и в окно отладки
+' можно задать до 3 строк, которые автоматически склеиваются в одну перед выводом
+ lm.AddMsg MakeLogMsg(msg, msg1, msg2, msg3)          '  пишем в лог
+End Function
+Public Function getLogObject() As CLogger
+  Set getLogObject = lm
+End Function
+Public Function CheckRanges(ByRef var_value As Double, ByVal var_name As String, ByVal var_min As Double, ByVal var_max As Double, _
+                                  Optional ByVal out_comment As String = "", Optional ByVal func_name As String = "", _
+                                  Optional ByVal var_set_default = False, Optional error_probability As Double = -1) As Boolean
+' функция проверки диапазонов входных параметров для физ мат функци oppump
+'
+'
+'
+CheckRanges = False
+If var_min > var_max Then
+ addLogMsg ("CheckRanges:" & func_name & ": не корректный диапазон для параметра " & var_name & ". проверка отменена")
+ Exit Function
+End If
+If var_value < var_min Then
+    addLogMsg ("CheckRanges:" & func_name & ": переменная " & var_name & " = " & var_value & " меньше мин. значения = " & var_min & ". " & out_comment)
+    If var_set_default Then
+        addLogMsg ("CheckRanges:" & func_name & ":для переменной " & var_name & " установлено значение по умолчанию = " & var_min)
+        var_value = var_min
+    End If
+    
+    error_probability = increment_error_probability(error_probability)
+    
+    Exit Function
+End If
+If var_value > var_max Then
+    addLogMsg ("CheckRanges:" & func_name & ": переменная " & var_name & " = " & var_value & " больше макс. значения = " & var_max & ". " & out_comment)
+    If var_set_default Then
+        addLogMsg ("CheckRanges:" & func_name & ":для переменной " & var_name & " установлено значение по умолчанию = " & var_max)
+        var_value = var_max
+    End If
+    
+    error_probability = increment_error_probability(error_probability)
+    
+    Exit Function
+End If
+CheckRanges = True
+End Function
+Function increment_error_probability(ByVal er_pr As Double, Optional increment As Integer = 1)
+' потенциально функция накопления ошибок будет усложняться поэтому вынесем отдельно
+ If er_pr >= 0 Then
+  increment_error_probability = er_pr + increment  ' накапливаем ошибки
+ Else
+  increment_error_probability = 1
+ End If
+ 
+End Function
+Sub ArrayConcatenation(arr1, arr2, Optional sum = 0)
+' функция для склейки массивов  - сделана для применения в функции расчета параметров потока в составной трубе
+' на входе два массива - накопительный и по новому участку трубы - по результатам массивы склеиваются
+'
+Dim i As Integer
+Dim arr1_length As Integer, arr2_length As Integer
+If Not IsMissing(arr1) Then
+    arr1_length = UBound(arr1)
+    
+    arr2_length = UBound(arr2) - LBound(arr2)
+    ReDim Preserve arr1(arr1_length + arr2_length)
+    
+    If sum = 0 Then
+        For i = LBound(arr2) To UBound(arr2)
+            arr1(i + arr1_length) = arr2(i)
+        Next i
+    ElseIf sum = 1 Then
+        For i = LBound(arr2) To UBound(arr2)
+            arr1(i + arr1_length) = arr2(i) + arr1(arr1_length)
+        Next i
+     
+    ElseIf sum = 2 Then
+        For i = LBound(arr2) To UBound(arr2)
+            arr1(i + arr1_length) = arr2(i)
+        Next i
+        
+    ElseIf sum = 3 Then
+        For i = UBound(arr1) To LBound(arr1) Step -1
+            If i <= arr2_length Then
+                arr1(i) = arr2(i)
+            Else
+                arr1(i) = arr1(i - arr2_length)
+            End If
+        Next i
+    End If
+    
+End If
+End Sub
+ Public Function CombineS(stor1, stor2)
+   Dim yDimension As Integer, Ydim1 As Integer
+   'Dim stor()
+   Dim i As Integer, j As Integer
+   
+   If IsArray(stor1) And IsArray(stor2) Then
+    yDimension = UBound(stor1, 2) + 1 + UBound(stor2, 2) + 1
+    Ydim1 = UBound(stor1, 2) + 1
+    
+    ReDim Preserve stor1(const_OutputCurveNumPoints, yDimension)
+    
+    For i = 0 To const_OutputCurveNumPoints
+       ' For j = 0 To Ydim1 - 1
+       '     stor(i, j) = stor1(i, j)
+       ' Next j
+        For j = Ydim1 To Ydim1 + UBound(stor2, 2)
+            stor1(i, j) = stor2(i, j - Ydim1)
+        Next j
+    Next i
+   End If
+   
+   
+  CombineS = stor1
+ End Function

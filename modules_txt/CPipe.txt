@@ -1,0 +1,1024 @@
+'=======================================================================================
+'Unifloc7.2  Canis Lupus                                          khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2017 г
+'
+'=======================================================================================
+'============== U4 CPipe  ==============
+' класс для расчета многофазного потока в трубе
+'
+' История
+' 2016.04    Реализован новый механизм расчета распределения давления в стволе с использованием модуля решения ОДУ
+'               упрощена структура хранения массивов
+' 2017.01    Модернизация под 7 версию. Испаравление ошибок и контроль температуры
+Option Explicit
+Option Base 0
+' геометрия трубы заданная массивами
+ Private p_Hmes_insert_m As TInterpolation              ' измеренная глубина которую надо встравить в расчет трубы
+                                                        ' чтобы отловить изменение градиента температуры, например при динамическом уровне
+ Private p_zero_coord_mes As Double                     ' начальная координата трубы, измеренная, от которой будут отсчитываться координаты в выходных массивах
+ Private p_zero_coord_vert As Double                    ' начальная координата трубы, вертикальная, от которой будут отсчитываться координаты в выходных массивах
+ Private p_total_legth_m As Double                      ' общая длинна трубы
+ Private p_total_depthVert_m As Double                  ' общая глубина трубы
+'данные расчета
+ Private p_PTsn As PTtype
+ Private p_PTen As PTtype
+' параметры расчета по трубе
+ Private p_Param As PARAMCALC
+ Private p_Fluid As CPVT                                ' базовый флюид в трубе. Определяет свойства и расходы и фазовый состав
+ Private p_AmbientForm As New CAmbientFormation         ' порода за пределями скважины   (new тут лишнее)
+' расчетные параметры по трубе  (используются для вывода после проведения расчета, отладочные, на их основе строются TInterpolation)
+ Private p_FlowParams_out() As PIPE_FLOW_PARAMS         ' расчетные параметры по трубе после расчета
+ Private p_pipe_segments_num As Integer                 ' количество сегментов трубы  (возм устар)
+ Private PipeSegFlowPar_out() As PIPE_FLOW_PARAMS       ' сегмент параметров для одного участка трубы
+ Private c_HvertCurve As TInterpolation                 ' кривая зависимость вертикальной глубины от измеренной (траектория скважины)
+ Private c_ThetaCurve As TInterpolation                 ' зенитный угол в зависимости от измеренной глубины
+ Private c_RoughnessCurve As TInterpolation             ' шероховатость от измеренной глубины
+ Private c_DiamCurve As TInterpolation                  ' диаметр трубы от измеренной глубины
+' набор расчетных параметров по стволу скважины
+ Private p_NumPointsCurve As Integer                    ' количество точек которые должны быть сохранены для распределения давления в трубе в итоговых кривых
+' Private p_HmesCurve() As Double                       ' массив глубин для которых должны сохраняться итоговые результаты
+ Private p_StepHmCurve As Double                        ' шаг для формирования выходного массива по трубе. м
+ Private p_HmCurve As New TInterpolation                ' кривая для хранения набора точек, для которых должны строится все другие кривые
+' набор кривых с базовыми свойствами
+ Private c_PCurve As TInterpolation                     ' кривая с давлениями
+ Private c_TCurve As TInterpolation
+ Private c_dpdl_gCurve As TInterpolation
+ Private c_dpdl_fCurve As TInterpolation
+ Private c_dpdl_aCurve As TInterpolation
+ Private c_vslCurve As TInterpolation
+ Private c_vsgCurve As TInterpolation
+ Private c_HlCurve As TInterpolation
+ Private c_fpatCurve As TInterpolation
+ ' дополнительные выводные параметры по трубам
+ Private c_RsCurve As New TInterpolation
+ Private c_gasfracCurve As New TInterpolation
+ Private c_muoCurve As New TInterpolation
+ Private c_muwCurve As New TInterpolation
+ Private c_mugCurve As New TInterpolation
+ Private c_mumixCurve As New TInterpolation
+ Private c_rhooCurve As New TInterpolation
+ Private c_rhowCurve As New TInterpolation
+ Private c_rholCurve As New TInterpolation
+ Private c_rhogCurve As New TInterpolation
+ Private c_rhomixCurve As New TInterpolation
+ Private c_qoCurve As New TInterpolation
+ Private c_qwCurve As New TInterpolation
+ Private c_qgCurve As New TInterpolation
+ Private c_moCurve As New TInterpolation
+ Private c_mwCurve As New TInterpolation
+ Private c_mgCurve As New TInterpolation
+ Private c_vlCurve As New TInterpolation
+ Private c_vgCurve As New TInterpolation
+ 
+ Private p_Calculated  As Boolean       ' позже надо приспособить чтобы блокировать расчет при неготовности данных
+ Private p_FastCalc As Boolean   ' флаг для оптимизации скорости счета и потребления памяти
+ 
+  ' конструктор класса
+  ' вызывается при создании класса - гарантирует что все объекты будут созданы
+ Private Sub Class_Initialize()
+    p_Calculated = False
+    p_zero_coord_mes = 0
+    p_zero_coord_vert = 0
+    p_total_legth_m = 100
+    ReDim p_FlowParams_out(0) As PIPE_FLOW_PARAMS
+    Set c_HvertCurve = New TInterpolation
+    Set c_ThetaCurve = New TInterpolation
+    Set c_RoughnessCurve = New TInterpolation
+    Set c_DiamCurve = New TInterpolation
+    ' шероховатость и диаметр трубы меняют ступенчато и не интерполируются
+    c_RoughnessCurve.isStepFunction = True
+    c_DiamCurve.isStepFunction = True
+    Set c_PCurve = New TInterpolation
+    Set c_TCurve = New TInterpolation
+    Set c_dpdl_gCurve = New TInterpolation
+    Set c_dpdl_fCurve = New TInterpolation
+    Set c_dpdl_aCurve = New TInterpolation
+    Set c_vslCurve = New TInterpolation
+    Set c_vsgCurve = New TInterpolation
+    Set c_HlCurve = New TInterpolation
+    Set c_fpatCurve = New TInterpolation
+    c_fpatCurve.isStepFunction = True
+    Set p_Fluid = New CPVT
+    With p_Param
+        '.CalcCorrection = 1
+        .correlation = AnsariCor
+       ' .FlowAtStart = FlowOutPipe
+        .FlowDirection = FlowAgainstCoord
+      '  .TempDirection = TempRaiseAlongCoord
+        .tempMethod = StartEndTemp
+    End With
+    p_HmCurve.ClearPoints
+    Set p_Hmes_insert_m = New TInterpolation
+    p_Hmes_insert_m.ClearPoints
+    Call p_Hmes_insert_m.AddPoint(0, 0)
+    Call p_Hmes_insert_m.AddPoint(LengthMes_m, 0)
+    StepHmCurve = 1000    ' по умолчанию шаг 100 м для сохранения кривых
+    p_FastCalc = True
+ End Sub
+ 
+ ' флаг для ускорения расчета за счет упрощения и расчета меньшего количества своств
+ Public Property Get FastCalc() As Boolean
+    FastCalc = p_FastCalc
+ End Property
+ 
+ Public Property Let FastCalc(val As Boolean)
+    p_FastCalc = val
+ End Property
+ 
+ Public Property Get Hmes_insert_m(ByVal i As Integer) As Double
+   Hmes_insert_m = p_Hmes_insert_m.pointX(i)
+ End Property
+ 
+ Public Function AddHmes_insert_m(ByVal val As Double) As Boolean
+    Call p_Hmes_insert_m.AddPoint(val, 0)   ' Запишем точку, которую надо сохранить
+ End Function
+ 
+ Public Property Get StepHmCurve() As Double
+    StepHmCurve = p_StepHmCurve
+ End Property
+ 
+ Public Property Let StepHmCurve(val As Double)
+    Dim i As Integer
+    Dim Hm As Double
+    Dim Hm_max As Double
+    
+    p_StepHmCurve = val
+    ' установили шаг - сразу подготовим массив точек по давлению для которых должен быть проведен расчет
+    p_HmCurve.ClearPoints    ' очистили точки по давлению
+    For i = 1 To p_Hmes_insert_m.numPoints    ' пустили цикл по количеству точек, которые должны быть обязательно
+        Hm = p_Hmes_insert_m.pointX(i)
+        p_HmCurve.AddPoint Hm, 0                ' добвляем точку в выходной массив. Важен только x, поэтому y задаем произвольно
+                                               ' здесь же должны задаться первая и последняя точки
+    Next i
+    ' далее добавим все промежуточные точки с заданым шагом
+    i = 0
+    Hm = p_HmCurve.pointX(1)   ' начинаем с первой точки
+    Hm_max = p_HmCurve.pointX(p_HmCurve.numPoints)
+    Do
+        Hm = Hm + StepHmCurve
+        If Hm < Hm_max Then                     ' если новая точка попадает в диапазон, добавляем ее.
+            p_HmCurve.AddPoint Hm, 0             ' здесь предполагается, что координаты будут возрастать
+        End If                                  ' если такая точка есть, то она просто перезапишется
+    Loop While Hm < Hm_max
+    ' здесь получили в кривой p_HmCurve все точки для которых надо искать параметры
+ End Property
+  
+' свойста класса служебные
+Public Property Get AmbientForm() As CAmbientFormation
+  Set AmbientForm = p_AmbientForm
+End Property
+Public Property Set AmbientForm(val As CAmbientFormation)
+  Set p_AmbientForm = val
+End Property
+Property Get ZeroCoordMes_m() As Double
+    ZeroCoordMes_m = p_zero_coord_mes
+End Property
+Property Let ZeroCoordMes_m(val As Double)
+    p_zero_coord_mes = val
+End Property
+Property Get ZeroCoordVert_m() As Double
+    ZeroCoordVert_m = p_zero_coord_vert
+End Property
+Property Let ZeroCoordVert_m(val As Double)
+    p_zero_coord_vert = val
+End Property
+' флаг целостности данных. показвает взаимную согласованность данных класса. только для чтения
+ Public Property Get calculated() As Boolean
+   calculated = p_Calculated
+ End Property
+ 
+ Public Property Get Fluid() As CPVT
+    Set Fluid = p_Fluid
+ End Property
+ 
+ Public Property Set Fluid(val As CPVT)
+   Set p_Fluid = val       ' берем новый объект в работу
+   p_Calculated = False
+ End Property
+ 
+' длина сегмента трубы
+Public Property Get LengthMes_m() As Double
+    LengthMes_m = p_total_legth_m
+End Property
+Public Property Get DepthVert_m() As Double
+    DepthVert_m = p_total_depthVert_m
+End Property
+ 
+' давление на старте трубы, задается
+Public Property Let Pstart_atma(val As Double)
+    If val >= const_P_atma_min Then
+        p_PTsn.P_atma = val
+    End If
+    p_Calculated = False
+End Property
+Public Property Get Pstart_atma() As Double
+        Pstart_atma = p_PTsn.P_atma
+End Property
+' давление на конце трубы, расчитывается, только для чтения
+Public Property Get PEnd_atma() As Double
+    If calculated Then
+        Pstart_atma = p_PTen.P_atma
+    Else
+        Pstart_atma = -1   ' может тут надо исключение сгенерировать
+    End If
+End Property
+' температура
+Public Property Let Tstart_C(val As Double)
+    If val >= 0 Then
+        p_PTsn.T_C = val
+    End If
+    p_Calculated = False
+End Property
+Public Property Get Tstart_C() As Double
+        Tstart_C = p_PTsn.T_C
+End Property
+Public Property Let Tend_C(val As Double)
+    If val >= 0 Then
+        p_PTen.T_C = val
+    End If
+    p_Calculated = False
+End Property
+Public Property Get Tend_C() As Double
+        Tend_C = p_PTen.T_C
+End Property
+Property Let correlation(cor As H_CORRELATION)
+    p_Param.correlation = cor
+    p_Calculated = False
+End Property
+Property Get correlation() As H_CORRELATION
+    correlation = Param.correlation
+End Property
+Property Let tempMethod(cor As TEMP_CALC_METHOD)
+    p_Param.tempMethod = cor
+    p_Calculated = False
+End Property
+Property Get tempMethod() As TEMP_CALC_METHOD
+    tempMethod = Param.tempMethod
+End Property
+Public Property Get Param() As PARAMCALC
+    Param = p_Param
+End Property
+Public Property Let Param(val As PARAMCALC)
+    p_Param = val
+End Property
+Public Property Get HvertCurve() As TInterpolation
+    Set HvertCurve = c_HvertCurve
+End Property
+Public Property Get ThetaCurve() As TInterpolation
+   Set ThetaCurve = c_ThetaCurve
+End Property
+Public Property Get RoughnessCurve() As TInterpolation
+   Set RoughnessCurve = c_RoughnessCurve
+End Property
+Public Property Get PCurve() As TInterpolation
+    Set PCurve = c_PCurve   ' для объектов надо использовать set
+End Property
+Public Property Get TCurve() As TInterpolation
+    Set TCurve = c_TCurve
+End Property
+Public Property Get dpdl_gCurve() As TInterpolation
+    Set dpdl_gCurve = c_dpdl_gCurve
+End Property
+Public Property Get dpdl_fCurve() As TInterpolation
+    Set dpdl_fCurve = c_dpdl_fCurve
+End Property
+Public Property Get dpdl_aCurve() As TInterpolation
+    Set dpdl_aCurve = c_dpdl_aCurve
+End Property
+Public Property Get vslCurve() As TInterpolation
+    Set vslCurve = c_vslCurve
+End Property
+Public Property Get vsgCurve() As TInterpolation
+    Set vsgCurve = c_vsgCurve
+End Property
+Public Property Get HlCurve() As TInterpolation
+    Set HlCurve = c_HlCurve
+End Property
+Public Property Get fpatCurve() As TInterpolation
+    Set fpatCurve = c_fpatCurve
+End Property
+    
+Public Property Get RsCurve() As TInterpolation
+   Set RsCurve = c_RsCurve
+End Property
+Public Property Get gasfracCurve() As TInterpolation
+   Set gasfracCurve = c_gasfracCurve
+End Property
+Public Property Get muoCurve() As TInterpolation
+   Set muoCurve = c_muoCurve
+End Property
+Public Property Get muwCurve() As TInterpolation
+   Set muwCurve = c_muwCurve
+End Property
+Public Property Get mugCurve() As TInterpolation
+   Set mugCurve = c_mugCurve
+End Property
+Public Property Get mumixCurve() As TInterpolation
+   Set mumixCurve = c_mumixCurve
+End Property
+Public Property Get rhooCurve() As TInterpolation
+   Set rhooCurve = c_rhooCurve
+End Property
+Public Property Get rhowCurve() As TInterpolation
+   Set rhowCurve = c_rhowCurve
+End Property
+Public Property Get rholCurve() As TInterpolation
+   Set rholCurve = c_rholCurve
+End Property
+Public Property Get rhogCurve() As TInterpolation
+   Set rhogCurve = c_rhogCurve
+End Property
+Public Property Get rhomixCurve() As TInterpolation
+   Set rhomixCurve = c_rhomixCurve
+End Property
+Public Property Get qoCurve() As TInterpolation
+   Set qoCurve = c_qoCurve
+End Property
+Public Property Get qwCurve() As TInterpolation
+  Set qwCurve = c_qwCurve
+End Property
+Public Property Get qgCurve() As TInterpolation
+  Set qgCurve = c_qgCurve
+End Property
+Public Property Get moCurve() As TInterpolation
+  Set moCurve = c_moCurve
+End Property
+Public Property Get mwCurve() As TInterpolation
+  Set mwCurve = c_mwCurve
+End Property
+Public Property Get mgCurve() As TInterpolation
+  Set mgCurve = c_mgCurve
+End Property
+Public Property Get vlCurve() As TInterpolation
+ Set vlCurve = c_vlCurve
+End Property
+Public Property Get vgCurve() As TInterpolation
+  Set vgCurve = c_vgCurve
+End Property
+    
+ Public Function DiamZ(ByVal Z As Double) As Double
+' функция возвращает внутренний диаметр трубы по заданной абсолютной измеренной глубине (если труба проходит по этой глубине)
+    DiamZ = c_DiamCurve.GetPoint(Z)
+ End Function
+ 
+ Public Function RoughnessZ(ByVal Z As Double) As Double
+ ' возвращает шероховатость по измеренной глубине
+    RoughnessZ = c_RoughnessCurve.GetPoint(Z)
+ End Function
+ Public Function AngleThetaZ(ByVal Z As Double) As Double
+' возвращает угол по измеренной глубине
+    AngleThetaZ = c_ThetaCurve.GetPoint(Z)
+ End Function
+ 
+ Public Function HvertZ(ByVal Z As Double) As Double
+' возвращает угол по измеренной глубине
+    HvertZ = c_HvertCurve.GetPoint(Z)
+ End Function
+' инициализация трубы через данные по траектории
+Public Sub InitPipeConstrTr(ByVal tr As CTrajectory, ByVal HmesStart_m As Double, ByVal HmesEnd_m As Double, Optional PipeType As Integer = 0)
+    Dim i As Integer
+    Dim h As Double
+    c_DiamCurve.isStepFunction = True
+    p_zero_coord_mes = HmesStart_m
+    p_zero_coord_vert = tr.HabsZ_m(HmesStart_m)
+    p_pipe_segments_num = tr.numPoints - 1
+    ' по умолчанию используем все сегменты которые были заданы в траектории
+    For i = 0 To p_pipe_segments_num
+         h = tr.Hmes_m(i)
+         If h >= HmesStart_m And h <= HmesEnd_m Then
+            ' теперь  заполним кривые соответствующие траектории скважины  - в первый раз пишем нулевую точку
+            Select Case PipeType
+                Case 0
+                    c_DiamCurve.AddPoint h, tr.DtubZ_m(h)   ' НКТ
+                    c_RoughnessCurve.AddPoint h, tr.RoughnessTub_m(i)
+                Case 1:
+                    c_DiamCurve.AddPoint h, tr.DcasZ_m(h)   ' эксп
+                    c_RoughnessCurve.AddPoint h, tr.RoughnessCas_m(i)
+                Case 2:
+                    c_DiamCurve.AddPoint h, tr.DcasZ_m(h) - tr.DtubZ_m(h)  ' затруб
+                    c_RoughnessCurve.AddPoint h, tr.RoughnessCas_m(i)
+            End Select
+            c_ThetaCurve.AddPoint h, tr.AngZ_deg(h)
+            c_HvertCurve.AddPoint h, tr.HabsZ_m(h)
+         End If
+    Next i
+    p_total_legth_m = HmesEnd_m - HmesStart_m
+    p_total_depthVert_m = tr.HabsZ_m(HmesEnd_m) - tr.HabsZ_m(HmesStart_m)
+    Call SetHmes_insert    ' после инициализации конструкции добавляем обязательные точки, которые надо добавить
+    StepHmCurve = 100    ' ставим заведомо большой шаг для сохранения, чтобы сохранить только крайние точки
+End Sub
+' Метод прямой инициализации конструкции трубы из массивов или исходных данных
+'
+Public Sub InitPipeConstr(ByVal arr_d_m, ByVal arr_length_m, ByVal arr_theta_deg, ByVal arr_roughness_m)
+    Dim length_
+    Dim tot_length As Double
+    Dim tot_length_mes As Double
+    Dim i As Integer
+    i = 0
+    tot_length = 0
+    p_total_depthVert_m = 0
+    tot_length_mes = ZeroCoordMes_m   ' повторно начнем использовать переменную для отсчета глубины
+    If (IsObject(arr_length_m)) Then  'length is specified as range
+        For Each length_ In arr_length_m   'calculate total length
+            tot_length = tot_length + length_
+            i = i + 1
+        Next
+    Else
+        If IsArray(arr_length_m) Then
+            i = UBound(arr_length_m)
+        Else
+            i = 0
+        End If
+    End If
+    
+    
+    If i > 0 Then
+        p_pipe_segments_num = i + 1
+        p_total_legth_m = tot_length
+        For i = 0 To p_pipe_segments_num - 1
+            ' теперь  заполним кривые соответствующие траектории скважины  - в первый раз пишем нулевую точку
+            c_DiamCurve.AddPoint tot_length_mes, arr_d_m(i)
+            c_ThetaCurve.AddPoint tot_length_mes, arr_theta_deg(i)
+            c_RoughnessCurve.AddPoint tot_length_mes, arr_roughness_m(i)
+            c_HvertCurve.AddPoint tot_length_mes, p_total_depthVert_m
+            tot_length_mes = tot_length_mes + arr_length_m(i)
+            p_total_depthVert_m = p_total_depthVert_m + arr_length_m(i) * sind(arr_theta_deg(i))
+        Next i
+        i = p_pipe_segments_num - 1
+        c_DiamCurve.AddPoint tot_length_mes, arr_d_m(i)
+        c_ThetaCurve.AddPoint tot_length_mes, arr_theta_deg(i)
+        c_RoughnessCurve.AddPoint tot_length_mes, arr_roughness_m(i)
+        c_HvertCurve.AddPoint tot_length_mes, p_total_depthVert_m
+        i = p_pipe_segments_num - 1
+        p_total_legth_m = tot_length_mes
+    Else  ' just numbers
+        p_pipe_segments_num = 1
+        Dim parr_arr_d_m, parr_arr_theta_deg, parr_arr_roughness_m, parr_arr_length_m
+        If IsArray(arr_length_m) Then
+            parr_arr_length_m = arr_length_m(0)
+            parr_arr_d_m = arr_d_m(0)
+            parr_arr_theta_deg = arr_theta_deg(0)
+            parr_arr_roughness_m = arr_roughness_m(0)
+            p_total_legth_m = arr_length_m(0)
+            p_total_depthVert_m = p_total_legth_m * sind(arr_theta_deg(0))
+        Else
+            parr_arr_length_m = arr_length_m
+            parr_arr_d_m = arr_d_m
+            parr_arr_theta_deg = arr_theta_deg
+            parr_arr_roughness_m = arr_roughness_m
+            p_total_legth_m = arr_length_m
+            p_total_depthVert_m = p_total_legth_m * sind(arr_theta_deg)
+        End If
+        i = 0
+        c_DiamCurve.AddPoint tot_length_mes, parr_arr_d_m
+        c_ThetaCurve.AddPoint tot_length_mes, parr_arr_theta_deg
+        c_RoughnessCurve.AddPoint tot_length_mes, parr_arr_roughness_m
+        c_HvertCurve.AddPoint tot_length_mes, ZeroCoordVert_m
+        tot_length_mes = tot_length_mes + parr_arr_length_m
+        c_DiamCurve.AddPoint tot_length_mes, parr_arr_d_m
+        c_ThetaCurve.AddPoint tot_length_mes, parr_arr_theta_deg
+        c_RoughnessCurve.AddPoint tot_length_mes, parr_arr_roughness_m
+        c_HvertCurve.AddPoint tot_length_mes, p_total_depthVert_m
+    End If
+    Call SetHmes_insert    ' после инициализации конструкции добавляем обязательные точки, которые надо добавить
+    StepHmCurve = 100    ' ставим заведомо большой шаг для сохранения, чтобы сохранить только крайние точки
+End Sub
+Public Sub SetHmes_insert(Optional pointX As Double = 0)
+    p_Hmes_insert_m.ClearPoints
+    p_Hmes_insert_m.AddPoint ZeroCoordMes_m, 0
+    p_Hmes_insert_m.AddPoint ZeroCoordMes_m + LengthMes_m, 0
+    If pointX > ZeroCoordMes_m And pointX < (ZeroCoordMes_m + LengthMes_m) Then
+        p_Hmes_insert_m.AddPoint pointX, 0
+    End If
+End Sub
+Public Function InitPipe(ByVal d_m, ByVal Hmes0_m, Hmes1_m, theta_deg, _
+                         Optional ByVal roughness_m = 0.00001)
+    Dim arr_d_m(0) As Double
+    Dim arr_length_m(0) As Double
+    Dim arr_theta_deg(0) As Double
+    Dim arr_roughness_m(0) As Double
+    Dim i As Integer
+    For i = LBound(arr_d_m) To UBound(arr_d_m)
+        arr_d_m(i) = d_m
+        arr_theta_deg(i) = theta_deg
+        arr_roughness_m(i) = roughness_m
+    Next i
+    arr_length_m(0) = Hmes1_m - Hmes0_m
+    'arr_length_m(1) = 0
+    ZeroCoordMes_m = Hmes0_m
+    ZeroCoordVert_m = 0
+    Call InitPipeConstr(arr_d_m, arr_length_m, arr_theta_deg, arr_roughness_m)
+        
+   
+End Function
+'=================================================================================================
+' новый подход - можно обойтись без разделение на прямой участок и кривой - расчет за один проход.
+'=================================================================================================
+Private Function TempGradLinearVert()
+' функция для определения вертикального температурного градиента в соответствии с линейным градиентом
+    TempGradLinearVert = (Tend_C - Tstart_C) / p_total_depthVert_m '* Param.FlowDirection
+End Function
+Public Function CalcGrad(ByVal L_m As Double, ByVal P_atma As Double, ByVal T_C As Double) As PIPE_FLOW_PARAMS
+' функция расчета градиента давления и температуры в скважине при заданных параметрах
+' возвращает все параметры потока в заданной точке трубы при заданых термобарических условиях.
+'
+'
+'
+'  L_m   - глубина на которой ведется расчет, нужна для привязки по температуре
+'  P_atma - давление в заданной точке
+'  T_C   - температура в заданной точке
+'  d_m   - диаметр трубы по которой идет поток в заданной точке
+'  theta_deg - зенитный угол наклона трубы в заданной точке
+'  rough_m   - шероховатость трубы в заданной точке
+'Allocate variables used to output auxilary values
+Dim dpdlg_out As Double
+Dim dpdlf_out As Double
+Dim dpdla_out As Double
+Dim v_sl_out As Double
+Dim v_sg_out As Double
+Dim vl_msec As Double
+Dim vg_msec As Double
+Dim h_l_out As Double
+Dim fpat_out
+'Dim calc_Rs_m3m3 As Double
+'Dim Ql_m3day As Double
+'Dim Qg_sc_m3day  As Double
+'Dim Hpipe_insert_m As Double
+'Dim delta_l_store2 As Double
+'Dim h1 As Double, H2 As Double
+Dim d_m As Double   ' диаметр трубы по которой идет поток
+Dim theta_deg As Double ' угол наклона трубы в расчете
+Dim rough_m As Double   ' шероховатость
+Dim Hv_m As Double
+Dim dp_dl As Double, dp_dl_arr
+Dim dt_dl As Double
+Dim v As Double, dvdL As Double
+'Dim delta_l As Double
+'delta_l = 0.1   ' квант длины для расчета градиента температуры - костыль, который надо будет исправить
+d_m = DiamZ(L_m)                ' определяем диаметр на указанной глубине
+theta_deg = AngleThetaZ(L_m)    ' определяем наклон на заданной глубине
+rough_m = RoughnessZ(L_m)       ' определяем шероховатость на заданной глубине
+Hv_m = HvertZ(L_m)              ' определяем вертикальную глубину для заданной измеренной глубины
+With Fluid
+  'проверим на корректность исходных данных
+  If P_atma < const_minPpipe_atma Then Exit Function
+  
+  ' найдем все PVT в заданных условиях
+  Call Fluid.Calc_PVT(P_atma, T_C)
+  If .Qmix_m3day = 0 Then
+    T_C = p_AmbientForm.AmbTemp_С(L_m)
+  End If
+  
+  Select Case Param.correlation
+      Case BeggsBriilCor
+        
+          dp_dl_arr = unf_BegsBrillGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
+                                .rho_liq_kgm3, .rho_gas_kgm3, 0, 1)
+'          dp_dl_arr = BegsBrillGradient(d_m, theta_deg, rough_m, P_atma, .Qo_scm3day, .Qw_scm3day, .Qgas_scm3day, .Bo_m3m3, _
+'                                    .Bw_m3m3, .Bg_m3m3, .Rs_m3m3, .Muo_cP, .Muw_cP, .Mug_cP, .sigma_o_Nm, .sigma_w_Nm, .rhoOil_sckgm3, .rhoWat_sckgm3, .rhoGas_sckgm3, 1, 0, 1)
+          dp_dl = dp_dl_arr(0)
+          dpdlg_out = dp_dl_arr(1)
+          dpdlf_out = dp_dl_arr(2)
+          dpdla_out = dp_dl_arr(3)
+          v_sl_out = dp_dl_arr(4)
+          v_sg_out = dp_dl_arr(5)
+          h_l_out = dp_dl_arr(6)
+          fpat_out = dp_dl_arr(7)
+          
+      Case AnsariCor
+          dp_dl_arr = unf_AnsariGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
+                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma)
+          dp_dl = dp_dl_arr(0)
+          dpdlg_out = dp_dl_arr(1)
+          dpdlf_out = dp_dl_arr(2)
+          dpdla_out = dp_dl_arr(3)
+          v_sl_out = dp_dl_arr(4)
+          v_sg_out = dp_dl_arr(5)
+          h_l_out = dp_dl_arr(6)
+          fpat_out = dp_dl_arr(7)
+      Case UnifiedCor
+          dp_dl_arr = unf_UnifiedTUFFPGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
+                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma)
+                                    
+          dp_dl = dp_dl_arr(0)
+          dpdlg_out = dp_dl_arr(1)
+          dpdlf_out = dp_dl_arr(2)
+          dpdla_out = dp_dl_arr(3)
+          v_sl_out = dp_dl_arr(4)
+          v_sg_out = dp_dl_arr(5)
+          h_l_out = dp_dl_arr(6)
+          fpat_out = dp_dl_arr(7)
+          
+      Case Gray
+          dp_dl_arr = unf_GrayModifiedGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
+                                .rho_liq_kgm3, .rho_gas_kgm3, 0, 1)
+          dp_dl = dp_dl_arr(0)
+          dpdlg_out = dp_dl_arr(1)
+          dpdlf_out = dp_dl_arr(2)
+          dpdla_out = dp_dl_arr(3)
+          v_sl_out = dp_dl_arr(4)
+          v_sg_out = dp_dl_arr(5)
+          h_l_out = dp_dl_arr(6)
+          fpat_out = dp_dl_arr(7)
+          
+      Case HagedornBrown
+          dp_dl_arr = unf_HagedornandBrawnmodified(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
+                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma, 0, 1)
+          dp_dl = dp_dl_arr(0)
+          dpdlg_out = dp_dl_arr(1)
+          dpdlf_out = dp_dl_arr(2)
+          dpdla_out = dp_dl_arr(3)
+          v_sl_out = dp_dl_arr(4)
+          v_sg_out = dp_dl_arr(5)
+          h_l_out = dp_dl_arr(6)
+          fpat_out = dp_dl_arr(7)
+          
+      Case SakharovMokhov
+          dp_dl_arr = unf_Saharov_Mokhov_Gradient(d_m, theta_deg, rough_m, P_atma, .Qo_scm3day, .Qw_scm3day, .Qgas_scm3day, .bo_m3m3, _
+                                    .Bw_m3m3, .Bg_m3m3, .rs_m3m3, .Muo_cP, .Muw_cP, .Mug_cP, .sigma_o_Nm, .sigma_w_Nm, .RhoOil_sckgm3, .rhoWat_sckgm3, .rhoGas_sckgm3)
+          dp_dl = dp_dl_arr(0)
+          dpdlg_out = dp_dl_arr(1)
+          dpdlf_out = dp_dl_arr(2)
+          dpdla_out = dp_dl_arr(3)
+          v_sl_out = dp_dl_arr(4)
+          v_sg_out = dp_dl_arr(5)
+          h_l_out = dp_dl_arr(6)
+          fpat_out = dp_dl_arr(7)
+                                    
+  End Select
+  
+  vl_msec = v_sl_out * const_Pi * d_m ^ 2 / 4 ' скорость жидкости реальная
+  vg_msec = v_sg_out * const_Pi * d_m ^ 2 / 4 ' скорость жидкости реальная
+  ' для оценки температуры оценим скорость потока и ускорение
+  
+  ' теперь зададим изменение температуры в потоке
+  Select Case Param.tempMethod
+        Case StartEndTemp
+            dt_dl = TempGradLinearVert * sind(theta_deg)
+        Case GeoGradTemp
+            dt_dl = p_AmbientForm.TGeoGrad_C100m * sind(theta_deg) / 100
+        Case AmbientTemp
+            v = vg_msec    ' оценка сверху
+            dvdL = -v / P_atma * dp_dl
+            dt_dl = p_AmbientForm.Calc_dTdL_Cm(L_m, sind(theta_deg), T_C, .Wm_kgsec, .Cmix_JkgC, _
+                                                    dp_dl, v, dvdL, .CJT_Katm)
+  End Select
+ ' тут надо записать в результаты все расчетные параметры
+ Dim res As PIPE_FLOW_PARAMS
+ 
+ 
+ res.dp_dl = dp_dl
+ res.dt_dl = dt_dl
+ 
+ If Not FastCalc Then
+         res.md_m = L_m                                 ' pipe measured depth (from start - top)
+         res.vd_m = Hv_m                                ' pipe vertical depth from start - top
+         res.dpdl_a_atmm = dpdla_out                    ' acceleration gradient at measured depth
+         res.dpdl_f_atmm = dpdlf_out                    ' friction gradient at measured depth
+         res.dpdl_g_atmm = dpdlg_out                    ' gravity gradient at measured depth
+         res.fpat = fpat_out                            ' flow pattern code
+         res.gasfrac = Fluid.GasFraction_d()
+         res.h_l_d = h_l_out                            ' liquid hold up
+         res.Qg_m3day = Fluid.Qgas_m3day
+         res.P_atma = P_atma                              '  pipe pressure at measured depth
+         res.T_C = T_C                                  ' pipe temp at measured depth
+         res.v_sl_msec = v_sl_out                       ' superficial liquid velosity
+         res.v_sg_msec = v_sg_out                       ' superficial gas velosity
+         res.thete_deg = theta_deg                      '
+         res.roughness_m = rough_m                      '
+         res.rs_m3m3 = Fluid.rs_m3m3                    ' растворенный газ в нефти в потоке
+         res.gasfrac = Fluid.GasFraction_d              ' расходное содержание газа в потоке
+         res.Muo_cP = Fluid.Muo_cP                      ' вязкость нефть в потоке
+         res.Muw_cP = Fluid.Muw_cP                      ' вязкость воды в потоке
+         res.Mug_cP = Fluid.Mug_cP                      ' вязкость газа в потоке
+         res.MuMix_cP = Fluid.MuMix_cP                  ' вязкость смеси в потоке
+         res.Rhoo_kgm3 = Fluid.rho_oil_kgm3             ' плотность нефти
+         res.Rhow_kgm3 = Fluid.rho_water_kgm3           ' плотность воды
+         res.rhol_kgm3 = Fluid.rho_liq_kgm3             ' плотность жидкости
+         res.Rhog_kgm3 = Fluid.rho_gas_kgm3             ' плотность газа
+         res.rhomix_kgm3 = Fluid.rho_mix_kgm3           ' плотность смеси в потоке
+         res.Qo_m3day = Fluid.Qo_m3day                  ' расход нефти в рабочих условиях
+         res.Qw_m3day = Fluid.Qw_m3day                  ' расход воды в рабочих условиях
+         res.Qg_m3day = Fluid.Qgas_m3day                ' расход газа в рабочих условиях
+         res.mo_kgsec = Fluid.mo_kgsec                  ' массовый расход нефти в рабочих условиях
+         res.mw_kgsec = Fluid.mw_kgsec                  ' массовый расход воды в рабочих условиях
+         res.mg_kgsec = Fluid.mg_kgsec                  ' массовый расход газа в рабочих условиях
+         res.vl_msec = vl_msec  ' скорость жидкости реальная
+         res.vg_msec = vg_msec  ' скорость газа реальная
+ End If
+  
+ CalcGrad = res
+End With
+'
+End Function
+Public Function Calc_dPipe(PT As PTtype) As PTtype
+' новая версия расчета перепада давления в трубе, сразу с учетом инклинометрии
+' основан на применении ODEsolver
+Dim Y0() As Double   ' начальные значения для проведения расчета
+Dim N, M As Long
+Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
+Dim eps As Double
+Dim Step As Double
+Dim State As ODESolverState
+Dim Rtn As Boolean
+Dim i As Integer
+Dim pfp As PIPE_FLOW_PARAMS
+Dim Rep As ODESolverReport
+On Error GoTo err1:
+eps = 0.001
+Step = 10
+ReDim Y0(1) ' = Array(Psn_atma, t_sn_C)
+Y0(0) = PT.P_atma
+Y0(1) = PT.T_C
+N = 2    ' размер системы  - две переменные - давление и температура
+M = p_HmCurve.numPoints ' количество точек для которых надо выдать ответ
+' формируем массив глубин для расчета давления
+' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
+ReDim x(M - 1)
+For i = 0 To M - 1
+    If Param.FlowDirection = FlowAlongCoord Then  '(1)
+        x(i) = p_HmCurve.pointX(i + 1)
+    Else
+        x(i) = p_HmCurve.pointX(M - i)
+    End If
+Next i
+ 
+  ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
+  ' без такой проверки расчет градиента температуры сходит с ума
+If Fluid.Qliq_scm3day = 0 Then
+    Y0(1) = p_AmbientForm.AmbTemp_С(x(0))
+End If
+'X(0) = ZeroCoordMes_m
+'X(1) = (2 * ZeroCoordMes_m + LengthMes_m) / 2
+'X(2) = ZeroCoordMes_m + LengthMes_m
+' X = Array(ZeroCoordMes_m, ZeroCoordMes_m + LengthMes_m)
+Call ODESolverRKCK(Y0(), N, x, M, eps, Step, State)
+' Loop through the AlgLib solver routine and the external ODE
+' evaluation routine until the solver routine returns "False",
+' which indicates that it has finished.
+' The VBA function named in "FuncName" is called using
+' the Application.Run method.
+Rtn = True
+i = 0
+Do While Rtn = True And i < 10000
+    Rtn = ODESolverIteration(State)
+    pfp = CalcGrad(State.x, State.y(0), State.y(1)) ' Application.Run(FuncName, State.X, State.Y, CoeffA)
+    State.DY(0) = pfp.dp_dl '* Param.FlowDirection '* Param.PipeDirection
+    State.DY(1) = pfp.dt_dl '* Param.FlowDirection '* Param.PipeDirection
+    i = i + 1
+Loop
+ ' Extract the desired results from the State
+ ' object using the appropriate AlgLib routine
+ Call ODESolverResults(State, M, x, y, Rep)
+' If necessary convert the AlgLib output array(s) to
+' a form suitable for Excel.  In this case YA2 is
+' a 2D base 0 array, which may be assigned to the
+' function return value without further processing.
+' Assign the output array to the function return value
+' ODE = YA2
+Calc_dPipe.P_atma = y(M - 1, 0)
+Calc_dPipe.T_C = y(M - 1, 1)
+c_PCurve.ClearPoints
+c_TCurve.ClearPoints
+For i = 0 To M - 1
+    c_PCurve.AddPoint x(i), y(i, 0)
+    c_TCurve.AddPoint x(i), y(i, 1)
+Next i
+If Not FastCalc Then
+    Call FillDetailedCurve
+End If
+    Exit Function
+err1:
+    addLogMsg ("CPipe.Calc_dPipe: ошибка какая то")
+    Err.Raise Err.Number, Err.Source, Err.Description
+End Function
+Public Function Calc_dPipeZNLF(PT As PTtype, ByVal Qgfree_scm3day As Double) As PTtype
+    ' расчет перепада давления в неподвижной колонне с газом
+ '   Dim qq As Double
+ '   qq = Fluid.Qliq_scm3day
+'    Qliq_m3day = const_ZNLF_rate
+ '   Param.ZNLF = True   ' флаг для znlf
+ '   p_Qgfree_scm3day = Qgfree_scm3day
+    Fluid.ZNLF = True
+    Fluid.Qgfree_scm3day = Qgfree_scm3day
+    Calc_dPipeZNLF = Calc_dPipe(PT)
+'    Qliq_m3day = qq
+End Function
+Public Sub FillDetailedCurve()
+' функция расчета  детальных распределений параметров по длине трубы
+Dim i As Integer
+Dim M As Integer
+Dim FlowParams_out As PIPE_FLOW_PARAMS
+    M = c_PCurve.numPoints
+    
+    c_HvertCurve.ClearPoints
+ '   c_PCurve.ClearPoints
+ '   c_TCurve.ClearPoints
+    c_dpdl_gCurve.ClearPoints
+    c_dpdl_fCurve.ClearPoints
+    c_dpdl_aCurve.ClearPoints
+    c_vslCurve.ClearPoints
+    c_vsgCurve.ClearPoints
+    c_HlCurve.ClearPoints
+    c_fpatCurve.ClearPoints
+    c_RsCurve.ClearPoints
+    c_gasfracCurve.ClearPoints
+    c_muoCurve.ClearPoints
+    c_muwCurve.ClearPoints
+    c_mugCurve.ClearPoints
+    c_mumixCurve.ClearPoints
+    c_rhooCurve.ClearPoints
+    c_rhowCurve.ClearPoints
+    c_rholCurve.ClearPoints
+    c_rhogCurve.ClearPoints
+    c_rhomixCurve.ClearPoints
+    c_qoCurve.ClearPoints
+    c_qwCurve.ClearPoints
+    c_qgCurve.ClearPoints
+    c_moCurve.ClearPoints
+    c_mwCurve.ClearPoints
+    c_mgCurve.ClearPoints
+    c_vlCurve.ClearPoints
+    c_vgCurve.ClearPoints
+ 
+    For i = 0 To M - 1 ' UBound(p_FlowParams_out)
+     FlowParams_out = CalcGrad(p_HmCurve.pointX(i), c_PCurve.PointY(i), c_TCurve.PointY(i))
+     With FlowParams_out
+        c_HvertCurve.AddPoint .md_m, .vd_m
+        c_PCurve.AddPoint .md_m, .P_atma
+        c_TCurve.AddPoint .md_m, .T_C
+        c_dpdl_gCurve.AddPoint .md_m, .dpdl_g_atmm
+        c_dpdl_fCurve.AddPoint .md_m, .dpdl_f_atmm
+        c_dpdl_aCurve.AddPoint .md_m, .dpdl_a_atmm
+        c_vslCurve.AddPoint .md_m, .v_sl_msec
+        c_vsgCurve.AddPoint .md_m, .v_sg_msec
+        c_HlCurve.AddPoint .md_m, .h_l_d
+        c_fpatCurve.AddPoint .md_m, .fpat
+        c_ThetaCurve.AddPoint .md_m, .thete_deg
+        c_RoughnessCurve.AddPoint .md_m, .roughness_m
+        
+        c_RsCurve.AddPoint .md_m, .rs_m3m3
+        c_gasfracCurve.AddPoint .md_m, .gasfrac
+        c_muoCurve.AddPoint .md_m, .Muo_cP
+        c_muwCurve.AddPoint .md_m, .Muw_cP
+        c_mugCurve.AddPoint .md_m, .Mug_cP
+        c_mumixCurve.AddPoint .md_m, .MuMix_cP
+        c_rhooCurve.AddPoint .md_m, .Rhoo_kgm3
+        c_rhowCurve.AddPoint .md_m, .Rhow_kgm3
+        c_rholCurve.AddPoint .md_m, .rhol_kgm3
+        c_rhogCurve.AddPoint .md_m, .Rhog_kgm3
+        c_rhomixCurve.AddPoint .md_m, .rhomix_kgm3
+        c_qoCurve.AddPoint .md_m, .Qo_m3day
+        c_qwCurve.AddPoint .md_m, .Qw_m3day
+        c_qgCurve.AddPoint .md_m, .Qg_m3day
+        c_moCurve.AddPoint .md_m, .mo_kgsec
+        c_mwCurve.AddPoint .md_m, .mw_kgsec
+        c_mgCurve.AddPoint .md_m, .mg_kgsec
+        c_vlCurve.AddPoint .md_m, .vl_msec
+        c_vgCurve.AddPoint .md_m, .vg_msec
+     End With
+    Next i
+End Sub
+Private Sub fillCurves()
+Dim i As Integer
+    c_HvertCurve.ClearPoints
+    c_PCurve.ClearPoints
+    c_TCurve.ClearPoints
+    c_dpdl_gCurve.ClearPoints
+    c_dpdl_fCurve.ClearPoints
+    c_dpdl_aCurve.ClearPoints
+    c_vslCurve.ClearPoints
+    c_vsgCurve.ClearPoints
+    c_HlCurve.ClearPoints
+    c_fpatCurve.ClearPoints
+    c_RsCurve.ClearPoints
+    c_gasfracCurve.ClearPoints
+    c_muoCurve.ClearPoints
+    c_muwCurve.ClearPoints
+    c_mugCurve.ClearPoints
+    c_mumixCurve.ClearPoints
+    c_rhooCurve.ClearPoints
+    c_rhowCurve.ClearPoints
+    c_rholCurve.ClearPoints
+    c_rhogCurve.ClearPoints
+    c_rhomixCurve.ClearPoints
+    c_qoCurve.ClearPoints
+    c_qwCurve.ClearPoints
+    c_qgCurve.ClearPoints
+    c_moCurve.ClearPoints
+    c_mwCurve.ClearPoints
+    c_mgCurve.ClearPoints
+    c_vlCurve.ClearPoints
+    c_vgCurve.ClearPoints
+ 
+    For i = LBound(p_FlowParams_out) To UBound(p_FlowParams_out)
+     With p_FlowParams_out(i)
+        c_HvertCurve.AddPoint .md_m, .vd_m
+        c_PCurve.AddPoint .md_m, .P_atma
+        c_TCurve.AddPoint .md_m, .T_C
+        c_dpdl_gCurve.AddPoint .md_m, .dpdl_g_atmm
+        c_dpdl_fCurve.AddPoint .md_m, .dpdl_f_atmm
+        c_dpdl_aCurve.AddPoint .md_m, .dpdl_a_atmm
+        c_vslCurve.AddPoint .md_m, .v_sl_msec
+        c_vsgCurve.AddPoint .md_m, .v_sg_msec
+        c_HlCurve.AddPoint .md_m, .h_l_d
+        c_fpatCurve.AddPoint .md_m, .fpat
+        c_ThetaCurve.AddPoint .md_m, .thete_deg
+        c_RoughnessCurve.AddPoint .md_m, .roughness_m
+        
+        c_RsCurve.AddPoint .md_m, .rs_m3m3
+        c_gasfracCurve.AddPoint .md_m, .gasfrac
+        c_muoCurve.AddPoint .md_m, .Muo_cP
+        c_muwCurve.AddPoint .md_m, .Muw_cP
+        c_mugCurve.AddPoint .md_m, .Mug_cP
+        c_mumixCurve.AddPoint .md_m, .MuMix_cP
+        c_rhooCurve.AddPoint .md_m, .Rhoo_kgm3
+        c_rhowCurve.AddPoint .md_m, .Rhow_kgm3
+        c_rholCurve.AddPoint .md_m, .rhol_kgm3
+        c_rhogCurve.AddPoint .md_m, .Rhog_kgm3
+        c_rhomixCurve.AddPoint .md_m, .rhomix_kgm3
+        c_qoCurve.AddPoint .md_m, .Qo_m3day
+        c_qwCurve.AddPoint .md_m, .Qw_m3day
+        c_qgCurve.AddPoint .md_m, .Qg_m3day
+        c_moCurve.AddPoint .md_m, .mo_kgsec
+        c_mwCurve.AddPoint .md_m, .mw_kgsec
+        c_mgCurve.AddPoint .md_m, .mg_kgsec
+        c_vlCurve.AddPoint .md_m, .vl_msec
+        c_vgCurve.AddPoint .md_m, .vg_msec
+     End With
+    Next i
+End Sub
+Public Function SaveState()
+ ' сохраняет состояние объекта в двухмерный массив для обеспечения вывода (для отладки)
+    Dim stor()
+    
+    ReDim stor(const_OutputCurveNumPoints, STOR_SIZE)
+    stor(0, 0) = "Pipe SaveState"   ' тут будет общея строка с датой сохранения дампа
+    
+    AddS stor, 1, 0, "calculation properties    "
+    AddS stor, 2, 0, "p_PTsn.P_atma      ", p_PTsn.P_atma
+    AddS stor, 3, 0, "p_Tsn_C           ", p_PTsn.T_C
+    AddS stor, 4, 0, "p_Ten_C           ", p_PTen.T_C
+    AddS stor, 5, 0, "p_Qliq_m3day      ", Fluid.Qliq_scm3day
+    AddS stor, 6, 0, "p_WCT_perc        ", Fluid.wc_perc
+    AddS stor, 7, 0, "p_Qgfree_scm3day  ", Fluid.Qgfree_scm3day
+    
+     AddS stor, 8, 0, "PVT    "
+     AddS stor, 9, 0, "p_gamma_o         ", Fluid.gamma_o
+    AddS stor, 10, 0, "p_gamma_g         ", Fluid.gamma_g
+    AddS stor, 11, 0, "p_gamma_w         ", Fluid.gamma_w
+    AddS stor, 12, 0, "p_Rp_m3m3         ", Fluid.Rp_m3m3
+    AddS stor, 13, 0, "p_Rsb_m3m3  ", Fluid.rsb_m3m3
+    AddS stor, 14, 0, "p_Pb_atma    ", Fluid.Pb_atma
+    AddS stor, 15, 0, "p_Bo_m3m3   ", Fluid.bo_m3m3
+    
+    AddS stor, 16, 0, "parameters    "
+    AddS stor, 17, 0, "p_correlation     ", Param.correlation
+    AddS stor, 18, 0, "p_PVT_correlation ", Fluid.PVT_CORRELATION
+    AddS stor, 19, 0, "p_AlongFlow       "
+    AddS stor, 20, 0, "p_n_n             ", const_n_n
+    AddS stor, 21, 0, "p_MaxSegmLen      ", const_MaxSegmLen
+    AddS stor, 22, 0, "p_maxdP           ", const_MaxdP
+    'AddS stor, 23, 0, "p_CalcCorrection  ", Param.CalcCorrection
+    
+    Call fillCurves
+    
+    AddS stor, 0, 2, "Hmes, m", " Hvert, m"
+    AddSCurve stor, 1, 2, c_HvertCurve
+    
+    AddS stor, 0, 4, "Hmes, m", " Theta, m"
+    AddSCurve stor, 1, 4, c_ThetaCurve
+    
+    AddS stor, 0, 6, "Hmes, m", " Roughness, m"
+    AddSCurve stor, 1, 6, c_RoughnessCurve
+    
+    AddS stor, 0, 8, "Hmes, m", " P, atma"
+    AddSCurve stor, 1, 8, c_PCurve
+ 
+    AddS stor, 0, 10, "Hmes, m", " T, C"
+    AddSCurve stor, 1, 10, c_TCurve
+    
+    AddS stor, 0, 12, "Hmes, m", " dP/dL grav, atma/m"
+    AddSCurve stor, 1, 12, c_dpdl_gCurve
+    
+    AddS stor, 0, 14, "Hmes, m", " dP/dL fric, atma/m"
+    AddSCurve stor, 1, 14, c_dpdl_fCurve
+ 
+    AddS stor, 0, 16, "Hmes, m", " dP/dL acel, atma/m"
+    AddSCurve stor, 1, 16, c_dpdl_aCurve
+    
+    AddS stor, 0, 18, "Hmes, m", " Vsl, m/s"
+    AddSCurve stor, 1, 18, c_vslCurve
+    
+    AddS stor, 0, 20, "Hmes, m", " Vsg, m/s"
+    AddSCurve stor, 1, 20, c_vsgCurve
+    
+    AddS stor, 0, 22, "Hmes, m", " Hl hold up"
+    AddSCurve stor, 1, 22, c_HlCurve
+    
+    AddS stor, 0, 24, "Hmes, m", " fpat"
+    AddSCurve stor, 1, 24, c_fpatCurve
+    
+    SaveState = stor
+ End Function
