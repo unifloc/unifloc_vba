@@ -12,8 +12,6 @@ Option Base 0
 Public choke As New Cchoke
 ' параметры флюида
 Private p_Fluid As New CPVT                 ' флюиды из пласта
-'Private p_FluidTub As New CPVT              ' флюиды в насосе и НКТ после сепарации
-'Private p_FluidCas As New CPVT              ' флюид в затрубном пространстве, с учетом барботажа
 ' параметры УЭЦН
 Private p_ESP As New CESPsystem             ' УЭЦН всегда есть, как минимум это входной модуль
 ' ключевые элементы конструкции
@@ -68,14 +66,12 @@ Private p_ErrorLevel As Double              ' уровень  ошибок в ходе проведения 
 Private p_DataQualityLevel As Double        ' уровень достоверности данных
 Private p_CalcQualityLevel As Double        ' уровень достоверности расчета
 Private c_Curves As New Collection_         ' коллекция кривых с результатами расчетов
+Private p_FastCalc As Boolean               ' флаг проведения быстрого расчета
 Public Event ReportProgress(msg As String)
 Private Sub Class_Initialize()
     With p_Param
-        '.CalcCorrection = 1
         .correlation = AnsariCor
-       ' .FlowAtStart = FlowOutPipe
         .FlowDirection = FlowAgainstCoord
-     '   .TempDirection = TempRaiseAlongCoord
         .tempMethod = StartEndTemp
     End With
     Param = p_Param                         ' здесь распространим все настройки на трубы
@@ -128,6 +124,15 @@ Public Property Get Tsurf_C() As Double
     Tsurf_C = p_PTbuf.T_C
     Tsurf_C = AmbientForm.AmbTemp_С(0)
 End Property
+ Public Property Let FastCalc(val As Boolean)
+    p_Pipe_HspHvd.FastCalc = val
+    p_Pipe_WHeadHsp_Tubing.FastCalc = val
+    p_FastCalc = val
+ End Property
+ 
+ Public Property Get FastCalc() As Boolean
+    FastCalc = p_FastCalc
+ End Property
  ' флаг целостности данных. показвает взаимную согласованность данных класса. только для чтения
  Public Property Get calculated() As Boolean
    calculated = p_Calculated
@@ -309,6 +314,10 @@ End Property
   p_Calculated = False
  End Property
  
+ Public Property Get Tline_C() As Double
+    Tline_C = p_PTlin.T_C
+ End Property
+ 
  Public Property Get Pline_atma() As Double
     Pline_atma = p_PTlin.P_atma
  End Property
@@ -316,6 +325,10 @@ End Property
  Public Property Let Pline_atma(val As Double)
     p_PTlin.P_atma = val
     p_Calculated = False
+ End Property
+ 
+ Public Property Get Tbuf_C() As Double
+    Tbuf_C = p_PTbuf.T_C
  End Property
  
  Public Property Get Pbuf_atma() As Double
@@ -379,65 +392,6 @@ End Property
     Call InitWellFromTr
  End Property
  
-' Private Sub InitWellConstructionFromTrajectory()
-' On Error GoTo error1
-' Dim i As Integer
-' Dim sina As Double, cosa As Double
-'        i = Trajectory.NumPoints - 1
-'        p_well_segment_joints = i + 1    ' нашли количество стыков сегментов
-'        p_well_segments_num = i     ' нашли количество сегментов
-'        ReDim p_Hmes_m(p_well_segment_joints - 1)
-'        ReDim p_Hvert_m(p_well_segment_joints - 1)
-'        ReDim p_Dcas_m(p_well_segments_num - 1)
-'        ReDim p_Dtub_m(p_well_segments_num - 1)
-'        ReDim p_RoughnessCas_m(p_well_segments_num - 1)
-'        ReDim p_RoughnessTub_m(p_well_segments_num - 1)
-'        ReDim parr_arr_theta_deg(p_well_segments_num - 1)
-'        ReDim parr_arr_length_m(p_well_segments_num - 1)
-'        For i = 0 To p_well_segment_joints - 1
-'            p_Hmes_m(i) = Trajectory.Hmes_m(i)
-'            p_Hvert_m(i) = Trajectory.Habs_m(i)
-'            If i < p_well_segment_joints - 1 Then ' отдельно с проверкой заполняем то, что касается сегментов
-'                p_Dcas_m(i) = Trajectory.Dcas_m(i)
-'                p_Dtub_m(i) = Trajectory.Dtub_m(i)
-'                If p_Dtub_m(i) >= p_Dcas_m(i) Then
-'                      addLogMsg "Cwell.InitWellConstruction некоррентно задана конструкция скважины. НКТ больше Эксп колонны", msgError
-'                End If
-'                p_RoughnessCas_m(i) = Trajectory.RoughnessCas_m(i)
-'                p_RoughnessTub_m(i) = Trajectory.RoughnessTub_m(i)
-'            End If
-'            If i > 0 Then
-'                parr_arr_length_m(i - 1) = p_Hmes_m(i) - p_Hmes_m(i - 1)
-'                If (parr_arr_length_m(i - 1) < 0) Or ((p_Hvert_m(i) - p_Hvert_m(i - 1)) < 0) Then
-'                      addLogMsg "Cwell.InitWellConstruction некоррентно задана конструкция скважины. Глубина не возрастает", msgError
-'                End If
-'                sina = (p_Hvert_m(i) - p_Hvert_m(i - 1)) / (p_Hmes_m(i) - p_Hmes_m(i - 1))
-'                cosa = Sqr(max(1 - sina ^ 2, 0))
-'                If cosa = 0 Then
-'                    parr_arr_theta_deg(i - 1) = 90
-'                Else
-'                    parr_arr_theta_deg(i - 1) = Atn(sina / cosa) * 180 / const_Pi
-'                End If
-'            End If
-'        Next i
-'    Exit Sub
-'error1:
-'    Dim MyError
-'    MyError = Err.Number - vbObjectError
-'    If MyError > 0 And MyError < 65000 Then             ' ошибки ОпНасоса
-'        Select Case MyError
-'            Case kErrWellConstruction                   ' проталкиваем наверх
-'                Err.Raise Err.Number, "InitWellConstructionFromTrajectory", Err.Description
-'            Case Else
-'                MsgBox "CWell.InitWellConstructionFromTrajectory error  "   ' для профилактики покахываем
-'                Debug.Assert False
-'                Resume Next
-'        End Select
-'    Else                                                ' ошибка VBA
-'        Err.Raise Err.Number, Err.Source, Err.Description, Err.HelpFile, Err.HelpContext    ' проталкиваем наверх ошибку
-'    End If
-' End Sub
- 
  Public Sub InitWell(ByVal Hperf_m As Double, ByVal Hpump_m As Double, ByVal Udl_m As Double, _
                      ByVal Dcas_mm As Double, ByVal dtub_mm As Double, ByVal Tbh_C As Double, ByVal Twh_C As Double)
 ' метод для инициализации скважины простыми числами
@@ -467,13 +421,91 @@ End Property
     geoGrad.AddPoint Hperf_m, Tbh_C
     Set ambTemp.AmbTempCurve = geoGrad
     Set AmbientForm = ambTemp
-    InitTempLinear Tbh_C, Twh_C
+    InitTempTr geoGrad
     Exit Sub
 err1:
     errMsg = "CWell.InitWell: Ошибка простой инициализации скважины " & sDELIM & Err.Description
     RaiseEvent ReportProgress(errMsg)
     Err.Raise kErrInitCalc, Err.Source, errMsg
  End Sub
+ 
+  Public Sub InitWellRange(ByVal Incl_Hmes_m_ As Range, ByVal Incl_Hvert_m_ As Range, Hperf_m, Htub_m, _
+                     Dcas_mm, dtub_mm, ByVal Tbh_C As Double, ByVal Twh_C As Double)
+' метод для инициализации скважины данными инсклинометрии и числами для остальных параметров
+ On Error GoTo err1:
+    Dim HabsCurve_m As New TInterpolation
+    Dim DcasCurve_mm As New TInterpolation
+    Dim DtubCurve_mm As New TInterpolation
+    Dim geoGrad As New TInterpolation
+    Dim ambTemp As New CAmbientFormation
+    
+    Dim tr As New CTrajectory
+    Dim errMsg As String
+    
+    Call HabsCurve_m.LoadFromVertRange(Incl_Hmes_m_, Incl_Hvert_m_)
+   
+    DcasCurve_mm.AddPoint 0, Dcas_mm
+    DcasCurve_mm.AddPoint Hperf_m, Dcas_mm
+    
+    DtubCurve_mm.AddPoint 0, dtub_mm
+    DtubCurve_mm.AddPoint Htub_m, dtub_mm
+    
+    Call tr.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Htub_m)
+    Set Trajectory = tr
+    
+    geoGrad.AddPoint 0, Twh_C
+    geoGrad.AddPoint Hperf_m, Tbh_C
+    Set ambTemp.AmbTempCurve = geoGrad
+    Set AmbientForm = ambTemp
+    InitTempTr geoGrad
+    Exit Sub
+err1:
+    errMsg = "CWell.InitWell: Ошибка простой инициализации скважины " & sDELIM & Err.Description
+    RaiseEvent ReportProgress(errMsg)
+    Err.Raise kErrInitCalc, Err.Source, errMsg
+ End Sub
+ 
+Public Sub InitWellRangeAll(ByVal Incl_Hmes_m_ As Range, _
+                            ByVal Incl_Hvert_m_ As Range, _
+                            ByVal hmes_dcas_m_ As Range, _
+                            ByVal dcas_arr_mm_ As Range, _
+                            ByVal hmes_dtub_m_ As Range, _
+                            ByVal dtub_arr_mm_ As Range, _
+                            ByVal hmes_tamb_m_ As Range, _
+                            ByVal tamb_C_ As Range)
+' метод для инициализации скважины из диапазонов измнения ключевых параметров
+ On Error GoTo err1:
+    Dim HabsCurve_m As New TInterpolation
+    Dim DcasCurve_mm As New TInterpolation
+    Dim DtubCurve_mm As New TInterpolation
+    Dim geoGrad As New TInterpolation
+    Dim ambTemp As New CAmbientFormation
+    Dim Hperf_m As Double, Htub_m As Double
+    Dim errMsg As String
+    
+    Call HabsCurve_m.LoadFromVertRange(Incl_Hmes_m_, Incl_Hvert_m_)
+    Call DcasCurve_mm.LoadFromVertRange(hmes_dcas_m_, dcas_arr_mm_)
+    Call DtubCurve_mm.LoadFromVertRange(hmes_dtub_m_, dtub_arr_mm_)
+   
+    Hperf_m = DcasCurve_mm.maxx
+    Htub_m = DtubCurve_mm.maxx
+    
+    Call p_Trajectory.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Htub_m)
+    Call InitWellFromTr
+    
+    Call geoGrad.LoadFromVertRange(hmes_tamb_m_, tamb_C_)
+    Set ambTemp.AmbTempCurve = geoGrad
+    
+    Set AmbientForm = ambTemp
+    
+    InitTempTr geoGrad
+    Exit Sub
+err1:
+    errMsg = "CWell.InitWell: Ошибка простой инициализации скважины " & sDELIM & Err.Description
+    RaiseEvent ReportProgress(errMsg)
+    Err.Raise kErrInitCalc, Err.Source, errMsg
+ End Sub
+ 
  
  Private Sub InitWellFromTr()
  ' инициализация скважины по данным траектории скважин
@@ -495,18 +527,41 @@ err1:
     p_Calculated = False
  End Sub
  
+  Public Sub InitTempTr(geoGrad As TInterpolation)
+ ' процедура для инициализации температуры в скважине, для линейнго расчета
+ ' при линейном расчете предполагается, что температура меняется линейно относительно длины трубы
+ '
+ 
+    p_PTwf.T_C = geoGrad.GetPoint(geoGrad.maxx)
+    p_PTbuf.T_C = geoGrad.GetPoint(geoGrad.minx)
+    ' теперь раскидаем температуру по трубам
+    ' до некоторого времени была путаница с распределением температуры по глубинам
+    '       логика такая - координаты всегда начинаются от устья к забою, а поток нормальный идет от забоя к устью
+    '       поэтому начало трубы это забой (по потоку), конец трубы это устье
+    Dim t As Double
+'    t = p_PTbuf.T_C + (p_PTwf.T_C - p_PTbuf.T_C) * p_Pipe_WHeadHsp_Tubing.DepthVert_m / _
+'       (p_Pipe_WHeadHsp_Tubing.DepthVert_m + p_Pipe_HspHvd.DepthVert_m)
+    t = p_PTbuf.T_C + (p_PTwf.T_C - p_PTbuf.T_C) * p_Pipe_WHeadHsp_Tubing.LengthMes_m / _
+       (p_Pipe_WHeadHsp_Tubing.LengthMes_m + p_Pipe_HspHvd.LengthMes_m)
+    p_Pipe_HspHvd.Tend_C = t ' geoGrad.GetPoint(p_Pipe_WHeadHsp_Tubing.DepthVert_m) ' Tbhinit_C - p_Pipe_HspHvd.DepthVert_m * TempGradVert
+    p_Pipe_HspHvd.Tstart_C = p_PTwf.T_C
+    p_Pipe_WHeadHsp_Tubing.Tend_C = p_PTbuf.T_C
+    p_Pipe_WHeadHsp_Tubing.Tstart_C = p_Pipe_HspHvd.Tend_C
+    p_Pipe_WHeadHsp_Casing.Tend_C = p_PTbuf.T_C
+    p_Pipe_WHeadHsp_Casing.Tstart_C = p_Pipe_HspHvd.Tend_C
+ End Sub
   
- Public Sub InitTempLinear(Tbhinit_C As Double, Twhinit_C As Double)
+ Public Sub InitTempLinear(ByVal Tbhinit_C As Double, ByVal Twhinit_C As Double)
  ' процедура для инициализации температуры в скважине, для линейнго расчета
     Dim TempGradVert As Double
-    TempGradVert = (Tbhinit_C - Twhinit_C) / Trajectory.HabsZ_m(p_Hvd_m)
+    TempGradVert = (Tbhinit_C - Twhinit_C) / p_Hvd_m
     p_PTwf.T_C = Tbhinit_C
     p_PTbuf.T_C = Twhinit_C
     ' теперь раскидаем температуру по трубам
     ' до некоторого времени была путаница с распределением температуры по глубинам
     '       логика такая - координаты всегда начинаются от устья к забою, а поток нормальный идет от забоя к устью
     '       поэтому начало трубы это забой (по потоку), конец трубы это устье
-    p_Pipe_HspHvd.Tend_C = Tbhinit_C - p_Pipe_HspHvd.DepthVert_m * TempGradVert
+    p_Pipe_HspHvd.Tend_C = Tbhinit_C - p_Pipe_HspHvd.LengthMes_m * TempGradVert
     p_Pipe_HspHvd.Tstart_C = Tbhinit_C
     p_Pipe_WHeadHsp_Tubing.Tend_C = Twh_C
     p_Pipe_WHeadHsp_Tubing.Tstart_C = p_Pipe_HspHvd.Tend_C
@@ -645,6 +700,10 @@ err1:
     
     Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve) ', ESP.PCurve   пока не включаем в расчет распределение давления в насосе, потом надо будет добавить
     Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve) ', ESP.TCurve
+        
+    Call Curve(str_HlHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.HlCurve, p_Pipe_HspHvd.HlCurve)  ', ESP.TCurve
+    Call Curve(str_TambHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TambCurve, p_Pipe_HspHvd.TambCurve)
+    
 End Function
  Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional fast As Boolean = True)
  ' функция расчета сверху вниз
@@ -836,13 +895,25 @@ On Error GoTo err1:
     ' Если при заданном затрубном давлении Pan существует отличный от нуля динамический уровень Hdyn
     ' то в качестве результатов расчетов сохраняются эти значения
     ' уже подсчитано
-'    p_Plin_atma = p_PTlin.P_atma
-'    p_Pbuf_atma = p_PTbuf.P_atma
+'   p_Plin_atma = p_PTlin.P_atma
+'   p_Pbuf_atma = p_PTbuf.P_atma
     Calc_Plin_Pwf_atma = p_PTlin.P_atma
-   ' переводим в состояние "целостность нарушена"
-'    Call fillCurvesPT
-        Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve) ', ESP.PCurve   пока не включаем в расчет распределение давления в насосе, потом надо будет добавить
-        Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve) ', ESP.TCurve
+'   Call fillCurvesPT
+    Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve)
+    Curve(str_PtubHmes_curve).xName = "hmes ptub"
+    Curve(str_PtubHmes_curve).yName = "Ptub"
+    Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve)
+    Curve(str_TtubHmes_curve).yName = "Ttub"
+    Call Curve(str_TambHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TambCurve, p_Pipe_HspHvd.TambCurve)
+    Curve(str_TambHmes_curve).yName = "Tamb"
+    
+    If Not FastCalc Then
+        Call Curve(str_HlHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.HlCurve, p_Pipe_HspHvd.HlCurve)
+        Curve(str_HlHmes_curve).yName = "Hl"
+    End If
+    
+    
+'   переводим в состояние "целостность нарушена"
     p_Calculated = False
     
     
@@ -1245,7 +1316,7 @@ Public Property Get Curve(Key As String) As TInterpolation
     c_Curves.Add Curve, Key
  End If
 End Property
-Public Property Set Curve(Key As String, valNew As TInterpolation) ' As TInterpolation
+Public Property Set Curve(Key As String, valNew As TInterpolation)
  If c_Curves.Exists(Key) Then
     c_Curves(Key) = valNew
  Else
@@ -1253,17 +1324,19 @@ Public Property Set Curve(Key As String, valNew As TInterpolation) ' As TInterpo
  End If
 End Property
 Private Sub fillCurvesPT_hirundo()
-' новая версия формирования выходных кривых по скважине на основе кривых по трубам
-Dim i As Integer
-Dim pumpLenCorr As Double
-Dim Hmes_m As Double   ' текущая глубина
-Dim StableFlag As Boolean
-StableFlag = False
-Curve(str_PtubHmes_curve).ClearPoints    ' сначала очистим точки
-' потом соберем кривую
-Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve)
-Call Curve(str_PtubHmes_curve).AddPointsCurve(ESP.PCurve)
-Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_HspHvd.PCurve)
+    ' новая версия формирования выходных кривых по скважине на основе кривых по трубам
+    'Dim i As Integer
+    Dim pumpLenCorr As Double
+    Dim Hmes_m As Double   ' текущая глубина
+    Dim StableFlag As Boolean
+    
+    StableFlag = False
+    
+    Curve(str_PtubHmes_curve).ClearPoints    ' сначала очистим точки
+    ' потом соберем кривую
+    Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve)
+    Call Curve(str_PtubHmes_curve).AddPointsCurve(ESP.PCurve)
+    Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_HspHvd.PCurve)
 End Sub
 Private Sub fillCurvesPT()
 ' формирование массивов свойств потока вдоль ствола скважины (давление температура и прочее)
