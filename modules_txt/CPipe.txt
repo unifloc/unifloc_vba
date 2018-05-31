@@ -75,6 +75,10 @@ Option Base 0
  Private p_Calculated  As Boolean       ' позже надо приспособить чтобы блокировать расчет при неготовности данных
  Private p_FastCalc As Boolean   ' флаг для оптимизации скорости счета и потребления памяти
  
+ ' поправочные коэффициенты для расчета распределения давления
+ Private p_betta_grav As Double
+ Private p_betta_fric As Double
+ 
   ' конструктор класса
   ' вызывается при создании класса - гарантирует что все объекты будут созданы
  Private Sub Class_Initialize()
@@ -114,7 +118,33 @@ Option Base 0
     Call p_Hmes_insert_m.AddPoint(LengthMes_m, 0)
     StepHmCurve = 1000    ' по умолчанию шаг 100 м для сохранения кривых
     p_FastCalc = True
+    p_betta_grav = 1
+    p_betta_fric = 1
  End Sub
+ 
+ Public Property Get betta_grav() As Double
+    betta_grav = p_betta_grav
+ End Property
+ 
+ Public Property Let betta_grav(val As Double)
+    If val > 0 And val < 2 Then
+    ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
+        p_betta_grav = val
+    End If
+ End Property
+ 
+ Public Property Let betta_fric(val As Double)
+    If val > 0 And val < 2 Then
+    ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
+        p_betta_fric = val
+    End If
+ End Property
+ 
+ Public Property Get betta_fric() As Double
+    betta_fric = p_betta_fric
+ End Property
+ 
+ 
  
  ' флаг для ускорения расчета за счет упрощения и расчета меньшего количества своств
  Public Property Get FastCalc() As Boolean
@@ -568,7 +598,7 @@ With Fluid
       Case BeggsBriilCor
         
           dp_dl_arr = unf_BegsBrillGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
-                                .rho_liq_kgm3, .rho_gas_kgm3, 0, 1)
+                                .rho_liq_kgm3, .rho_gas_kgm3, 0, 1, betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
           dpdlg_out = dp_dl_arr(1)
           dpdlf_out = dp_dl_arr(2)
@@ -580,7 +610,7 @@ With Fluid
           
       Case AnsariCor
           dp_dl_arr = unf_AnsariGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
-                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma)
+                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma, , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
           dpdlg_out = dp_dl_arr(1)
           dpdlf_out = dp_dl_arr(2)
@@ -591,7 +621,7 @@ With Fluid
           fpat_out = dp_dl_arr(7)
       Case UnifiedCor
           dp_dl_arr = unf_UnifiedTUFFPGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
-                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma)
+                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma, , betta_grav, betta_fric)
                                     
           dp_dl = dp_dl_arr(0)
           dpdlg_out = dp_dl_arr(1)
@@ -604,7 +634,7 @@ With Fluid
           
       Case Gray
           dp_dl_arr = unf_GrayModifiedGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
-                                .rho_liq_kgm3, .rho_gas_kgm3, 0, 1)
+                                .rho_liq_kgm3, .rho_gas_kgm3, 0, 1, , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
           dpdlg_out = dp_dl_arr(1)
           dpdlf_out = dp_dl_arr(2)
@@ -616,7 +646,7 @@ With Fluid
           
       Case HagedornBrown
           dp_dl_arr = unf_HagedornandBrawnmodified(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
-                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma, 0, 1)
+                                .rho_liq_kgm3, .rho_gas_kgm3, P_atma, 0, 1, , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
           dpdlg_out = dp_dl_arr(1)
           dpdlf_out = dp_dl_arr(2)
@@ -628,7 +658,8 @@ With Fluid
           
       Case SakharovMokhov
           dp_dl_arr = unf_Saharov_Mokhov_Gradient(d_m, theta_deg, rough_m, P_atma, .Qo_scm3day, .Qw_scm3day, .Qgas_scm3day, .Bo_m3m3, _
-                                    .Bw_m3m3, .Bg_m3m3, .rs_m3m3, .Muo_cP, .Muw_cP, .Mug_cP, .sigma_o_Nm, .sigma_w_Nm, .RhoOil_sckgm3, .rhoWat_sckgm3, .rhoGas_sckgm3)
+                                    .Bw_m3m3, .Bg_m3m3, .rs_m3m3, .Muo_cP, .Muw_cP, .Mug_cP, .sigma_o_Nm, .sigma_w_Nm, .RhoOil_sckgm3, .rhoWat_sckgm3, .rhoGas_sckgm3, _
+                                    , , , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
           dpdlg_out = dp_dl_arr(1)
           dpdlf_out = dp_dl_arr(2)
