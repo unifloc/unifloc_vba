@@ -725,14 +725,14 @@ err1:
     p_Calculated = True
  End Function
  
- Public Function Calcfast_Pwf_Plin_atma(Plin_atma As Double, ByVal Tbh_C As Double)
+ Public Function Calcfast_Pwf_Plin_atma(Plin_atma As Double, ByVal Tbh_C As Double, Optional SaveCurve As CALC_RESULTS = noCurves)
 ' быстрый метод расчета забойного давлени€ через линейное (без итераций - пр€мой счет)
     p_Pipe_WHeadHsp_Tubing.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
     p_PTbuf.P_atma = Plin_atma
     p_PTbuf.T_C = Twh_C
-    p_PTintake = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf)   'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
+    p_PTintake = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, SaveCurve)   'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
     p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
-    p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake)
+    p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake, SaveCurve)
     Calcfast_Pwf_Plin_atma = p_PTwf.P_atma
     
     Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve) ', ESP.PCurve   пока не включаем в расчет распределение давлени€ в насосе, потом надо будет добавить
@@ -742,16 +742,16 @@ err1:
     Call Curve(str_TambHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TambCurve, p_Pipe_HspHvd.TambCurve)
     
 End Function
- Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional fast As Boolean = True)
+ Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional fast As Boolean = True, Optional SaveCurve As CALC_RESULTS = noCurves)
  ' функци€ расчета сверху вниз
  If fast Then
-    Calc_Pwf_Plin_atma = Calcfast_Pwf_Plin_atma(Plin_atma, Tbh_C)
+    Calc_Pwf_Plin_atma = Calcfast_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
  Else
-    Calc_Pwf_Plin_atma = Calcslow_Pwf_Plin_atma(Plin_atma, Tbh_C)
+    Calc_Pwf_Plin_atma = Calcslow_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
  End If
  End Function
  
-  Public Function Calcslow_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double)
+  Public Function Calcslow_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional SaveCurve As CALC_RESULTS = noCurves)
 ' @brief Calc_Pwf_Plin_atma расчет забойного давлени€ по известному давлению в линии и конструкции скважины дихотомией
 ' @param Plin_atma - давление в линии
 ' @param Hd - динамический уровень
@@ -771,7 +771,7 @@ On Error GoTo err1:
     PwfDown = -1
     Do
         ' ищем  приближени€
-        Plin1 = Calc_Plin_Pwf_atma(SetPT(Pwf1, Tbh_C), CalcCasing:=False)
+        Plin1 = Calc_Plin_Pwf_atma(SetPT(Pwf1, Tbh_C), CalcCasing:=False, SaveCurve:=noCurves)
         If (Abs(Plin1 - Plin_atma) < const_well_P_tolerance) Then
              found_solution = True
              p_PTwf.P_atma = Pwf1
@@ -799,7 +799,7 @@ On Error GoTo err1:
         End If
         i = i + 1
     Loop While Not found_solution And i < 20
-    Me.Pline_atma = Calc_Plin_Pwf_atma(p_PTwf)
+    Me.Pline_atma = Calc_Plin_Pwf_atma(p_PTwf, CalcCasing:=False, SaveCurve:=SaveCurve)
     If Abs(Me.Pline_atma - Plin_atma) > const_well_P_tolerance Then
        addLogMsg "Calc_Pwf_Plin_atma: ошибка расчета забойного давлени€ больше " & const_well_P_tolerance & ". –авна = " & Abs(Me.Pline_atma - Plin_atma)
     End If
@@ -840,7 +840,9 @@ End Function
 Public Function Calc_Tintake_C(ByVal TbeforePump_C As Double)
     Calc_Tintake_C = TbeforePump_C ' ESP.Calc_ESP_Tintake_C(TbeforePump_C, Qliq_scm3day, p_Pipe_HspHvd.DiamTop())
 End Function
-Public Function Calc_Plin_Pwf_atma(PTwf As PTtype, Optional CalcCasing As Boolean = True, Optional CalcChoke As Boolean = True, Optional calcEPStemp As Boolean = False) As Double
+Public Function Calc_Plin_Pwf_atma(PTwf As PTtype, Optional CalcCasing As Boolean = True, Optional CalcChoke As Boolean = True, _
+                                    Optional calcESPtemp As Boolean = False, _
+                                    Optional SaveCurve As CALC_RESULTS = noCurves) As Double
 ' @brief расчет давлени€ на устье через забойное давление (снизу -> вверх)
 ' @param Pwf - исходное забойное давление
 ' @param Tbh_c - температура на забое
@@ -856,16 +858,16 @@ On Error GoTo err1:
     ' p_Pipe_HspHvd - труба от забо€ до приема, задаем расчет параметров снизу-вверх
     p_Pipe_HspHvd.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
     ' –асчитываем давление на приеме (Pwf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
-    p_PTintake = p_Pipe_HspHvd.Calc_dPipe(PTwf)
+    p_PTintake = p_Pipe_HspHvd.Calc_dPipe(PTwf, SaveCurve)
     ' еслт давление на приеме меньше 1 значит поток не доходит до насоса, значит надо поправить расчеты
-    If p_PTintake.P_atma < 1 Then
-        p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
-        p_PTintake.P_atma = 1
-        p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake)              ' стрельнем назад и определим новое давление на приеме
-    End If
+'    If p_PTintake.P_atma < 1 Then
+'        p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
+'        p_PTintake.P_atma = 1
+'        p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake, SaveCurve)              ' стрельнем назад и определим новое давление на приеме
+'    End If
     If IsESP() Then                                                 ' ≈сли есть насос
         ' 3. –асчет изменени€ температуры в насосе
-        If calcEPStemp Then
+        If calcESPtemp Then
             p_PTdis = ESP.Calc(p_PTintake)                              ' расчитываютс€ параметры насоса включа€ сепарацию и модификацию флюидов
         Else
             p_PTdis = ESP.Calc(p_PTintake, p_PTintake.T_C)
@@ -913,7 +915,7 @@ On Error GoTo err1:
     End If
     ' 7. –асчет распределени€ давлени€ в Ќ “ и расчет буферного давлени€ c учетом движени€ в Ќ “ нефти после сепарации PVTtub
     p_Pipe_WHeadHsp_Tubing.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
-    p_PTbuf = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTdis)   'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
+    p_PTbuf = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTdis, SaveCurve)   'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
     
     ' 8. –асчет линейного давлени€ по штуцеру
     If Dchoke_m > 0 And CalcChoke Then     ' пока отключено
@@ -932,23 +934,22 @@ On Error GoTo err1:
     ' ≈сли при заданном затрубном давлении Pan существует отличный от нул€ динамический уровень Hdyn
     ' то в качестве результатов расчетов сохран€ютс€ эти значени€
     ' уже подсчитано
-'   p_Plin_atma = p_PTlin.P_atma
-'   p_Pbuf_atma = p_PTbuf.P_atma
-    Calc_Plin_Pwf_atma = p_PTlin.P_atma
-'   Call fillCurvesPT
-    Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve)
-    Curve(str_PtubHmes_curve).xName = "hmes ptub"
-    Curve(str_PtubHmes_curve).yName = "Ptub"
-    Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve)
-    Curve(str_TtubHmes_curve).yName = "Ttub"
-    Call Curve(str_TambHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TambCurve, p_Pipe_HspHvd.TambCurve)
-    Curve(str_TambHmes_curve).yName = "Tamb"
+   Calc_Plin_Pwf_atma = p_PTlin.P_atma
     
-    If Not FastCalc Then
-        Call Curve(str_HlHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.HlCurve, p_Pipe_HspHvd.HlCurve)
-        Curve(str_HlHmes_curve).yName = "Hl"
+    If SaveCurve > 0 Then
+        Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve)
+        Curve(str_PtubHmes_curve).xName = "hmes ptub"
+        Curve(str_PtubHmes_curve).yName = "Ptub"
+        Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve)
+        Curve(str_TtubHmes_curve).yName = "Ttub"
+        Call Curve(str_TambHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TambCurve, p_Pipe_HspHvd.TambCurve)
+        Curve(str_TambHmes_curve).yName = "Tamb"
+    
+        If SaveCurve > 1 Then
+            Call Curve(str_HlHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.HlCurve, p_Pipe_HspHvd.HlCurve)
+            Curve(str_HlHmes_curve).yName = "Hl"
+        End If
     End If
-    
     
 '   переводим в состо€ние "целостность нарушена"
     p_Calculated = False
