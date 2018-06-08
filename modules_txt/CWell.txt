@@ -568,42 +568,28 @@ err1:
  ' процедура для инициализации температуры в скважине, для линейнго расчета
  ' при линейном расчете предполагается, что температура меняется линейно относительно длины трубы
  '
- 
+    Dim TempGradVert As Double
     p_PTwf.T_C = geoGrad.GetPoint(geoGrad.maxx)
     p_PTbuf.T_C = geoGrad.GetPoint(geoGrad.minx)
-    ' теперь раскидаем температуру по трубам
-    ' до некоторого времени была путаница с распределением температуры по глубинам
-    '       логика такая - координаты всегда начинаются от устья к забою, а поток нормальный идет от забоя к устью
-    '       поэтому начало трубы это забой (по потоку), конец трубы это устье
-    Dim t As Double
-'    t = p_PTbuf.T_C + (p_PTwf.T_C - p_PTbuf.T_C) * p_Pipe_WHeadHsp_Tubing.DepthVert_m / _
-'       (p_Pipe_WHeadHsp_Tubing.DepthVert_m + p_Pipe_HspHvd.DepthVert_m)
-    t = p_PTbuf.T_C + (p_PTwf.T_C - p_PTbuf.T_C) * p_Pipe_WHeadHsp_Tubing.LengthMes_m / _
-       (p_Pipe_WHeadHsp_Tubing.LengthMes_m + p_Pipe_HspHvd.LengthMes_m)
-    p_Pipe_HspHvd.Tend_C = t ' geoGrad.GetPoint(p_Pipe_WHeadHsp_Tubing.DepthVert_m) ' Tbhinit_C - p_Pipe_HspHvd.DepthVert_m * TempGradVert
-    p_Pipe_HspHvd.Tstart_C = p_PTwf.T_C
-    p_Pipe_WHeadHsp_Tubing.Tend_C = p_PTbuf.T_C
-    p_Pipe_WHeadHsp_Tubing.Tstart_C = p_Pipe_HspHvd.Tend_C
-    p_Pipe_WHeadHsp_Casing.Tend_C = p_PTbuf.T_C
-    p_Pipe_WHeadHsp_Casing.Tstart_C = p_Pipe_HspHvd.Tend_C
+    
+    TempGradVert = (p_PTwf.T_C - p_PTbuf.T_C) / p_Hvd_m
+    
+    p_Pipe_HspHvd.dTdLinit = TempGradVert
+    p_Pipe_WHeadHsp_Tubing.dTdLinit = TempGradVert
+    p_Pipe_WHeadHsp_Casing.dTdLinit = TempGradVert
  End Sub
   
  Public Sub InitTempLinear(ByVal Tbhinit_C As Double, ByVal Twhinit_C As Double)
  ' процедура для инициализации температуры в скважине, для линейнго расчета
     Dim TempGradVert As Double
+    
     TempGradVert = (Tbhinit_C - Twhinit_C) / p_Hvd_m
     p_PTwf.T_C = Tbhinit_C
     p_PTbuf.T_C = Twhinit_C
     ' теперь раскидаем температуру по трубам
-    ' до некоторого времени была путаница с распределением температуры по глубинам
-    '       логика такая - координаты всегда начинаются от устья к забою, а поток нормальный идет от забоя к устью
-    '       поэтому начало трубы это забой (по потоку), конец трубы это устье
-    p_Pipe_HspHvd.Tend_C = Tbhinit_C - p_Pipe_HspHvd.LengthMes_m * TempGradVert
-    p_Pipe_HspHvd.Tstart_C = Tbhinit_C
-    p_Pipe_WHeadHsp_Tubing.Tend_C = Twh_C
-    p_Pipe_WHeadHsp_Tubing.Tstart_C = p_Pipe_HspHvd.Tend_C
-    p_Pipe_WHeadHsp_Casing.Tend_C = Twh_C
-    p_Pipe_WHeadHsp_Casing.Tstart_C = p_Pipe_HspHvd.Tend_C
+    p_Pipe_HspHvd.dTdLinit = TempGradVert
+    p_Pipe_WHeadHsp_Tubing.dTdLinit = TempGradVert
+    p_Pipe_WHeadHsp_Casing.dTdLinit = TempGradVert
  End Sub
  
  Public Function dCasPumpIntake() As Double
@@ -1588,282 +1574,284 @@ Dim i As Integer
  End If
  
 End Sub
- Public Function SaveState()
- ' сохраняет состояние объекта в двухмерный массив для обеспечения вывода (для отладки)
-    Dim stor()
-    Dim i As Integer
-    Dim ii As Integer
-    
-    ReDim stor(const_OutputCurveNumPoints, STOR_SIZE * 2)
-    stor(0, 0) = "CWell SaveState"              ' тут будет общея строка с датой сохранения дампа
-    AddS stor, 1, 0, "construction    "
-    AddS stor, 2, 0, "p_well_segments_num   ", p_well_segments_num
-    AddS stor, 3, 0, "p_well_segment_joints ", p_well_segment_joints
-    AddS stor, 4, 0, "p_Hsp                 ", p_Hsp_m
-    AddS stor, 5, 0, "p_Hd                  ", p_Hd_m
-    AddS stor, 6, 0, "--                    ", ""
-    AddS stor, 7, 0, "p_Dchoke_m            ", Dchoke_m
-    AddS stor, 8, 0, "--                    ", ""
-    AddS stor, 9, 0, "--                    ", ""
-    
-    AddS stor, 10, 0, "calculus    "
-    AddS stor, 11, 0, "p_Plin_atma         ", Pline_atma
-    AddS stor, 12, 0, "p_Pbuf_atma         ", Pbuf_atma
-    AddS stor, 13, 0, "p_Pan_atma          ", p_Pan_atma
-'    AddS stor, 14, 0, "p_Pdis_atma         ", Pdis_atma
-'    AddS stor, 15, 0, "p_Pintake_atma      ", p_Pintake_atma
-    AddS stor, 16, 0, "p_Pwf_atma          ", Pwf_atma
-    AddS stor, 17, 0, "--                    ", ""
-    AddS stor, 18, 0, "--                    ", ""
-    AddS stor, 19, 0, "--                    ", ""
-    
-    AddS stor, 20, 0, "p_Twh_C            ", Twh_C
- '   AddS stor, 21, 0, "p_Tintake_C        ", p_Tintake_C
-'    AddS stor, 22, 0, "p_p_TDis_CTbh_C    ", p_Tdis_C
-    AddS stor, 23, 0, "p_Tbh_C            ", Tbh_C
-    AddS stor, 24, 0, "--                    ", ""
-    
-    AddS stor, 25, 0, "Qliq_m3day                 ", Qliq_scm3day
-    AddS stor, 26, 0, "WCT_perc                   ", WCT_perc
-   ' AddS stor, 27, 0, "Расход доп. газа из пласта   ", p_Qgfree_scm3day
-    
-    AddS stor, 28, 0, "Ksep                         ", Ksep_d
-    AddS stor, 29, 0, "KsepTotal                    ", ""
-    AddS stor, 30, 0, "KsepGasSeparator             ", ""
-    
-    AddS stor, 31, 0, "ESPPressureDegradation       ", ESPPressureDegradation
-    AddS stor, 32, 0, "ESP Rate Degradation         ", ""
-    AddS stor, 33, 0, "Коэффициент штуцера          ", ""
-    AddS stor, 34, 0, "Коэффициент потока НКТ       ", ""
-    AddS stor, 35, 0, "Коэффициент потока затруб    ", ""
-    
-    
-    AddS stor, 37, 0, "params               "
-    AddS stor, 38, 0, "p_correlation        ", p_Param.correlation
-    AddS stor, 39, 0, "p_PVT_correlation    ", Fluid.PVT_CORRELATION
-    'AddS stor, 40, 0, "p_CalcCorrection     ", p_Param.CalcCorrection
-    
-    Const flStart = 1
-    i = 0
-    With p_Fluid
-        AddS stor, flStart + i, 2, "PVT    ": i = i + 1
-        AddS stor, flStart + i, 2, "p_gamma_o        ", .gamma_o: i = i + 1
-        AddS stor, flStart + i, 2, "p_gamma_g        ", .gamma_g: i = i + 1
-        AddS stor, flStart + i, 2, "p_gamma_w        ", .gamma_w: i = i + 1
-        AddS stor, flStart + i, 2, "p_Rp_m3m3        ", .Rp_m3m3: i = i + 1
-        AddS stor, flStart + i, 2, "p_Rsb_m3m3       ", .rsb_m3m3: i = i + 1
-        AddS stor, flStart + i, 2, "p_Pb_atma         ", .Pb_atma: i = i + 1
-        AddS stor, flStart + i, 2, "p_Bob_m3m3        ", .Bob_m3m3: i = i + 1
-    End With
-   
-    i = i + 1
-'    With p_FluidTub
-'        AddS stor, flStart + i, 2, "PVT tub   ": i = i + 1
+' Public Function SaveState()
+' ' сохраняет состояние объекта в двухмерный массив для обеспечения вывода (для отладки)
+'    Dim stor()
+'    Dim i As Integer
+'    Dim ii As Integer
+'
+'    ReDim stor(const_OutputCurveNumPoints, STOR_SIZE * 2)
+'    stor(0, 0) = "CWell SaveState"              ' тут будет общея строка с датой сохранения дампа
+'    AddS stor, 1, 0, "construction    "
+'    AddS stor, 2, 0, "p_well_segments_num   ", p_well_segments_num
+'    AddS stor, 3, 0, "p_well_segment_joints ", p_well_segment_joints
+'    AddS stor, 4, 0, "p_Hsp                 ", p_Hsp_m
+'    AddS stor, 5, 0, "p_Hd                  ", p_Hd_m
+'    AddS stor, 6, 0, "--                    ", ""
+'    AddS stor, 7, 0, "p_Dchoke_m            ", Dchoke_m
+'    AddS stor, 8, 0, "--                    ", ""
+'    AddS stor, 9, 0, "--                    ", ""
+'
+'    AddS stor, 10, 0, "calculus    "
+'    AddS stor, 11, 0, "p_Plin_atma         ", Pline_atma
+'    AddS stor, 12, 0, "p_Pbuf_atma         ", Pbuf_atma
+'    AddS stor, 13, 0, "p_Pan_atma          ", p_Pan_atma
+''    AddS stor, 14, 0, "p_Pdis_atma         ", Pdis_atma
+''    AddS stor, 15, 0, "p_Pintake_atma      ", p_Pintake_atma
+'    AddS stor, 16, 0, "p_Pwf_atma          ", Pwf_atma
+'    AddS stor, 17, 0, "--                    ", ""
+'    AddS stor, 18, 0, "--                    ", ""
+'    AddS stor, 19, 0, "--                    ", ""
+'
+'    AddS stor, 20, 0, "p_Twh_C            ", Twh_C
+' '   AddS stor, 21, 0, "p_Tintake_C        ", p_Tintake_C
+''    AddS stor, 22, 0, "p_p_TDis_CTbh_C    ", p_Tdis_C
+'    AddS stor, 23, 0, "p_Tbh_C            ", Tbh_C
+'    AddS stor, 24, 0, "--                    ", ""
+'
+'    AddS stor, 25, 0, "Qliq_m3day                 ", Qliq_scm3day
+'    AddS stor, 26, 0, "WCT_perc                   ", WCT_perc
+'   ' AddS stor, 27, 0, "Расход доп. газа из пласта   ", p_Qgfree_scm3day
+'
+'    AddS stor, 28, 0, "Ksep                         ", Ksep_d
+'    AddS stor, 29, 0, "KsepTotal                    ", ""
+'    AddS stor, 30, 0, "KsepGasSeparator             ", ""
+'
+'    AddS stor, 31, 0, "ESPPressureDegradation       ", ESPPressureDegradation
+'    AddS stor, 32, 0, "ESP Rate Degradation         ", ""
+'    AddS stor, 33, 0, "Коэффициент штуцера          ", ""
+'    AddS stor, 34, 0, "Коэффициент потока НКТ       ", ""
+'    AddS stor, 35, 0, "Коэффициент потока затруб    ", ""
+'
+'
+'    AddS stor, 37, 0, "params               "
+'    AddS stor, 38, 0, "p_correlation        ", p_Param.correlation
+'    AddS stor, 39, 0, "p_PVT_correlation    ", Fluid.PVT_CORRELATION
+'    'AddS stor, 40, 0, "p_CalcCorrection     ", p_Param.CalcCorrection
+'
+'    Const flStart = 1
+'    i = 0
+'    With p_Fluid
+'        AddS stor, flStart + i, 2, "PVT    ": i = i + 1
 '        AddS stor, flStart + i, 2, "p_gamma_o        ", .gamma_o: i = i + 1
 '        AddS stor, flStart + i, 2, "p_gamma_g        ", .gamma_g: i = i + 1
 '        AddS stor, flStart + i, 2, "p_gamma_w        ", .gamma_w: i = i + 1
 '        AddS stor, flStart + i, 2, "p_Rp_m3m3        ", .Rp_m3m3: i = i + 1
-'        AddS stor, flStart + i, 2, "p_Rsb_m3m3       ", .Rsb_m3m3: i = i + 1
+'        AddS stor, flStart + i, 2, "p_Rsb_m3m3       ", .rsb_m3m3: i = i + 1
 '        AddS stor, flStart + i, 2, "p_Pb_atma         ", .Pb_atma: i = i + 1
 '        AddS stor, flStart + i, 2, "p_Bob_m3m3        ", .Bob_m3m3: i = i + 1
 '    End With
-   
-    i = i + 1
-    i = i + 1
-    AddS stor, flStart + i, 2, "Расход ГЖС на входе в насос  ", QmixPumpIntake_m3day: i = i + 1
-    AddS stor, flStart + i, 2, "Расход ГЖС на выходе насоса  ", QmixPumpOutlet_m3day: i = i + 1
-    AddS stor, flStart + i, 2, "Расход ГЖС в гезосепараторе  ", QmixInGasSep_m3day: i = i + 1
-    AddS stor, flStart + i, 2, "Доля газа в потоке           ", GasFraction_BeforePump_d: i = i + 1
-    AddS stor, flStart + i, 2, "Доля газа в газосепараторе   ", GasFraction_InGasSep_d: i = i + 1
-    AddS stor, flStart + i, 2, "Доля газа на входе в насос   ", GasFraction_PumpIntake_d: i = i + 1    ' хорошо бы график добавить доли газа от забойного давления и от газового фактора
-    AddS stor, flStart + i, 2, "Доля газа на выходе насоса   ", GasFraction_PumpOutlet_d: i = i + 1
-    i = i + 1
-    AddS stor, flStart + i, 2, "Дебит нефти т/сут   ", Qo_sctday: i = i + 1
-    AddS stor, flStart + i, 2, "Дебит газа на поверхности         ", Qg_scm3day: i = i + 1
-    AddS stor, flStart + i, 2, "Дебит газа на поверхности из газовой шапки ", "": i = i + 1
-    AddS stor, flStart + i, 2, "Дебит газа через затруб ", p_QgasCasing_scm3day: i = i + 1
-    
-    ' блок энегретических показателей
-    i = 0
-    
-    AddS stor, flStart + i, 4, "Напряжения на СУ вход  ", "": i = i + 1
-    AddS stor, flStart + i, 4, "Ток на СУ вход  ", "": i = i + 1
-    
-    AddS stor, flStart + i, 4, "Напряжения на СУ выход  ", "": i = i + 1
-    AddS stor, flStart + i, 4, "Ток на СУ выход  ", "": i = i + 1
-    
-    AddS stor, flStart + i, 4, "Напряжение на двигателе  ", "": i = i + 1
-    i = i + 1
-    
- '   AddS stor, flStart + i, 4, "Мощность ЭЦН потребляемая  ", ESP.PowerESP_Wt: i = i + 1
- '   AddS stor, flStart + i, 4, "Мощность ЭЦН полезная  ", ESP.PowerFluid_Wt: i = i + 1
-    AddS stor, flStart + i, 4, "Мощность Газосепаратора потребляемая ", "": i = i + 1
-'    AddS stor, flStart + i, 4, "Мощность двигателя полезная (на валу) ", ESP.PowerESP_Wt: i = i + 1
- '   AddS stor, flStart + i, 4, "Мощность двигателя потребляемая ", ESP.PowerMotor_Wt: i = i + 1
-    AddS stor, flStart + i, 4, "Мощность СУ полезная ", "": i = i + 1
-    AddS stor, flStart + i, 4, "Мощность СУ потребляемая ", "": i = i + 1
-    
-'    AddS stor, flStart + i, 4, "КПД УЭЦН ", ESP.EffiencyESP_d * ESP.EffiencyMotor_d: i = i + 1
-'    AddS stor, flStart + i, 4, "КПД ЭЦН ", ESP.EffiencyESP_d: i = i + 1
- '   AddS stor, flStart + i, 4, "КПД двигателя ", ESP.EffiencyMotor_d: i = i + 1
-    AddS stor, flStart + i, 4, "КПД кабеля ", "": i = i + 1
-    AddS stor, flStart + i, 4, "КПД СУ ", "": i = i + 1
-    
-    AddS stor, flStart + i, 4, "Удельный расход энергии по жидкости", "": i = i + 1
-    AddS stor, flStart + i, 4, "Удельный расход энергии по нефти", "": i = i + 1
-    
-    
-    
-   
-    AddS stor, 0, 6, "Hmes, m", " Diam tubing, m"
-    AddSCurve stor, 1, 6, Curve(str_DtubCurve)
-   
-    AddS stor, 0, 8, "Hmes, m", " Diam casing, m"
-    AddSCurve stor, 1, 8, Curve(str_DcasCurve)
-   
-    AddS stor, 0, 10, "Plin", " Kdegr"
-    AddSCurve stor, 1, 10, Curve(str_PdisKdegr_curve)
-   
-    AddS stor, 0, 12, "Hmes, m", " Roughness tub, m"
-    AddSCurve stor, 1, 12, Curve(str_RoughnessTubCurve)
-    
-    AddS stor, 0, 14, "Pwf, atma", " Hd, m"
-    AddSCurve stor, 1, 14, Curve(str_Hd_Depend_Pwf)
-   
-    AddS stor, 0, 16, "Pwf, atma", " Plin, atma"
-    AddSCurve stor, 1, 16, Curve(str_Plin_Depend_Pwf)
-    
-    AddS stor, 0, 18, "Pwf, atma", " Pbuf, atma"
-    AddSCurve stor, 1, 18, Curve(str_Pbuf_Pwf_curve)
-    
-    AddS stor, 0, 20, "Qliq m3/day", " Pwf, atma"
-    AddSCurve stor, 1, 20, Curve(str_VLPcurve)
-   
-    AddS stor, 0, 22, "Q", " Ksep"
-    AddSCurve stor, 1, 22, Curve(str_KsepNatQl_curve)
-    
-    AddS stor, 0, 24, "Pan atma", " Pwf, atma"
-    AddSCurve stor, 1, 24, Curve(str_Pan_Depend_Pwf)
-    
-    AddS stor, 0, 26, "Hmes, m", " Удл, m"
-    AddSCurve stor, 1, 26, Curve(str_HvertCurve)
-    
-    AddS stor, 0, 28, "Hmes, m", " P, atma"
-    AddSCurve stor, 1, 28, Curve(str_PtubHmes_curve)
-    
-    AddS stor, 0, 30, "Hmes, m", " Pcas, atma"
-    AddSCurve stor, 1, 30, Curve(str_PcasHmes_curve)
-    ii = 30
-    
-    ii = ii + 2
-    AddS stor, 0, ii, "Hmes, m", " Rs, m3m3"  ' 32
-    AddSCurve stor, 1, ii, Curve(str_RstubHmes_curve)
-    
-    ii = ii + 2 '34
-    AddS stor, 0, ii, "Hmes, m", " T, C"
-    AddSCurve stor, 1, ii, Curve(str_TtubHmes_curve)
-    
-    ii = ii + 2  '36
-    AddS stor, 0, ii, "Hmes, m", " mo, kg/sec"
-    AddSCurve stor, 1, ii, Curve(str_moTubCurve)
-    
-    ii = ii + 2  '38
-    AddS stor, 0, ii, "Hmes, m", " mw, kg/sec"
-    AddSCurve stor, 1, ii, Curve(str_mwTubCurve)
-    
-    ii = ii + 2  '40
-    AddS stor, 0, ii, "Hmes, m", " mg, kg/sec"
-    AddSCurve stor, 1, ii, Curve(str_mgTubCurve)
-    
-    ii = ii + 2  '42
-    AddS stor, 0, ii, "Hmes, m", " qo, m3/day"
-    AddSCurve stor, 1, ii, Curve(str_qoTubCurve)
-    
-    ii = ii + 2  '44
-    AddS stor, 0, ii, "Hmes, m", " qw, m3/day"
-    AddSCurve stor, 1, ii, Curve(str_qwTubCurve)
-    
-    ii = ii + 2  '46
-    AddS stor, 0, ii, "Hmes, m", " qg, m3/day"
-    AddSCurve stor, 1, ii, Curve(str_qgTubCurve)
-    
-    ii = ii + 2  '48
-    AddS stor, 0, ii, "Hmes, m", " vl, m/sec"
-    AddSCurve stor, 1, ii, Curve(str_vlTubCurve)
-    
-    ii = ii + 2  '50
-    AddS stor, 0, ii, "Hmes, m", " vg, m/sec"
-    AddSCurve stor, 1, ii, Curve(str_vgTubCurve)
-    
-    ii = ii + 2  '52
-    AddS stor, 0, ii, "Hmes, m", " rhoo, kg/m3"
-    AddSCurve stor, 1, ii, Curve(str_rhooTubCurve)
-    
-    ii = ii + 2  '54
-    AddS stor, 0, ii, "Hmes, m", " rhow, kg/m3"
-    AddSCurve stor, 1, ii, Curve(str_rhowTubCurve)
-    
-    ii = ii + 2  '56
-    AddS stor, 0, ii, "Hmes, m", " rhog, kg/m3"
-    AddSCurve stor, 1, ii, Curve(str_rhogTubCurve)
-    
-    ii = ii + 2  '58
-    AddS stor, 0, ii, "Hmes, m", " rhol, kg/m3"
-    AddSCurve stor, 1, ii, Curve(str_rholTubCurve)
-    
-    ii = ii + 2  '60
-    AddS stor, 0, ii, "Hmes, m", " rhomix, kg/m3"
-    AddSCurve stor, 1, ii, Curve(str_rhomixTubCurve)
-    
-    ii = ii + 2  '62
-    AddS stor, 0, ii, "Hmes, m", " muo, cP"
-    AddSCurve stor, 1, ii, Curve(str_muoTubCurve)
-    
-    ii = ii + 2  '64
-    AddS stor, 0, ii, "Hmes, m", " muw, cP"
-    AddSCurve stor, 1, ii, Curve(str_muwTubCurve)
-    
-    ii = ii + 2  '66
-    AddS stor, 0, ii, "Hmes, m", " mug, cP"
-    AddSCurve stor, 1, ii, Curve(str_mugTubCurve)
-    
-    ii = ii + 2  '68
-    AddS stor, 0, ii, "Hmes, m", " mumix, cP"
-    AddSCurve stor, 1, ii, Curve(str_mumixTubCurve)
-    ii = ii + 2  '70
-    AddS stor, 0, ii, "Hmes, m", " GasFracTubHmes"
-    AddSCurve stor, 1, ii, Curve(str_GasFracTubHmes_curve)
-    
-    ii = ii + 2  '72
-    AddS stor, 0, ii, "Hmes, m", "GasFracCasHmes"
-    AddSCurve stor, 1, ii, Curve(str_GasFracCasHmes_curve)
-    
-    ii = ii + 2  '74
-    AddS stor, 0, ii, "Hmes, m", " HLtubHmes"
-    AddSCurve stor, 1, ii, Curve(str_HLtubHmes_curve)
-    
-    ii = ii + 2  '76
-    AddS stor, 0, ii, "Hmes, m", "HLcasHmes"
-    AddSCurve stor, 1, ii, Curve(str_HLcasHmes_curve)
-    
-    ii = ii + 2  '78
-    AddS stor, 0, ii, "Hmes, m", " RscasHmes"
-    AddSCurve stor, 1, ii, Curve(str_RscasHmes_curve)
-   
-    
-   On Error Resume Next
-   
-    SaveState = CombineS(stor, p_Pipe_WHeadHsp_Tubing.SaveState)
-    SaveState = CombineS(stor, p_Pipe_HspHvd.SaveState)
-    SaveState = CombineS(stor, p_Pipe_WHeadHsp_Casing.SaveState)
-    SaveState = CombineS(stor, p_Pipe_WHeadHspFact_Tubing.SaveState)
-    SaveState = CombineS(stor, Fluid.SaveState)
-    SaveState = CombineS(stor, FluidTub.SaveState)
- '   If IsESP Then SaveState = CombineS(stor, ESP.SaveState)
-    'If Dchoke_m > 0 Then
-    SaveState = CombineS(stor, choke.SaveState)
-    
- End Function
+'
+'    i = i + 1
+''    With p_FluidTub
+''        AddS stor, flStart + i, 2, "PVT tub   ": i = i + 1
+''        AddS stor, flStart + i, 2, "p_gamma_o        ", .gamma_o: i = i + 1
+''        AddS stor, flStart + i, 2, "p_gamma_g        ", .gamma_g: i = i + 1
+''        AddS stor, flStart + i, 2, "p_gamma_w        ", .gamma_w: i = i + 1
+''        AddS stor, flStart + i, 2, "p_Rp_m3m3        ", .Rp_m3m3: i = i + 1
+''        AddS stor, flStart + i, 2, "p_Rsb_m3m3       ", .Rsb_m3m3: i = i + 1
+''        AddS stor, flStart + i, 2, "p_Pb_atma         ", .Pb_atma: i = i + 1
+''        AddS stor, flStart + i, 2, "p_Bob_m3m3        ", .Bob_m3m3: i = i + 1
+''    End With
+'
+'    i = i + 1
+'    i = i + 1
+'    AddS stor, flStart + i, 2, "Расход ГЖС на входе в насос  ", QmixPumpIntake_m3day: i = i + 1
+'    AddS stor, flStart + i, 2, "Расход ГЖС на выходе насоса  ", QmixPumpOutlet_m3day: i = i + 1
+'    AddS stor, flStart + i, 2, "Расход ГЖС в гезосепараторе  ", QmixInGasSep_m3day: i = i + 1
+'    AddS stor, flStart + i, 2, "Доля газа в потоке           ", GasFraction_BeforePump_d: i = i + 1
+'    AddS stor, flStart + i, 2, "Доля газа в газосепараторе   ", GasFraction_InGasSep_d: i = i + 1
+'    AddS stor, flStart + i, 2, "Доля газа на входе в насос   ", GasFraction_PumpIntake_d: i = i + 1    ' хорошо бы график добавить доли газа от забойного давления и от газового фактора
+'    AddS stor, flStart + i, 2, "Доля газа на выходе насоса   ", GasFraction_PumpOutlet_d: i = i + 1
+'    i = i + 1
+'    AddS stor, flStart + i, 2, "Дебит нефти т/сут   ", Qo_sctday: i = i + 1
+'    AddS stor, flStart + i, 2, "Дебит газа на поверхности         ", Qg_scm3day: i = i + 1
+'    AddS stor, flStart + i, 2, "Дебит газа на поверхности из газовой шапки ", "": i = i + 1
+'    AddS stor, flStart + i, 2, "Дебит газа через затруб ", p_QgasCasing_scm3day: i = i + 1
+'
+'    ' блок энегретических показателей
+'    i = 0
+'
+'    AddS stor, flStart + i, 4, "Напряжения на СУ вход  ", "": i = i + 1
+'    AddS stor, flStart + i, 4, "Ток на СУ вход  ", "": i = i + 1
+'
+'    AddS stor, flStart + i, 4, "Напряжения на СУ выход  ", "": i = i + 1
+'    AddS stor, flStart + i, 4, "Ток на СУ выход  ", "": i = i + 1
+'
+'    AddS stor, flStart + i, 4, "Напряжение на двигателе  ", "": i = i + 1
+'    i = i + 1
+'
+' '   AddS stor, flStart + i, 4, "Мощность ЭЦН потребляемая  ", ESP.PowerESP_Wt: i = i + 1
+' '   AddS stor, flStart + i, 4, "Мощность ЭЦН полезная  ", ESP.PowerFluid_Wt: i = i + 1
+'    AddS stor, flStart + i, 4, "Мощность Газосепаратора потребляемая ", "": i = i + 1
+''    AddS stor, flStart + i, 4, "Мощность двигателя полезная (на валу) ", ESP.PowerESP_Wt: i = i + 1
+' '   AddS stor, flStart + i, 4, "Мощность двигателя потребляемая ", ESP.PowerMotor_Wt: i = i + 1
+'    AddS stor, flStart + i, 4, "Мощность СУ полезная ", "": i = i + 1
+'    AddS stor, flStart + i, 4, "Мощность СУ потребляемая ", "": i = i + 1
+'
+''    AddS stor, flStart + i, 4, "КПД УЭЦН ", ESP.EffiencyESP_d * ESP.EffiencyMotor_d: i = i + 1
+''    AddS stor, flStart + i, 4, "КПД ЭЦН ", ESP.EffiencyESP_d: i = i + 1
+' '   AddS stor, flStart + i, 4, "КПД двигателя ", ESP.EffiencyMotor_d: i = i + 1
+'    AddS stor, flStart + i, 4, "КПД кабеля ", "": i = i + 1
+'    AddS stor, flStart + i, 4, "КПД СУ ", "": i = i + 1
+'
+'    AddS stor, flStart + i, 4, "Удельный расход энергии по жидкости", "": i = i + 1
+'    AddS stor, flStart + i, 4, "Удельный расход энергии по нефти", "": i = i + 1
+'
+'
+'
+'
+'    AddS stor, 0, 6, "Hmes, m", " Diam tubing, m"
+'    AddSCurve stor, 1, 6, Curve(str_DtubCurve)
+'
+'    AddS stor, 0, 8, "Hmes, m", " Diam casing, m"
+'    AddSCurve stor, 1, 8, Curve(str_DcasCurve)
+'
+'    AddS stor, 0, 10, "Plin", " Kdegr"
+'    AddSCurve stor, 1, 10, Curve(str_PdisKdegr_curve)
+'
+'    AddS stor, 0, 12, "Hmes, m", " Roughness tub, m"
+'    AddSCurve stor, 1, 12, Curve(str_RoughnessTubCurve)
+'
+'    AddS stor, 0, 14, "Pwf, atma", " Hd, m"
+'    AddSCurve stor, 1, 14, Curve(str_Hd_Depend_Pwf)
+'
+'    AddS stor, 0, 16, "Pwf, atma", " Plin, atma"
+'    AddSCurve stor, 1, 16, Curve(str_Plin_Depend_Pwf)
+'
+'    AddS stor, 0, 18, "Pwf, atma", " Pbuf, atma"
+'    AddSCurve stor, 1, 18, Curve(str_Pbuf_Pwf_curve)
+'
+'    AddS stor, 0, 20, "Qliq m3/day", " Pwf, atma"
+'    AddSCurve stor, 1, 20, Curve(str_VLPcurve)
+'
+'    AddS stor, 0, 22, "Q", " Ksep"
+'    AddSCurve stor, 1, 22, Curve(str_KsepNatQl_curve)
+'
+'    AddS stor, 0, 24, "Pan atma", " Pwf, atma"
+'    AddSCurve stor, 1, 24, Curve(str_Pan_Depend_Pwf)
+'
+'    AddS stor, 0, 26, "Hmes, m", " Удл, m"
+'    AddSCurve stor, 1, 26, Curve(str_HvertCurve)
+'
+'    AddS stor, 0, 28, "Hmes, m", " P, atma"
+'    AddSCurve stor, 1, 28, Curve(str_PtubHmes_curve)
+'
+'    AddS stor, 0, 30, "Hmes, m", " Pcas, atma"
+'    AddSCurve stor, 1, 30, Curve(str_PcasHmes_curve)
+'    ii = 30
+'
+'    ii = ii + 2
+'    AddS stor, 0, ii, "Hmes, m", " Rs, m3m3"  ' 32
+'    AddSCurve stor, 1, ii, Curve(str_RstubHmes_curve)
+'
+'    ii = ii + 2 '34
+'    AddS stor, 0, ii, "Hmes, m", " T, C"
+'    AddSCurve stor, 1, ii, Curve(str_TtubHmes_curve)
+'
+'    ii = ii + 2  '36
+'    AddS stor, 0, ii, "Hmes, m", " mo, kg/sec"
+'    AddSCurve stor, 1, ii, Curve(str_moTubCurve)
+'
+'    ii = ii + 2  '38
+'    AddS stor, 0, ii, "Hmes, m", " mw, kg/sec"
+'    AddSCurve stor, 1, ii, Curve(str_mwTubCurve)
+'
+'    ii = ii + 2  '40
+'    AddS stor, 0, ii, "Hmes, m", " mg, kg/sec"
+'    AddSCurve stor, 1, ii, Curve(str_mgTubCurve)
+'
+'    ii = ii + 2  '42
+'    AddS stor, 0, ii, "Hmes, m", " qo, m3/day"
+'    AddSCurve stor, 1, ii, Curve(str_qoTubCurve)
+'
+'    ii = ii + 2  '44
+'    AddS stor, 0, ii, "Hmes, m", " qw, m3/day"
+'    AddSCurve stor, 1, ii, Curve(str_qwTubCurve)
+'
+'    ii = ii + 2  '46
+'    AddS stor, 0, ii, "Hmes, m", " qg, m3/day"
+'    AddSCurve stor, 1, ii, Curve(str_qgTubCurve)
+'
+'    ii = ii + 2  '48
+'    AddS stor, 0, ii, "Hmes, m", " vl, m/sec"
+'    AddSCurve stor, 1, ii, Curve(str_vlTubCurve)
+'
+'    ii = ii + 2  '50
+'    AddS stor, 0, ii, "Hmes, m", " vg, m/sec"
+'    AddSCurve stor, 1, ii, Curve(str_vgTubCurve)
+'
+'    ii = ii + 2  '52
+'    AddS stor, 0, ii, "Hmes, m", " rhoo, kg/m3"
+'    AddSCurve stor, 1, ii, Curve(str_rhooTubCurve)
+'
+'    ii = ii + 2  '54
+'    AddS stor, 0, ii, "Hmes, m", " rhow, kg/m3"
+'    AddSCurve stor, 1, ii, Curve(str_rhowTubCurve)
+'
+'    ii = ii + 2  '56
+'    AddS stor, 0, ii, "Hmes, m", " rhog, kg/m3"
+'    AddSCurve stor, 1, ii, Curve(str_rhogTubCurve)
+'
+'    ii = ii + 2  '58
+'    AddS stor, 0, ii, "Hmes, m", " rhol, kg/m3"
+'    AddSCurve stor, 1, ii, Curve(str_rholTubCurve)
+'
+'    ii = ii + 2  '60
+'    AddS stor, 0, ii, "Hmes, m", " rhomix, kg/m3"
+'    AddSCurve stor, 1, ii, Curve(str_rhomixTubCurve)
+'
+'    ii = ii + 2  '62
+'    AddS stor, 0, ii, "Hmes, m", " muo, cP"
+'    AddSCurve stor, 1, ii, Curve(str_muoTubCurve)
+'
+'    ii = ii + 2  '64
+'    AddS stor, 0, ii, "Hmes, m", " muw, cP"
+'    AddSCurve stor, 1, ii, Curve(str_muwTubCurve)
+'
+'    ii = ii + 2  '66
+'    AddS stor, 0, ii, "Hmes, m", " mug, cP"
+'    AddSCurve stor, 1, ii, Curve(str_mugTubCurve)
+'
+'    ii = ii + 2  '68
+'    AddS stor, 0, ii, "Hmes, m", " mumix, cP"
+'    AddSCurve stor, 1, ii, Curve(str_mumixTubCurve)
+'
+'    ii = ii + 2  '70
+'    AddS stor, 0, ii, "Hmes, m", " GasFracTubHmes"
+'    AddSCurve stor, 1, ii, Curve(str_GasFracTubHmes_curve)
+'
+'    ii = ii + 2  '72
+'    AddS stor, 0, ii, "Hmes, m", "GasFracCasHmes"
+'    AddSCurve stor, 1, ii, Curve(str_GasFracCasHmes_curve)
+'
+'    ii = ii + 2  '74
+'    AddS stor, 0, ii, "Hmes, m", " HLtubHmes"
+'    AddSCurve stor, 1, ii, Curve(str_HLtubHmes_curve)
+'
+'    ii = ii + 2  '76
+'    AddS stor, 0, ii, "Hmes, m", "HLcasHmes"
+'    AddSCurve stor, 1, ii, Curve(str_HLcasHmes_curve)
+'
+'    ii = ii + 2  '78
+'    AddS stor, 0, ii, "Hmes, m", " RscasHmes"
+'    AddSCurve stor, 1, ii, Curve(str_RscasHmes_curve)
+'
+'
+'   On Error Resume Next
+'
+'    SaveState = CombineS(stor, p_Pipe_WHeadHsp_Tubing.SaveState)
+'    SaveState = CombineS(stor, p_Pipe_HspHvd.SaveState)
+'    SaveState = CombineS(stor, p_Pipe_WHeadHsp_Casing.SaveState)
+'    SaveState = CombineS(stor, p_Pipe_WHeadHspFact_Tubing.SaveState)
+'    SaveState = CombineS(stor, Fluid.SaveState)
+'    SaveState = CombineS(stor, FluidTub.SaveState)
+' '   If IsESP Then SaveState = CombineS(stor, ESP.SaveState)
+'    'If Dchoke_m > 0 Then
+'    SaveState = CombineS(stor, choke.SaveState)
+'
+' End Function
+'
 Public Function Calc_GasSepSeparation() As Double
     Calc_GasSepSeparation = 0.1
 End Function

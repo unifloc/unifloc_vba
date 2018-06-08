@@ -494,7 +494,7 @@ Public Function PVT_Z(P_atma, T_C, _
     
     Call PVT.Calc_PVT(P_atma, T_C)
     
-    PVT_Z = PVT.Z
+    PVT_Z = PVT.z
 End Function
 ' расчет плотности нефти
 Public Function PVT_Rhoo_kgm3(P_atma, T_C, _
@@ -1256,16 +1256,18 @@ Public Function MF_dPpipe_atma(Q_m3Day, WCT_perc, _
                 Optional PKsep_atma As Double = -1, _
                 Optional TKsep_C As Double = -1, _
                 Optional HydrCorr As H_CORRELATION = 0, _
-                Optional Calc_from_H0 As Boolean = True, _
-                Optional Tcalc_method As Integer = 1, _
                 Optional Tother_C As Double = -1, _
-                Optional Tgrad_c100m As Double = 3)
+                Optional betta_grav = 1, Optional betta_fric = 1)
 '
 ' Обязательные параметры
 ' Q_m3Day       - дебит жидкости в поверхностных условиях
 ' WCT_perc      - обводненность
 ' Hmes0_m       - начальная координата трубы, м
 ' Hmes1_m       - конечная координата трубы, м
+'                 расчет всегда ведется от начальной координаты к
+'                 конечной. если Hmes0_m < Hmes1_m то расчет
+'                 идет сверху вниз для вертикальной трубы
+'                 иначе расчет идет снизу вверх
 ' Pcalc_atma    - давление с которого начинается расчет, атм
 '                 граничное значение для проведения расчета
 ' Необязательные параметры
@@ -1308,23 +1310,16 @@ Public Function MF_dPpipe_atma(Q_m3Day, WCT_perc, _
 '                   Gray = 3
 '                   HagedornBrown = 4
 '                   SakharovMokhov = 5
-' Calc_from_H0  - флаг показывает направление расчета
-'                   1 (True) расчет из H0 в H1
-'                   0 (False) расчет из H1 в H0
-'                 переключение "снизу вверх" и "сверху вниз"
-' Tcalc_method  - переключение метода расчета температуры
-'                   0 - расчет по температуре на концах
-'                   1 - по геоградиенту (по умолчанию)
-'                   2 - расчет эмисии тепла
-' Tother_C      - температура на другом конце трубы (опция 0)
-' Tgrad_c100m   - гео градиент температуры C на 100 м верт глубины
-'                 (опция 1)
+' Tother_C      - температура на другом конце трубы
+'                 по умолчанию температура вдоль трубы постоянна
+'                 если задано то меняется линейно по трубе
 ' выходное значение - число - давление на другом конце трубы atma.
 On Error GoTo err1:
     Dim Pipe As New CPipe
     Dim PVT As New CPVT
     Dim PTcalc As PTtype
     Dim TM As TEMP_CALC_METHOD
+    Dim h
     
     PVT.gamma_g = gamma_gas
     PVT.gamma_o = gamma_oil
@@ -1344,32 +1339,38 @@ On Error GoTo err1:
     PVT.wc_perc = WCT_perc
     Set Pipe.Fluid = PVT
     
- '   Pipe.correlation = AnsariCor 'UnifiedCor ' BeggsBriilCor
- '   Pipe.correlation = HydrCorr
     PTcalc.P_atma = Pcalc_atma
     PTcalc.T_C = Tcalc_C
-    
-    Select Case Tcalc_method
-        Case 0: TM = StartEndTemp
-        Case 1: TM = GeoGradTemp
-        Case 2: TM = AmbientTemp
-    End Select
- '  Pipe.AmbientForm.TGeoGrad_C100m = Tgrad_c100m   todo: надо исправить для расчета с использованием градиента
+    If Tother_C < 0 Then Tother_C = Tcalc_C
+'    Tcalc_method = 0 ' todo временно отключены другие методы кроме линейного
+'    Select Case Tcalc_method
+'        Case 0: TM = StartEndTemp
+'        Case 1: TM = GeoGradTemp
+'        Case 2: TM = AmbientTemp
+'    End Select
     ' до некоторого времени была путаница с распределением температуры по глубинам
     '       логика такая - координаты всегда начинаются от устья к забою, а поток нормальный идет от забоя к устью
     '       поэтому начало трубы это забой (по потоку), конец трубы это устье
-    If Calc_from_H0 Then
-        Pipe.Param = ParamCalcFromTop(HydrCorr, TempMeth:=TM)
-        Pipe.Tstart_C = Tother_C
-        Pipe.Tend_C = Tcalc_C
+    
+'    If Calc_from_H0 Then
+    If Hmes0_m < Hmes1_m Then
+        Pipe.Param = ParamCalcFromTop(HydrCorr, TempMeth:=StartEndTemp)
+        Pipe.InitTlinear Tcalc_C, Tother_C
+'        Pipe.Tstart_C = Tother_C
+'        Pipe.Tend_C = Tcalc_C
     Else
-        Pipe.Param = ParamCalcFromBottom(HydrCorr, TempMeth:=TM)
-        Pipe.Tstart_C = Tcalc_C
-        Pipe.Tend_C = Tother_C
+        h = Hmes0_m
+        Hmes0_m = Hmes1_m
+        Hmes1_m = h
+        Pipe.Param = ParamCalcFromBottom(HydrCorr, TempMeth:=StartEndTemp)
+        Pipe.InitTlinear Tother_C, Tcalc_C
+'        Pipe.Tstart_C = Tcalc_C
+'        Pipe.Tend_C = Tother_C
     End If
     Call Pipe.InitPipe(d_mm / 1000, Hmes0_m, Hmes1_m, theta_deg, roughness_m)
-    
-    MF_dPpipe_atma = ArrayOut(Pipe.Calc_dPipe(PTcalc))
+    Pipe.betta_grav = betta_grav
+    Pipe.betta_fric = betta_fric
+    MF_dPpipe_atma = ArrayOut(Pipe.Calc_dPipe(PTcalc, noCurves))
     
     Exit Function
 err1:
@@ -2112,6 +2113,7 @@ Public Function ESP_dP_atma(Pin_atma As Double, Qliq_m3day As Double, WCT_perc A
     Fluid.gamma_w = gamma_wat
     Fluid.Qliq_scm3day = Qliq_m3day
     Fluid.wc_perc = WCT_perc
+    Fluid.Muob_cP = Muob_cP
     
 '   Dim fluidESP As CPVT
 '   Ksep_fr = 0.5
@@ -2628,12 +2630,12 @@ P = P_atmg
      
     Dim T_pc As Double
     Dim p_pc As Double
-    Dim Z As Double
+    Dim z As Double
     
 '        T_pc = PseudoTemperatureStanding(gamma_gas)
 '        p_pc = PseudoPressureStanding(gamma_gas)
 '        Z = ZFactorDranchuk(T_K / T_pc, P_MPa / p_pc)
-    Z = unf_Calc_Zgas_d(T_K, P_MPa, gamma_gas)
+    z = unf_Calc_Zgas_d(T_K, P_MPa, gamma_gas)
     
     eps = eps * 39.3701 'convert m to in
     
@@ -2649,7 +2651,7 @@ P = P_atmg
         deq = (de_in ^ 2 + di_in ^ 2 - (de_in ^ 2 - di_in ^ 2) / Log(de_in / di_in)) / (de_in - di_in)
     End If
     Dim mu_g As Double
-    mu_g = unf_calc_Mug_cP(T_K, P_MPa, Z, gamma_gas)
+    mu_g = unf_calc_Mug_cP(T_K, P_MPa, z, gamma_gas)
     Dim Re As Double
     Re = 0.020107 * gamma_gas * Abs(qg_sc) * deq / mu_g / da ^ 2
     Dim A As Double, b As Double
@@ -2660,7 +2662,7 @@ P = P_atmg
     
     Dim gradP As Double
     
-    gradP = -0.018786 * gamma_gas * (P_psi + 14.7) * Sin(theta * Application.PI / 180) / (T_F + 460) / Z + (1.2595 * 10 ^ (-11)) * f_moody * (T_F + 460) * Z * gamma_gas * (qg_sc ^ 2) / (P_psi + 14.7) / dh / da ^ 4
+    gradP = -0.018786 * gamma_gas * (P_psi + 14.7) * Sin(theta * Application.PI / 180) / (T_F + 460) / z + (1.2595 * 10 ^ (-11)) * f_moody * (T_F + 460) * z * gamma_gas * (qg_sc ^ 2) / (P_psi + 14.7) / dh / da ^ 4
     gradP = gradP * 0.068 / 0.3048 'convert psi/ft to atma/m
     
     GL_dPgasPipe_atmg = P + gradP * length
