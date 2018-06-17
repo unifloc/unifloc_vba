@@ -105,6 +105,7 @@ Option Base 0
     Set c_vsgCurve = New TInterpolation
     Set c_HlCurve = New TInterpolation
     Set c_fpatCurve = New TInterpolation
+    Set c_TinitCurve = New TInterpolation
     c_fpatCurve.isStepFunction = True
     Set p_Fluid = New CPVT
     With p_Param
@@ -408,11 +409,25 @@ End Property
  
  Public Function Tamb_C(lmes_m As Double) As Double
     ' возвращает температуру исходя из окружения скважины
+    Dim Hv_m As Double
+    Hv_m = HvertZ(lmes_m)              ' определяем вертикальную глубину для заданной измеренной глубины
+    Tamb_C = p_AmbientForm.AmbTemp_С(Hv_m)
  End Function
+ 
+ Public Function Tinit_C(lmes_m As Double) As Double
+        Select Case Param.tempMethod
+            Case StartEndTemp
+                Tinit_C = Tlinear_C(lmes_m) ' температуру берем извне
+            Case GeoGradTemp
+                Tinit_C = Tamb_C(lmes_m)
+        End Select
+        
+ End Function
+ 
  
  Public Function dTdLlinear_Cm(lmes_m As Double) As Double
     ' возвращает градиент температуры исходя из линейного приближения
-    
+    dTdLlinear_Cm = p_dTdLinit
  End Function
  
  Public Function dTdLamb_Cm(lmes_m As Double) As Double
@@ -601,7 +616,7 @@ End Function
 '=================================================================================================
 ' новый подход - можно обойтись без разделение на прямой участок и кривой - расчет за один проход.
 '=================================================================================================
-Public Function CalcGrad(ByVal L_m As Double, ByVal P_atma As Double, ByVal T_C As Double) As PIPE_FLOW_PARAMS
+Public Function CalcGrad(L_m As Double, P_atma As Double, T_C As Double, Optional calc_dtdl As Boolean = True) As PIPE_FLOW_PARAMS
 ' функция расчета градиента давления и температуры в скважине при заданных параметрах
 ' возвращает все параметры потока в заданной точке трубы при заданых термобарических условиях.
 '
@@ -639,13 +654,12 @@ With Fluid
   If P_atma < const_minPpipe_atma Then Exit Function
   
   ' найдем все PVT в заданных условиях
-  Call Fluid.Calc_PVT(P_atma, T_C)
+  Call .Calc_PVT(P_atma, T_C)
   If .Qmix_m3day = 0 Then
-    T_C = p_AmbientForm.AmbTemp_С(L_m)
+        T_C = p_AmbientForm.AmbTemp_С(L_m)
   End If
   
-  Select Case Param.correlation
-      Case BeggsBriilCor
+  If Param.correlation = BeggsBriilCor Then
         
           dp_dl_arr = unf_BegsBrillGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
                                 .rho_liq_kgm3, .rho_gas_kgm3, 0, 1, betta_grav, betta_fric)
@@ -658,7 +672,7 @@ With Fluid
           h_l_out = dp_dl_arr(6)
           fpat_out = dp_dl_arr(7)
           
-      Case AnsariCor
+  ElseIf Param.correlation = AnsariCor Then
           dp_dl_arr = unf_AnsariGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
                                 .rho_liq_kgm3, .rho_gas_kgm3, P_atma, , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
@@ -669,7 +683,7 @@ With Fluid
           v_sg_out = dp_dl_arr(5)
           h_l_out = dp_dl_arr(6)
           fpat_out = dp_dl_arr(7)
-      Case UnifiedCor
+  ElseIf Param.correlation = UnifiedCor Then
           dp_dl_arr = unf_UnifiedTUFFPGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
                                 .rho_liq_kgm3, .rho_gas_kgm3, P_atma, , betta_grav, betta_fric)
                                     
@@ -682,7 +696,7 @@ With Fluid
           h_l_out = dp_dl_arr(6)
           fpat_out = dp_dl_arr(7)
           
-      Case Gray
+  ElseIf Param.correlation = Gray Then
           dp_dl_arr = unf_GrayModifiedGradient(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
                                 .rho_liq_kgm3, .rho_gas_kgm3, 0, 1, , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
@@ -694,7 +708,7 @@ With Fluid
           h_l_out = dp_dl_arr(6)
           fpat_out = dp_dl_arr(7)
           
-      Case HagedornBrown
+  ElseIf Param.correlation = HagedornBrown Then
           dp_dl_arr = unf_HagedornandBrawnmodified(d_m, theta_deg, rough_m, .Qliq_rc_m3day, .Qgas_rc_m3day, .MuLiq_rc_cP, .Mug_cP, .sigma_liq_Nm, _
                                 .rho_liq_kgm3, .rho_gas_kgm3, P_atma, 0, 1, , betta_grav, betta_fric)
           dp_dl = dp_dl_arr(0)
@@ -706,7 +720,7 @@ With Fluid
           h_l_out = dp_dl_arr(6)
           fpat_out = dp_dl_arr(7)
           
-      Case SakharovMokhov
+  ElseIf Param.correlation = SakharovMokhov Then
           dp_dl_arr = unf_Saharov_Mokhov_Gradient(d_m, theta_deg, rough_m, P_atma, .Qo_scm3day, .Qw_scm3day, .Qgas_scm3day, .Bo_m3m3, _
                                     .Bw_m3m3, .Bg_m3m3, .rs_m3m3, .Muo_cP, .Muw_cP, .Mug_cP, .sigma_o_Nm, .sigma_w_Nm, .RhoOil_sckgm3, .rhoWat_sckgm3, .rhoGas_sckgm3, _
                                     , , , betta_grav, betta_fric)
@@ -719,24 +733,26 @@ With Fluid
           h_l_out = dp_dl_arr(6)
           fpat_out = dp_dl_arr(7)
                                     
-  End Select
+  End If
   
   vl_msec = v_sl_out * const_Pi * d_m ^ 2 / 4 ' скорость жидкости реальная
   vg_msec = v_sg_out * const_Pi * d_m ^ 2 / 4 ' скорость жидкости реальная
   ' для оценки температуры оценим скорость потока и ускорение
   
   ' теперь зададим изменение температуры в потоке
-  Select Case Param.tempMethod
-        Case StartEndTemp
-            dt_dl = p_dTdLinit 'TempGradLinear '* sind(theta_deg)
-        Case GeoGradTemp
-            dt_dl = p_AmbientForm.AmbTempGrad_Cm(Hv_m) * sind(theta_deg)
-        Case AmbientTemp
-            v = vg_msec    ' оценка сверху
-            dvdL = -v / P_atma * dp_dl
-            dt_dl = -p_AmbientForm.Calc_dTdL_Cm(Hv_m, sind(theta_deg), T_C, .Wm_kgsec, .Cmix_JkgC, _
-                                                    dp_dl, v, dvdL, .CJT_Katm)
-  End Select
+  If calc_dtdl Then
+    Select Case Param.tempMethod
+          Case StartEndTemp
+              dt_dl = dTdLlinear_Cm(Hv_m)  '  p_dTdLinit 'TempGradLinear '* sind(theta_deg)
+          Case GeoGradTemp
+              dt_dl = dTdLamb_Cm(Hv_m)  ' p_AmbientForm.AmbTempGrad_Cm(Hv_m) * sind(theta_deg)
+          Case AmbientTemp
+              v = vg_msec    ' оценка сверху
+              dvdL = -v / P_atma * dp_dl
+              dt_dl = -p_AmbientForm.Calc_dTdL_Cm(Hv_m, sind(theta_deg), T_C, .Wm_kgsec, .Cmix_JkgC, _
+                                                      dp_dl, v, dvdL, .CJT_Katm)
+    End Select
+  End If
  ' тут надо записать в результаты все расчетные параметры
  Dim res As PIPE_FLOW_PARAMS
  
@@ -786,6 +802,16 @@ End With
 '
 End Function
 Public Function Calc_dPipe(PT As PTtype, Optional SaveCurve As CALC_RESULTS = noCurves) As PTtype
+' здесь выбираем метод расчета
+' если не надо рассчитывать эмисию тепла - то можно расчет делать только по давлению - это быстрее
+' если температуру рассчитываем то решаем систему и по давлению и по температуре - медленнее
+    If Param.tempMethod = AmbientTemp Then
+        Calc_dPipe = Calc_dPipe_2d(PT, SaveCurve)
+    Else
+        Calc_dPipe = Calc_dPipe_1d(PT, SaveCurve)
+    End If
+End Function
+Public Function Calc_dPipe_2d(PT As PTtype, Optional SaveCurve As CALC_RESULTS = noCurves) As PTtype
 ' новая версия расчета перепада давления в трубе, сразу с учетом инклинометрии
 ' основан на применении ODEsolver
 ' PT   - термобарические условия в точке задания условия по давлению
@@ -853,8 +879,8 @@ On Error GoTo err1:
     ' ODE = YA2
     
     ' подговим выходные результаты функции
-    Calc_dPipe.P_atma = Y(M - 1, 0)
-    Calc_dPipe.T_C = Y(M - 1, 1)
+    Calc_dPipe_2d.P_atma = Y(M - 1, 0)
+    Calc_dPipe_2d.T_C = Y(M - 1, 1)
     If SaveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         c_PCurve.ClearPoints
@@ -876,7 +902,7 @@ On Error GoTo err1:
     End If
     Exit Function
 err1:
-    addLogMsg ("CPipe.Calc_dPipe: ошибка какая то")
+    addLogMsg ("CPipe.Calc_dPipe_2d: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
 End Function
 Public Function Calc_dPipe_1d(PT As PTtype, Optional SaveCurve As CALC_RESULTS = noCurves) As PTtype
@@ -895,13 +921,9 @@ Dim pfp As PIPE_FLOW_PARAMS
 Dim Rep As ODESolverReport
 Dim stPt As Boolean
 On Error GoTo err1:
-    eps = 0.01
+    eps = 0.001
     Step = 10
     Y0(0) = PT.P_atma
-    ' подготовим данные для расчета температуры
-    c_TinitCurve.ClearPoints
-    c_TinitCurve.AddPoint ZeroCoordMes_m, PT.T_C
-    c_TinitCurve.AddPoint ZeroCoordMes_m + LengthMes_m, PT.T_C + LengthMes_m * dTdLinit
     
 '    Y0(1) = PT.T_C
     N = 1                   ' размер системы  - одна переменные - давление и температура
@@ -931,11 +953,8 @@ On Error GoTo err1:
     i = 0
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
-        Dim t As Double
-        t = c_TinitCurve.GetPoint(State.X)
-        pfp = CalcGrad(State.X, State.Y(0), t)  ' Application.Run(FuncName, State.X, State.Y, CoeffA)
-        State.DY(0) = pfp.dp_dl '* Param.FlowDirection '* Param.PipeDirection
-    '    State.DY(1) = pfp.dt_dl '* Param.FlowDirection '* Param.PipeDirection
+        pfp = CalcGrad(State.X, State.Y(0), Tinit_C(State.X), calc_dtdl:=False)
+        State.DY(0) = pfp.dp_dl
         i = i + 1
     Loop
      ' Extract the desired results from the State
@@ -950,7 +969,7 @@ On Error GoTo err1:
     
     ' подговим выходные результаты функции
     Calc_dPipe_1d.P_atma = Y(M - 1, 0)
-    Calc_dPipe_1d.T_C = PT.T_C 'Y(M - 1, 1)
+    Calc_dPipe_1d.T_C = Tinit_C(X(M - 1))
     If SaveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         c_PCurve.ClearPoints
@@ -959,12 +978,8 @@ On Error GoTo err1:
         For i = 0 To M - 1
             stPt = i = 0 Or i = M - 1
             c_PCurve.AddPoint X(i), Y(i, 0), stPt
-            c_TCurve.AddPoint X(i), PT.T_C, stPt
-            If Param.tempMethod = AmbientTemp Then
-                c_TambCurve.AddPoint X(i), p_AmbientForm.AmbTemp_С(c_HvertCurve.GetPoint(X(i))), stPt
-            Else
-                c_TambCurve.AddPoint X(i), PT.T_C, stPt
-            End If
+            c_TCurve.AddPoint X(i), Tinit_C(X(i)), stPt
+            c_TambCurve.AddPoint X(i), Tinit_C(X(i)), stPt
         Next i
         If SaveCurve > 1 Then
             Call FillDetailedCurve

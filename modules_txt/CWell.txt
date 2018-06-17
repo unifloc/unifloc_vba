@@ -70,6 +70,9 @@ Private p_FastCalc As Boolean               ' флаг проведения быстрого расчета
  ' поправочные коэффициенты для расчета распределения давления
 Private p_betta_grav As Double
 Private p_betta_fric As Double
+' данные по сепарации, если заданы вручную - то ускоряют расчет, но могут быть и вычислены
+Private p_Kseptotal_d As Double
+Private p_PTsep As PTtype
 Public Event ReportProgress(msg As String)
 Private Sub Class_Initialize()
     With p_Param
@@ -83,7 +86,27 @@ Private Sub Class_Initialize()
     
     p_betta_grav = 1
     p_betta_fric = 1
+    p_Kseptotal_d = 0                       ' по умолчанию нет сепарации
 End Sub
+ Public Property Get Kseptotal_d() As Double
+    Kseptotal_d = p_Kseptotal_d
+ End Property
+ 
+ Public Property Get PTsep() As PTtype
+    PTsep = p_PTsep
+ End Property
+  
+ Public Sub SetKseptotal(val As Double, PTsep As PTtype)
+    If val >= 0 And val <= 1 And PTsep.P_atma > 0 And PTsep.T_C > 0 Then
+        p_Kseptotal_d = val
+        p_PTsep = PTsep
+    Else
+        addLogMsg_debug "CWell.Kseptotal_d установить не удалось, значение " & Str(val) & _
+                                                                     " P = " & Str(PTsep.P_atma) & _
+                                                                     " T = " & Str(PTsep.T_C) & _
+                                                                     " вне диапазона"
+    End If
+ End Sub
  
  Public Property Get betta_grav() As Double
     betta_grav = p_betta_grav
@@ -97,6 +120,10 @@ End Sub
         p_Pipe_WHeadHsp_Tubing.betta_grav = val
         p_Pipe_WHeadHspFact_Tubing.betta_grav = val
         p_betta_grav = val
+        If val <> 1 Then addLogMsg_debug "CWell.betta_grav = " & Str(val) & " внимание - поправка на гидравлическую корреляцию!!! лучше без нее"
+    Else
+        addLogMsg_debug "CWell.betta_grav установить не удалось, значение " & Str(val) & _
+                                                             " вне диапазона"
     End If
  End Property
  
@@ -108,13 +135,16 @@ End Sub
         p_Pipe_WHeadHsp_Tubing.betta_fric = val
         p_Pipe_WHeadHspFact_Tubing.betta_fric = val
         p_betta_fric = val
+        If val <> 1 Then addLogMsg_debug "CWell.betta_fric = " & Str(val) & " внимание - поправка на гидравлическую корреляцию!!! лучше без нее"
+    Else
+        addLogMsg_debug "CWell.betta_fric установить не удалось, значение " & Str(val) & _
+                                                             " вне диапазона"
     End If
  End Property
  
  Public Property Get betta_fric() As Double
     betta_fric = p_betta_fric
  End Property
- 
  
 Public Property Let HFlowCorrelation(val As H_CORRELATION)
     Dim prm As PARAMCALC
@@ -186,16 +216,17 @@ End Property
  Public Property Get Fluidcas() As CPVT
     Set Fluidcas = ESP.GasSeparator.Fluidcas
  End Property
- Public Property Get Ksep_d() As Double
-    Ksep_d = ESP.Ksep_d
- End Property
- 
- Public Property Get KsepNat_d() As Double
-    KsepNat_d = ESP.KsepNat_d
- End Property
- Public Property Get KsepGasSep_d() As Double
-    KsepGasSep_d = ESP.KsepGasSep_d
- End Property
+' Public Property Get Ksep_d() As Double
+'    Ksep_d = ESP.Ksep_d
+' End Property
+'
+' Public Property Get KsepNat_d() As Double
+'    KsepNat_d = ESP.KsepNat_d
+' End Property
+'
+' Public Property Get KsepGasSep_d() As Double
+'    KsepGasSep_d = ESP.KsepGasSep_d
+' End Property
  
  Public Property Set Fluid(val As CPVT)
  ' Установка PVT свойств для скважины
@@ -227,7 +258,7 @@ On Error GoTo noESP
    Exit Property
 noESP:
    p_ESP_on = False
-   addLogMsg "насос отключен"
+   addLogMsg_debug "насос отключен"
  End Property
  
  Public Property Get IsESP() As Boolean
@@ -272,20 +303,20 @@ noESP:
    QmixBeforePump_m3day = Fluid.Qmix_m3day
  End Property
  
- ' дебит газожидкостной смеси внути газосепаратора (после естественной сепарации)
- Public Property Get QmixInGasSep_m3day() As Double
-   ' надо рассчитать свойства флюида после частичной сепарации
-   Dim fl As New CPVT
-   fl.Copy Fluid
-   Call fl.ModifyFluidTubPVTafterSeparation(Pintake_atma, Tintake_C, KsepNat_d)
-   fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
-   QmixInGasSep_m3day = fl.Qmix_m3day
- End Property
+' ' дебит газожидкостной смеси внути газосепаратора (после естественной сепарации)
+' Public Property Get QmixInGasSep_m3day() As Double
+'   ' надо рассчитать свойства флюида после частичной сепарации
+'   Dim fl As New CPVT
+'   fl.Copy Fluid
+'   Call fl.ModifyFluidTubPVTafterSeparation(Pintake_atma, Tintake_c, KsepNat_d)
+'   fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
+'   QmixInGasSep_m3day = fl.Qmix_m3day
+' End Property
  ' дебит газожидкостной смеси в насосе на первых ступенях (после естественной сепарации и газосепаратора)
  Public Property Get QmixPumpIntake_m3day() As Double
    Dim fl As CPVT
    fl.Copy Fluid
-   Call fl.ModifyFluidTubPVTafterSeparation(Pintake_atma, Tintake_C, Ksep_d)
+   Call fl.ModifyFluidTubPVTafterSeparation(Pintake_atma, Tintake_c, Kseptotal_d)
    fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
    QmixPumpIntake_m3day = fl.Qmix_m3day
  End Property
@@ -294,7 +325,7 @@ noESP:
  Public Property Get QmixPumpOutlet_m3day() As Double
    Dim fl As CPVT
    fl.Copy Fluid
-   Call fl.ModifyFluidTubPVTafterSeparation(Pdischarge_atma, Tdischarge_C, Ksep_d)
+   Call fl.ModifyFluidTubPVTafterSeparation(Pdischarge_atma, Tdischarge_C, Kseptotal_d)
    fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
    QmixPumpOutlet_m3day = fl.Qmix_m3day
  End Property
@@ -308,11 +339,11 @@ noESP:
     GasFraction_BeforePump_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=0)
  End Property
  
- Public Property Get GasFraction_InGasSep_d() As Double
-    GasFraction_InGasSep_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=KsepNat_d)
- End Property
+' Public Property Get GasFraction_InGasSep_d() As Double
+'    GasFraction_InGasSep_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=KsepNat_d)
+' End Property
  Public Property Get GasFraction_PumpIntake_d() As Double
-    GasFraction_PumpIntake_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=Ksep_d)
+    GasFraction_PumpIntake_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=Kseptotal_d)
  End Property
  Public Property Get GasFraction_PumpOutlet_d() As Double
     GasFraction_PumpOutlet_d = GasFraction_d(p_PTdis.P_atma, p_PTdis.T_C, FluidTub, Ksep:=0)
@@ -387,8 +418,8 @@ End Property
     Pintake_atma = p_PTintake.P_atma
  End Property
  
- Public Property Get Tintake_C() As Double
-    Tintake_C = p_PTintake.T_C
+ Public Property Get Tintake_c() As Double
+    Tintake_c = p_PTintake.T_C
  End Property
  
  Public Property Get Pdischarge_atma() As Double
@@ -581,15 +612,21 @@ err1:
   
  Public Sub InitTempLinear(ByVal Tbhinit_C As Double, ByVal Twhinit_C As Double)
  ' процедура для инициализации температуры в скважине, для линейнго расчета
-    Dim TempGradVert As Double
-    
-    TempGradVert = (Tbhinit_C - Twhinit_C) / p_Hvd_m
+    Dim TempGrad As Double
+    Dim Tintake_c As Double
+    TempGrad = (Tbhinit_C - Twhinit_C) / p_Hvd_m
     p_PTwf.T_C = Tbhinit_C
     p_PTbuf.T_C = Twhinit_C
-    ' теперь раскидаем температуру по трубам
-    p_Pipe_HspHvd.dTdLinit = TempGradVert
-    p_Pipe_WHeadHsp_Tubing.dTdLinit = TempGradVert
-    p_Pipe_WHeadHsp_Casing.dTdLinit = TempGradVert
+    Tintake_c = Tbhinit_C - TempGrad * p_Pipe_HspHvd.LengthMes_m
+    
+    p_Pipe_HspHvd.InitTlinear Tintake_c, Tbhinit_C
+    p_Pipe_WHeadHsp_Tubing.InitTlinear Twhinit_C, Tintake_c
+    p_Pipe_WHeadHsp_Casing.InitTlinear Twhinit_C, Tintake_c
+    
+'    ' теперь раскидаем температуру по трубам
+'    p_Pipe_HspHvd.dTdLinit = TempGradVert
+'    p_Pipe_WHeadHsp_Tubing.dTdLinit = TempGradVert
+'    p_Pipe_WHeadHsp_Casing.dTdLinit = TempGradVert
  End Sub
  
  Public Function dCasPumpIntake() As Double
@@ -716,6 +753,10 @@ err1:
     p_Pipe_WHeadHsp_Tubing.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
     p_PTbuf.P_atma = Plin_atma
     p_PTbuf.T_C = Twh_C
+    ' если задан вручную коэффициент сепарации - учтем это при расчете
+    If p_Kseptotal_d > 0 Then
+        'Set p_Pipe_WHeadHsp_Tubing.Fluid = Fluid.ModifyFluidTubPVTafterSeparation(PTsep.P_atma, PTsep.T_C, p_Kseptotal_d)
+    End If
     p_PTintake = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, SaveCurve)   'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
     p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
     p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake, SaveCurve)
@@ -723,18 +764,24 @@ err1:
     
     Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve) ', ESP.PCurve   пока не включаем в расчет распределение давления в насосе, потом надо будет добавить
     Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve) ', ESP.TCurve
-        
     Call Curve(str_HlHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.HlCurve, p_Pipe_HspHvd.HlCurve)  ', ESP.TCurve
     Call Curve(str_TambHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TambCurve, p_Pipe_HspHvd.TambCurve)
     
 End Function
  Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional fast As Boolean = True, Optional SaveCurve As CALC_RESULTS = noCurves)
  ' функция расчета сверху вниз
- If fast Then
-    Calc_Pwf_Plin_atma = Calcfast_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
- Else
-    Calc_Pwf_Plin_atma = Calcslow_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
- End If
+ ' тут смотрим можно ли провести расчет быстро
+ ' или надо вызывать медленный метод (итерациями снизу вверх)
+ '
+    If Param.tempMethod = AmbientTemp Then
+    Else
+    End If
+    
+    If fast Then
+       Calc_Pwf_Plin_atma = Calcfast_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
+    Else
+       Calc_Pwf_Plin_atma = Calcslow_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
+    End If
  End Function
  
   Public Function Calcslow_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional SaveCurve As CALC_RESULTS = noCurves)
@@ -866,7 +913,7 @@ On Error GoTo err1:
 '        ' todo Qgfree_scm3day и Pcas_atma надо ли засунуть в поля класса и как назвать?
 '        ' 10. Расчет расхода свободного газа двигающегося через затрубное пространство после сепарации
         p_Fluid.Calc_PVT_PT p_PTintake                              ' на всякий случай пересчитаем PVT
-        p_QgasCasing_scm3day = p_Fluid.QgasInSitu_scm3day * Ksep_d
+        p_QgasCasing_scm3day = p_Fluid.QgasInSitu_scm3day * Kseptotal_d
         p_Pipe_WHeadHsp_Casing.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)      ' для затруба считаем снизу вверх
 '       todo надо доделать расчет
 '        Pcas_atma_tmp = p_Pipe_WHeadHsp_Casing.Calc_Pipe_PInclZNLF_atma(p_Pintake_atma, p_Tintake_C, Tan_C, p_QgasCasing_scm3day) ' ZNLF - zero net liquid flow
@@ -920,7 +967,7 @@ On Error GoTo err1:
     ' Если при заданном затрубном давлении Pan существует отличный от нуля динамический уровень Hdyn
     ' то в качестве результатов расчетов сохраняются эти значения
     ' уже подсчитано
-   Calc_Plin_Pwf_atma = p_PTlin.P_atma
+    Calc_Plin_Pwf_atma = p_PTlin.P_atma
     
     If SaveCurve > 0 Then
         Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve)
@@ -946,7 +993,7 @@ err1:
     RaiseEvent ReportProgress("CWell.Calc_Plin_Pwf_atma: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
 End Function
-Public Function Calc_Pwf_PIn_atma(ByVal Pintake_atma As Double, ByVal Tintake_C As Double) As Double
+Public Function Calc_Pwf_PIn_atma(ByVal Pintake_atma As Double, ByVal Tintake_c As Double) As Double
 ' @function Calc_Pwf_PIn Расчет забойного давления по известному давлению на приеме насоса
 ' @param Pintake_atma Давление на приеме насоса
 ' @param p_Tintake_C Температура на приеме скважины

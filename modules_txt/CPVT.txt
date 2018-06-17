@@ -264,11 +264,11 @@ Option Explicit
  Public Property Get rho_oil_kgm3() As Double
     Dim msg As String
     If Bo_m3m3 > 0 Then
-        rho_oil_kgm3 = 1000 * (gamma_o + rs_m3m3 * gamma_g * const_rho_air / 1000) / Bo_m3m3
+        rho_oil_kgm3 = 1000 * (p_gamma_o + p_Rs_m3m3 * p_gamma_g * const_rho_air / 1000) / p_Bo_m3m3
     Else
         msg = "CPVT.rho_oil_kgm3: расчет плотности с неположительным значением Bo_m3m3" & Bo_m3m3 & "Значение Bo проигнорировано"
         addLogMsg msg
-        rho_oil_kgm3 = 1000 * (gamma_o + rs_m3m3 * gamma_g * const_rho_air / 1000)
+        rho_oil_kgm3 = 1000 * (p_gamma_o + p_Rs_m3m3 * p_gamma_g * const_rho_air / 1000)
         Err.Raise kErrPVTinput, , msg
     End If
  End Property
@@ -456,7 +456,7 @@ Property Let rsb_m3m3(Rsbval As Double)
     End If
 End Property
  
-Public Function SetRpRsb(ByVal Rpval_m3m3 As Double, ByVal Rsbval_m3m3 As Double) As Boolean
+Public Function SetRpRsb(Rpval_m3m3 As Double, Rsbval_m3m3 As Double) As Boolean
 ' безопасный с точки зрения начисления штрафов способ установки произвольных значений газового фактора в системе
     If Rpval_m3m3 > 0 Then
         If Rpval_m3m3 >= Rsbval_m3m3 Then
@@ -637,7 +637,7 @@ End Property
         gamma_g = gg
         gamma_o = gamma_oil
         gamma_w = gamma_wat
-        Me.SetRpRsb Rp_m3m3, rsb_m3m3
+        Me.SetRpRsb CDbl(Rp_m3m3), CDbl(rsb_m3m3)
         Me.Pb_atma = Pb_atma
         Me.Tres_C = Tres_C
         Me.Bob_m3m3 = Bob_m3m3
@@ -646,9 +646,9 @@ End Property
  End Sub
  
  Public Function Clone()
-    Dim fl As New CPVT
-    Call fl.Copy(Me)
-    Set Clone = fl
+        Dim fl As New CPVT
+        Call fl.Copy(Me)
+        Set Clone = fl
  End Function
  
  Public Function Copy(fl As CPVT)
@@ -665,17 +665,16 @@ End Property
         wc_fr = fl.wc_fr
         Qliq_scm3day = fl.Qliq_scm3day
         Qgfree_scm3day = fl.Qgfree_scm3day
-        Qgfree_scm3day = fl.Qgfree_scm3day
         sigma_o_Nm = fl.sigma_o_Nm
         sigma_w_Nm = fl.sigma_w_Nm
  End Function
 Public Sub Calc_PVT_PT(PT As PTtype)
-    Call Calc_PVT(PT.P_atma, PT.T_C)
+        Call Calc_PVT(PT.P_atma, PT.T_C)
 End Sub
-Public Sub Calc_PVT(ByVal P_atma As Double, ByVal T_C As Double)
+Public Sub Calc_PVT(P_atma As Double, T_C As Double)
 ' расчет свойств воды нефти и газа при заданных давлении и температуре
-    Dim timeStamp
-    timeStamp = Time()
+'    Dim timeStamp
+'    timeStamp = Time()
     Dim T_K As Double  ' internal K temp
     'PVT properties
     Dim rho_o As Double
@@ -712,10 +711,10 @@ On Error GoTo err1:
     'calculate PVT properties
     'calculate water properties at current pressure and temperature
     p_Bw_m3m3 = unf_Calc_Bw_m3m3(P_MPa, T_K)
-    p_Muw_cP = unf_Calc_Muw_cP(P_MPa, T_K, Sal_ppm)   ' откуда тут возьмется соленость?!!!
+    p_Muw_cP = unf_Calc_Muw_cP(P_MPa, T_K, p_Salinity_ppm)   ' откуда тут возьмется соленость?!!!
     'if no calibration gas-oil ratio specified, then set it to some very large value and
     'switch of calibration for bubblepoint and oil formation volume factor
-    p_Z = unf_Calc_Zgas_d(T_K, P_MPa, gamma_g, 1)
+    p_Z = unf_Calc_Zgas_d(T_K, P_MPa, p_gamma_g, 1)
     p_Bg_m3m3 = unf_calc_Bg_z_m3m3(T_K, P_MPa, p_Z)
     p_Mug_cP = unf_calc_Mug_cP(T_K, P_MPa, p_Z, p_gamma_g)
     If PVT_CORRELATION = StandingBased Then
@@ -749,8 +748,8 @@ On Error GoTo err1:
                  p_Bo_m3m3 = Bob_m3m3_sat * Exp(p_copmressibility_o_1atm * (p_bi - P_MPa))
                  p_Muo_cP = mu_fact * unf_OilViscosity_Vasquez_Beggs(Muo_saturated_cP, P_MPa, p_bi)  'Vesquez&Beggs
             Else 'apply correction to saturated oil
-                r_si = unf_GOR_Standing(P_MPa, gamma_g, T_K, gamma_o)
-                p_Bo_m3m3 = b_fact * (unf_FVF_Saturated_Oil_Standing(r_si, gamma_g, T_K, gamma_o) - 1) + 1 ''Standing. it is assumed that at pressure 1 atma bo=1
+                r_si = unf_GOR_Standing(P_MPa, p_gamma_g, T_K, p_gamma_o)
+                p_Bo_m3m3 = b_fact * (unf_FVF_Saturated_Oil_Standing(r_si, p_gamma_g, T_K, gamma_o) - 1) + 1 ''Standing. it is assumed that at pressure 1 atma bo=1
                 p_Muo_cP = mu_fact * unf_SaturatedOilViscosity_Beggs_Robinson(r_si, Muo_deadoil_cP)  'Beggs & Robinson
             End If
     End If
@@ -767,25 +766,25 @@ On Error GoTo err1:
                 p_fact = 1
             End If
             P_MPa = P_MPa * p_fact
-            p_copmressibility_o_1atm = unf_Compressibility_Oil_VB(Rsb_calbr_m3m3, gamma_g, Tres_K, gamma_o, p_bi) 'calculate compressibility at bubble point pressure
+            p_copmressibility_o_1atm = unf_Compressibility_Oil_VB(Rsb_calbr_m3m3, p_gamma_g, Tres_K, gamma_o, p_bi) 'calculate compressibility at bubble point pressure
             If (Bo_calbr_m3m3 > 0) Then 'Calculate oil formation volume factor correction factor
-                  rho_o_sat = unf_Density_McCainSI(p_bi, gamma_g, Tres_K, gamma_o, Rsb_calbr_m3m3, p_bi, p_copmressibility_o_1atm)    ' тут формально есть зависимость от сжимаемости но реально она не влияет (так как расчет идет при давлении насыщения)
-                  Bob_m3m3_sat = unf_FVF_McCainSI(Rsb_calbr_m3m3, gamma_g, gamma_o * const_rho_ref, rho_o_sat)
+                  rho_o_sat = unf_Density_McCainSI(p_bi, p_gamma_g, Tres_K, gamma_o, Rsb_calbr_m3m3, p_bi, p_copmressibility_o_1atm)    ' тут формально есть зависимость от сжимаемости но реально она не влияет (так как расчет идет при давлении насыщения)
+                  Bob_m3m3_sat = unf_FVF_McCainSI(Rsb_calbr_m3m3, p_gamma_g, p_gamma_o * const_rho_ref, rho_o_sat)
                   b_fact = (Bo_calbr_m3m3 - 1) / (Bob_m3m3_sat - 1)
             Else ' not specified, use from correlations
                   b_fact = 1
             End If
             p_bi = unf_Bubblepoint_Valko_McCainSI(Rsb_calbr_m3m3, p_gamma_g, T_K, p_gamma_o)
-            r_si = unf_GOR_VelardeSI(P_MPa, p_bi, gamma_g, T_K, gamma_o, Rsb_calbr_m3m3)
+            r_si = unf_GOR_VelardeSI(P_MPa, p_bi, p_gamma_g, T_K, p_gamma_o, Rsb_calbr_m3m3)
             If P_MPa > p_bi Then 'apply correction to undersaturated oil
                   p_copmressibility_o_1atm = unf_Compressibility_Oil_VB(Rsb_calbr_m3m3, p_gamma_g, T_K, p_gamma_o, P_MPa)  'calculate compressibility at bubble point pressure
-                  rho_o_sat = unf_Density_McCainSI(p_bi, gamma_g, T_K, gamma_o, Rsb_calbr_m3m3, p_bi, p_copmressibility_o_1atm)
-                  Bob_m3m3_sat = unf_FVF_McCainSI(Rsb_calbr_m3m3, gamma_g, gamma_o * const_rho_ref, rho_o_sat)
+                  rho_o_sat = unf_Density_McCainSI(p_bi, p_gamma_g, T_K, p_gamma_o, Rsb_calbr_m3m3, p_bi, p_copmressibility_o_1atm)
+                  Bob_m3m3_sat = unf_FVF_McCainSI(Rsb_calbr_m3m3, p_gamma_g, p_gamma_o * const_rho_ref, rho_o_sat)
                   Bob_m3m3_sat = b_fact * (Bob_m3m3_sat - 1) + 1 ' it is assumed that at pressure 1 atma bo=1
                   p_Bo_m3m3 = Bob_m3m3_sat * Exp(p_copmressibility_o_1atm * (p_bi - P_MPa))
             Else 'apply correction to saturated oil
-                  rho_o = unf_Density_McCainSI(P_MPa, gamma_g, T_K, gamma_o, r_si, p_bi, p_copmressibility_o_1atm)
-                  p_Bo_m3m3 = b_fact * (unf_FVF_McCainSI(r_si, gamma_g, gamma_o * const_rho_ref, rho_o) - 1) + 1 ' it is assumed that at pressure 1 atma bo=1
+                  rho_o = unf_Density_McCainSI(P_MPa, p_gamma_g, T_K, p_gamma_o, r_si, p_bi, p_copmressibility_o_1atm)
+                  p_Bo_m3m3 = b_fact * (unf_FVF_McCainSI(r_si, p_gamma_g, p_gamma_o * const_rho_ref, rho_o) - 1) + 1 ' it is assumed that at pressure 1 atma bo=1
             End If
             If muo_calibr_cP > 0 Then           ' рассчитаем калибровочный коэффициент для вязкости при давлении насыщения
                   If (Rsb_calbr_m3m3 < 350) Then
@@ -823,7 +822,7 @@ On Error GoTo err1:
          'if Bob_m3m3 is not specified by the user then
          'set Bob_m3m3 so, that oil density, recalculated with Rs_m3m3 would be equal to dead oil density
          If (Bo_calbr_m3m3 < 0) Then
-            p_Bo_m3m3 = (1 + r_si * (gamma_g * const_rho_air) / (gamma_o * const_rho_ref))
+            p_Bo_m3m3 = (1 + r_si * (p_gamma_g * const_rho_air) / (p_gamma_o * const_rho_ref))
          Else
             If P_MPa > (p_bi) Then 'undersaturated oil
                 p_Bo_m3m3 = Bo_calbr_m3m3
@@ -841,8 +840,8 @@ On Error GoTo err1:
     p_Pbcalc_atma = p_bi / p_fact / const_convert_atma_MPa
     p_Rs_m3m3 = r_si
     p_Muo_deadoil_cP = Muo_deadoil_cP
-    timeStamp = Time() - timeStamp
-    timePVTtotal = timePVTtotal + timeStamp
+'    timeStamp = Time() - timeStamp
+'    timePVTtotal = timePVTtotal + timeStamp
     Exit Sub
 err1:
     addLogMsg ("CPVT.Calc_PVT: ошибка какая то")
@@ -953,6 +952,13 @@ On Error GoTo err1:
 err1:
     RpGasFraction_m3m3 = 0
 End Function
+Public Function GetModCloneafterSeparation(P_atma As Double, T_C As Double, Ksep As Double, _
+                                         Optional ByVal GasSol As GAS_INTO_SOLUTION = GasnotGoesIntoSolution) As CPVT
+    Dim newFluid As CPVT
+    Set newFluid = Me.Clone
+    Call newFluid.ModifyFluidTubPVTafterSeparation(P_atma, T_C, Ksep, GasSol)
+    Set GetModCloneafterSeparation = newFluid
+End Function
 Public Sub ModifyFluidTubPVTafterSeparation(ByVal P_atma As Double, ByVal T_C As Double, ByVal Ksep As Double, _
                                          Optional ByVal GasSol As GAS_INTO_SOLUTION = GasnotGoesIntoSolution) 'As CPVT
 ' функция модификации свойств нефти после сепарации
@@ -977,36 +983,25 @@ Public Sub ModifyFluidTubPVTafterSeparation(ByVal P_atma As Double, ByVal T_C As
         Else                                   ' газ не растворяется, то же самое, что Ксеп = 1
             Rpnew = .Rp_m3m3 - (.Rp_m3m3 - Rs)
         End If
-        
-'        If GasSol = GasGoesIntoSolution Then
-            delta = (.Pb_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
-            ' запишем зависимость газосодержания от давления насыщения на память
-            For i = 0 To N
-                Pb_atma_tab = 1 + delta * i
-                Rsb_m3m3_tab = .calc_Rs_m3m3(Pb_atma_tab, .Tres_C)
-                Pb_Rs_curve.AddPoint Rsb_m3m3_tab, Pb_atma_tab
-                Bo_m3m3_tab = .Calc_Bo_m3m3(Pb_atma_tab, .Tres_C)
-                Bo_Rs_curve.AddPoint Rsb_m3m3_tab, Bo_m3m3_tab
-            Next i
-            ' найдем сколько всего газа осталось в потоке
-            If Rpnew < .rsb_m3m3 Then
-                ' Если газовый фактор становится меньше газосодержания, тогда надо скорректировать газосодержание и давление насыщения,
-                ' которое будет от него зависеть
-                .Pb_atma = Pb_Rs_curve.GetPoint(Rpnew)
-                .Bob_m3m3 = Bo_Rs_curve.GetPoint(Rpnew)
-                .rsb_m3m3 = Rpnew
-                ' иначе газа из раствора не сепарировался - свойства не менялись ничего делать не надо
-            End If
-'        Else  ' Gas Not Goes into solution
-'            If .Pb_atma > P_atma Then
-'                ' если давление при котором была сепарация меньше давления насыщения
-'                .Pb_atma = P_atma
-'                .Rsb_m3m3 = Rs
-'                .Bob_m3m3 = Bo
-'                ' иначе газа из раствора не сепарировался - свойства не менялись ничего делать не надо
-'            End If
-'        End If
-        .Rp_m3m3 = Rpnew
+        delta = (.Pb_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
+        ' запишем зависимость газосодержания от давления насыщения на память
+        For i = 0 To N
+            Pb_atma_tab = 1 + delta * i
+            Rsb_m3m3_tab = .calc_Rs_m3m3(Pb_atma_tab, .Tres_C)
+            Pb_Rs_curve.AddPoint Rsb_m3m3_tab, Pb_atma_tab
+            Bo_m3m3_tab = .Calc_Bo_m3m3(Pb_atma_tab, .Tres_C)
+            Bo_Rs_curve.AddPoint Rsb_m3m3_tab, Bo_m3m3_tab
+        Next i
+        ' найдем сколько всего газа осталось в потоке
+        If Rpnew < .rsb_m3m3 Then
+            ' Если газовый фактор становится меньше газосодержания, тогда надо скорректировать газосодержание и давление насыщения,
+            ' которое будет от него зависеть
+            .Pb_atma = Pb_Rs_curve.GetPoint(Rpnew)
+            .Bob_m3m3 = Bo_Rs_curve.GetPoint(Rpnew)
+            .rsb_m3m3 = Rpnew
+            ' иначе газа из раствора не сепарировался - свойства не менялись ничего делать не надо
+        End If
+    .Rp_m3m3 = Rpnew
     End With
 End Sub
 Public Sub BuildCurves(T_C As Double)
