@@ -11,6 +11,7 @@
 '
 ' класс отвечает за расчет всех процессов в зоне ЭЦН - сепарации, перепада давления в насосе и пр
 '
+Option Explicit
  Private Parts As New Collection                 ' все части насоса имеющие геометричесие размеры
  Private p_Pumps As New CESPpumps               ' набор насосов в системе. надо несколько, чтобы поддерживать конусную сборку
  Private p_GasSeparator As New CESPGasSep       ' газосопаратор или приеменый модуль
@@ -24,8 +25,8 @@
  Private c_PCurve As New TInterpolation         ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
  Private c_TCurve As New TInterpolation         ' кривая распределения температуры флюида вдоль насоса
  
- Private p_Ksep_d As Double
- 
+ Private p_KsepGasSep_d As Double
+  
  'геометрические параметры системы ЭЦН
  Private p_Dintake_m As Double               ' диаметр приемной сетки ЭЦН - необходим для оценки коэффициента сепарации только для чтения - меняется насосом
  Private p_Dcas_m As Double                  ' диамер эксплуатационной колонны в месте установки ЭЦН. Предполагаем, что он постоянен для всей установки
@@ -35,8 +36,15 @@
  Private p_M_Nm As Double                   ' общие момент на валу
  
  ' общие параметры
- Private p_Fluid As CPVT
-' Private p_FluidTub As CPVT
+ Private p_Fluid As CPVT            ' флюид на входе в систему
+ Private p_FluidGasSep As CPVT      ' флюид в газосепараторе
+ Private p_FluidPump As CPVT        ' флюид в насосе
+ 
+ Private p_PTintake As PTtype
+ Private p_PTdis As PTtype
+ 
+ 
+ 
 ' Private p_FluidCas As CPVT
  
  ' Электрические параметры
@@ -55,25 +63,25 @@
  
   ' блок оценки качества данных
  'Public' LogMsg As New CLogger                ' логгер
- Public Property Get Ksep_d() As Double
-    Ksep_d = p_Ksep_d
- End Property
- Public Property Get KsepNat_d() As Double
-    KsepNat_d = p_KsepNatural
- End Property
+' Public Property Get Ksep_d() As Double
+'    Ksep_d = p_Ksep_d
+' End Property
+'
+' Public Property Get KsepNat_d() As Double
+'    KsepNat_d = p_KsepNatural
+' End Property
+'
  Public Property Get KsepGasSep_d() As Double
     KsepGasSep_d = p_KsepGasSep_d
  End Property
- Public Property Get HeadTotal_m() As Double
-    HeadTotal_m = p_Pumps.Head_m
+ Public Property Get Head_m() As Double
+    Head_m = p_Pumps.Head_m
  End Property
  
  ' общая длина установки УЭЦН - погружной части
  Public Property Get Length_m() As Double
-    Length_m = p_Pumps.Length_m ' + p_GasSeparator
+    Length_m = p_Pumps.Length_m + p_GasSeparator.Length_m + p_Motor.Length_m
  End Property
- 
- 
  ' глубина установки ЭЦН по глубине спуска НКТ (верхняя точка)
  Public Property Get HmesTop_m() As Double
     HmesTop_m = p_HmesTop
@@ -93,7 +101,7 @@
  End Property
  ' глубина приема насоса. Точка в которой поток попадает внутрь насоса
  Public Property Get HmesIntake_m() As Double
-   HmesIntake_m = HmesTop_m + p_Pump.Length_m
+   HmesIntake_m = HmesTop_m + p_Pumps.Length_m
  End Property
  
  ' глубина выкида насоса. Точка в которой поток выходит из насоса и идет по НКТ
@@ -104,13 +112,12 @@
     Set Fluid = p_Fluid
  End Property
  
-' Public Property Get FluidTub() As CPVT
-'    Set FluidTub = p_FluidTub
-' End Property
-'
-' Public Property Get Fluidcas() As CPVT
-'    Set Fluidcas = p_FluidCas
-' End Property
+ Public Property Get FluidPump() As CPVT
+    Set FluidPump = p_FluidPump
+ End Property
+ Public Property Get FluidGasSep() As CPVT
+    Set FluidGasSep = p_FluidGasSep
+ End Property
  
  Public Property Set Fluid(val As CPVT)
     Set p_Fluid = val       ' берем новый объект в работу
@@ -119,8 +126,8 @@
     'и для газосепаратора
     Set p_GasSeparator.Fluid = val
  End Property
-Public Property Get Tdischarge_C() As Double
- Tdischarge_C = p_Tdischarge_C
+ Public Property Get Tdischarge_C() As Double
+    Tdischarge_C = p_PTdis.T_C
  End Property
  
  ' свойства для доступа к кривым распределения давления
@@ -164,7 +171,7 @@ Public Sub ClearESPumps()
 End Sub
 ' общий метод расчета состояния системы при заданном давлении и температуре
 ' после расчета можно считать все параметры, которые изменились
-Public Function Calc(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
+Public Function Calc_Pdis_Pin_atma(PTin As PTtype, Optional dTpump_C As Double = 0, Optional Ksep_d As Double = 0) As PTtype
 ' считает сепарацию  (нужны довольно гибкие методы управления расчетов сепарации)
 ' потом считает распределение давления в насосе
 '
@@ -172,19 +179,27 @@ Public Function Calc(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
     Dim slip As Double
     Dim PTintake_temp As PTtype
     
-    PTintake_temp = PT
+    PTintake_temp = PTin
     
     c_PCurve.ClearPoints
     c_TCurve.ClearPoints
     
+    If (Ksep_d = 0) Or (Ksep_d > 1) Then
+        Set p_FluidPump = p_Fluid
+    ElseIf Ksep_d > 0 Then
+        Set p_FluidPump = p_Fluid.GetCloneModAfterSeparation(PTin.P_atma, PTin.T_C, Ksep_d)
+    Else
+        Ksep_d = p_GasSeparator.Calc_Separation(PTin)           ' получили сепарацию и модифицированные флюид
+        Set p_FluidPump = p_Fluid.GetCloneModAfterSeparation(PTin.P_atma, PTin.T_C, Ksep_d)
+    End If
+    
+    
+    
     If p_Pumps.StageNum > 0 Then
-    
-        p_Ksep_d = p_GasSeparator.Calc_Separation(PT)     ' получили сепарацию и модифицированные флюида
-    
-    
-    
-        Set p_Pumps.Fluid = p_GasSeparator.FluidTub                 ' сохранили модифицированный флюид в насосе
-        Calc = p_Pumps.Calc_ESP_DownUp(PT, Tdis_C)                             ' рассчитали перепад давления в насосе
+        
+        Set p_Pumps.Fluid = p_FluidPump              ' сохранили модифицированный флюид в насосе
+        
+        Call p_Pumps.Calc_ESP_DownUp(PTin, PTin.T_C + dTpump_C)            ' рассчитали перепад давления в насосе
     
         p_M_Nm = p_GasSeparator.M_Nm + p_Pumps.M_Nm
     
@@ -195,10 +210,10 @@ Public Function Calc(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
         Call c_PCurve.AddPointsCurve(p_Pumps.PCurve, p_GasSeparator.PCurve) ', p_Motor.PCurve
         Call c_TCurve.AddPointsCurve(p_Pumps.TCurve, p_GasSeparator.TCurve) ', p_Motor.TCurve)
     Else
-        p_Ksep_d = 0
-        Calc = PT
+    '    p_Ksep_d = 0
+        'Calc = PT
     End If
-    PT = PTintake_temp
+  '  PT = PTintake_temp
 End Function
 Function Calc_ESP_dP_atma(P_atma As Double, Tin_C As Double, Optional ByRef Tdis_C As Double, Optional calc_dir As Integer = 1)
  

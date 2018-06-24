@@ -9,11 +9,12 @@ Option Explicit
 Option Base 0
 ' ============ объекты в скважине ===========
 ' штуцер установленный на поверхности
-Public choke As New Cchoke
+Private p_Choke As New Cchoke
+Private p_choke_after_annulus_connection As Boolean
 ' параметры флюида
 Private p_Fluid As New CPVT                 ' флюиды из пласта
 ' параметры УЭЦН
-Private p_ESP As New CESPsystem             ' УЭЦН всегда есть, как минимум это входной модуль
+Private p_ESP As CESPsystem             ' УЭЦН всегда есть, как минимум это входной модуль
 ' ключевые элементы конструкции
 Private p_Pipe_HspHvd As New CPipe           ' от приема насоса до забоя (перфорации)      ' pipe segment from bottom to tubing setting depth
 Private p_Pipe_WHeadHsp_Tubing As New CPipe  ' от приема насоса по устья скважины до нкт
@@ -236,8 +237,10 @@ End Property
    Set p_Pipe_WHeadHsp_Casing.Fluid = Fluid
    Set p_Pipe_WHeadHsp_Tubing.Fluid = Fluid
    Set p_Pipe_WHeadHspFact_Tubing.Fluid = Fluid
-   Set choke.Fluid = Fluid
-   Set ESP.Fluid = Fluid
+   Set Choke.Fluid = Fluid
+   If IsESP Then
+       Set ESP.Fluid = Fluid
+   End If
    ' переводим в состояние "целостность нарушена"
    p_Calculated = False
  End Property
@@ -247,7 +250,7 @@ End Property
     Set ESP = p_ESP
  End Property
  
- Public Property Set ESP(val As CESPsystem)
+ Public Sub SetESP(val As CESPsystem)
    Set p_ESP = val
    If val Is Nothing Then GoTo noESP:
    ' переводим в состояние "целостность нарушена"
@@ -255,28 +258,48 @@ End Property
 On Error GoTo noESP
    p_ESP_on = True
    Set p_ESP.Fluid = Fluid
-   Exit Property
+   Exit Sub
 noESP:
    p_ESP_on = False
    addLogMsg_debug "насос отключен"
- End Property
+ End Sub
  
  Public Property Get IsESP() As Boolean
     IsESP = p_ESP_on
  End Property
  
-  Public Property Let IsESP(val As Boolean)
-    p_ESP_on = val
- End Property
+'  Public Property Let IsESP(val As Boolean)
+'    p_ESP_on = val
+' End Property
  
  Property Get Dchoke_m() As Double
-    Dchoke_m = choke.Dchoke_m
+    Dchoke_m = p_Choke.Dchoke_m
  End Property
  
- Property Let Dchoke_m(val As Double)
-    choke.Dchoke_m = val
-    p_Calculated = False
+' Property Let Dchoke_m(val As Double)
+'    p_Choke.Dchoke_m = val
+'    p_Calculated = False
+' End Property
+ 
+ Property Get Choke() As Cchoke
+    Set Choke = p_Choke
  End Property
+ 
+ Public Sub SetChoke(dchoke_mm, Optional dtub_mm = 62, Optional choke_after_annulus_connection As Boolean = False)
+ ' установка параметров штуцера
+    p_Choke.Dchoke_m = dchoke_mm / 1000
+    p_Choke.Ddown_m = dtub_mm / 1000
+    p_Choke.Dup_m = dtub_mm / 1000
+    p_choke_after_annulus_connection = choke_after_annulus_connection
+ End Sub
+ 
+ Public Sub cleatChoke()
+    p_Choke.Dchoke_m = 0
+ End Sub
+ 
+ Public Function isChoke() As Boolean
+    isChoke = p_Choke.Dchoke_m > 0
+ End Function
  
  Property Get VLPCurve() As TInterpolation
    Set VLPCurve = Curve(str_VLPcurve)
@@ -315,8 +338,7 @@ noESP:
  ' дебит газожидкостной смеси в насосе на первых ступенях (после естественной сепарации и газосепаратора)
  Public Property Get QmixPumpIntake_m3day() As Double
    Dim fl As CPVT
-   fl.Copy Fluid
-   Call fl.ModifyFluidTubPVTafterSeparation(Pintake_atma, Tintake_c, Kseptotal_d)
+   Set fl = Fluid.GetCloneModAfterSeparation(Pintake_atma, Tintake_c, Kseptotal_d)
    fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
    QmixPumpIntake_m3day = fl.Qmix_m3day
  End Property
@@ -324,8 +346,7 @@ noESP:
  ' дебит газожидкостной смеси на выкиде насоса (на последних ступенях)
  Public Property Get QmixPumpOutlet_m3day() As Double
    Dim fl As CPVT
-   fl.Copy Fluid
-   Call fl.ModifyFluidTubPVTafterSeparation(Pdischarge_atma, Tdischarge_C, Kseptotal_d)
+   Set fl = Fluid.GetCloneModAfterSeparation(Pdischarge_atma, Tdischarge_C, Kseptotal_d)
    fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
    QmixPumpOutlet_m3day = fl.Qmix_m3day
  End Property
@@ -583,13 +604,15 @@ err1:
     p_Hsp_m = Trajectory.Hpump_m ' определим глубину спуска установки
     p_Hspvert_m = Trajectory.HabsZ_m(p_Hsp_m)    ' в том числе по вертикали
     Call p_Pipe_HspHvd.InitPipeConstrTr(Trajectory, Trajectory.Hpump_m, Trajectory.Hperf_m, 1)
-    choke.Dup_m = 0.06
-    choke.Ddown_m = 0.06
+    Choke.Dup_m = 0.06
+    Choke.Ddown_m = 0.06
     Set p_Pipe_HspHvd.AmbientForm = p_AmbientForm
     Set p_Pipe_WHeadHsp_Casing.AmbientForm = p_AmbientForm
     Set p_Pipe_WHeadHsp_Tubing.AmbientForm = p_AmbientForm
     Set p_Pipe_WHeadHspFact_Tubing.AmbientForm = p_AmbientForm
-    ESP.HmesTop_m = p_Hsp_m  ' установим глубину спуска оборудования
+    If IsESP Then
+        ESP.HmesTop_m = p_Hsp_m  ' установим глубину спуска оборудования
+    End If
     p_Hvd_m = Trajectory.Hperf_m
    ' переводим в состояние "целостность нарушена"
     p_Calculated = False
@@ -731,7 +754,7 @@ err1:
     ESPPressureDegradation = 0
     If CalcChoke Then
         '  ищем распределение давления в скважине соответствующее текущим условиям
-        Call choke.Calc_ChokeCalibration(Pbuf_atma, Plin_atma, Qliq_scm3day)
+        Call Choke.Calc_ChokeCalibration(Pbuf_atma, Plin_atma, Qliq_scm3day)
         ' определили поправочный коэффициент для штуцера
     End If
     PlinTemp_atma = Calc_Plin_Pwf_atma(SetPT(Pwf_atma, Tbh_C), CalcCasing:=False)
@@ -750,14 +773,35 @@ err1:
  
  Public Function Calcfast_Pwf_Plin_atma(Plin_atma As Double, ByVal Tbh_C As Double, Optional SaveCurve As CALC_RESULTS = noCurves)
 ' быстрый метод расчета забойного давления через линейное (без итераций - прямой счет)
-    p_Pipe_WHeadHsp_Tubing.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
-    p_PTbuf.P_atma = Plin_atma
-    p_PTbuf.T_C = Twh_C
-    ' если задан вручную коэффициент сепарации - учтем это при расчете
+    
+    Dim flSep As CPVT   ' флюид для которого будет проводиться расчет выше сепарации
     If p_Kseptotal_d > 0 Then
-        'Set p_Pipe_WHeadHsp_Tubing.Fluid = Fluid.ModifyFluidTubPVTafterSeparation(PTsep.P_atma, PTsep.T_C, p_Kseptotal_d)
+        Set flSep = p_Fluid.GetCloneModAfterSeparation(PTsep.P_atma, PTsep.T_C, p_Kseptotal_d)
+    Else
+        Set flSep = p_Fluid
     End If
-    p_PTintake = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, SaveCurve)   'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
+    p_PTlin.P_atma = Plin_atma
+    p_PTlin.T_C = Twh_C
+    ' Расчет буферного давления по штуцеру
+    If isChoke() Then
+        p_PTbuf = Choke.Calc_Choke_Pbuf(p_PTlin)
+        If p_PTbuf.P_atma < 0 Then
+            p_PTbuf.P_atma = 1 ' p_PTbuf.P_atma
+        End If
+    Else
+        p_PTbuf = p_PTlin
+    End If
+    p_Pipe_WHeadHsp_Tubing.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
+    Set p_Pipe_WHeadHsp_Tubing.Fluid = flSep
+    
+    p_PTdis = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, SaveCurve)  'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
+    If IsESP() Then                                                 ' Если есть насос
+       ' Call ESP.Calc_ESP_dP_atma(p_PTintake )                                 ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
+        Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.GasSeparator.FluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
+    Else                                                            ' Если насоса нет, то совпадают
+       p_PTintake = p_PTdis
+    End If
+ 
     p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
     p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake, SaveCurve)
     Calcfast_Pwf_Plin_atma = p_PTwf.P_atma
@@ -772,16 +816,12 @@ End Function
  ' функция расчета сверху вниз
  ' тут смотрим можно ли провести расчет быстро
  ' или надо вызывать медленный метод (итерациями снизу вверх)
- '
-    If Param.tempMethod = AmbientTemp Then
-    Else
-    End If
-    
-    If fast Then
+    If fast And p_Param.tempMethod <> AmbientTemp Then
        Calc_Pwf_Plin_atma = Calcfast_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
     Else
        Calc_Pwf_Plin_atma = Calcslow_Pwf_Plin_atma(Plin_atma, Tbh_C, SaveCurve)
     End If
+ 
  End Function
  
   Public Function Calcslow_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional SaveCurve As CALC_RESULTS = noCurves)
@@ -901,9 +941,9 @@ On Error GoTo err1:
     If IsESP() Then                                                 ' Если есть насос
         ' 3. Расчет изменения температуры в насосе
         If calcESPtemp Then
-            p_PTdis = ESP.Calc(p_PTintake)                              ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
+           ' p_PTdis = ESP.Calc(p_PTintake)                              ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
         Else
-            p_PTdis = ESP.Calc(p_PTintake, p_PTintake.T_C)
+           ' p_PTdis = ESP.Calc(p_PTintake, p_PTintake.T_C)
         End If
         Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.GasSeparator.FluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
     Else                                                            ' Если насоса нет, то совпадают
@@ -952,7 +992,7 @@ On Error GoTo err1:
     
     ' 8. Расчет линейного давления по штуцеру
     If Dchoke_m > 0 And CalcChoke Then     ' пока отключено
-        p_PTlin = choke.Calc_Choke_Plin(p_PTbuf)
+        p_PTlin = Choke.Calc_Choke_Plin(p_PTbuf)
         
         If p_PTlin.P_atma < 0 Then
             p_PTlin.P_atma = 1 ' p_PTbuf.P_atma
@@ -1934,7 +1974,7 @@ End Function
 ' todo надо исправить инициализацию скважины при клонировании
 '
     Set wl.Trajectory = Trajectory   ' это должно сработать вместо инициализации
-    Call wl.choke.Copy(choke)
+    Call wl.Choke.Copy(Choke)
     
     Dim ESP_1 As New CESPpump
     Call ESP_1.Copy(ESP)
@@ -1955,7 +1995,7 @@ End Function
     Call p_Pipe_WHeadHsp_Casing.Fluid.Copy(fl)
     Call p_Pipe_WHeadHsp_Tubing.Fluid.Copy(fl)
     Call p_Pipe_WHeadHspFact_Tubing.Fluid.Copy(fl)
-    Call choke.Fluid.Copy(fl)
+    Call Choke.Fluid.Copy(fl)
     Call ESP.Fluid.Copy(fl)
  End Sub
 Public Property Get AmbientForm() As CAmbientFormation

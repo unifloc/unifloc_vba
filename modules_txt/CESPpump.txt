@@ -12,8 +12,7 @@
 Option Explicit
 Option Base 0
 ' геометрические параметры насоса
-'Private p_Length_m As Double                ' длина должна быть не нулевая, для того чтобы корректно строились графики по скважине
-Private p_HmesTop As Double                 ' глубина установки ЭЦН (по верхней части)
+Private p_HmesTop_m As Double                 ' глубина установки ЭЦН (по верхней части)
 Private p_Angle_deg As Double               ' угол установки УЭЦН (предполагается, что по глубине угол не меняется)
 ' общие параметры
 Private p_Fluid As CPVT                     ' флюид движущийся через насос (с учетом сепарации газа)
@@ -101,19 +100,19 @@ Private p_EffCorrViscInPumpCurve As New TInterpolation             ' для КПД
  'Public' LogMsg As New CLogger                ' логгер
 ' =======================  геометрия
 Public Property Get Length_m() As Double
-    Length_m = esp_StageHeight_m * StageNum  '  p_Length_m
+    Length_m = esp_StageHeight_m * StageNum
 End Property
  ' глубина установки  (верхняя точка)
  Public Property Get HmesTop_m() As Double
-    HmesTop_m = p_HmesTop
+    HmesTop_m = p_HmesTop_m
  End Property
  
  Public Property Let HmesTop_m(val As Double)
-    p_HmesTop = val
+    p_HmesTop_m = val
  End Property
  ' глубина нижней точки установки
  Public Property Get HmesDown_m() As Double
-    HmesDown_m = HmesTop_m + Length_m
+    HmesDown_m = p_HmesTop_m + Length_m
  End Property
  
  ' функция для расчета высоты сбори из num ступеней
@@ -206,10 +205,9 @@ End Property
 Property Get EffiencyESP_d() As Double
     EffiencyESP_d = p_EffESP_d
 End Property
-Property Get EffiencyMotor_d() As Double
-    EffiencyMotor_d = 0.9
-   ' p_EffESP_d
-End Property
+'Property Get EffiencyMotor_d() As Double
+'    EffiencyMotor_d = 0.9
+'End Property
 Property Get PowerFluid_Wt() As Double
     PowerFluid_Wt = p_PowerFluid_Wt
 End Property
@@ -224,11 +222,7 @@ End Property
  End Property
  
  Property Let Qliq_m3day(Qval As Double)
- 
-   ' p_Qliq_m3day = Qval
-    
     Fluid.Qliq_scm3day = Qval
-    
     p_Calculated = False
  End Property
  
@@ -237,8 +231,6 @@ End Property
  End Property
  
  Property Let WCT_perc(val As Double)
- 
-    'p_WCT_perc = val
     Fluid.wc_fr = val / 100
     p_Calculated = False
  End Property
@@ -246,6 +238,7 @@ End Property
  Property Get WCT_perc() As Double
     WCT_perc = Fluid.wc_perc
  End Property
+ 
 Public Property Get Pintake_atma() As Double
     Pintake_atma = p_Pintake_atma
 End Property
@@ -261,11 +254,12 @@ End Property
  
  Public Property Let PressureDegradation(val As Double)
     p_PressureDegradation = val
-    
  End Property
+ 
 Public Property Get Tintake_c() As Double
  Tintake_c = p_Tintake_C
  End Property
+ 
 Public Property Get Tdischarge_C() As Double
  Tdischarge_C = p_Tdischarge_C
  End Property
@@ -280,6 +274,7 @@ Public Property Get Tdischarge_C() As Double
   Public Property Let ManufacturerName(val As String)
     esp_ManufacturerName = val
  End Property
+ 
  Public Property Get Fluid() As CPVT
     Set Fluid = p_Fluid
  End Property
@@ -287,8 +282,8 @@ Public Property Get Tdischarge_C() As Double
  Public Property Set Fluid(val As CPVT)
    Set p_Fluid = Nothing   ' удаляем старый объект явно
    Set p_Fluid = val       ' берем новый объект в работу
-   
  End Property
+ 
 Public Property Get PumpName() As String
     PumpName = esp_PumpName
 End Property
@@ -304,7 +299,6 @@ Public Property Get StageNum() As Integer
 End Property
 Public Property Let StageNum(val As Integer)
     p_StageNum = val
-  '  p_Length_m = p_StageNum * StageHeight_m
 End Property
 ' задем монтажную высоту ступени насоса - влияет на расчет длины насоса
 Public Property Get StageHeight_m() As Double
@@ -378,7 +372,6 @@ Public Sub InitESP(PumpID, Freq_Hz, StageNum As Integer)
 End Sub
 Public Sub LoadESP_points(name As String, Rate, Head, Power, Eff, Optional Hz = 50)
 ' загрузка данных по насосу из формата хранения по точкам
-'
 '
 ' тестовая инициализация насоса на 80 м3/сут
     esp_PumpN = 0
@@ -553,122 +546,136 @@ Private Function Polynom(coef, arg)
 End Function
 Public Function Get_ESP_Head_m(ByVal Q_m3Day As Double, Optional ByVal StageNum As Integer = -1, Optional ByVal mu_cSt As Double = -1) As Double
 '  новая версия с поддержкой только базы Роспамп
-Dim b As Double                  ' отношение частот
-Dim StageNum_to_calc As Integer  ' число ступеней с которым будет проводиться расчет
-' проверим исходные данные на релевантность
-If Q_m3Day < 0 Then
-    Get_ESP_Head_m = 0
-    addLogMsg "CPumpESP.Get_ESP_Head_m: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Format(Q_m3Day, "###0.00") & "Напор установлен = 0"
-    Exit Function
-End If
-If Q_m3Day > Get_Max_RateForGraph_m3day Then
-    Get_ESP_Head_m = 0
- '   addLogMsg "CPumpESP.Get_ESP_Head_m: расчет характеристики насоса для дебита  Q_m3day = " & Format(Q_m3day, "###0.00") _
- '                                       & " превышаеющего максимальный для данного насоса на заданной частоте " & Format(Get_Max_RateForGraph_m3day, "###0.00") _
- '                                      & ". Частота = " & Format(p_Frequency, "###0.00") & ". Напор установлен = 0"
-    Exit Function
-End If
-' определяем число ступеней с которым будем проводить расчет
-If StageNum > 0 Then        ' если в явном виде задан параметр то его используем
-    StageNum_to_calc = StageNum
-Else                        ' иначе использует количество ступеней из характеристики насоса
-    StageNum_to_calc = p_StageNum
-End If
-If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
-    Call Calc_CorrVisc_PetrInst(Q_m3Day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
-End If
-Q_m3Day = Q_m3Day / p_QCorrVisc   ' делаем коррекцию по вязкости
-b = esp_Frequency_Hz / p_Frequency_Hz  ' определим отношение реальной частоты УЭЦН к номинальной для которой заданы характеристики
-Get_ESP_Head_m = b ^ (-2) * StageNum_to_calc * Polynom(esp_HeadKoefficients, b * Q_m3Day)
-If Get_ESP_Head_m < 0 Then Get_ESP_Head_m = 0
-Get_ESP_Head_m = Get_ESP_Head_m * p_HCorrVisc  ' учтем коррекцию на вязкость
+    Dim b As Double                  ' отношение частот
+    Dim StageNum_to_calc As Integer  ' число ступеней с которым будет проводиться расчет
+    ' проверим исходные данные на релевантность
+    If Q_m3Day < 0 Then
+        Get_ESP_Head_m = 0
+        addLogMsg_debug "CPumpESP.Get_ESP_Head_m: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Format(Q_m3Day, "###0.00") & "Напор установлен = 0"
+        Exit Function
+    End If
+    If Q_m3Day > Get_Max_RateForGraph_m3day Then
+        Get_ESP_Head_m = 0
+     '   addLogMsg "CPumpESP.Get_ESP_Head_m: расчет характеристики насоса для дебита  Q_m3day = " & Format(Q_m3day, "###0.00") _
+     '                                       & " превышаеющего максимальный для данного насоса на заданной частоте " & Format(Get_Max_RateForGraph_m3day, "###0.00") _
+     '                                      & ". Частота = " & Format(p_Frequency, "###0.00") & ". Напор установлен = 0"
+        Exit Function
+    End If
+    ' определяем число ступеней с которым будем проводить расчет
+    If StageNum > 0 Then        ' если в явном виде задан параметр то его используем
+        StageNum_to_calc = StageNum
+    Else                        ' иначе использует количество ступеней из характеристики насоса
+        StageNum_to_calc = p_StageNum
+    End If
+    
+    If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
+        Call Calc_CorrVisc_PetrInst(Q_m3Day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
+    End If
+    Q_m3Day = Q_m3Day / p_QCorrVisc   ' делаем коррекцию по вязкости
+    
+    b = esp_Frequency_Hz / p_Frequency_Hz  ' определим отношение реальной частоты УЭЦН к номинальной для которой заданы характеристики
+    Get_ESP_Head_m = b ^ (-2) * StageNum_to_calc * Polynom(esp_HeadKoefficients, b * Q_m3Day)
+    If Get_ESP_Head_m < 0 Then Get_ESP_Head_m = 0
+    Get_ESP_Head_m = Get_ESP_Head_m * p_HCorrVisc  ' учтем коррекцию на вязкость
 End Function
 Public Function Get_ESP_Power_W(Q_m3Day As Double, Optional StageNum As Integer = -1, Optional mu_cSt As Double = 1) As Double
-Dim b As Double
-Dim StageNum_to_calc As Integer
-If Q_m3Day < 0 Then
-    Get_ESP_Power_W = 0 '"Q<0!!!"
-    addLogMsg "CPumpESP.Get_ESP_Power_W: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Q_m3Day & "Мощность установлена = 0"
-    Exit Function
-End If
-If Q_m3Day > Get_Max_RateForGraph_m3day Then
-    Get_ESP_Power_W = 0
-  '  addLogMsg "CPumpESP.Get_ESP_Power_W: расчет характеристики насоса для дебита  Q_m3day = " & Q_m3day & " превышаеющего максимальный для данного насоса на заданной частоте " & Get_Max_RateForGraph_m3day & ". Частота = " & p_Frequency & ". Мощность установлена = 0"
-    Exit Function
-End If
-'' определяем число ступеней с которым будем проводить расчет
-If StageNum > 0 Then        ' если в явном виде задан параметр то его используем
- StageNum_to_calc = StageNum
-Else                        ' иначе использует количество ступеней из характеристики насоса
- StageNum_to_calc = p_StageNum
-End If
-If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
-    Call Calc_CorrVisc_PetrInst(Q_m3Day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
-End If
-Q_m3Day = Q_m3Day / p_QCorrVisc   ' делаем коррекцию по вязкости
-b = esp_Frequency_Hz / p_Frequency_Hz
-Get_ESP_Power_W = 1000 * b ^ (-3) * StageNum_to_calc * Polynom(esp_PowerKoefficients, b * Q_m3Day)
-If Get_ESP_Power_W < 0 Then
-    Get_ESP_Power_W = 0
-End If
-Get_ESP_Power_W = Get_ESP_Power_W * p_PowCorrVisc
-' поскольку в базе Роспампа выявлены насосы с некорректными характеристиками
-'  проведем тут проверку - рассчитаем мощность через КПД и сравним с исходным значением в базе данных
-Dim Nconsumption_W As Double, eff1 As Double, Get_ESP_Power_W1
-Nconsumption_W = Get_ESP_Head_m(Q_m3Day, StageNum_to_calc) * const_g * const_rho_ref * _
-                    Q_m3Day * const_convert_m3day_m3sec
-'Nstages_W = Get_ESP_Power_W(Q_m3day)
-eff1 = Get_ESP_effeciency_fr(Q_m3Day)
-If eff1 > 0 Then
- Get_ESP_Power_W1 = Nconsumption_W / eff1
-End If
-Dim eps As Double
-eps = Abs(Get_ESP_Power_W - Get_ESP_Power_W1) / Get_ESP_Power_W
-'
-' для тестового насоса генерит слишком много сообщений, пока вывод отключен
-'
-'If Get_ESP_Power_W > 0 And eps > 0.01 And PumpName <> "DesignPump" Then
-'    addLogMsg "Данные по насосу " & Me.PumpName & " не корректны. Расхождение по мощности = " & Format(eps, "#0.00") & "| ИСпользовано КПД для расчета мощности "
-'    Get_ESP_Power_W = Get_ESP_Power_W1
-'End If
+    Dim b As Double
+    Dim StageNum_to_calc As Integer
+    If Q_m3Day < 0 Then
+        Get_ESP_Power_W = 0 '"Q<0!!!"
+        addLogMsg_debug "CPumpESP.Get_ESP_Power_W: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Q_m3Day & "Мощность установлена = 0"
+        Exit Function
+    End If
+    If Q_m3Day > Get_Max_RateForGraph_m3day Then
+        Get_ESP_Power_W = 0
+      '  addLogMsg "CPumpESP.Get_ESP_Power_W: расчет характеристики насоса для дебита  Q_m3day = " & Q_m3day & " превышаеющего максимальный для данного насоса на заданной частоте " & Get_Max_RateForGraph_m3day & ". Частота = " & p_Frequency & ". Мощность установлена = 0"
+        Exit Function
+    End If
+    '' определяем число ступеней с которым будем проводить расчет
+    If StageNum > 0 Then        ' если в явном виде задан параметр то его используем
+     StageNum_to_calc = StageNum
+    Else                        ' иначе использует количество ступеней из характеристики насоса
+     StageNum_to_calc = p_StageNum
+    End If
+        
+    If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
+        Call Calc_CorrVisc_PetrInst(Q_m3Day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
+    End If
+    Q_m3Day = Q_m3Day / p_QCorrVisc   ' делаем коррекцию по вязкости
+    
+    
+    b = esp_Frequency_Hz / p_Frequency_Hz
+    Get_ESP_Power_W = 1000 * b ^ (-3) * StageNum_to_calc * Polynom(esp_PowerKoefficients, b * Q_m3Day)
+    If Get_ESP_Power_W < 0 Then
+        Get_ESP_Power_W = 0
+    End If
+    
+    Get_ESP_Power_W = Get_ESP_Power_W * p_PowCorrVisc
+    
+    ' поскольку в базе Роспампа выявлены насосы с некорректными характеристиками
+    '  проведем тут проверку - рассчитаем мощность через КПД и сравним с исходным значением в базе данных
+    
+    Dim Nconsumption_W As Double, eff1 As Double, Get_ESP_Power_W1
+    Nconsumption_W = Get_ESP_Head_m(Q_m3Day, StageNum_to_calc) * const_g * const_rho_ref * _
+                        Q_m3Day * const_convert_m3day_m3sec
+    'Nstages_W = Get_ESP_Power_W(Q_m3day)
+    eff1 = Get_ESP_effeciency_fr(Q_m3Day)
+    If eff1 > 0 Then
+     Get_ESP_Power_W1 = Nconsumption_W / eff1
+    End If
+    
+    Dim eps As Double
+    eps = Abs(Get_ESP_Power_W - Get_ESP_Power_W1) / Get_ESP_Power_W
+    '
+    ' для тестового насоса генерит слишком много сообщений, пока вывод отключен
+    '
+    'If Get_ESP_Power_W > 0 And eps > 0.01 And PumpName <> "DesignPump" Then
+    '    addLogMsg "Данные по насосу " & Me.PumpName & " не корректны. Расхождение по мощности = " & Format(eps, "#0.00") & "| ИСпользовано КПД для расчета мощности "
+    '    Get_ESP_Power_W = Get_ESP_Power_W1
+    'End If
 End Function
 Public Function Get_ESP_effeciency_fr(Q_m3Day As Double, Optional mu_cSt As Double = 1) As Double
-'Dim Nconsumption_W As Double, Nstages_W As Double
-'Nconsumption_W = Get_ESP_Head_m(Q_m3day) * const_g * const_rho_ref * _
-'                    Q_m3day * const_convert_m3day_m3sec
-'Nstages_W = Get_ESP_Power_W(Q_m3day)
-'If Nstages_W > 0 Then
-'    Get_ESP_effeciency_fr = Nconsumption_W / Nstages_W
-'End If
-Dim b As Double
-Dim StageNum_to_calc As Integer
-If Q_m3Day < 0 Then
-    Get_ESP_effeciency_fr = 0 '"Q<0!!!"
-    addLogMsg "CPumpESP.Get_ESP_effeciency_fr: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Q_m3Day & "Мощность установлена = 0"
-    Exit Function
-End If
-If Q_m3Day > Get_Max_RateForGraph_m3day Then
-    Get_ESP_effeciency_fr = 0
-  '  addLogMsg "CPumpESP.Get_ESP_Power_W: расчет характеристики насоса для дебита  Q_m3day = " & Q_m3day & " превышаеющего максимальный для данного насоса на заданной частоте " & Get_Max_RateForGraph_m3day & ". Частота = " & p_Frequency & ". Мощность установлена = 0"
-    Exit Function
-End If
-' определяем число ступеней с которым будем проводить расчет
-'If StageNum > 0 Then        ' если в явном виде задан параметр то его используем
-' StageNum_to_calc = StageNum
-'Else                        ' иначе использует количество ступеней из характеристики насоса
-' StageNum_to_calc = p_StageNum
-'End If
-If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
-    Call Calc_CorrVisc_PetrInst(Q_m3Day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
-End If
-Q_m3Day = Q_m3Day / p_QCorrVisc   ' делаем коррекцию по вязкости
-b = esp_Frequency_Hz / p_Frequency_Hz
-Get_ESP_effeciency_fr = Polynom(esp_EffKoefficients, b * Q_m3Day)
-If Get_ESP_effeciency_fr < 0 Then
-    Get_ESP_effeciency_fr = 0
- '   Debug.Assert False
-End If
-Get_ESP_effeciency_fr = Get_ESP_effeciency_fr * p_EffCorrVisc
+    'Dim Nconsumption_W As Double, Nstages_W As Double
+    'Nconsumption_W = Get_ESP_Head_m(Q_m3day) * const_g * const_rho_ref * _
+    '                    Q_m3day * const_convert_m3day_m3sec
+    'Nstages_W = Get_ESP_Power_W(Q_m3day)
+    'If Nstages_W > 0 Then
+    '    Get_ESP_effeciency_fr = Nconsumption_W / Nstages_W
+    'End If
+    
+    Dim b As Double
+    Dim StageNum_to_calc As Integer
+    If Q_m3Day < 0 Then
+        Get_ESP_effeciency_fr = 0 '"Q<0!!!"
+        addLogMsg "CPumpESP.Get_ESP_effeciency_fr: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Q_m3Day & "Мощность установлена = 0"
+        Exit Function
+    End If
+    If Q_m3Day > Get_Max_RateForGraph_m3day Then
+        Get_ESP_effeciency_fr = 0
+      '  addLogMsg "CPumpESP.Get_ESP_Power_W: расчет характеристики насоса для дебита  Q_m3day = " & Q_m3day & " превышаеющего максимальный для данного насоса на заданной частоте " & Get_Max_RateForGraph_m3day & ". Частота = " & p_Frequency & ". Мощность установлена = 0"
+        Exit Function
+    End If
+    ' определяем число ступеней с которым будем проводить расчет
+    'If StageNum > 0 Then        ' если в явном виде задан параметр то его используем
+    ' StageNum_to_calc = StageNum
+    'Else                        ' иначе использует количество ступеней из характеристики насоса
+    ' StageNum_to_calc = p_StageNum
+    'End If
+    
+    
+    If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
+        Call Calc_CorrVisc_PetrInst(Q_m3Day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
+    End If
+    Q_m3Day = Q_m3Day / p_QCorrVisc   ' делаем коррекцию по вязкости
+    
+    
+    b = esp_Frequency_Hz / p_Frequency_Hz
+    Get_ESP_effeciency_fr = Polynom(esp_EffKoefficients, b * Q_m3Day)
+    If Get_ESP_effeciency_fr < 0 Then
+        Get_ESP_effeciency_fr = 0
+     '   Debug.Assert False
+    End If
+    Get_ESP_effeciency_fr = Get_ESP_effeciency_fr * p_EffCorrVisc
 End Function
 Public Function Get_ESP_MaxOptimRate_m3day() As Double
 ' получения границы оптимального диапазона из базы
@@ -681,145 +688,165 @@ Public Function Get_ESP_MinOptimRate_m3day() As Double
     
 End Function
 Public Function Get_Max_RateForGraph_m3day() As Double
-Get_Max_RateForGraph_m3day = (p_Frequency_Hz / esp_Frequency_Hz) * ESP_maxRate_m3day  ';const_convert_bbl_m3day *
+    Get_Max_RateForGraph_m3day = (p_Frequency_Hz / esp_Frequency_Hz) * ESP_maxRate_m3day  ';const_convert_bbl_m3day *
 End Function
-Function ESP_dPIntegration(ByVal P_atma, ByVal T_C, Optional Tdis_C As Double = 0)
-' Функция расчете распределения давления в УЭЦН - расчет снизу вверх от входного давления до выходного
-' заодно считает и потребляемую мощность и КПД установки
-' p_atma         pressure at pump intake
-' t_C           temprature at pump intake
-' Tdis_C      температура на выходе, если задана учитывается, если нет то рассчитывается
-'
-Dim i As Integer
-Dim Head_mix As Double
-Dim dPStage As Double
-Dim P0_atma
-Dim T0_C
-Dim PowFluid_Wt As Double   ' полезная мощность передаваемая насосом жидкости
-Dim PowESP_Wt As Double     ' механическая мощность потребляемая насосом
-Dim EffESP_d As Double      ' КПД УЭЦН
-Dim EffStage As Double
-Dim dTpump_C As Double, dTpumpSum_C As Double
-On Error GoTo err1:
-P0_atma = P_atma     ' сохраним давление с которого стартуем
-T0_C = T_C
-dTpumpSum_C = 0
-p_HeadReal_m = 0
-p_Pintake_atma = P_atma
-p_Tintake_C = T_C
+Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, _
+                           Optional calc_from_dis As Boolean = False, _
+                           Optional Pint_estimation_atma As Double = 0)
+    ' Функция расчете распределения давления в УЭЦН - расчет снизу вверх от входного давления до выходного
+    ' заодно считает и потребляемую мощность и КПД установки
+    ' p_atma         pressure at pump intake
+    ' Tin_C          temprature at pump intake
+    ' Tdis_C         температура на выходе, если задана учитывается, если нет то рассчитывается
+    ' calc_from_dis  показывает будет ли предпринята попытка проинтегрировать сверху вниз насос
+    ' Pint_estimation_atma приближения для давления на приеме, используется для расчета сверху вниз
     
+    Dim i As Integer
+    Dim Head_mix As Double
+    Dim dPStage As Double
+    Dim PowFluid_Wt As Double   ' полезная мощность передаваемая насосом жидкости
+    Dim PowESP_Wt As Double     ' механическая мощность потребляемая насосом
+    Dim EffESP_d As Double      ' КПД УЭЦН
+    Dim EffStage As Double
+    Dim dTpump_C As Double, dTpumpSum_C As Double
+    Dim Pst_atma As Double
+    Dim Tst_C As Double         ' температура по ступеням
+    Dim sign_int As Integer
+    On Error GoTo err1:
+    
+    If calc_from_dis Then
+        Tst_C = Tdis_C
+        p_Pdis_atma = P_atma
+        sign_int = -1
+        ' если считаем сверху вниз - оценим долю газа в насоса по приближению
+        If Pint_estimation_atma > 1 Then
+            Call Fluid.Calc_PVT(CDbl(Pint_estimation_atma), CDbl(Tin_C))
+            p_GasFraction = Fluid.f_g
+        End If
+    Else
+        Tst_C = Tin_C
+        p_Pintake_atma = P_atma
+        sign_int = 1
+    End If
+    Pst_atma = P_atma
+    dTpumpSum_C = 0
+    p_HeadReal_m = 0
+    p_Tintake_C = Tin_C
+    p_Tdischarge_C = Tdis_C
+        
     p_HCorrVisc = 1             ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
     p_QCorrVisc = 1               ' для дебита
     p_PowCorrVisc = 1             ' для мощности
     p_EffCorrVisc = 1             ' для КПД
-c_GasFractionInPumpCurve.ClearPoints
-c_PressureInPumpCurve.ClearPoints
-c_TempInPumpCurve.ClearPoints
-c_PowerFluidInPumpCurve.ClearPoints
-c_PowerESPInPumpCurve.ClearPoints
-c_EffESPInPumpCurve.ClearPoints
-c_QmixInPumpCurve.ClearPoints
-c_PCurve.ClearPoints
-c_TCurve.ClearPoints
-With Fluid
-    
-    PowFluid_Wt = 0
-    PowESP_Wt = 0
-    
-  '  P(0) = P_atma
-    ' перед началом расчета перепада давления оценить долю газа на приеме насоса
-    Call .Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    p_GasFraction = .f_g
     
     
-    dTpumpSum_C = 0
+    c_GasFractionInPumpCurve.ClearPoints
+    c_PressureInPumpCurve.ClearPoints
+    c_TempInPumpCurve.ClearPoints
+    c_PowerFluidInPumpCurve.ClearPoints
+    c_PowerESPInPumpCurve.ClearPoints
+    c_EffESPInPumpCurve.ClearPoints
+    c_QmixInPumpCurve.ClearPoints
+    c_PCurve.ClearPoints
+    c_TCurve.ClearPoints
     
-    ' запишем в выходной массив первые точки
-    c_PCurve.AddPoint HmesStage_m(0), P_atma
-    c_TCurve.AddPoint HmesStage_m(0), T_C
+    With Fluid
+        PowFluid_Wt = 0
+        PowESP_Wt = 0
+        dTpumpSum_C = 0
+        c_PCurve.AddPoint HmesStage_m(0), Pst_atma    ' запишем в выходной массив первые точки
+        c_TCurve.AddPoint HmesStage_m(0), Tst_C
     
-    For i = 0 To p_StageNum - 1
-        Call .Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
-     '  .mumix_cSt
-        Head_mix = Get_ESP_Head_m(.Qmix_m3day, 1, .MuMix_cSt)
-        p_HeadReal_m = p_HeadReal_m + Head_mix
-        
-        ' тут когда то надо сделать коррекцию характеристики на плотность
-        dPStage = .rho_mix_kgm3 * Head_mix * const_g * const_convert_Pa_atma * (1 - PressureDegradation) * GasCorrection_d(GasFractionIn_d)
-        P_atma = P_atma + dPStage
-        
-        ' оценим работу совершаемую насосом по перекачке жидкости
-        PowFluid_Wt = PowFluid_Wt + .Qmix_m3day * const_convert_m3day_m3sec * dPStage * const_convert_atma_Pa  ' мощность с поправкой на плотность ГЖС
-        
-        ' оценим мощность потребляемую насосом с вала
-        PowESP_Wt = PowESP_Wt + Get_ESP_Power_W(.Qmix_m3day, 1, .MuMix_cSt) * .rho_mix_kgm3 / 1000 * (1 - PressureDegradation)  ' мощность потребляемая одной ступенью на воде
-        
-        ' оценим КПД ступени в данных условиях
-        If (PowESP_Wt > 0) Then
-            EffESP_d = PowFluid_Wt / PowESP_Wt
-        Else
-            EffESP_d = 0
-        End If
-        EffStage = Get_ESP_effeciency_fr(.Qmix_m3day, .MuMix_cSt)
+        For i = 0 To p_StageNum - 1
+            Call .Calc_PVT(CDbl(Pst_atma), CDbl(Tst_C))
+            Head_mix = Get_ESP_Head_m(.Qmix_m3day, 1, .MuMix_cSt)
+            p_HeadReal_m = p_HeadReal_m + Head_mix
+            
+            If calc_from_dis Then
                 
-        ' оценка температуры по ступеням
-        If Tdis_C <= 0 Then
-            If EffStage > 0 Then
-                dTpump_C = const_g * Head_mix / .Cmix_JkgC * (1 - EffStage) / EffStage
             Else
-                dTpump_C = 0
+                If i = 0 Then p_GasFraction = .f_g ' перед началом расчета перепада давления оценить долю газа на приеме насоса
             End If
-        Else
-            dTpump_C = (Tdis_C - T_C) / StageNum * 1
-        End If
-        
-        If T_C < 299 Then T_C = T_C + dTpump_C
-        If T_C > 300 Then
-'            addLogMsg "Перегрев около УЭЦН, расчетная температура =" & Format(T_C, "##0") & _
-'                          " рост температуры на ступени =" & Format(dTpump_C, "##0") & _
-'                          " КПД ступени =" & Format(EffStage, "##0.00") & _
-'                          " Дебит ступени =" & Format(.Qmix_m3day, "##0.00") & _
-'                          " Температура исправлена на 299", msgWarning
-            T_C = 299
-        End If
-        dTpumpSum_C = dTpumpSum_C + dTpump_C
-        
-        c_QmixInPumpCurve.AddPoint i + 1, .Qmix_m3day
-        c_GasFractionInPumpCurve.AddPoint i + 1, .f_g
-        c_PressureInPumpCurve.AddPoint i + 1, P_atma
-        c_TempInPumpCurve.AddPoint i + 1, T_C
-        c_PowerFluidInPumpCurve.AddPoint i + 1, PowFluid_Wt
-        c_PowerESPInPumpCurve.AddPoint i + 1, PowESP_Wt
-        c_EffESPInPumpCurve.AddPoint i + 1, EffESP_d
-        
-        ' заполним данные по измеренной глубине
-        c_PCurve.AddPoint HmesStage_m(i + 1), P_atma
-        c_TCurve.AddPoint HmesStage_m(i + 1), T_C
-                             
-    Next i
-            
-            If dTpumpSum_C > 298 Then
-            addLogMsg "Перегрев около УЭЦН, расчетная температура =" & Format(T_C, "##0") & _
-                          " рост температуры на ступени =" & Format(dTpump_C, "##0") & _
-                          " КПД ступени =" & Format(EffStage, "##0.00") & _
-                          " Дебит ступени =" & Format(.Qmix_m3day, "##0.00") & _
-                          " Температура исправлена на 299", msgWarning
-        End If
-            
-End With
-    ESP_dPIntegration = P_atma - P0_atma   ' функция возвращает перепад давления
-    p_PowerESP_Wt = PowESP_Wt
-    p_PowerFluid_Wt = PowFluid_Wt
- '   p_PowerMotor_Wt = PowESP_Wt / EffiencyMotor_d    ' заглушка считаем что КПД двигателя 0.9 и оцениваем мощность - потом надо исправить на реальный двигатель
-    p_Tdischarge_C = T_C
-    p_Pdis_atma = Pdis_atma
     
-    p_EffESP_d = EffESP_d
-    Exit Function
+            ' тут когда то надо сделать коррекцию характеристики на плотность
+            dPStage = .rho_mix_kgm3 * Head_mix * const_g * const_convert_Pa_atma * (1 - p_PressureDegradation) * GasCorrection_d(p_GasFraction)
+            Pst_atma = Pst_atma + sign_int * dPStage
+            
+            ' оценим работу совершаемую насосом по перекачке жидкости
+            PowFluid_Wt = PowFluid_Wt + .Qmix_m3day * const_convert_m3day_m3sec * dPStage * const_convert_atma_Pa  ' мощность с поправкой на плотность ГЖС
+            ' оценим мощность потребляемую насосом с вала
+            PowESP_Wt = PowESP_Wt + Get_ESP_Power_W(.Qmix_m3day, 1, .MuMix_cSt) * .rho_mix_kgm3 / 1000 * (1 - PressureDegradation)  ' мощность потребляемая одной ступенью на воде
+            
+            ' оценим КПД ступени в данных условиях
+            If (PowESP_Wt > 0) Then
+                EffESP_d = PowFluid_Wt / PowESP_Wt
+            Else
+                EffESP_d = 0
+            End If
+            EffStage = Get_ESP_effeciency_fr(.Qmix_m3day, .MuMix_cSt)
+                    
+            ' оценка температуры по ступеням
+            If Tdis_C <= 0 And (Not calc_from_dis) Then
+                If EffStage > 0 Then
+                    dTpump_C = const_g * Head_mix / .Cmix_JkgC * (1 - EffStage) / EffStage
+                Else
+                    dTpump_C = 0
+                End If
+            Else
+                dTpump_C = (Tdis_C - Tin_C) / StageNum * 1
+            End If
+            
+            If Tst_C < 299 Then Tst_C = Tst_C + sign_int * dTpump_C
+            If Tst_C > 300 Then
+'                addLogMsg_debug "Перегрев около УЭЦН, расчетная температура =" & Format(Tst_C, "##0") & _
+'                              " рост температуры на ступени =" & Format(dTpump_C, "##0") & _
+'                              " КПД ступени =" & Format(EffStage, "##0.00") & _
+'                              " Дебит ступени =" & Format(.Qmix_m3day, "##0.00") & _
+'                              " Температура исправлена на 299", msgWarning
+                Tst_C = 299
+            End If
+    
+            dTpumpSum_C = dTpumpSum_C + dTpump_C
+            
+            c_QmixInPumpCurve.AddPoint i + 1, .Qmix_m3day
+            c_GasFractionInPumpCurve.AddPoint i + 1, .f_g
+            c_PressureInPumpCurve.AddPoint i + 1, Pst_atma
+            c_TempInPumpCurve.AddPoint i + 1, Tst_C
+            c_PowerFluidInPumpCurve.AddPoint i + 1, PowFluid_Wt
+            c_PowerESPInPumpCurve.AddPoint i + 1, PowESP_Wt
+            c_EffESPInPumpCurve.AddPoint i + 1, EffESP_d
+            
+            ' заполним данные по измеренной глубине
+            c_PCurve.AddPoint HmesStage_m(i + 1), P_atma
+            c_TCurve.AddPoint HmesStage_m(i + 1), Tst_C
+                                 
+        Next i
+                
+                If dTpumpSum_C > 298 Then
+                addLogMsg "Перегрев около УЭЦН, расчетная температура =" & Format(Tst_C, "##0") & _
+                              " рост температуры на ступени =" & Format(dTpump_C, "##0") & _
+                              " КПД ступени =" & Format(EffStage, "##0.00") & _
+                              " Дебит ступени =" & Format(.Qmix_m3day, "##0.00") & _
+                              " Температура исправлена на 299", msgWarning
+            End If
+                
+    End With
+        p_PowerESP_Wt = PowESP_Wt
+        p_PowerFluid_Wt = PowFluid_Wt
+     '   p_PowerMotor_Wt = PowESP_Wt / EffiencyMotor_d    ' заглушка считаем что КПД двигателя 0.9 и оцениваем мощность - потом надо исправить на реальный двигатель
+        If calc_from_dis Then
+            p_Pintake_atma = Pst_atma
+        Else
+            p_Pdis_atma = Pst_atma
+            p_Tdischarge_C = Tst_C
+        End If
+        
+        p_EffESP_d = EffESP_d
+ '       ESP_dPIntegration = p_Pdis_atma - p_Pintake_atma   ' функция возвращает перепад давления
+        Exit Sub
 err1:
-    Debug.Assert True
-End Function
+        Debug.Assert True
+End Sub
 Public Function Calc_ESP_Tintake_C(ByVal Tbef_C As Double, Q_m3Day As Double, WCT_perc As Double, Optional ByVal Dcas_m As Double, Optional Fluid As CPVT)
 ' расчет изменения температуры в насосе
 ' пока только заглушка - потом надо будет добавить расчет от скорости потока и рассеиваемой мощности
@@ -843,145 +870,150 @@ Public Function Calc_ESP_NumStages(Qmix_m3day As Double, Head_m As Double) As In
     End If
 End Function
 ' метод расчета работы насоса
-Public Function Calc_ESP_DownUp(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
+Public Sub Calc_ESP_simple(P_atma As Double, Tin_C As Double, Optional Tdis_C As Double = 0, _
+                        Optional calc_from_intake As Boolean = True)
     
-    p_Pintake_atma = PT.P_atma
-    p_Pdis_atma = p_Pintake_atma + ESP_dPIntegration(PT.P_atma, PT.T_C, Tdis_C)
+    'p_Pintake_atma = PT.P_atma
+    'p_Pdis_atma = p_Pintake_atma + ESP_dPIntegration(PT.P_atma, PT.T_C, Tdis_C)
     ' сохраним результат
-    Calc_ESP_DownUp.P_atma = p_Pdis_atma - p_Pintake_atma
-    Calc_ESP_DownUp.T_C = p_Tdischarge_C - p_Tintake_C
-End Function
-' расчет распределения давления в ЭЦН сверху вниз
-Public Function Calc_ESP_UpDown(PTup As PTtype, Tdown_C As Double) As PTtype
+    Dim Pint_estimation As Double
+    Pint_estimation = 30
+    Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake, Pint_estimation)
+    
+End Sub
+'' расчет распределения давления в ЭЦН сверху вниз
+'Public Function Calc_ESP_UpDown(PTup As PTtype, Tdown_C As Double) As PTtype
+'' заданы давление на выкиде, и температуры на входе и выходе  - решение ищется только по давлению
 '
-' заданы давление на выкиде, и температуры на входе и выходе  - решение ищется только по давлению
+'    Dim Pmin As Double, Pmax As Double   ' границы поиска решения
+'    Dim P As Double, Pdis As Double ', Pdis As Double
+'    Dim eps As Double
+'    Dim i As Integer
 '
-    Dim Pmin As Double, Pmax As Double   ' границы поиска решения
-    Dim P As Double, Pdis As Double ', Pdis As Double
-    Dim eps As Double
-    Dim i As Integer
-    
-    i = 0
-    eps = 0.01  ' погрешность в атм
-    Pmin = 1
-    Pmax = PTup.P_atma
-    
-    Pdis = Pmin + ESP_dPIntegration(Pmin, Tdown_C, PTup.T_C)
-  '  Pdis = Pmin + dPdis
-    If Pdis > PTup.P_atma Then
-                    ' уже на первом шаге получили завышенное значение - значит решения нет в данном случае
-                    Calc_ESP_UpDown.P_atma = PTup.P_atma + 0.5
-                    Calc_ESP_UpDown.T_C = PTup.T_C - Tdown_C
-                    addLogMsg "CPump.Calc_ESP_UpDown: расчет перепада давления в насосе по давлению на выкиде. Давление на приеме ниже атмосферного Pdis = " & PTup.P_atma & " Pin = " & Pmin _
-                                    & " dP pump = " & Calc_ESP_UpDown.P_atma
-                    p_Pintake_atma = 0.5
-                    p_Pdis_atma = PTup.P_atma
-        
-        Exit Function
-    End If
-    
-    Do
-        i = i + 1
-        P = (Pmin + Pmax) / 2
-        'Pup_atma -Pdis
-        
-        Pdis = P + ESP_dPIntegration(P, Tdown_C, PTup.T_C)
-        'Pdis = Pmin + dPdis
-        
-        If Pdis > PTup.P_atma Then
-            Pmax = P
-        Else
-            Pmin = P
-        End If
-        
-    Loop Until (Abs(Pdis - PTup.P_atma) < eps) Or (i > 100)
-    
-    If i < 100 Then
-        Calc_ESP_UpDown.P_atma = P
-        Calc_ESP_UpDown.T_C = PTup.T_C - Tdown_C
-    End If
-End Function
-Function Calc_ESP_dP_atma(P_atma As Double, Tin_C As Double, Optional ByRef Tdis_C, Optional calc_dir As Integer = 1)
-'выборка насоса исправлена
-' rnt to do передача сюда дебита, обводненности, сепарации,и температуры на выкиде излишни - их можно передать через свойства класса,
-' там же и прочитать при необходимости. В перспективе надо убрать эти вызовы
+'    i = 0
+'    eps = 0.01  ' погрешность в атм
+'    Pmin = 1
+'    Pmax = PTup.P_atma
+'
+'    Pdis = Pmin + ESP_dPIntegration(Pmin, Tdown_C, PTup.T_C)
+'  '  Pdis = Pmin + dPdis
+'    If Pdis > PTup.P_atma Then
+'                    ' уже на первом шаге получили завышенное значение - значит решения нет в данном случае
+'                    Calc_ESP_UpDown.P_atma = PTup.P_atma + 0.5
+'                    Calc_ESP_UpDown.T_C = PTup.T_C - Tdown_C
+'                    addLogMsg "CPump.Calc_ESP_UpDown: расчет перепада давления в насосе по давлению на выкиде. Давление на приеме ниже атмосферного Pdis = " & PTup.P_atma & " Pin = " & Pmin _
+'                                    & " dP pump = " & Calc_ESP_UpDown.P_atma
+'                    p_Pintake_atma = 0.5
+'                    p_Pdis_atma = PTup.P_atma
+'
+'        Exit Function
+'    End If
+'
+'    Do
+'        i = i + 1
+'        P = (Pmin + Pmax) / 2
+'        'Pup_atma -Pdis
+'
+'        Pdis = P + ESP_dPIntegration(P, Tdown_C, PTup.T_C)
+'        'Pdis = Pmin + dPdis
+'
+'        If Pdis > PTup.P_atma Then
+'            Pmax = P
+'        Else
+'            Pmin = P
+'        End If
+'
+'    Loop Until (Abs(Pdis - PTup.P_atma) < eps) Or (i > 100)
+'
+'    If i < 100 Then
+'        Calc_ESP_UpDown.P_atma = P
+'        Calc_ESP_UpDown.T_C = PTup.T_C - Tdown_C
+'    End If
+'
+'End Function
+'
+'Function Calc_ESP_dP_atma(P_atma As Double, Tin_C As Double, Optional ByRef Tdis_C, Optional calc_dir As Integer = 1)
+''выборка насоса исправлена
+'' rnt to do передача сюда дебита, обводненности, сепарации,и температуры на выкиде излишни - их можно передать через свойства класса,
+'' там же и прочитать при необходимости. В перспективе надо убрать эти вызовы
+'
+'ReDim P(p_StageNum) As Double
+'ReDim p_out(51) As Double
+'Dim j As Integer
+'Dim Calc_ESP_dP_atma_2 As Double
+'Dim P_step As Double
+'
+''p_Es_frac = Es
+'p_Tintake_C = Tin_C
 '
 '
-ReDim P(p_StageNum) As Double
-ReDim p_out(51) As Double
-Dim j As Integer
-Dim Calc_ESP_dP_atma_2 As Double
-Dim P_step As Double
-'p_Es_frac = Es
-p_Tintake_C = Tin_C
-P_step = 10
-P(0) = P_atma
-Dim dP_Pin_ESP_curve As New TInterpolation
-Select Case calc_dir
-    Case 0 ' Интергрирование сверху вниз
-        j = 0
-        p_out(0) = 1
-        p_out(1) = 1
-        Calc_ESP_dP_atma = 0
-        
-        Do Until (p_out(j) + Calc_ESP_dP_atma > P_atma) And (p_out(j) < p_out(j + 1))
-        ' цикл - перебираем давления на входе в насос снизу вверх
-        ' пока давление на выходе не превысит заданное
-            j = j + 1
-            
-            ' считаем перепад давления в насосе
-            Calc_ESP_dP_atma = ESP_dPIntegration(p_out(j), Tin_C)
-            ' проверяем если на текущем шаге перепад давления в насосе больше необходимого
-            If p_out(j) + Calc_ESP_dP_atma > P_atma Then
-                If j = 1 Then
-                    ' уже на первом шаге получили завышенное значение - значит решения нет в данном случае
-                    Calc_ESP_dP_atma = P_atma + 0.5
-                    addLogMsg "CPump.Calc_ESP_dP_atma: расчет перепада давления в насосе по давлению на выкиде. Давление на приеме ниже атмосферного Pdis = " & P_atma & " Pin = " & p_out(j) & " dP pump = " & Calc_ESP_dP_atma
-                    p_Pintake_atma = 0.5
-                    p_Pdis_atma = P_atma
-                    Exit Function
-                ElseIf dP_Pin_ESP_curve.numPoints > 0 Then
-                    ' достигли конечной точки расчета кривой - сохраняем значение для будущих разборок если эта точка не первая
-                    dP_Pin_ESP_curve.AddPoint p_out(j) + Calc_ESP_dP_atma, p_out(j)
-                    p_out(j + 1) = p_out(j) + P_step
-                ElseIf Calc_ESP_dP_atma > 0 Then
-                    P_step = P_step / 2
-                    p_out(j + 1) = p_out(j) - P_step
-                Else
-                    Calc_ESP_dP_atma = 0
-                    p_Pintake_atma = P_atma
-                    p_Pdis_atma = P_atma
-                    dP_Pin_ESP_curve.AddPoint P_atma, P_atma
-                    Exit Function
-                End If
-            Else
-                 p_out(j + 1) = p_out(j) + P_step
-                 If Calc_ESP_dP_atma > 0 Then
-                     dP_Pin_ESP_curve.AddPoint p_out(j) + Calc_ESP_dP_atma, p_out(j)
-                 End If
-            End If
-            
-        
-        Loop
-        Calc_ESP_dP_atma = P_atma - dP_Pin_ESP_curve.GetPoint(P_atma)
-        
-        p_Pintake_atma = P_atma - Calc_ESP_dP_atma
-        
-        p_Pdis_atma = ESP_dPIntegration(p_Pintake_atma, Tin_C) + p_Pintake_atma
-     '   Debug.Assert (Abs(p_Pdis_atma - P_atma) < 1)
-Case 1 ' Интергрирование снизу вверх
-        Calc_ESP_dP_atma = ESP_dPIntegration(P_atma, Tin_C)
-    
-        p_Pintake_atma = P_atma
-        p_Pdis_atma = P_atma + Calc_ESP_dP_atma
-    Exit Function
-End Select
-EndFunc:
-End Function
+'P_step = 10
+'P(0) = P_atma
+'Dim dP_Pin_ESP_curve As New TInterpolation
+'Select Case calc_dir
+'    Case 0 ' Интергрирование сверху вниз
+'        j = 0
+'        p_out(0) = 1
+'        p_out(1) = 1
+'        Calc_ESP_dP_atma = 0
+'
+'        Do Until (p_out(j) + Calc_ESP_dP_atma > P_atma) And (p_out(j) < p_out(j + 1))
+'        ' цикл - перебираем давления на входе в насос снизу вверх
+'        ' пока давление на выходе не превысит заданное
+'            j = j + 1
+'
+'            ' считаем перепад давления в насосе
+'            Calc_ESP_dP_atma = ESP_dPIntegration(p_out(j), Tin_C)
+'            ' проверяем если на текущем шаге перепад давления в насосе больше необходимого
+'            If p_out(j) + Calc_ESP_dP_atma > P_atma Then
+'                If j = 1 Then
+'                    ' уже на первом шаге получили завышенное значение - значит решения нет в данном случае
+'                    Calc_ESP_dP_atma = P_atma + 0.5
+'                    addLogMsg "CPump.Calc_ESP_dP_atma: расчет перепада давления в насосе по давлению на выкиде. Давление на приеме ниже атмосферного Pdis = " & P_atma & " Pin = " & p_out(j) & " dP pump = " & Calc_ESP_dP_atma
+'                    p_Pintake_atma = 0.5
+'                    p_Pdis_atma = P_atma
+'                    Exit Function
+'                ElseIf dP_Pin_ESP_curve.numPoints > 0 Then
+'                    ' достигли конечной точки расчета кривой - сохраняем значение для будущих разборок если эта точка не первая
+'                    dP_Pin_ESP_curve.AddPoint p_out(j) + Calc_ESP_dP_atma, p_out(j)
+'                    p_out(j + 1) = p_out(j) + P_step
+'                ElseIf Calc_ESP_dP_atma > 0 Then
+'                    P_step = P_step / 2
+'                    p_out(j + 1) = p_out(j) - P_step
+'                Else
+'                    Calc_ESP_dP_atma = 0
+'                    p_Pintake_atma = P_atma
+'                    p_Pdis_atma = P_atma
+'                    dP_Pin_ESP_curve.AddPoint P_atma, P_atma
+'                    Exit Function
+'                End If
+'            Else
+'                 p_out(j + 1) = p_out(j) + P_step
+'                 If Calc_ESP_dP_atma > 0 Then
+'                     dP_Pin_ESP_curve.AddPoint p_out(j) + Calc_ESP_dP_atma, p_out(j)
+'                 End If
+'            End If
+'
+'
+'        Loop
+'        Calc_ESP_dP_atma = P_atma - dP_Pin_ESP_curve.GetPoint(P_atma)
+'
+'        p_Pintake_atma = P_atma - Calc_ESP_dP_atma
+'
+'        p_Pdis_atma = ESP_dPIntegration(p_Pintake_atma, Tin_C) + p_Pintake_atma
+'     '   Debug.Assert (Abs(p_Pdis_atma - P_atma) < 1)
+'Case 1 ' Интергрирование снизу вверх
+'        Calc_ESP_dP_atma = ESP_dPIntegration(P_atma, Tin_C)
+'
+'        p_Pintake_atma = P_atma
+'        p_Pdis_atma = P_atma + Calc_ESP_dP_atma
+'    Exit Function
+'End Select
+'EndFunc:
+'End Function
 Private Sub Class_Initialize()
     Set p_Fluid = New CPVT
     p_CorrectVisc = True
- '   p_Length_m = 1 ' по умолчанию ставим длину УЭЦН 1 м
  
  ' некоторых параметров может не быть в текущей версии базы, зададим их по умолчанию
     esp_StageHeight_m = 0.05   ' 50 mm в среднем закладывается на высоту одной ступени
@@ -1037,10 +1069,12 @@ For i = 0 To numPoints
     
     degr_temp = PressureDegradation
     PressureDegradation = 0
-    c_NominalPressureDropCurve.AddPoint qcalc, Calc_ESP_dP_atma(p_Pintake_atma, p_Tintake_C)
+    Call Calc_ESP_simple(p_Pintake_atma, p_Tintake_C)
+    c_NominalPressureDropCurve.AddPoint qcalc, p_Pdis_atma - p_Pintake_atma
     
     PressureDegradation = degr_temp
-    c_RealPressureDropCurve.AddPoint qcalc, Calc_ESP_dP_atma(p_Pintake_atma, p_Tintake_C)
+    Call Calc_ESP_simple(p_Pintake_atma, p_Tintake_C)
+    c_RealPressureDropCurve.AddPoint qcalc, p_Pdis_atma - p_Pintake_atma
     c_RealPowerCurve.AddPoint qcalc, p_PowerFluid_Wt
     c_RealEfficiencyCurve.AddPoint qcalc, p_EffESP_d
     c_RealHeadCurve.AddPoint qcalc, p_HeadReal_m
@@ -1048,131 +1082,13 @@ For i = 0 To numPoints
     c_PumpTinCurve.AddPoint qcalc, p_Tintake_C
 Next i
 If Qliq < 0 Then Me.Qliq_m3day = qold
-Call Calc_ESP_dP_atma(p_Pintake_atma, p_Tintake_C)
+Call Calc_ESP_simple(p_Pintake_atma, p_Tintake_C)
 End Sub
- Public Function SaveState()
- ' сохраняет состояние объекта в двухмерный массив для обеспечения вывода (для отладки)
-    Dim stor()
-    Dim i As Integer
-    
-    ReDim stor(const_OutputCurveNumPoints, STOR_SIZE)
-    stor(0, 0) = "ESP SaveState"   ' тут будет общея строка с датой сохранения дампа
-    AddS stor, 1, 0, "construction    "
-    AddS stor, 2, 0, "p_Qliq_m3day              ", Qliq_m3day
-    AddS stor, 3, 0, "p_WCT_perc                ", WCT_perc
-    AddS stor, 4, 0, "p_Pintake_atma             ", p_Pintake_atma
-    AddS stor, 5, 0, "p_Pintake_atma             ", p_Pdis_atma
-  '  AddS stor, 6, 0, "p_Es_frac                 ", p_Es_frac
-    
-    AddS stor, 7, 0, "--                    ", ""
-    AddS stor, 8, 0, "--                    ", ""
-    AddS stor, 9, 0, "--                    ", ""
-    
-    AddS stor, 10, 0, "pump props          "
-    AddS stor, 11, 0, "p_PumpName         ", "" 'p_PumpName
-    AddS stor, 12, 0, "p_StageNum         ", p_StageNum
-    AddS stor, 13, 0, "p_Frequency        ", p_Frequency_Hz
-    
-    AddS stor, 14, 0, "p_Length_m               ", Length_m
-    AddS stor, 15, 0, "p_Dintake_m              ", 1 'p_Dintake_m
-    AddS stor, 16, 0, "--                       ", ""
-    AddS stor, 17, 0, "p_PressureDegradation   ", p_PressureDegradation
-    AddS stor, 18, 0, "p_RateDegradation       ", p_RateDegradation
-    AddS stor, 19, 0, "--                      ", ""
-    
-  '  AddS stor, 20, 0, "p_Twh_C            ", p_Tbefore_C
-    AddS stor, 21, 0, "p_Tintake_C        ", p_Tintake_C
-    AddS stor, 22, 0, "p_Tdischarge_C     ", p_Tdischarge_C
-    AddS stor, 23, 0, "--                 ", ""
-    AddS stor, 24, 0, "--                 ", ""
-    
-    AddS stor, 25, 0, "esp_PumpN             ", esp_PumpN
-    AddS stor, 26, 0, "esp_ManufacturerName  ", esp_ManufacturerName
-    AddS stor, 27, 0, "esp_PumpName          ", esp_PumpName
-    AddS stor, 28, 0, "esp_MaxStagesNumber   ", esp_MaxStagesNumber
-    AddS stor, 29, 0, "esp_MaxRate           ", ESP_maxRate_m3day
-    
-    
-    AddS stor, 30, 0, "params               "
-    AddS stor, 31, 0, "esp_OptimumMinRate        ", esp_OptimumMinRate_m3day
-    AddS stor, 32, 0, "esp_OptimumMaxRate    ", esp_OptimumMaxRate_m3day
-    AddS stor, 33, 0, "esp_Reda_Special_Rate     ", esp_Reda_Special_Rate
-    AddS stor, 33, 0, "esp_Frequency     ", esp_Frequency_Hz
-    
-    Const flStart = 1
-    i = 0
-    With p_Fluid
-        AddS stor, flStart + i, 2, "PVT    ": i = i + 1
-        AddS stor, flStart + i, 2, "p_gamma_o        ", .gamma_o: i = i + 1
-        AddS stor, flStart + i, 2, "p_gamma_g        ", .gamma_g: i = i + 1
-        AddS stor, flStart + i, 2, "p_gamma_w        ", .gamma_w: i = i + 1
-        AddS stor, flStart + i, 2, "p_Rp_m3m3        ", .Rp_m3m3: i = i + 1
-        AddS stor, flStart + i, 2, "p_Rsb_m3m3       ", .rsb_m3m3: i = i + 1
-        AddS stor, flStart + i, 2, "p_Pb_atma         ", .Pb_atma: i = i + 1
-        AddS stor, flStart + i, 2, "p_Bob_m3m3        ", .Bob_m3m3: i = i + 1
-    End With
-    
-    
-      
-    
-    AddS stor, 0, 4, "Q, m3/day", " Head,m"
-    AddSCurve stor, 1, 4, c_HeadCurve
-   
-    AddS stor, 0, 6, "Q, m3/day", " c_PowerCurve"
-    AddSCurve stor, 1, 6, c_PowerCurve
-   
-    AddS stor, 0, 8, "Q, m3/day", " c_EffeciencyCurve"
-    AddSCurve stor, 1, 8, c_EffeciencyCurve
-   
-    AddS stor, 0, 10, "Q, m3/day", " c_NominalPressureDropCurve"
-    AddSCurve stor, 1, 10, c_NominalPressureDropCurve
-   
-    AddS stor, 0, 12, "Q, m3/day", " c_RealPressureDropCurve"
-    AddSCurve stor, 1, 12, c_RealPressureDropCurve
-    
-    AddS stor, 0, 14, "Q, m3/day", " c_RealPowerCurve"
-    AddSCurve stor, 1, 14, c_RealPowerCurve
-   
-    AddS stor, 0, 16, "Q, m3/day", " c_RealEfficiencyCurve"
-    AddSCurve stor, 1, 16, c_RealEfficiencyCurve
-    
-    AddS stor, 0, 18, "stage num", " GasFractionInPump"
-    AddSCurve stor, 1, 18, c_GasFractionInPumpCurve
-    
-    AddS stor, 0, 20, "stage num", " PressureInPump, atma"
-    AddSCurve stor, 1, 20, c_PressureInPumpCurve
-   
-    AddS stor, 0, 22, "Hd m", "QmixInPump,m3/day"
-    AddSCurve stor, 1, 22, c_QmixInPumpCurve
-    
-    AddS stor, 0, 24, "stage num", " TempInPump"
-    AddSCurve stor, 1, 24, c_TempInPumpCurve
-    
-    AddS stor, 0, 26, "stage num", "PowerFluidInPump"
-    AddSCurve stor, 1, 26, c_PowerFluidInPumpCurve
-    
-    AddS stor, 0, 28, "stage num", "PowerESPInPump"
-    AddSCurve stor, 1, 28, c_PowerESPInPumpCurve
-    
-    AddS stor, 0, 30, "stage num", "EffESPInPump"
-    AddSCurve stor, 1, 30, c_EffESPInPumpCurve
-    
-    AddS stor, 0, 32, "Q m3/day", "c_RealHeadCurve"
-    AddSCurve stor, 1, 32, c_RealHeadCurve
-    
-    AddS stor, 0, 34, "Q m3/day", "c_PumpTdisCurve"
-    AddSCurve stor, 1, 34, c_PumpTinCurve
-    
-    AddS stor, 0, 36, "Q m3/day", "c_PumpTdisCurve"
-    AddSCurve stor, 1, 36, c_PumpTdisCurve
-    SaveState = stor
- End Function
 Public Function Copy(pump As CESPpump) As Boolean
     
     
  p_StageNum = pump.StageNum
  p_Frequency_Hz = pump.Frequency
-' p_Length_m = pump.Length_m
 ' p_Dintake_m = pump.Dintake_m
  
 ' p_Tbefore_C = pump.Tbefore_C

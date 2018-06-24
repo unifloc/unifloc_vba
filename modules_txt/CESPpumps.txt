@@ -15,15 +15,19 @@ Option Explicit
                                       ' один насос об€зательно должен быть в списке, чтобы все работало
  
  
- Private p_Tintake_C As Double               ' температура потока на приемной сетке ”Ё÷Ќ (учитываетс€ нагрев двигателем)
- Private p_Tdischarge_C As Double            ' температура потока на выкиде насоса (учитываетс€ нагрев в насосе)
- Private p_Pintake_atma As Double             ' давление на приеме насоса (используетс€ дл€ расчета рабочих характеристик)
- Private p_Pdis_atma As Double                ' давление на выкиде насоса
+' Private p_Tintake_C As Double               ' температура потока на приемной сетке ”Ё÷Ќ (учитываетс€ нагрев двигателем)
+' Private p_Tdischarge_C As Double            ' температура потока на выкиде насоса (учитываетс€ нагрев в насосе)
+'
+' Private p_Pintake_atma As Double             (используетс€ дл€ расчета рабочих характеристик)
+' Private p_Pdis_atma As Double
+ Private p_PTintake As PTtype           ' давление и температура на приеме насоса
+ Private p_PTdis As PTtype              ' давление и температура на выкиде насоса
  Private p_Fluid As CPVT                  ' флюид движущийс€ через насос (с учетом сепарации газа)
  
  Private c_PCurve As New TInterpolation         ' крива€ распределени€ давлени€ вдоль насоса   (как снаружи, так и внутри)
  Private c_TCurve As New TInterpolation         ' крива€ распределени€ температуры флюида вдоль насоса
  Private p_PressureDegradation As Double
+ 
  ' блок оценки качества данных
  'Public' LogMsg As New CLogger                ' логгер
 ' =======================  геометри€
@@ -133,9 +137,9 @@ End Property
     ' в результате все насосы ссылаютс€ на один и тот объект флюида
  End Property
  
- Public Property Get Tdischarge_C() As Double
- Tdischarge_C = p_Tdischarge_C
- End Property
+' Public Property Get Tdischarge_C() As Double
+' Tdischarge_C = p_Tdischarge_C
+' End Property
 ' свойство выдает момент на валу потребл€емый насосом
 Public Property Get M_Nm() As Double
     Dim pmp As CESPpump
@@ -168,44 +172,46 @@ Private Sub FillCurvePT()
     Next
 End Sub
 ' метод расчета работы насоса
-Public Function Calc_ESP_DownUp(PT As PTtype, Optional Tdis_C As Double = 0) As PTtype
+Public Sub Calc_ESP_DownUp(PTin As PTtype, Optional Tdis_C As Double = 0)
     
     Dim pmp As CESPpump
     Dim i As Integer
     Dim dPump As PTtype, dPumpSum As PTtype
     
+    p_PTintake = PTin
     dPumpSum = SetPT(P:=0, t:=0)
      
     For i = 1 To p_Pumps.count
         Set pmp = p_Pumps(i)
-        dPump = pmp.Calc_ESP_DownUp(PT, Tdis_C)     ' ищем изменение термобарических условий
+      '  dPump = pmp.Calc_ESP_DownUp(PTin, Tdis_C)     ' ищем изменение термобарических условий
         dPumpSum = SumPT(dPumpSum, dPump)
-        PT = SumPT(PT, dPumpSum)
+        PTin = SumPT(PTin, dPumpSum)
     Next i
     
-    Calc_ESP_DownUp = PT
+    p_PTdis = PTin
     Call FillCurvePT
-   
-End Function
-' расчет распределени€ давлени€ в Ё÷Ќ сверху вниз
-Public Function Calc_ESP_UpDown(PTup As PTtype, Tdown_C As Double) As PTtype
-    
-    Dim pmp As CESPpump
-    Dim i As Integer
-    Dim dPump As PTtype, dPumpSum As PTtype
-    
-    dPumpSum = SetPT(P:=0, t:=0)
-     
-    For i = p_Pumps.count To 1 Step -1
-        Set pmp = p_Pumps(i)
-        dPump = pmp.Calc_ESP_UpDown(PTup, Tdown_C)  ' ищем изменение термобарических условий
-        dPumpSum = SumPT(dPumpSum, dPump)
-        PTup = SubtractPT(PTup, dPumpSum)
-    Next i
-    
-    Calc_ESP_UpDown = PTup
-   ' Call FillCurvePT
-End Function
+End Sub
+'' расчет распределени€ давлени€ в Ё÷Ќ сверху вниз
+'Public Sub Calc_ESP_UpDown(PTdis As PTtype, Tdown_C As Double)
+'
+'    Dim pmp As CESPpump
+'    Dim i As Integer
+'    Dim dPump As PTtype, dPumpSum As PTtype
+'
+'    dPumpSum = SetPT(P:=0, t:=0)
+'    p_PTdis = PTdis
+'
+'    For i = p_Pumps.count To 1 Step -1
+'        Set pmp = p_Pumps(i)
+'        dPump = pmp.Calc_ESP_UpDown(PTdis, Tdown_C)  ' ищем изменение термобарических условий
+'        dPumpSum = SumPT(dPumpSum, dPump)
+'        PTdis = SubtractPT(PTdis, dPumpSum)
+'    Next i
+'
+'    p_PTintake = PTdis
+'    Call FillCurvePT
+'
+'End Sub
 '
 ' заданы давление на выкиде, и температуры на входе и выходе  - решение ищетс€ только по давлению
 '
