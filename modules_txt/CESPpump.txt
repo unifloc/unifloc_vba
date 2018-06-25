@@ -443,14 +443,14 @@ Public Sub LoadESP_points(name As String, Rate, Head, Power, Eff, Optional Hz = 
     ReDim esp_PowerKoefficients(14)
     ReDim esp_EffKoefficients(14)
     
-    Dim A, b, c
+    Dim a, b, c
     ' по точкам ищем коэффициенты полинома
-    A = Application.WorksheetFunction.LinEst(HeadArray, Application.Power(RateArray, Array(1, 2, 3, 4, 5)))
+    a = Application.WorksheetFunction.LinEst(HeadArray, Application.Power(RateArray, Array(1, 2, 3, 4, 5)))
     b = Application.WorksheetFunction.LinEst(PowerArray, Application.Power(RateArray, Array(1, 2, 3, 4, 5)))
     c = Application.WorksheetFunction.LinEst(EffArray, Application.Power(RateArray, Array(1, 2, 3, 4, 5)))
     
     For i = 0 To 5
-       esp_HeadKoefficients(i) = A(6 - i)
+       esp_HeadKoefficients(i) = a(6 - i)
        esp_PowerKoefficients(i) = b(6 - i)
        esp_EffKoefficients(i) = c(6 - i)
     Next i
@@ -870,7 +870,7 @@ Public Function Calc_ESP_NumStages(Qmix_m3day As Double, Head_m As Double) As In
     End If
 End Function
 ' метод расчета работы насоса
-Public Sub Calc_ESP_simple(P_atma As Double, Tin_C As Double, Optional Tdis_C As Double = 0, _
+Public Sub Calc_ESP(P_atma As Double, Tin_C As Double, Optional Tdis_C As Double = 0, _
                         Optional calc_from_intake As Boolean = True)
     
     'p_Pintake_atma = PT.P_atma
@@ -879,6 +879,11 @@ Public Sub Calc_ESP_simple(P_atma As Double, Tin_C As Double, Optional Tdis_C As
     Dim Pint_estimation As Double
     Pint_estimation = 30
     Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake, Pint_estimation)
+    If Not calc_from_intake And Abs(Pint_estimation - p_Pintake_atma) > 10 And ESPtype > 0 Then
+        ' добавим вторую итерацию, чтобы улучшить приближение по деградации
+        Pint_estimation = p_Pintake_atma
+        Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake, Pint_estimation)
+    End If
     
 End Sub
 '' расчет распределени€ давлени€ в Ё÷Ќ сверху вниз
@@ -1069,11 +1074,11 @@ For i = 0 To numPoints
     
     degr_temp = PressureDegradation
     PressureDegradation = 0
-    Call Calc_ESP_simple(p_Pintake_atma, p_Tintake_C)
+    Call Calc_ESP(p_Pintake_atma, p_Tintake_C)
     c_NominalPressureDropCurve.AddPoint qcalc, p_Pdis_atma - p_Pintake_atma
     
     PressureDegradation = degr_temp
-    Call Calc_ESP_simple(p_Pintake_atma, p_Tintake_C)
+    Call Calc_ESP(p_Pintake_atma, p_Tintake_C)
     c_RealPressureDropCurve.AddPoint qcalc, p_Pdis_atma - p_Pintake_atma
     c_RealPowerCurve.AddPoint qcalc, p_PowerFluid_Wt
     c_RealEfficiencyCurve.AddPoint qcalc, p_EffESP_d
@@ -1082,7 +1087,7 @@ For i = 0 To numPoints
     c_PumpTinCurve.AddPoint qcalc, p_Tintake_C
 Next i
 If Qliq < 0 Then Me.Qliq_m3day = qold
-Call Calc_ESP_simple(p_Pintake_atma, p_Tintake_C)
+Call Calc_ESP(p_Pintake_atma, p_Tintake_C)
 End Sub
 Public Function Copy(pump As CESPpump) As Boolean
     

@@ -11,8 +11,8 @@
 '
 Option Explicit
  
- Private p_Pumps As New Collection    ' набор насосов для которых проводится расчет
-                                      ' один насос обязательно должен быть в списке, чтобы все работало
+ Private p_Pumps As New Collection_    ' набор насосов для которых проводится расчет
+                                       ' один насос обязательно должен быть в списке, чтобы все работало
  
  
 ' Private p_Tintake_C As Double               ' температура потока на приемной сетке УЭЦН (учитывается нагрев двигателем)
@@ -172,23 +172,54 @@ Private Sub FillCurvePT()
     Next
 End Sub
 ' метод расчета работы насоса
-Public Sub Calc_ESP_DownUp(PTin As PTtype, Optional Tdis_C As Double = 0)
+Public Sub Calc_ESP(P_atma As Double, Tin_C As Double, Optional Tdis_C As Double = 0, _
+                        Optional calc_from_intake As Boolean = True)
     
     Dim pmp As CESPpump
     Dim i As Integer
     Dim dPump As PTtype, dPumpSum As PTtype
+    Dim Tin_i_C() As Double, Tdis_i_C() As Double
+    Dim Pin_i As Double, Pdis_i As Double
+    Dim numSt As Integer
+    Dim numStAll As Integer
     
-    p_PTintake = PTin
     dPumpSum = SetPT(P:=0, t:=0)
-     
-    For i = 1 To p_Pumps.count
-        Set pmp = p_Pumps(i)
-      '  dPump = pmp.Calc_ESP_DownUp(PTin, Tdis_C)     ' ищем изменение термобарических условий
-        dPumpSum = SumPT(dPumpSum, dPump)
-        PTin = SumPT(PTin, dPumpSum)
+    ' подготовим массив по распределению температур
+    ReDim Tin_i_C(p_Pumps.count)
+    ReDim Tdis_i_C(p_Pumps.count)
+    numStAll = StageNum
+    numSt = 0
+    Pin_i = P_atma
+    Pdis_i = P_atma
+    For i = 0 To p_Pumps.count - 1
+        Set pmp = p_Pumps(i + 1)
+        Tin_i_C(i) = Tin_C + (Tdis_C - Tin_C) * numSt / numStAll
+        numSt = numSt + pmp.StageNum
+        Tdis_i_C(i) = Tin_C + (Tdis_C - Tin_C) * numSt / numStAll
     Next i
+    If calc_from_intake Then
+        For i = 0 To p_Pumps.count - 1
+            Set pmp = p_Pumps(i + 1)
+            Call pmp.Calc_ESP(Pin_i, Tin_i_C(i), Tdis_i_C(i))         ' ищем изменение термобарических условий
+            Pin_i = pmp.Pdis_atma
+        Next i
+        p_PTdis.P_atma = Pin_i
+        p_PTdis.T_C = Tdis_C
+        p_PTintake.P_atma = P_atma
+        p_PTintake.T_C = Tin_C
     
-    p_PTdis = PTin
+    Else
+        For i = p_Pumps.count - 1 To 0 Step -1
+            Set pmp = p_Pumps(i + 1)
+            Call pmp.Calc_ESP(Pdis_i, Tin_i_C(i), Tdis_i_C(i))        ' ищем изменение термобарических условий
+            Pdis_i = pmp.Pintake_atma
+        Next i
+        p_PTdis.P_atma = P_atma
+        p_PTdis.T_C = Tdis_C
+        p_PTintake.P_atma = Pdis_i
+        p_PTintake.T_C = Tin_C
+    End If
+     
     Call FillCurvePT
 End Sub
 '' расчет распределения давления в ЭЦН сверху вниз
