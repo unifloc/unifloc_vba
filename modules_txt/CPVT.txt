@@ -33,12 +33,23 @@ Option Explicit
  Private p_Mug_cP As Double                         ' вязкость газа при рабочих условиях
  ' расчетные параметры воды
  Private p_Bw_m3m3 As Double                        ' расчетное значение объемного коэффициента воды
+ Private p_BwSC_m3m3 As Double
  Private p_Muw_cP As Double                         ' вязкость воды
  Private p_Salinity_ppm As Double                   ' соленость воды
  ' параметры потока
  Private p_Rp_m3m3 As Double                        ' газовый фактор добычной (приведенный к стандартным условиям)
  Private p_wc_fr As Double                          ' объемная доля воды в флюиде
  Private p_Qliq_scm3day As Double                   ' задаем для флюида также и дебиты, это упрощает дальнейшие расчеты расходов в разных условиях
+ Private p_Qo_m3day As Double
+ Private p_Qw_m3day As Double
+ Private p_Qgas_m3day As Double
+ Private p_Qliq_m3day As Double
+ Private p_GasFraction_d As Double
+ Private p_MuMix_cP As Double
+ Private p_rho_oil_kgm3 As Double
+ Private p_rho_water_kgm3 As Double
+ Private p_rho_liq_kgm3 As Double
+ Private p_rho_mix_kgm3 As Double
  Private p_Qgfree_scm3day As Double                 ' дебит газа, вернее добавка для значения Qgas, в исследовательских целях
  ' набор параметров для температурных расчетов
  Private p_Co_JkgC As Double                        ' oil heat capacity   теплоемкость нефти  Дж/кг/С
@@ -173,7 +184,7 @@ Option Explicit
  End Property
    
  Public Property Get Qmix_m3day() As Double
-   Qmix_m3day = Qw_m3day + Qo_m3day + Qgas_m3day
+   Qmix_m3day = p_Qw_m3day + p_Qo_m3day + p_Qgas_m3day
    ' при барботаже будет все как надо
  End Property
  Public Property Get Qgfree_scm3day() As Double
@@ -276,7 +287,7 @@ Option Explicit
  Public Property Get rho_water_kgm3() As Double
     Dim msg As String
     If Bw_m3m3 > 0 Then
-        rho_water_kgm3 = 1000 * (gamma_w) / Bw_m3m3
+        rho_water_kgm3 = 1000 * (p_gamma_w) / p_Bw_m3m3
     Else
         msg = "CPVT.rho_water_kgm3: расчет плотности с неположительным значением Bw_m3m3" & Bw_m3m3 & "Значение Bw проигнорировано"
         addLogMsg msg
@@ -285,7 +296,7 @@ Option Explicit
     End If
  End Property
  Public Property Get rho_liq_kgm3() As Double
-    rho_liq_kgm3 = (1 - wc_fr) * rho_oil_kgm3 + wc_fr * rho_water_kgm3
+    rho_liq_kgm3 = p_rho_liq_kgm3 '(1 - wc_fr) * rho_oil_kgm3 + wc_fr * rho_water_kgm3
  End Property
  
  Public Property Get rho_gas_kgm3() As Double
@@ -308,7 +319,7 @@ Option Explicit
    ' при барботаже будет все как надо
  End Property
  Public Property Get rho_mix_kgm3() As Double
-    rho_mix_kgm3 = rho_liq_kgm3 * (1 - f_g) + rho_gas_kgm3 * f_g
+    rho_mix_kgm3 = p_rho_mix_kgm3  ' rho_liq_kgm3 * (1 - f_g) + rho_gas_kgm3 * f_g
  End Property
  
  Public Property Get sigma_liq_Nm() As Double
@@ -560,13 +571,14 @@ Public Property Get MuMix_cP() As Double
 '
 ' todo надо уточнить как считать вязкость для смеси - быть может надо холдап использовать
 '
-    MuMix_cP = (Muo_cP * Qo_m3day / Qliq_m3day + _
-                Muw_cP * Qw_m3day / Qliq_m3day) * (1 - GasFraction_d) + _
-                Mug_cP * (1 - GasFraction_d)
+    MuMix_cP = p_MuMix_cP
+'               (p_Muo_cP * p_Qo_m3day / Qliq_m3day + _
+'                p_Muw_cP * p_Qw_m3day / Qliq_m3day) * (1 - GasFraction_d) + _
+'                p_Mug_cP * (1 - GasFraction_d)
 End Property
 ' кинематическая вязкость смеси в сантистоксах
 Public Property Get MuMix_cSt() As Double
-    MuMix_cSt = MuMix_cP / (rho_mix_kgm3 / 1000)
+    MuMix_cSt = p_MuMix_cP / (p_rho_mix_kgm3 / 1000)
 End Property
 ' массовый расход нефти
 Public Property Get mo_kgsec() As Double
@@ -710,7 +722,9 @@ On Error GoTo err1:
     'for undersaturated - by shifting according to p_offs
     'calculate PVT properties
     'calculate water properties at current pressure and temperature
-    p_Bw_m3m3 = unf_Calc_Bw_m3m3(P_MPa, T_K)
+    p_BwSC_m3m3 = gamma_w / 1
+    p_Salinity_ppm = unf_Calc_Sal_BwSC_ppm(p_BwSC_m3m3)
+    p_Bw_m3m3 = unf_Calc_Bw_m3m3(P_MPa, T_K) * p_BwSC_m3m3
     p_Muw_cP = unf_Calc_Muw_cP(P_MPa, T_K, p_Salinity_ppm)   ' откуда тут возьмется соленость?!!!
     'if no calibration gas-oil ratio specified, then set it to some very large value and
     'switch of calibration for bubblepoint and oil formation volume factor
@@ -840,6 +854,18 @@ On Error GoTo err1:
     p_Pbcalc_atma = p_bi / p_fact / const_convert_atma_MPa
     p_Rs_m3m3 = r_si
     p_Muo_deadoil_cP = Muo_deadoil_cP
+    p_Qo_m3day = p_Qliq_scm3day * (1 - p_wc_fr) * p_Bo_m3m3   ' для ускорения расчетов потом все что можно подсчитаем тут
+    p_Qw_m3day = p_Qliq_scm3day * p_wc_fr * p_Bw_m3m3
+    p_Qgas_m3day = (p_Qliq_scm3day * (1 - p_wc_fr) * p_Rp_m3m3 + p_Qgfree_scm3day - p_Rs_m3m3 * p_Qliq_scm3day * (1 - p_wc_fr))
+    p_Qliq_m3day = p_Qw_m3day + p_Qo_m3day
+    p_GasFraction_d = p_Qgas_m3day / (p_Qw_m3day + p_Qo_m3day + p_Qgas_m3day)
+    p_MuMix_cP = (p_Muo_cP * p_Qo_m3day / p_Qliq_m3day + _
+                  p_Muw_cP * p_Qw_m3day / p_Qliq_m3day) * (1 - p_GasFraction_d) + _
+                  p_Mug_cP * (1 - p_GasFraction_d)
+    p_rho_oil_kgm3 = 1000 * (p_gamma_o + p_Rs_m3m3 * p_gamma_g * const_rho_air / 1000) / p_Bo_m3m3
+    p_rho_water_kgm3 = 1000 * (p_gamma_w) / p_Bw_m3m3
+    p_rho_liq_kgm3 = (1 - p_wc_fr) * rho_oil_kgm3 + wc_fr * rho_water_kgm3
+    p_rho_mix_kgm3 = rho_liq_kgm3 * (1 - f_g) + rho_gas_kgm3 * f_g
 '    timeStamp = Time() - timeStamp
 '    timePVTtotal = timePVTtotal + timeStamp
     Exit Sub
@@ -878,13 +904,13 @@ End Function
 Public Function GasFraction_d(Optional ByVal Ksep As Double = 0) As Double
 ' метод расчета доли газа в потоке для заданной жидкости при заданных условиях
 ' предполагается что свойства нефти газа и воды уже расчитаны и заданы при необходимых условиях
-    Dim Qmix As Double
+    Dim qmix As Double
     GasFraction_d = 0
-    Qmix = Qmix_m3day   ' сохраним чтобы немного сэкономить на проверку нулевого значения
-    If Qmix > 0 And Ksep >= 0 And Ksep < 1 Then
+    qmix = Qmix_m3day   ' сохраним чтобы немного сэкономить на проверку нулевого значения
+    If qmix > 0 And Ksep >= 0 And Ksep < 1 Then
         GasFraction_d = Qgas_m3day * (1 - Ksep) / (Qw_m3day + Qo_m3day + Qgas_m3day * (1 - Ksep))
     Else
-        addLogMsg "GasFraction_d: Общий расход ГЖС (qo + qw + qg) = " & Qmix
+        addLogMsg "GasFraction_d: Общий расход ГЖС (qo + qw + qg) = " & qmix
     End If
 End Function
 Public Function PGasFraction_atma(FreeGas, T_C As Double, Optional Es As Double = 0, Optional P_init_atma = 300) As Double

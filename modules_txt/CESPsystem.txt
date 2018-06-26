@@ -43,6 +43,9 @@ Option Explicit
  Private p_PTintake As PTtype
  Private p_PTdis As PTtype
  
+ Private p_ESPtypeGasDegr As Double
+ Private p_GasFraction As Double
+ 
  
  
 ' Private p_FluidCas As CPVT
@@ -108,6 +111,12 @@ Option Explicit
  Public Property Get HmesDischarge_m() As Double
     HmesDischarge_m = HmesTop_m
  End Property
+Public Property Get ESPtype() As Double
+ ESPtype = p_ESPtypeGasDegr
+End Property
+Public Property Let ESPtype(val As Double)
+    p_ESPtypeGasDegr = val
+End Property
  Public Property Get Fluid() As CPVT
     Set Fluid = p_Fluid
  End Property
@@ -180,10 +189,11 @@ Public Function Calc_Pdis_Pin_atma(PTin As PTtype, Optional dTpump_C As Double =
     Dim PTintake_temp As PTtype
     
     PTintake_temp = PTin
-    
     c_PCurve.ClearPoints
     c_TCurve.ClearPoints
     
+    ' если задана сепарация на входе - то считаем с ней и не думаем про сепарацию
+    ' если нет - то берем сепарацию из газосепаратора
     If (Ksep_d = 0) Or (Ksep_d > 1) Then
         Set p_FluidPump = p_Fluid
     ElseIf Ksep_d > 0 Then
@@ -192,17 +202,26 @@ Public Function Calc_Pdis_Pin_atma(PTin As PTtype, Optional dTpump_C As Double =
         Ksep_d = p_GasSeparator.Calc_Separation(PTin)           ' получили сепарацию и модифицированные флюид
         Set p_FluidPump = p_Fluid.GetCloneModAfterSeparation(PTin.P_atma, PTin.T_C, Ksep_d)
     End If
-    
-    
-    
+    ' здесь флюид готов - можнос считать, что получится с установкой
+    p_FluidPump.Calc_PVT PTin.P_atma, PTin.T_C
+    p_GasFraction = p_FluidPump.GasFraction_d()
+    p_Pumps.PressureDegradation = GasCorrection_d(p_GasFraction)
     If p_Pumps.StageNum > 0 Then
-        
         Set p_Pumps.Fluid = p_FluidPump              ' сохранили модифицированный флюид в насосе
-        
+        ' 1. рассчитаем перепад давления в насосе
         Call p_Pumps.Calc_ESP(PTin.P_atma, PTin.T_C, PTin.T_C + dTpump_C)                     ' рассчитали перепад давления в насосе
-    
+        ' 2. оценим мощность потребляемую газосепаратором
         p_M_Nm = p_GasSeparator.M_Nm + p_Pumps.M_Nm
-    
+        ' 3. получим момент на валу, который должен выдавать двигатель
+        ' 4. получим значение проскальзывания двигателя по моменту
+        ' 5. если необходимо пересчитаем параметры работы насоса с учетом значения проскальзования
+        ' 6. по известному напряжению двигателя номинальному оценить ток
+        ' 7. по значению тока и параметрам кабельной линии оценить падение напряжения в кабеле
+        ' 8. по падению напряжения в кабеле получим значение напряжения на поверхности
+        ' 9. при необходимости пересчитаем напряжение и ток в кабельной линии
+        ' 10. по известному напряжению, току двигателя оценим его КПД и коэффициент мощности
+        
+        
 '    slip = p_Motor.calc_s_d(p_Pumps.M_Nm)                         ' по моменту потребляемому насосом определяем параметры работы двигателя
     
     ' если стоит опция детального расчета - тогда пересчитываем насос и двигатель с учетом проскальзования и нагрева жидкости на двигателе
@@ -232,3 +251,28 @@ Private Sub Class_Initialize()
     Parts.Add p_Motor
     p_PressureDegradation = 0
 End Sub
+Public Property Get GasFractionIn_d() As Double
+ GasFractionIn_d = p_GasFraction
+End Property
+' функция расчета деградации из за газа
+Private Function GasCorrection_d(GasFracIn As Double) As Double
+Dim b As Double
+    b = 0
+    If GasFracIn > 0 And GasFracIn < 1 Then
+        b = GasFracIn
+    End If
+    If ESPtype = 0 Then GasCorrection_d = 1
+    If ESPtype = 1 Then
+        GasCorrection_d = -9 * b ^ 2 + 0.6 * b + 1    ' SPE 117414
+    End If
+    If ESPtype = 2 Then
+        GasCorrection_d = -2 * b ^ 2 + 0.05 * b + 1    ' SPE 117414  corrected rnt
+    End If
+    If ESPtype = 3 Then
+        GasCorrection_d = -1.4 * b ^ 2 + 0.15 * b + 1    ' SPE 117414
+    End If
+    If ESPtype = 4 Then
+        GasCorrection_d = -4 * b ^ 2 + 0.2 * b + 1    ' SPE 117414   corrected rnt
+    End If
+    If GasCorrection_d < 0 Then GasCorrection_d = 0
+End Function
