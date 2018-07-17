@@ -6,50 +6,50 @@
 '=======================================================================================
 '
 Option Explicit
-'  класс для описания характеристик роторного газосепаратора
-'  заодно класс работает с расчетом сепарации вообще - при необходимости описывает входной модуль
-'
+'  класс для описания характеристик роторного газосепаратора УЭЦН
+'  класс работает с расчетом сепарации вообще - при необходимости описывает входной модуль
 '
 ' геометрические параметры насоса
 Private p_Length_m As Double                ' длина должна быть не нулевая, для того чтобы корректно строились графики по скважине
-Private p_HmesTop As Double                 ' глубина установки ЭЦН (по верхней части)
-Private esp_Diam_m As Double                  ' внешний диаметр ЭЦН
+Private p_HmesTop As Double                 ' глубина установки газосепаратора по верхней части
+Private p_OD_mm As Double                   ' внешний диаметр
 Private p_Angle_deg As Double               ' угол установки УЭЦН (предполагается, что по глубине угол не меняется)
 Private p_Dcas_m As Double                  ' диаметр эксплуатационной колонны в месте установки сепаратора
-Private p_Dintake_m As Double               ' диаметр приемной сетки ЭЦН - необходим для оценки коэффициента сепарации только для чтения - меняется насосом
-Private c_PCurve As New TInterpolation         ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
-Private c_TCurve As New TInterpolation         ' кривая распределения температуры флюида вдоль насоса
- ' блок оценки качества данных
-'Public' LogMsg As New CLogger                ' логгер
+Private p_Qnom_m3day                        ' номинальный дебит для газосепаратора
+Private c_PCurve As New TInterpolation      ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
+Private c_TCurve As New TInterpolation      ' кривая распределения температуры флюида вдоль насоса
 ' общие параметры
-Private p_Fluid As CPVT                   ' флюид исходный
-Private p_FluidTub As CPVT               ' флюид после сепарации
-Private p_FluidCas As CPVT               ' флюид после сепарации - то что идет в затруб
-'
-'
-Private p_KsepManual As Boolean         ' флаг для ручного учета газосепаратора
- ' параметры сепарации
- Private p_KsepNatural As Double
- Private p_KsepGasSep_d As Double
- Private p_Ksep_d  As Double
+Private p_Fluid As CPVT                     ' флюид исходный
+Private p_FluidTub As CPVT                  ' флюид после сепарации
+Private p_FluidCas As CPVT                  ' флюид после сепарации - то что идет в затруб
+Private p_isKsepManual As Boolean           ' флаг для ручного учета газосепаратора
+ ' параметры сепарации, расчетные значения
+Private p_KsepNatural As Double
+Private p_KsepGasSep_d As Double
+Private p_KsepTotal_d  As Double
  
- Private p_M_Nm As Double               ' момент потребляемый
- Private p_Power_w As Double            ' мощность потребляемая
- Private p_w_obmin As Double            ' скорость вращения вала
+Private p_KsepGSMax  As Double
+Private p_QmixGS_rc_m3day As Double
+Private p_M_Nm As Double                    ' момент потребляемый
+Private p_Pshaft_w As Double                ' мощность потребляемая
+Private p_Pshaftnom_w As Double             ' номинальная мощность потребляемая газосепаратором
+Private p_w_rpm As Double                   ' скорость вращения вала
+Private p_fnom_Hz As Double                 ' номинальная скорость вращения газосепаратора
  
- ' свойство для выдачи момента
- Public Property Get M_Nm() As Double
-    M_Nm = p_M_Nm
-    
-    M_Nm = p_Power_w / w_radsec
- End Property
- 
- Public Property Get w_radsec() As Double
-    w_radsec = p_w_obmin / 60 * 2 * const_Pi
- End Property
+' свойство для выдачи момента
+Public Property Get M_Nm() As Double
+   M_Nm = p_M_Nm
+   M_Nm = p_Pshaft_w / w_radsec
+End Property
+Public Property Get w_radsec() As Double
+   w_radsec = p_w_rpm / 60 * 2 * const_Pi
+End Property
+Public Property Get w_rpm() As Double
+   w_rpm = p_w_rpm
+End Property
 ' свойство выдает сумарную кривую по давлениям
 Public Property Get PCurve() As TInterpolation
-    Set PCurve = c_PCurve
+   Set PCurve = c_PCurve
 End Property
 Public Property Get TCurve() As TInterpolation
     Set TCurve = c_TCurve
@@ -57,135 +57,139 @@ End Property
 Public Property Get Dcas_m() As Double
     Dcas_m = p_Dcas_m
 End Property
-Public Property Get Dintake_m() As Double
-    Dintake_m = p_Dintake_m
-End Property
+'Public Property Get Dintake_m() As Double
+'    Dintake_m = p_Dintake_m
+'End Property
 Private Sub Class_Initialize()
-    p_Dintake_m = 0.1
-    p_Dcas_m = 0.15
+    Call InitGS(OD_mm:=125, _
+                Qnom_m3day:=250, _
+                HmesTop_m:=0, _
+                dcas_mm:=0, _
+                Length_m:=3, _
+                Angle_deg:=90)
+    p_isKsepManual = False
     
-    p_KsepManual = False
+End Sub
+Public Sub InitGS(Optional OD_mm As Double = 125, _
+                  Optional Qnom_m3day As Double = 250, _
+                  Optional HmesTop_m As Double = 0, _
+                  Optional Angle_deg As Double = 90, _
+                  Optional dcas_mm As Double = 0, _
+                  Optional Length_m As Double = 1)
+' метод инициализации параметров газосепаратора
+' в зависимости от габарита
+' OD_mm     - определяет габарит
+' HmesTop_m - глубина подвеса в скважине, может пригодится когда то, пока про запас
+' Angle_deg - угол установки к горизонтали 90 - вертикально
+' dcas_mm   - диаметр эксплуатационной колоны в месте установки
+    p_OD_mm = OD_mm
+    p_Angle_deg = Angle_deg
+    If dcas_mm = 0 Then
+        p_Dcas_m = OD_mm + 10
+    Else
+        p_Dcas_m = dcas_mm
+    End If
+    p_HmesTop = HmesTop_m
+    p_Length_m = Length_m
+    p_Qnom_m3day = Qnom_m3day
     
-    p_Length_m = 1
-    esp_Diam_m = 0.1
-    p_Angle_deg = 90
-    
-    p_Power_w = 1000   ' по умолчанию считаем что 1 квт уходит на сепарацию
-    p_w_obmin = 3000   ' по умолчанию 3000 оборотов в секунду
-    
-    ' газосепаратор обеспечивает расчет разделения флюида на приеме поэтому оперирует тремя независимыми объектами для флюида
-  '  Fluid.AddChain FluidTub
-  '  Fluid.AddChain Fluidcas
+    ' пока задаем тут - надо будет в зависимости от модели изменить потом
+    p_Pshaftnom_w = 1000            ' по умолчанию считаем что 1 квт уходит на сепарацию при номинальной частоте
+    p_w_rpm = 3000                  ' по умолчанию 3000 оборотов в секунду
+    p_fnom_Hz = 50
+    p_KsepGSMax = 0.9
     
 End Sub
 ' =======================  геометрия
 Public Property Get Length_m() As Double
     Length_m = p_Length_m
 End Property
- ' глубина установки  (верхняя точка)
- Public Property Get HmesTop_m() As Double
-    HmesTop_m = p_HmesTop
- End Property
- 
- Public Property Let HmesTop_m(val As Double)
-    p_HmesTop = val
- End Property
- ' глубина нижней точки установки
- Public Property Get HmesDown_m() As Double
-    HmesDown_m = HmesTop_m + Length_m
- End Property
- Public Property Get Diam_m() As Double
-    Diam_m = esp_Diam_m
- End Property
- 
- ' угол к горизонтали под которым установлена установка
- ' угол задается извне системой скважиной при установке системы в скважину
- Public Property Get AngleHor_deg() As Double
-    AngleHor_deg = p_Angle_deg
- End Property
- 
- Public Property Get AngleVert_deg() As Double
-    AngleVert_deg = AngleVert_deg - 90
- End Property
- 
- Public Property Let AngleHor_deg(val As Double)
-    p_Angle_deg = val
- End Property
-' ========================  конец блока описания геометрии
- Public Property Get Fluid() As CPVT
-    Set Fluid = p_Fluid
- End Property
- 
- Public Property Get FluidTub() As CPVT
-    Set FluidTub = p_FluidTub
- End Property
- Public Property Get Fluidcas() As CPVT
-    Set Fluidcas = p_FluidCas
- End Property
- 
- Public Property Set Fluid(val As CPVT)
-   
-   Set p_Fluid = val       ' берем новый объект в работу
-   Set p_FluidTub = val
-   Set p_FluidCas = val
-        
-    ' по умолчанию разделению флюидов не произошло
-   
- End Property
- 
- Public Property Get KsepManual() As Boolean
-    KsepManual = p_KsepManual
- End Property
- 
- Public Property Let KsepManual(val As Boolean)
-    p_KsepManual = val
- End Property
- 
- Public Property Get Ksep_fr() As Double
-    KsepManual = p_Ksep_d
- End Property
- 
- Public Property Let Ksep_fr(val As Double)
-    p_Ksep_d = val
- End Property
- 
- 
- Private Sub SeparateFluids()
- ' метод для принудительного разделения свойст флюида
-    ' создаем новые экзампляры
-    Set p_FluidTub = New CPVT
-    Set p_FluidCas = New CPVT
-    
-    '  копируем в них значения
-    p_FluidTub.Copy p_Fluid
-    p_FluidCas.Copy p_Fluid
-    
-'    ' записываем их в цепочку базового флюида
-'    p_Fluid.AddChain p_FluidTub
-'    p_Fluid.AddChain p_FluidCas
- 
- End Sub
-' метод расчет сепарации в скважине
-Public Function Calc_Separation(PT As PTtype) As Double
+' глубина установки  (верхняя точка)
+Public Property Get HmesTop_m() As Double
+   HmesTop_m = p_HmesTop
+End Property
+'Public Property Let HmesTop_m(val As Double)
+'   p_HmesTop = val
+'End Property
+' глубина нижней точки установки
+Public Property Get HmesDown_m() As Double
+   HmesDown_m = HmesTop_m + Length_m
+End Property
+Public Property Get Diam_m() As Double
+   Diam_m = p_OD_mm / 1000
+End Property
+' угол к горизонтали под которым установлена установка
+' угол задается извне системой скважиной при установке системы в скважину
+Public Property Get AngleHor_deg() As Double
+   AngleHor_deg = p_Angle_deg
+End Property
+Public Property Get AngleVert_deg() As Double
+   AngleVert_deg = AngleVert_deg - 90
+End Property
+Public Property Get Fluid() As CPVT
+   Set Fluid = p_Fluid
+End Property
+Public Property Get FluidTub() As CPVT
+   Set FluidTub = p_FluidTub
+End Property
+Public Property Get Fluidcas() As CPVT
+   Set Fluidcas = p_FluidCas
+End Property
+Public Property Set Fluid(val As CPVT)
+  Set p_Fluid = val       ' берем новый объект в работу
+  Set p_FluidTub = val
+  Set p_FluidCas = val
+End Property
+Public Property Get isKsepManual() As Boolean
+   isKsepManual = p_isKsepManual
+End Property
+Public Property Let isKsepManual(val As Boolean)
+   p_isKsepManual = val
+End Property
+Public Property Get Ksep_fr() As Double
+   Ksep_fr = p_KsepTotal_d
+End Property
+Public Property Let Ksep_fr(val As Double)
+   p_KsepTotal_d = val
+End Property
+Private Sub SeparateFluids()
+' метод для принудительного разделения свойст флюида
+   ' создаем новые экзампляры
+   Set p_FluidTub = New CPVT
+   Set p_FluidCas = New CPVT
+   '  копируем в них значения
+   p_FluidTub.Copy p_Fluid
+   p_FluidCas.Copy p_Fluid
+End Sub
+Public Sub Calc_GasSep(PT As PTtype, Optional f_Hz As Double = 50)
+' метод расчета параметров газосепаратора при заданных термобарических условиях
+' считает, сепарацию, потребляемую мощность, при необходимости другие параметры
 ' расчитывается естественная и искуственная сепарация, модифицируются флюиды после сепарации
 ' возвращается значение коэффициента сепарации общего
 '
+    
     c_PCurve.ClearPoints
     c_TCurve.ClearPoints
-    
-    
-    If Not KsepManual Then
-        p_KsepNatural = Calc_NatSeparation_d(Dintake_m, Dcas_m, PT.P_atma, PT.T_C)
-        ' p_KsepNatural = 0 ' специально для Приразломного - отключим сепарацию
-        p_Ksep_d = p_KsepNatural
-    End If
-    
-    If p_Ksep_d > 0 Then
+    With Fluid
+        .Calc_PVT_PT PT
+        If Not isKsepManual Then
+            p_KsepNatural = Calc_NatSeparation_d()
+            p_QmixGS_rc_m3day = .Qliq_rc_m3day + .Qgas_rc_m3day * (1 - p_KsepNatural)
+            p_KsepGasSep_d = calc_GSsep_d(p_QmixGS_rc_m3day)
+            p_KsepTotal_d = p_KsepNatural + (1 - p_KsepNatural) * p_KsepGasSep_d
+        End If
+    End With
+    If p_KsepTotal_d > 0 Then
         ' разделяем и модифицируем свойства флюидов после сепарации
         Call SeparateFluids
-        Call p_FluidTub.ModAfterSeparation(PT.P_atma, PT.T_C, p_Ksep_d, GasGoesIntoSolution)
+        Call p_FluidTub.ModAfterSeparation(PT.P_atma, PT.T_C, p_KsepTotal_d, GasGoesIntoSolution)
         p_FluidCas.ZNLF = True
     End If
+    ' поскольку основная мощность потребляемая газосепаратором тратится шнеком на повышение давления
+    ' то можно предположить, что потери мощность с ростом частоты будут расти в кубе
+    ' при этом зависимости от дебита выраженной нет, поскольку будет меняться КПД
+    ' это предположение требует уточнения (11.07.2018 rnt)
+    p_Pshaft_w = p_Pshaftnom_w * (f_Hz / p_fnom_Hz) ^ 3
     
     ' добавим точки для газосепаратора
     c_PCurve.AddPoint HmesTop_m, PT.P_atma
@@ -193,38 +197,29 @@ Public Function Calc_Separation(PT As PTtype) As Double
     c_TCurve.AddPoint HmesTop_m, PT.T_C
     c_TCurve.AddPoint HmesDown_m, PT.T_C
     
-    Calc_Separation = p_Ksep_d
+End Sub
+Private Function calc_GSsep_d(Qmix_m3day As Double)
+' расчет коэффициента сепарации газосепаратора
+' предполагается линейная зависимость от дебита
+' Qmix_m3day - расход ГЖС поступающей на вход с учетом естественной сепарации с рабочих условиях
+' потом хорошо бы уточнить и приспособить для разных видов конструкции
+    Dim ks As Double
+    Dim qmix As Double
+    Dim qmax As Double
+    qmix = Qmix_m3day
+    qmax = p_Qnom_m3day
+    If qmix < qmax Then
+        ks = (qmix / qmax) * p_KsepGSMax
+    Else
+        ks = 0
+    End If
+    calc_GSsep_d = ks
 End Function
-Public Function Calc_NatSeparation_d(ByVal D_T As Double, ByVal D_C As Double, _
-                                  ByVal P_atma As Double, ByVal T_C As Double) As Double
-      '----------------------------------------------------------------
- With Fluid
-      Call .Calc_PVT(P_atma, T_C)
-      
-      
-'      Dim Qg_sc_m3day  As Double
-'      Qg_sc_m3day = .rs_m3m3 * Qo_m3day
-              
-      'PVT calculations end --------------------------------------------
-      Calc_NatSeparation_d = unf_calc_natural_separation(D_T, D_C, .Qo_scm3day, .QgasInSitu_scm3day, .Bo_m3m3, .Bg_m3m3, .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
-      '
- End With
-End Function
-Public Function Calc_SeparationAtIntake_d(ByVal P_atma As Double, ByVal T_C As Double)
-' расчет общего коэффициента сепарации с учетом естественной сепарации и газосепаратора (надо будет добавить позже)
- 
-'  If IsESP() Then
-             ' 4. Коэфициент сепарации
-        p_KsepNatural = Calc_NatSeparation_d(p_Dintake_m, p_Dcas_m, P_atma, T_C)
-        p_KsepGasSep_d = 0 ' Calc_GasSepSeparation()
-        p_Ksep_d = p_KsepNatural + (1 - p_KsepNatural) * p_KsepGasSep_d
-        Calc_SeparationAtIntake_d = p_Ksep_d
-                                       
-'  Else
-'     Calc_SeparationAtIntake_d = 1   ' если УЭЦН нет то предполагаем, что фонтан и затруб закрыт - сепарации нет, при этом затруб должен быть заполнен газом
-'  End If
-   ' переводим в состояние "целостность нарушена"
- '   p_Calculated = False
+Private Function Calc_NatSeparation_d() As Double
+    With Fluid
+        Calc_NatSeparation_d = unf_calc_natural_separation(p_OD_mm / 1000, p_Dcas_m, _
+                                                        .Qliq_scm3day, .QgasInSitu_scm3day, .Bo_m3m3, .Bg_m3m3, .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
+    End With
 End Function
 ' метод построения кривой зависимости коэффициента сепарации от дебита
 Public Function Build_SeparCurve()
@@ -260,7 +255,7 @@ Public Function Build_SeparCurve()
 '
 '        Curve(str_KsepNatQl_curve).AddPoint qtest, p_KsepNatural
 '        Curve(str_KsepGasSepQl_curve).AddPoint qtest, p_KsepGasSep_d
-'        Curve(str_KsepTotalQl_curve).AddPoint qtest, p_Ksep_d
+'        Curve(str_KsepTotalQl_curve).AddPoint qtest, p_KsepTotal_d
 '    Next i
 '
 '    ' вернем дебит по скважине назад
@@ -277,7 +272,7 @@ Public Function Build_SeparCurve()
 '
 '        Curve(str_KsepNatRp_curve).AddPoint qtest, p_KsepNatural
 '        Curve(str_KsepGasSepRp_curve).AddPoint qtest, p_KsepGasSep_d
-'        Curve(str_KsepTotalRp_curve).AddPoint qtest, p_Ksep_d
+'        Curve(str_KsepTotalRp_curve).AddPoint qtest, p_KsepTotal_d
 '    Next i
 '    Fluid.Rp_m3m3 = Rpinit
 '    Fluid.Rsb_m3m3 = Rsbinit
