@@ -24,9 +24,11 @@ Option Explicit
  Private p_Muo_cP As Double                         ' вязкость нефти при рабочих условиях
  Private p_Muo_deadoil_cP As Double                 ' вязкость дегазированной нефти
  Private p_copmressibility_o_1atm As Double         ' сжимаемость нефти
- Private p_sigma_o_Nm As Double                     ' поверхностное натяжение
- Private p_sigma_w_Nm As Double                     ' поверхностное натяжение
- 
+' Private p_sigma_o_Nm As Double                     ' поверхностное натяжение
+' Private p_sigma_w_Nm As Double                     ' поверхностное натяжение
+ Private p_ST_oilgas_dyncm As Double                ' поверхностное натяжение нефть газ
+ Private p_ST_watgas_dyncm As Double                ' поверхностное натяжение вода газ
+ Private p_ST_liqgas_dyncm As Double
  ' расчетные параметры газа
  Private p_Z As Double                              ' расчетное значение коэффициента сверхсжимаемости
  Private p_Bg_m3m3 As Double                        ' объемный коэффициент газа
@@ -272,6 +274,10 @@ Option Explicit
     CJT_Katm = 1 / Cmix_JkgC * (X / rho_gas_kgm3 * (-TZdZdT) + (1 - X) / rho_liq_kgm3) * const_convert_atma_Pa
  End Property
  
+ Public Property Get oil_API() As Double
+    oil_API = 141.5 / p_gamma_o - 131.5
+ End Property
+ 
  Public Property Get rho_oil_kgm3() As Double
     Dim msg As String
     If Bo_m3m3 > 0 Then
@@ -323,22 +329,27 @@ Option Explicit
  End Property
  
  Public Property Get sigma_liq_Nm() As Double
-    sigma_liq_Nm = p_sigma_o_Nm * (1 - wc_fr) + p_sigma_w_Nm * wc_fr
+    'sigma_liq_Nm = p_sigma_o_Nm * (1 - wc_fr) + p_sigma_w_Nm * wc_fr
+    sigma_liq_Nm = p_ST_liqgas_dyncm * 0.001
  End Property
  Public Property Get sigma_o_Nm() As Double
-    sigma_o_Nm = p_sigma_o_Nm
+    'sigma_o_Nm = p_sigma_o_Nm
+    sigma_o_Nm = p_ST_oilgas_dyncm * 0.001
  End Property
  
  Public Property Let sigma_o_Nm(val As Double)
-    p_sigma_o_Nm = val
+    'p_sigma_o_Nm = val
+    p_ST_oilgas_dyncm = val / 0.001
  End Property
  
  Public Property Get sigma_w_Nm() As Double
-    sigma_w_Nm = p_sigma_w_Nm
+    'sigma_w_Nm = p_sigma_w_Nm
+    sigma_w_Nm = p_ST_watgas_dyncm * 0.001
  End Property
  
  Public Property Let sigma_w_Nm(val As Double)
-    p_sigma_w_Nm = val
+    'p_sigma_w_Nm = val
+    p_ST_watgas_dyncm = val / 0.001
  End Property
  
   
@@ -607,6 +618,9 @@ End Property
 Public Property Get Tcalc_K() As Double
     Tcalc_K = Tcalc_C + const_T_K_min
 End Property
+Public Property Get Tcalc_F() As Double
+    Tcalc_F = Tcalc_C * 1.8 + 32
+End Property
 Public Property Get Muo_deadoil_cP() As Double
     Muo_deadoil_cP = p_Muo_deadoil_cP
 End Property
@@ -856,7 +870,7 @@ On Error GoTo err1:
     p_Muo_deadoil_cP = Muo_deadoil_cP
     p_Qo_m3day = p_Qliq_scm3day * (1 - p_wc_fr) * p_Bo_m3m3   ' для ускорения расчетов потом все что можно подсчитаем тут
     p_Qw_m3day = p_Qliq_scm3day * p_wc_fr * p_Bw_m3m3
-    p_Qgas_m3day = (p_Qliq_scm3day * (1 - p_wc_fr) * p_Rp_m3m3 + p_Qgfree_scm3day - p_Rs_m3m3 * p_Qliq_scm3day * (1 - p_wc_fr))
+    p_Qgas_m3day = (p_Qliq_scm3day * (1 - p_wc_fr) * p_Rp_m3m3 + p_Qgfree_scm3day - p_Rs_m3m3 * p_Qliq_scm3day * (1 - p_wc_fr)) * p_Bg_m3m3
     p_Qliq_m3day = p_Qw_m3day + p_Qo_m3day
     p_GasFraction_d = p_Qgas_m3day / (p_Qw_m3day + p_Qo_m3day + p_Qgas_m3day)
     p_MuMix_cP = (p_Muo_cP * p_Qo_m3day / p_Qliq_m3day + _
@@ -866,12 +880,53 @@ On Error GoTo err1:
     p_rho_water_kgm3 = 1000 * (p_gamma_w) / p_Bw_m3m3
     p_rho_liq_kgm3 = (1 - p_wc_fr) * rho_oil_kgm3 + wc_fr * rho_water_kgm3
     p_rho_mix_kgm3 = rho_liq_kgm3 * (1 - f_g) + rho_gas_kgm3 * f_g
+    
+    Call calc_ST(P_atma, T_C)
 '    timeStamp = Time() - timeStamp
 '    timePVTtotal = timePVTtotal + timeStamp
     Exit Sub
 err1:
     addLogMsg ("CPVT.Calc_PVT: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
+End Sub
+Private Sub calc_ST(ByVal P_atma As Double, ByVal T_C As Double)
+' calculate surface tension according Baker Sverdloff correlation
+'Расчет коэффициента поверхностного натяжения газ-нефть
+    Dim ST68 As Double, ST100 As Double
+    Dim STw74 As Double, STw280 As Double
+    Dim Tst As Double, Tstw As Double
+    Dim STo As Double, STw As Double, ST As Double
+    Dim T_F As Double
+    Dim P_psia As Double, P_MPa As Double
+        T_F = T_C * 1.8 + 32
+        P_psia = P_atma / 0.068046
+        P_MPa = P_atma / 10
+        ST68 = 39 - 0.2571 * oil_API
+        ST100 = 37.5 - 0.2571 * oil_API
+        If T_F < 68 Then
+            STo = ST68
+        Else
+            Tst = T_F
+            If T_F > 100 Then Tst = 100
+            STo = (68 - (((Tst - 68) * (ST68 - ST100)) / 32)) * (1 - (0.024 * (P_psia) ^ 0.45))
+        End If
+        'Расчет коэффициента поверхностного натяжения газ-вода  (два способа)
+        STw74 = (75 - (1.108 * (P_psia) ^ 0.349))
+        STw280 = (53 - (0.1048 * (P_psia) ^ 0.637))
+        If T_F < 74 Then
+            STw = STw74
+        Else
+            Tstw = T_F
+            If T_F > 280 Then Tstw = 280
+            STw = STw74 - (((Tstw - 74) * (STw74 - STw280)) / 206)
+        End If
+        ' далее второй способ
+        STw = 10 ^ (-(1.19 + 0.01 * P_MPa)) * 1000
+        ' Расчет коэффициента поверхностного натяжения газ-жидкость
+        ST = (STw * wc_fr) + STo * (1 - wc_fr)
+        p_ST_oilgas_dyncm = STo
+        p_ST_watgas_dyncm = STw
+        p_ST_liqgas_dyncm = ST
 End Sub
 Public Function calc_Rs_m3m3(ByVal P_atma As Double, ByVal T_C As Double) As Double
 'function calculates solution gas oil ratio

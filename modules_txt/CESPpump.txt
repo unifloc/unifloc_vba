@@ -691,7 +691,7 @@ Public Function Get_Max_RateForGraph_m3day() As Double
 End Function
 Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, _
                            Optional calc_from_dis As Boolean = False, _
-                           Optional saveCurve As Boolean = False)
+                           Optional saveCurve As Boolean = False, Optional ESPtype As Integer = 0)
     ' Функция расчете распределения давления в УЭЦН - расчет снизу вверх от входного давления до выходного
     ' заодно считает и потребляемую мощность и КПД установки
     ' p_atma         pressure at pump intake
@@ -712,7 +712,8 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
     Dim Tst_C As Double         ' температура по ступеням
     Dim sign_int As Integer
     Dim qmix As Double, qmix_degr As Double
-    
+    Dim gascorr As Double
+    gascorr = 1
     On Error GoTo err1:
     
     If calc_from_dis Then
@@ -754,6 +755,9 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
         c_TCurve.AddPoint HmesStage_m(0), Tst_C
         For i = 0 To p_StageNum - 1
             Call .Calc_PVT(CDbl(Pst_atma), CDbl(Tst_C))
+            If i = 0 Then
+                gascorr = GasCorrection_d(.GasFraction_d, ESPtype)
+            End If
             qmix = .Qmix_m3day
             qmix_degr = qmix * (1 + p_RateDegradation)
             Head_mix = Get_ESP_Head_m(qmix_degr, 1, .MuMix_cSt)
@@ -847,12 +851,12 @@ Public Function Calc_ESP_NumStages(Qmix_m3day As Double, Head_m As Double) As In
 End Function
 ' метод расчета работы насоса
 Public Sub Calc_ESP(P_atma As Double, Tin_C As Double, Optional Tdis_C As Double = 0, _
-                        Optional calc_from_intake As Boolean = True)
+                        Optional calc_from_intake As Boolean = True, Optional ESPtype As Integer = 0)
     
     'p_Pintake_atma = PT.P_atma
     'p_Pdis_atma = p_Pintake_atma + ESP_dPIntegration(PT.P_atma, PT.T_C, Tdis_C)
     ' сохраним результат
-    Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake)
+    Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake, , ESPtype)
 '    If Not calc_from_intake And Abs(Pint_estimation - p_Pintake_atma) > 10 Then
 '        ' добавим вторую итерацию, чтобы улучшить приближение по деградации
 '        Pint_estimation = p_Pintake_atma
@@ -1348,3 +1352,25 @@ End Function
 Public Property Get M_Nm() As Double
     M_Nm = p_PowerESP_Wt / w_radsec
 End Property
+' функция расчета деградации из за газа
+Private Function GasCorrection_d(GasFracIn As Double, Optional ESPtype As Integer = 0) As Double
+Dim B As Double
+    B = 0
+    If GasFracIn > 0 And GasFracIn < 1 Then
+        B = GasFracIn
+    End If
+    If ESPtype = 0 Then GasCorrection_d = 1
+    If ESPtype = 1 Then
+        GasCorrection_d = -9 * B ^ 2 + 0.6 * B + 1    ' SPE 117414
+    End If
+    If ESPtype = 2 Then
+        GasCorrection_d = -2 * B ^ 2 + 0.05 * B + 1    ' SPE 117414  corrected rnt
+    End If
+    If ESPtype = 3 Then
+        GasCorrection_d = -1.4 * B ^ 2 + 0.15 * B + 1    ' SPE 117414
+    End If
+    If ESPtype = 4 Then
+        GasCorrection_d = -4 * B ^ 2 + 0.2 * B + 1    ' SPE 117414   corrected rnt
+    End If
+    If GasCorrection_d < 0 Then GasCorrection_d = 0
+End Function
