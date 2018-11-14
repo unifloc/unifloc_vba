@@ -1875,54 +1875,44 @@ Public Function MF_Ppipe_atma(Q_m3Day, WCT_perc, _
 '                 если задано то меняется линейно по трубе
 ' выходное значение - число - давление на другом конце трубы atma.
 On Error GoTo err1:
+    ' first check trivial initial data
+    If Hmes0_m = Hmes1_m Then
+        MF_Ppipe_atma = Array(Pcalc_atma, Tcalc_C)
+        Exit Function
+    End If
     Dim Pipe As New CPipe
     Dim PVT As New CPVT
     Dim PTcalc As PTtype
     Dim TM As TEMP_CALC_METHOD
-    Dim h
-    
-    PVT.gamma_g = gamma_gas
-    PVT.gamma_o = gamma_oil
-    PVT.gamma_w = gamma_wat
-    PVT.Tres_C = Tres_C
-    Call PVT.SetRpRsb(Rp_m3m3, CDbl(rsb_m3m3))
-    PVT.Pb_atma = Pb_atma
-    PVT.Bob_m3m3 = Bob_m3m3
-    PVT.Muob_cP = Muob_cP
-    PVT.PVT_CORRELATION = PVTcorr
-        
+    ' initialize PVT properties
+    PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
     If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
         Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
     End If
-    
+    PVT.PVT_CORRELATION = PVTcorr
     PVT.Qliq_scm3day = Q_m3Day
     PVT.wc_perc = WCT_perc
     Set Pipe.Fluid = PVT
-    
+    ' initialize boundary conditions
     PTcalc.P_atma = Pcalc_atma
     PTcalc.T_C = Tcalc_C
     If Tother_C < 0 Then Tother_C = Tcalc_C
+    ' initialize geometry
     Call Pipe.InitPipe(d_mm / 1000, Hmes0_m, Hmes1_m, theta_deg, roughness_m)
     If Hmes0_m < Hmes1_m Then
         Pipe.Param = ParamCalcFromTop(HydrCorr, TempMeth:=StartEndTemp)
-        Pipe.InitTlinear Tcalc_C, Tother_C
-    ElseIf Hmes0_m = Hmes1_m Then
-        MF_Ppipe_atma = Array(Pcalc_atma, Tcalc_C)
-        Exit Function
     Else
-        h = Hmes0_m
-        Hmes0_m = Hmes1_m
-        Hmes1_m = h
         Pipe.Param = ParamCalcFromBottom(HydrCorr, TempMeth:=StartEndTemp)
-        Pipe.InitTlinear Tcalc_C, Tother_C
     End If
+    Pipe.InitTlinear Tcalc_C, Tother_C
     Pipe.betta_grav = betta_grav
     Pipe.betta_fric = betta_fric
+    ' calc pressure distribution
     MF_Ppipe_atma = ArrayOut(Pipe.Calc_dPipe(PTcalc, noCurves))
     
     Exit Function
 err1:
-    MF_Ppipe_atma = ArrayOut(SetPT(0, 0))
+    MF_Ppipe_atma = Array(Pcalc_atma, Tcalc_C)
     addLogMsg ("ошибка при расчете dPipe")
 End Function
 Private Function ArrayOut(PT As PTtype)
