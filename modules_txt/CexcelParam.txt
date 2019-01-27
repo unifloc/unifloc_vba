@@ -1,0 +1,365 @@
+Option Explicit
+'=======================================================================================
+'Unifloc7.3  Testudines                                           khabibullinra@gmail.com
+'Библиотека расчетных модулей по нефтяному инжинирингу
+'2000 - 2018 г
+'
+'=======================================================================================
+' описывает параметр заданный на листе Excel, который может быть считан или записан
+' работает с классом КСписокПараметровКнигиExcel которые содержит список параметров
+' может работать с параметрами разного типа как с единым объектом (число, массив, данные кривой)
+'
+' извне передается Range в котором находится параметр, далее класс работает с ним
+' хранит все описание параметра - название, описание и тп
+ Private p_ValRange As Range            ' исходный диапазо в котором хранится значение  (для числовых и строковых параметров)
+ Private p_RangeLink As String          ' адрес диапазона данных в виде строки
+ Private p_ValXRange As Range           ' для кривой отдельно храняться x и у координаты. на лист x всегда левее
+ Private p_XRangeLink As String
+ Private p_ValYRange As Range
+ Private p_YRangeLink As String
+ Private p_ValDouble As Double          ' значение представленное в виде дробного числа
+ Private p_ValString As String          ' значение в виде строки
+ Private p_ValCurve As TInterpolation   ' объект содержащий кривую
+ Private p_ExcelDescription As String   ' описание значение считанное с листа Excel
+ Private p_Description As String        ' описание значения загруженное извне
+ Private p_XDescription As String
+ Private p_YDescription As String
+ Private p_Name As String
+ Private p_minVal As Double
+ Private p_maxVal As Double
+ Private p_minValX As Double
+ Private p_maxValX As Double
+ Private p_minValY As Double
+ Private p_maxValY As Double
+ Private p_typeVal As VAL_FROM_SHEET    ' тип значения которое было прочитано
+                                        ' ожидаемые значения
+                                        '  - дробное число
+                                        '  - строка - название скважины или тип оборудования
+                                        '  - кривая (два массива)
+ Private p_ReadOnly As Boolean          ' показывает писал ли макрос что то в эту ячейку
+ 'Private p_LogMsg As New CLogger        ' логгер
+ Public Property Get ReadOnly() As Boolean
+    ReadOnly = p_ReadOnly
+ End Property
+' метод проверяет какого типа диапазон передан в него
+ Private Function CheckRange(rngName As String) As VAL_FROM_SHEET
+ On Error GoTo er1:
+    Dim rng As Range
+    Dim rngVal As Variant
+    Set rng = Range(rngName)
+    If rng.Areas.count = 1 Then
+        If rng.Rows.count = 1 Then
+            ' это или число или строка если только одна строка - кривые могут расти только вниз
+            rngVal = rng(1)
+            If (VarType(rngVal) = vbDouble) Or (VarType(rngVal) = vbInteger) Then
+                CheckRange = VAL_DOUBLE
+            ElseIf VarType(rngVal) = vbString Then
+                CheckRange = VAL_STRING
+            ElseIf VarType(rngVal) = vbEmpty Then  ' хотим наверное зарезервировать место для вывода
+                CheckRange = VAL_STRING
+            Else
+                Err.Raise kErrReadDataFromWorksheet, "CexcelParam.CheckRange", "Ошибка, попытка загрузить непонятный тип значения. " & rngName & " Тип " & VarType(rngVal)
+            End If
+        Else
+            ' это возможно кривая, потому что тут несколько строк, так как область одна - то может быть массив 2 на количество точек
+            If (rng.Columns.count = 2) And (rng.Rows.count > 1) Then
+                CheckRange = VAL_CURVE
+                Set p_ValXRange = rng.Range(Cells(1, 1), Cells(rng.Rows.count, 1))
+                Set p_ValYRange = rng.Range(Cells(1, 2), Cells(rng.Rows.count, 2))
+            Else
+                Err.Raise kErrReadDataFromWorksheet, "CexcelParam.CheckRange", "Ошибка, попытка загрузить кривую. " & rngName & " с неподходящими диапазонами. колонок = " & rng.Columns.count & " строк = " & rng.Rows.count
+            End If
+        End If
+    ElseIf rng.Areas.count = 2 Then
+    ' если области две, то это может быть два разделенных диапазона
+        If (rng.Areas(1).Rows.count = rng.Areas(2).Rows.count) And (rng.Areas(1).Columns.count = 1) And (rng.Areas(2).Columns.count = 1) Then
+                CheckRange = VAL_CURVE
+                Set p_ValXRange = rng.Areas(1)
+                Set p_ValYRange = rng.Areas(2)
+        Else
+                Err.Raise kErrReadDataFromWorksheet, "CexcelParam.CheckRange", "Ошибка, попытка загрузить кривую (2 областb). " & rngName & " с неподходящими диапазонами"
+        End If
+    Else
+        Err.Raise kErrReadDataFromWorksheet, "CexcelParam.CheckRange", "Ошибка, попытка загрузить кривую (больше 2 областей). " & rngName & "."
+    End If
+    Exit Function
+er1:
+  ' если была ошибка, то перекидываем ее наверх
+   Err.Raise Err.Number, Err.Source, Err.Description
+ End Function
+ 
+Private Property Set ValRange(rng As Range)
+   Set p_ValRange = rng
+End Property
+Private Function ReadRangeString() As String
+On Error GoTo er1
+    Dim val As String
+    Dim RangeIn As Range
+    Set RangeIn = p_ValRange
+    p_ExcelDescription = RangeIn.Cells(1, 0)  ' считываем описание значения - должно быть слева от значения
+    val = RangeIn.Cells(1, 1)
+    ReadRangeString = val
+    Exit Function
+er1:
+    ReadRangeString = ""
+    Err.Raise kErrReadDataFromWorksheet, "CexcelParam.ReadRangeString", "Ошибка, при чтении строки " & p_RangeLink & "."
+End Function
+Private Function WriteRangeString(valString As String) As String
+On Error GoTo er1
+    Dim RangeIn As Range
+    Set RangeIn = p_ValRange
+    RangeIn.Cells(1, 1) = valString
+    WriteRangeString = valString
+    Exit Function
+er1:
+    WriteRangeString = ""
+    Err.Raise kErrWriteDataFromWorksheet, "CexcelParam.WriteRangeString", "Ошибка, при записи строки " & valString & " в диапазон " & p_RangeLink & "."
+End Function
+' чтение из загруженного диапазона значения числового
+' также читается и описание для значения, которое должно быт расположено слева от значения
+'
+Private Function ReadRangeDouble() As Double
+On Error GoTo er1
+    Dim val As Double
+    Dim RangeIn As Range
+    Set RangeIn = p_ValRange
+    p_ExcelDescription = RangeIn.Cells(1, 0)  ' считываем описание значения - должно быть слева от значения
+   ' val = Range(range_Qliq).Value2
+    val = RangeIn.Cells(1, 1)
+    If val < minVal Then
+        addLogMsg "ReadRangeDouble: при считывании " & name & " с листа заменено значение = " & s(val) & " на значение = " & s(minVal) & "."
+        val = minVal   ' тут еще хорошо бы считать значение
+    End If
+    If val > MaxVal Then
+        addLogMsg "ReadRangeDouble: при считывании " & name & " с листа заменено значение = " & s(val) & " на значение = " & s(MaxVal) & "."
+        val = MaxVal
+    End If
+    ReadRangeDouble = val
+    Exit Function
+er1:
+    addLogMsg ("Сбой при чтении значения " & p_RangeLink)
+    ReadRangeDouble = const_default_wrong_read_num
+    Err.Raise kErrReadDataFromWorksheet, "CexcelParam.ReadRangeDouble", "Ошибка, при чтении числа " & val & " в диапазоне " & p_RangeLink & "."
+End Function
+Private Function WriteRangeDouble(valDouble As Double) As Double
+ On Error GoTo er1
+    Dim RangeIn As Range
+    Set RangeIn = p_ValRange
+    If valDouble < minVal Then
+        addLogMsg "LoadRangeDouble: при считывании " & name & " с листа заменено значение = " & s(valDouble) & " на значение = " & s(minVal) & "."
+        valDouble = minVal   ' тут еще хорошо бы считать значение
+    End If
+    If valDouble > MaxVal Then
+        addLogMsg "LoadRangeDouble: при считывании " & name & " с листа заменено значение = " & s(valDouble) & " на значение = " & s(MaxVal) & "."
+        valDouble = MaxVal
+    End If
+    RangeIn.Cells(1, 1) = valDouble
+    WriteRangeDouble = valDouble
+    Exit Function
+er1:
+    WriteRangeDouble = 0
+    Err.Raise kErrWriteDataFromWorksheet, "CexcelParam.WriteRangeDouble", "Ошибка, при записи числа " & valDouble & " в диапазон " & p_RangeLink & "."
+End Function
+Private Function ReadRangeCurve() As TInterpolation
+' функция загрузки
+ On Error GoTo er1
+    Dim Curve As New TInterpolation      ' кривая куда будут загружаться данные с листа
+    Dim ValX As Double, ValY As Double
+    Dim RangX As Range, RangY As Range   ' диапазоны из которых будет идти загрузка
+    Dim NumStr As Integer
+    Dim i As Integer
+    Set RangX = p_ValXRange
+    Set RangY = p_ValYRange
+    NumStr = RangX.Rows.count   ' определяем количество элементов в списке. Оно равно числу значений по оси X
+    For i = 1 To NumStr
+        If Not RangX.Cells(i, 1) = "" Then
+             ValX = RangX.Cells(i, 1)
+             If ValX < minValX Then
+                 addLogMsg "LoadRangeCurve: при считывании кривой " & name & " заменено значение по x = " & s(ValX) & " на значение = " & s(minValX) & "."
+                 ValX = minValX
+             End If
+             If ValX > maxValX Then
+                 addLogMsg "LoadRangeCurve: при считывании кривой " & name & " заменено значение по x = " & s(ValX) & " на значение = " & s(maxValX) & "."
+                 ValX = maxValX
+             End If
+             ValY = RangY.Cells(i, 1)
+             If ValY < minValY Then
+                 addLogMsg "LoadRangeCurve: при считывании кривой " & name & " заменено значение по x = " & s(ValY) & " на значение = " & s(minValY) & "."
+                 ValY = minValY
+             End If
+             If ValY > maxValY Then
+                 addLogMsg "LoadRangeCurve: при считывании кривой " & name & " заменено значение по x = " & s(ValX) & " на значение = " & s(maxValY) & "."
+                 ValY = maxValY
+             End If
+             Curve.AddPoint ValX, ValY
+        End If
+    Next i
+    Curve.xName = RangX.Cells(0, 1)
+    Curve.yName = RangY.Cells(0, 1)
+    Set ReadRangeCurve = Curve
+    Exit Function
+er1:
+     ReadRangeCurve = Nothing
+     Err.Raise kErrReadDataFromWorksheet, "CexcelParam.ReadRangeCurve", "Ошибка, при чтении кривой. Число точек " & NumStr & " в диапазоне " & p_RangeLink & "."
+End Function
+Private Function WriteRangeCurve(Curve As TInterpolation) As TInterpolation
+' функция записи кривой на лист excel
+ On Error GoTo er1
+    Dim ValX As Double, ValY As Double
+    Dim RangX As Range, RangY As Range   ' диапазоны из которых будет идти загрузка
+    Dim NumStr As Integer
+    Dim i As Integer
+    Set RangX = p_ValXRange
+    Set RangY = p_ValYRange
+    RangX.Clear
+    RangY.Clear
+    NumStr = min(Curve.numPoints, RangX.Rows.count)   ' определяем количество элементов в списке. Оно равно числу значений по оси X
+    RangX.Cells(0, 1) = Curve.xName  ' XDescription
+    RangY.Cells(0, 1) = Curve.yName 'YDescription
+    For i = 1 To NumStr
+        ValX = Curve.pointX(i)
+        ValY = Curve.PointY(i)
+        RangX.Cells(i, 1) = ValX
+        RangY.Cells(i, 1) = ValY
+    Next i
+    Set WriteRangeCurve = Curve
+    Exit Function
+er1:
+    WriteRangeCurve = Nothing
+    Err.Raise kErrWriteDataFromWorksheet, "CexcelParam.WriteRangeCurve", "Ошибка, при записи кривой. Точек " & NumStr & " в диапазон " & p_RangeLink & "."
+End Function
+Public Property Get typeVal() As VAL_FROM_SHEET
+    typeVal = p_typeVal
+End Property
+Public Property Let typeVal(val As VAL_FROM_SHEET)
+    p_typeVal = val
+End Property
+Public Property Get name() As String
+    name = p_Name
+End Property
+Public Property Let name(val As String)
+    p_Name = val
+End Property
+Public Property Get DescriptionFromSheet() As String
+    DescriptionFromSheet = p_ExcelDescription
+End Property
+Public Property Get Description() As String
+    Description = p_Description
+End Property
+Public Property Let Description(val As String)
+    p_Description = val
+End Property
+Public Property Get minVal() As Double
+    minVal = p_minVal
+End Property
+Public Property Get MaxVal() As Double
+    MaxVal = p_maxVal
+End Property
+Public Property Let minVal(val As Double)
+' внимание  - изменение свойства minVal меняет границы диапазонов и по осям x и y
+    p_minVal = val
+    p_minValX = val
+    p_minValY = val
+End Property
+Public Property Let MaxVal(val As Double)
+' внимание  - изменение свойства minVal меняет границы диапазонов и по осям x и y
+    p_maxVal = val
+    p_maxValY = val
+    p_maxValY = val
+End Property
+Private Sub Class_Initialize()
+    p_minVal = 0
+    p_maxVal = 10000
+    p_minValX = 0
+    p_maxValX = 10000
+    p_minValY = 0
+    p_maxValY = 10000
+    p_ReadOnly = True   ' по умолчанию только читаем
+End Sub
+'Public Property Get' LogMsg() As CLogger
+'    'Set' LogMsg = p_LogMsg
+'End Property
+'
+'Public Property 'Set' LogMsg(val As CLogger)
+' ' распространяем систему логирования на все вложенные объекты
+'    Set p_LogMsg = val
+'End Property
+Public Property Get minValX() As Double
+    minValX = p_minValX
+End Property
+Public Property Let minValX(ByVal vNewValue As Double)
+    p_minValX = vNewValue
+End Property
+Public Property Get maxValX() As Double
+    maxValX = p_maxValX
+End Property
+Public Property Let maxValX(ByVal vNewValue As Double)
+    p_maxValX = vNewValue
+End Property
+Public Property Get minValY() As Double
+    minValY = p_minValY
+End Property
+Public Property Let minValY(ByVal vNewValue As Double)
+    p_minValY = vNewValue
+End Property
+Public Property Get maxValY() As Double
+    maxValY = p_maxValY
+End Property
+Public Property Let maxValY(ByVal vNewValue As Double)
+    p_maxValY = vNewValue
+End Property
+Public Property Get valDouble() As Double
+' Пытаемся из данного параметра извлечь число double
+    p_ValDouble = ReadRangeDouble()
+    valDouble = p_ValDouble
+End Property
+Public Property Let valDouble(val As Double)
+    Dim varVal As Variant
+    varVal = WriteRangeDouble(val)
+    p_ValDouble = varVal
+    p_typeVal = VAL_DOUBLE
+    p_ReadOnly = False     ' макрос что то записал в ячейку, помочаем его сбрасывая флаг только чтение
+End Property
+Public Property Get ValCurve() As TInterpolation
+    Set p_ValCurve = ReadRangeCurve()
+    Set ValCurve = p_ValCurve
+End Property
+Public Property Set ValCurve(ByVal vNewValue As TInterpolation)
+    Set p_ValCurve = WriteRangeCurve(vNewValue)
+    p_typeVal = VAL_CURVE
+    p_ReadOnly = False     ' макрос что то записал в ячейку, помочаем его сбрасывая флаг только чтение
+End Property
+Public Property Get valString() As String
+    p_ValString = ReadRangeString()
+    valString = p_ValString
+End Property
+Public Property Let valString(ByVal vNewValue As String)
+    Dim varVal As Variant
+    varVal = WriteRangeString(vNewValue)
+    p_ValString = vNewValue
+    p_typeVal = VAL_STRING
+    p_ReadOnly = False     ' макрос что то записал в ячейку, помочаем его сбрасывая флаг только чтение
+End Property
+Public Property Get RangeLink() As String
+' свойство RangeLink используется на уровне параметра только как справочное значение
+    RangeLink = p_RangeLink
+End Property
+Public Property Let RangeLink(ByVal vNewValue As String)
+    p_RangeLink = vNewValue
+    ' тип не известен - попробуем определить что это за тип
+    p_typeVal = CheckRange(vNewValue)
+    ' пробуем прочитать что то из этого диапазона
+    Set ValRange = Range(p_RangeLink)
+End Property
+Public Property Get XDescription() As String
+    XDescription = p_XDescription
+End Property
+Public Property Let XDescription(ByVal vNewValue As String)
+    p_XDescription = vNewValue
+End Property
+Public Property Get YDescription() As String
+    YDescription = p_YDescription
+End Property
+Public Property Let YDescription(ByVal vNewValue As String)
+    p_YDescription = vNewValue
+End Property

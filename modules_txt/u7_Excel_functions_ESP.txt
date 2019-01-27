@@ -10,12 +10,12 @@ Option Explicit
 '
 '
 Public Function ESP_head_m(Qliq_m3day As Double, Optional NumStages As Integer = 1, _
-                            Optional freq As Double = 50, Optional PumpID = 674, _
+                            Optional freq_Hz As Double = 50, Optional PumpID = 674, _
                             Optional mu_cSt As Double = -1) As Double
 ' напор УЭЦН номинальный
 ' Qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' NumStages  - количество ступеней
-' Freq       - частота вращения насоса
+' freq_Hz       - частота вращения насоса
 ' PumpID     - номер насоса в базе данных
 ' mu_cSt     - вязкость жидкости
 '
@@ -24,17 +24,17 @@ Public Function ESP_head_m(Qliq_m3day As Double, Optional NumStages As Integer =
         Exit Function
     End If
     
-    ESP.Frequency = freq
+    ESP.freq_Hzuency = freq_Hz
     ESP.StageNum = NumStages
     ESP_head_m = ESP.Get_ESP_Head_m(Qliq_m3day, NumStages, mu_cSt)
 End Function
 Public Function ESP_Power_W(Qliq_m3day As Double, Optional NumStages As Integer = 1, _
-                            Optional freq As Double = 50, Optional PumpID = 674, _
+                            Optional freq_Hz As Double = 50, Optional PumpID = 674, _
                             Optional mu_cSt As Double = -1) As Double
 ' мощность УЭЦН номинальная потребляемая
 ' Qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' NumStages  - количество ступеней
-' Freq       - частота вращения насоса
+' freq_Hz       - частота вращения насоса
 ' PumpID     - номер насоса в базе данных
 ' mu_cSt     - вязкость жидкости
     
@@ -43,17 +43,17 @@ Public Function ESP_Power_W(Qliq_m3day As Double, Optional NumStages As Integer 
         Exit Function
     End If
     
-    ESP.Frequency = freq
+    ESP.freq_Hzuency = freq_Hz
     ESP.StageNum = NumStages
     ESP_Power_W = ESP.Get_ESP_Power_W(Qliq_m3day, NumStages, mu_cSt)
 End Function
 Public Function ESP_eff_fr(Qliq_m3day As Double, Optional NumStages As Integer = 1, _
-                            Optional freq As Double = 50, Optional PumpID = 674, _
+                            Optional freq_Hz As Double = 50, Optional PumpID = 674, _
                             Optional mu_cSt As Double = -1) As Double
 ' КПД УЭЦН номинальный
 ' Qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' NumStages  - количество ступеней
-' Freq       - частота вращения насоса
+' freq_Hz       - частота вращения насоса
 ' PumpID     - номер насоса в базе данных
 ' mu_cSt     - вязкость жидкости
     
@@ -62,7 +62,7 @@ Public Function ESP_eff_fr(Qliq_m3day As Double, Optional NumStages As Integer =
         Exit Function
     End If
     
-    ESP.Frequency = freq
+    ESP.freq_Hzuency = freq_Hz
     ESP.StageNum = NumStages
     ESP_eff_fr = ESP.Get_ESP_effeciency_fr(Qliq_m3day, mu_cSt)
 End Function
@@ -74,20 +74,20 @@ Public Function ESP_name(Optional PumpID = 674) As String
     End If
     ESP_name = ESP.PumpName
 End Function
-Public Function ESP_maxRate_m3day(Optional freq As Double = 50, Optional PumpID = 674) As Double
+Public Function ESP_maxRate_m3day(Optional freq_Hz As Double = 50, Optional PumpID = 674) As Double
     If Not checkID_ESP(PumpID) Then
         ESP_maxRate_m3day = 0
         Exit Function
     End If
-    ESP.Frequency = freq
+    ESP.freq_Hzuency = freq_Hz
     ESP_maxRate_m3day = ESP.MaxRate_m3day
 End Function
-Public Function ESP_optRate_m3day(Optional freq As Double = 50, Optional PumpID = 674) As Double
+Public Function ESP_optRate_m3day(Optional freq_Hz As Double = 50, Optional PumpID = 674) As Double
     If Not checkID_ESP(PumpID) Then
         ESP_optRate_m3day = 0
         Exit Function
     End If
-    ESP.Frequency = freq
+    ESP.freq_Hzuency = freq_Hz
     ESP_optRate_m3day = ESP.NominalRate_m3day
 End Function
 Public Function ESP_IDbyRate(Q As Double)
@@ -107,8 +107,10 @@ Public Function ESP_IDbyRate(Q As Double)
     If Q > 1200 Then ESP_IDbyRate = 264
     
 End Function
-Public Function ESP_dP_atma(P_atma As Double, Qliq_m3day As Double, WCT_perc As Double, _
-                        Optional NumStages As Integer = 1, Optional freq As Double = 50, _
+Public Function ESP_dP_atm(Qliq_m3day As Double, fw_perc As Double, _
+                        Pin_atma As Double, _
+                        Optional Pout_atma As Double = -1, _
+                        Optional NumStages As Integer = 1, Optional freq_Hz As Double = 50, _
                         Optional PumpID = 674, _
                         Optional gamma_gas = const_gamma_gas_default, _
                         Optional gamma_oil = const_gamma_oil_default, _
@@ -127,30 +129,38 @@ Public Function ESP_dP_atma(P_atma As Double, Qliq_m3day As Double, WCT_perc As 
                         Optional Tdis_C As Double = 50, _
                         Optional CalcFromIntake As Boolean = 1, _
                         Optional GasDegtType As Integer = 0, Optional Kdegr As Double = 0)
-'  расчет перепада давления в насосе при перекачке ГЖС с заданными
+' расчет перепада давления в насосе при перекачке ГЖС с заданными
 ' характеристиками (харктеристики фдюида для поверхности берутся)
-' Pin_atma       - давление на приеме насоса
-' Qliq_m3day    - дебит жидкости на поверхности
-' WCT_perc      - обводненность
-' NumStages     - количество ступеней
-' Freq          - частота, Гц
-' PumpID        - идентификатор насоса
-' PVT           - набор данных PVT
-' Tin_C         - температура на приеме насоа
-' Tdis_C        - температура на выкиде насоса. если =0 и CalcFromIntake = 1 то рассчитываетс
-' CalcFromIntake - режим расчета снизу вверх или сверху вниз
-' GasDegtType   - тип насоса по работе с газом
-' Kdegr         - коэффициент деградации напора
+' Qliq_m3day        - дебит жидкости на поверхности
+' fw_perc           - обводненность
+' Pin_atma          - давление на приеме насоса
+' Pout_atma         - давление на выкиде насоса, используется для расчета
+'                     сверху вниз и для расчета деградации насоса. при расчете снизу вверх игнор
+' NumStages         - количество ступеней
+' freq_Hz           - частота, Гц
+' PumpID            - идентификатор насоса
+' PVT               - набор данных PVT
+' Tin_C             - температура на приеме насоа
+' Tdis_C            - температура на выкиде насоса. если =0 и CalcFromIntake = 1 то рассчитывается
+' CalcFromIntake    - режим расчета снизу вверх или сверху вниз
+' GasDegtType       - тип насоса по работе с газом
+' Kdegr             - коэффициент деградации напора
+' режимы расчета ЭЦН
+'       1 - расчет от давления на приеме вверх - флюид задан
+'       2 - расчет от давление на выходе вниз - флюид и сепарация задан (быстрый расчет)
+'       3 - расчет от давления на выходе вниз - флюид задан, сепарация определяется
+'       4 - расчет деградации по значениям давления на приеме и на выходе
+'
     If Not checkID_ESP(PumpID) Then
-        ESP_dP_atma = 0
+        ESP_dP_atm = 0
         Exit Function
     End If
     Dim Fluid As New CPVT
     Fluid.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
     Fluid.Qliq_scm3day = Qliq_m3day
-    Fluid.wc_perc = WCT_perc
+    Fluid.wc_perc = fw_perc
     
-    If PKsep_atma < 0 Then PKsep_atma = P_atma
+    If PKsep_atma < 0 Then PKsep_atma = Pin_atma
     If TKsep_C < 0 Then TKsep_C = Tin_C
     If Ksep_fr > 0 And Ksep_fr <= 1 Then
         Call Fluid.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasnotGoesIntoSolution)
@@ -158,19 +168,22 @@ Public Function ESP_dP_atma(P_atma As Double, Qliq_m3day As Double, WCT_perc As 
     
     Set ESP.Fluid = Fluid
     
-    ESP.Frequency = freq
+    ESP.freq_Hzuency = freq_Hz
     ESP.StageNum = NumStages
     ESP.PressureDegradation = Kdegr
+    If CalcFromIntake Then
+        Call ESP.Calc_ESP(Pin_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
+    Else
+        Call ESP.Calc_ESP(Pout_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
+    End If
     
-    Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
-    
-    ESP_dP_atma = Array(ESP.Pdis_atma - ESP.Pintake_atma, ESP.Tdischarge_C - ESP.Tintake_c)
+    ESP_dP_atm = Array(ESP.Pdis_atma - ESP.Pintake_atma, ESP.Tdischarge_C - ESP.Tintake_c)
 End Function
 ' расчет производительности системы УЭЦН
-Public Function ESP_system_calc(Pintake_atma As Double, Qliq_m3day As Double, WCT_perc As Double, _
+Public Function ESP_system_calc(Pintake_atma As Double, Qliq_m3day As Double, fw_perc As Double, _
                         Optional PumpID1 = 674, Optional NumStages1 As Integer = 1, _
                         Optional PumpID2 = 0, Optional NumStages2 As Integer = 1, _
-                        Optional freq As Double = 50, _
+                        Optional freq_Hz As Double = 50, _
                         Optional MotorID = 674, _
                         Optional CableID = 674, _
                         Optional PVTstr As String, _
@@ -182,9 +195,9 @@ Public Function ESP_system_calc(Pintake_atma As Double, Qliq_m3day As Double, WC
 ' характеристиками (харктеристики фдюида для поверхности берутся)
 ' Pin_atma       - давление на приеме насоса
 ' Qliq_m3day    - дебит жидкости на поверхности
-' WCT_perc      - обводненность
+' fw_perc      - обводненность
 ' NumStages     - количество ступеней
-' Freq          - частота, Гц
+' freq_Hz          - частота, Гц
 ' PumpID        - идентификатор насоса
 ' PVT           - набор данных PVT
 ' Tin_C         - температура на приеме насоа
@@ -201,14 +214,14 @@ Public Function ESP_system_calc(Pintake_atma As Double, Qliq_m3day As Double, WC
         Exit Function
     Else
         Set ESP1 = getESP(PumpID1)
-        ESP1.Frequency = freq
+        ESP1.freq_Hzuency = freq_Hz
         ESP1.StageNum = NumStages1
         ESPsys.AddESPpump ESP1
     End If
     
     If checkID_ESP(PumpID2) Then
         Set ESP2 = getESP(PumpID2)
-        ESP2.Frequency = freq
+        ESP2.freq_Hzuency = freq_Hz
         ESP2.StageNum = NumStages2
         ESPsys.AddESPpump ESP2
     End If
@@ -218,7 +231,7 @@ Public Function ESP_system_calc(Pintake_atma As Double, Qliq_m3day As Double, WC
     Set ESPsys.Fluid = Fluid
     
     Fluid.Qliq_scm3day = Qliq_m3day
-    Fluid.wc_perc = WCT_perc
+    Fluid.wc_perc = fw_perc
     ESPsys.ESPtype = GasDegtType
 '    ESP.PressureDegradation = Kdegr
 '    Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake)
@@ -228,16 +241,16 @@ Sub Описание_ESP_dP_atma()
 ' функция определения описания для интерфейса Excel
 ' достаточно вызвать один раз для того, чтобы поменять описание
 ' лучше вызывать функцию u7_descriptions.Задать_описания если надо поменять описания
-    Dim Pin_atma, Qliq_m3day, WCT_perc, NumStages, freq, PumpID, gamma_gas, gamma_oil, _
+    Dim Pin_atma, Qliq_m3day, fw_perc, NumStages, freq_Hz, PumpID, gamma_gas, gamma_oil, _
                gamma_wat, rsb_m3m3, Rp_m3m3, _
               Pb_atma, Tres_C, Bob_m3m3, Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, _
               TKsep_C, Tin_C, Tdis_C, CalcFromIntake, GasDegtType, Kdegr
     Dim a
     Pin_atma = "Давление на приеме (или на выкиде если CalcFromIntake = 0), атма"
     Qliq_m3day = "Дебит жидкости на поверхности, м3/сут"
-    WCT_perc = "Обводненность объемная на поверхности, %"
+    fw_perc = "Обводненность объемная на поверхности, %"
     NumStages = "Количество ступеней УЭЦН"
-    freq = "Частота питающего напряжения УЭЦН, Гц"
+    freq_Hz = "Частота питающего напряжения УЭЦН, Гц"
     PumpID = "Номер насоса в базе данных"
     gamma_gas = "Относительная плотность газа, по воздуху (плотность воздуха 1.2217 кг/м3)"
     gamma_oil = "Относительная плотность нефти, по воде"
@@ -257,7 +270,7 @@ Sub Описание_ESP_dP_atma()
     CalcFromIntake = "Флаг показывает направление расчета 1 - от приема к выкиду, 0 от выкида к приему (иногда может считать медленнее)"
     GasDegtType = "Тип насоса для учета деградации по газу. 0 - не учитывается, 1 - стандартный, 2, 3, 4 с предвключенными модулями"
     Kdegr = "Коэффициент деградации напора"
-    a = Array(Pin_atma, Qliq_m3day, WCT_perc, NumStages, freq, PumpID, gamma_gas, gamma_oil, _
+    a = Array(Pin_atma, Qliq_m3day, fw_perc, NumStages, freq_Hz, PumpID, gamma_gas, gamma_oil, _
                gamma_wat, rsb_m3m3, Rp_m3m3, _
               Pb_atma, Tres_C, Bob_m3m3, Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, _
               TKsep_C, Tin_C, Tdis_C, CalcFromIntake, GasDegtType, Kdegr)
@@ -267,8 +280,8 @@ Sub Описание_ESP_dP_atma()
             Category:="УЭЦН", _
             ArgumentDescriptions:=a
 End Sub
-'Public Function ESP_dPdown_atma(Pin_atma As Double, Qliq_m3day As Double, Optional Ksep_fr As Double = 0, Optional NumStages As Integer = 1, Optional Freq As Double = 50, Optional PumpID = 674, _
-'                      Optional WCT_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional rsb_m3m3 As Double = 100, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
+'Public Function ESP_dPdown_atma(Pin_atma As Double, Qliq_m3day As Double, Optional Ksep_fr As Double = 0, Optional NumStages As Integer = 1, Optional freq_Hz As Double = 50, Optional PumpID = 674, _
+'                      Optional fw_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional rsb_m3m3 As Double = 100, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
 '                      Optional gamma_oil = const_gamma_oil_default, Optional gamma_wat = const_gamma_wat_default, Optional gamma_gas = const_gamma_gas_default, _
 '                      Optional Bob_m3m3 As Double = -1, Optional Tin_C As Double = 50, Optional Tout_C As Double = 50, _
 '                      Optional PVTcorr As PVT_CORRELATION = 0, Optional CalcFromIntake As Integer = 1, _
@@ -290,7 +303,7 @@ End Sub
 '    Fluid.gamma_o = gamma_oil
 '    Fluid.gamma_w = gamma_wat
 '    Fluid.Qliq_scm3day = Qliq_m3day
-'    Fluid.wc_perc = WCT_perc
+'    Fluid.wc_perc = fw_perc
 '
 ''   Dim fluidESP As CPVT
 ''   Ksep_fr = 0.5
@@ -299,7 +312,7 @@ End Sub
 '    Set ESP.Fluid = Fluid 'ESP
 '
 '    ESP.ESPtype = GasDegtType
-'    ESP.Frequency = Freq
+'    ESP.freq_Hzuency = freq_Hz
 '    ESP.StageNum = NumStages
 '    ESP.PressureDegradation = Kdegr
 '  '  ESP_dP_atma = ESP.Calc_ESP_dP_atma(Pin_atma, Ksep_fr, Tin_C, CalcFromIntake)
@@ -341,13 +354,13 @@ End Sub
 '' функция расчета загрузки двигателя от скольжения
 '' rnt 03/2016
 'Public Function MotorLoad_d(s As Double, _
-'                    Optional freqU_Hz As Double = 50, _
+'                    Optional freq_HzU_Hz As Double = 50, _
 '                    Optional U_V As Double = -1, _
 '                    Optional MotorID As Integer = 0) As Double
 ''
 ''   s           - скольжение от 0 до 1
 '' опциональные параметры
-''   freqU_Hz    - частота вращения внешнего поля
+''   freq_HzU_Hz    - частота вращения внешнего поля
 ''   U_V         - напряжение питания двигателя, фазовое, В
 '' выход
 ''   число       - значение момента двигателя при заданных частоте и напряжении
@@ -359,7 +372,7 @@ End Sub
 '''    Dim Motor As New CESPmotor
 '''    Motor.CalcModelGridin
 ''
-''    If freqU_Hz > 0 Then Motor.f_Hz = freqU_Hz
+''    If freq_HzU_Hz > 0 Then Motor.f_Hz = freq_HzU_Hz
 ''    If U_V > 0 Then Motor.Ulin_V = U_V
 ''
 ''    Motor.S_d = s
@@ -369,7 +382,7 @@ End Sub
 ' функция расчета момента двигателя от проскальзования
 ' rnt 03/2016
 Public Function MotorM_slip_Nm(s As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -378,7 +391,7 @@ Public Function MotorM_slip_Nm(s As Double, _
 '
 '   s           - скольжение двигателя
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -389,12 +402,12 @@ Public Function MotorM_slip_Nm(s As Double, _
 '   число       - значение момента двигателя при заданных частоте и напряжении
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor_slip s, freq_Hz, U_V
+    Motor.Calc_motor_slip s, freq_Hz_Hz, U_V
     MotorM_slip_Nm = Motor.M_Nm
     
 End Function
 Public Function MotorI_slip_A(s As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -403,7 +416,7 @@ Public Function MotorI_slip_A(s As Double, _
 '
 '   s           - скольжение двигателя
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -414,12 +427,12 @@ Public Function MotorI_slip_A(s As Double, _
 '   число       - значение момента двигателя при заданных частоте и напряжении
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor_slip s, freq_Hz, U_V
+    Motor.Calc_motor_slip s, freq_Hz_Hz, U_V
     MotorI_slip_A = Motor.I_lin_A
     
 End Function
 Public Function MotorCosPhi_slip(s As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -428,7 +441,7 @@ Public Function MotorCosPhi_slip(s As Double, _
 '
 '   s           - скольжение двигателя
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -439,12 +452,12 @@ Public Function MotorCosPhi_slip(s As Double, _
 '   число       - значение момента двигателя при заданных частоте и напряжении
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor_slip s, freq_Hz, U_V
+    Motor.Calc_motor_slip s, freq_Hz_Hz, U_V
     MotorCosPhi_slip = Motor.CosPhi_d
     
 End Function
 Public Function MotorEff_slip(s As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -453,7 +466,7 @@ Public Function MotorEff_slip(s As Double, _
 '
 '   s           - скольжение двигателя
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -464,14 +477,14 @@ Public Function MotorEff_slip(s As Double, _
 '   число       - значение момента двигателя при заданных частоте и напряжении
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor_slip s, freq_Hz, U_V
+    Motor.Calc_motor_slip s, freq_Hz_Hz, U_V
     MotorEff_slip = Motor.Eff_d
     
 End Function
 ' функция расчета момента двигателя от мощности на валу
 ' rnt 03/2016
 Public Function MotorM_Nm(Pshaft_kW As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -480,7 +493,7 @@ Public Function MotorM_Nm(Pshaft_kW As Double, _
 '
 ' Pshaft_kW     - мощность развиваемая двигателем на валу
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -491,14 +504,14 @@ Public Function MotorM_Nm(Pshaft_kW As Double, _
 '   число       - значение момента двигателя при заданных частоте и напряжении
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor Pshaft_kW, freq_Hz, U_V
+    Motor.Calc_motor Pshaft_kW, freq_Hz_Hz, U_V
     MotorM_Nm = Motor.M_Nm
     
 End Function
 ' функция расчета рабочего тока двигателя
 ' rnt 03/2016
 Public Function MotorI_A(Pshaft_kW As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -507,7 +520,7 @@ Public Function MotorI_A(Pshaft_kW As Double, _
 '
 ' Pshaft_kW     - мощность развиваемая двигателем на валу
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -518,14 +531,14 @@ Public Function MotorI_A(Pshaft_kW As Double, _
 '   число       - значение тока потребляемого двигателем при данном режиме работы
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor Pshaft_kW, freq_Hz, U_V
+    Motor.Calc_motor Pshaft_kW, freq_Hz_Hz, U_V
     MotorI_A = Motor.I_lin_A
     
 End Function
 ' функция расчета коэффициента мощности двигателя
 ' rnt 03/2016
 Public Function MotorCosPhi_d(Pshaft_kW As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -534,7 +547,7 @@ Public Function MotorCosPhi_d(Pshaft_kW As Double, _
 '
 ' Pshaft_kW     - мощность развиваемая двигателем на валу
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -545,14 +558,14 @@ Public Function MotorCosPhi_d(Pshaft_kW As Double, _
 '   число       - значение тока потребляемого двигателем при данном режиме работы
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor Pshaft_kW, freq_Hz, U_V
+    Motor.Calc_motor Pshaft_kW, freq_Hz_Hz, U_V
     MotorCosPhi_d = Motor.CosPhi_d
     
 End Function
 ' функция расчета КПД двигателя
 ' rnt 03/2016
 Public Function MotorEff_d(Pshaft_kW As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -561,7 +574,7 @@ Public Function MotorEff_d(Pshaft_kW As Double, _
 '
 ' Pshaft_kW     - мощность развиваемая двигателем на валу
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -572,14 +585,14 @@ Public Function MotorEff_d(Pshaft_kW As Double, _
 '   число       - значение тока потребляемого двигателем при данном режиме работы
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor Pshaft_kW, freq_Hz, U_V
+    Motor.Calc_motor Pshaft_kW, freq_Hz_Hz, U_V
     MotorEff_d = Motor.Eff_d
     
 End Function
 ' функция расчета скольжения от мощности на валу
 ' rnt 07/2018
 Public Function MotorS_d(Pshaft_kW As Double, _
-                    Optional freq_Hz As Double = 50, _
+                    Optional freq_Hz_Hz As Double = 50, _
                     Optional U_V As Double = -1, _
                     Optional Unom_V As Double = 500, _
                     Optional Inom_A As Double = 10, _
@@ -588,7 +601,7 @@ Public Function MotorS_d(Pshaft_kW As Double, _
 '
 ' Pshaft_kW     - мощность развиваемая двигателем на валу
 ' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
+'   freq_Hz_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
 '   Inom_A      - номинальный ток двигателя, линейный, А
@@ -599,7 +612,7 @@ Public Function MotorS_d(Pshaft_kW As Double, _
 '   число       - значение тока потребляемого двигателем при данном режиме работы
     Dim Motor As New CESPMotor
     Motor.InitMotor MotorID, Unom_V, Inom_A, Fnom_Hz
-    Motor.Calc_motor Pshaft_kW, freq_Hz, U_V
+    Motor.Calc_motor Pshaft_kW, freq_Hz_Hz, U_V
     MotorS_d = Motor.S_d
     
 End Function
@@ -653,10 +666,10 @@ End Function
 '                             Optional ByVal Udl_m As Double = 0, _
 '                             Optional dtub_mm As Double = 62, Optional dcas_mm As Double = 125, Optional dintake_mm As Double = 102, _
 '                             Optional Ksep_d As Double = 0.7, _
-'                             Optional WCT_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional Rsb_m3m3 As Double = 100, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
+'                             Optional fw_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional Rsb_m3m3 As Double = 100, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
 '                             Optional gamma_oil = const_gamma_oil_default, Optional gamma_wat = const_gamma_wat_default, Optional gamma_gas = const_gamma_gas_default, _
 '                             Optional Bob_m3m3 As Double = -1, _
-'                             Optional esp_freq As Double = 50, Optional ESP_U_V As Double = 1000, _
+'                             Optional esp_freq_Hz As Double = 50, Optional ESP_U_V As Double = 1000, _
 '                             Optional ESP_Motor_Power_nom As Double = 0)
 ' End Function
 ' Функция расчета потребляемой мощности с учетом скважинного оборудования  (для проведения факторного анализа и прогноза УРЭ)
@@ -669,10 +682,10 @@ Public Function Well_Power_w(ByVal Hmes_m As Double, ByVal Hpump_m As Double, _
                              Optional ByVal Udl_m As Double = 0, _
                              Optional dtub_mm As Double = 62, Optional dcas_mm As Double = 125, Optional dintake_mm As Double = 102, _
                              Optional Ksep_d As Double = 0.7, _
-                             Optional WCT_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
+                             Optional fw_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
                              Optional gamma_oil = const_gamma_oil_default, _
                              Optional Bob_m3m3 As Double = -1, _
-                             Optional esp_freq As Double = 50, Optional ESP_U_V As Double = 1000, _
+                             Optional esp_freq_Hz As Double = 50, Optional ESP_U_V As Double = 1000, _
                              Optional ESP_Power_W As Double = 0, Optional ESP_cos_phi As Double = 0.95, _
                              Optional ESP_cable_R_Om As Double = 1.8, Optional ESP_power_degr As Double = 0)
 ' Входные параметры
@@ -691,7 +704,7 @@ Public Function Well_Power_w(ByVal Hmes_m As Double, ByVal Hpump_m As Double, _
 ' dcas_mm       - диаметр эксплуатационной колонны в месте уставноки НКТ
 ' dintake_mm    - диаметр приемной сетки
 ' Ksep_d        - коэффициент сепарации
-' WCT_perc
+' fw_perc
 ' Rp_m3m3
 ' Rsb_m3m3
 ' Pb_atma
@@ -754,11 +767,11 @@ gamma_gas = const_gamma_gas_default
     Angle_deg = 90 - ArcCos((Hmes_m - Udl_m) / Hmes_m) / const_Pi * 180
     
     ' 1. Расчитываем дебит жидкости по продуктивности
-    Qliq_scm3day = IPR_Ql_sm3Day(PI_m3dayatm, Pr_atma, Pwf_atma, WCT_perc, Pb_atma)
+    Qliq_scm3day = IPR_Ql_sm3Day(PI_m3dayatm, Pr_atma, Pwf_atma, fw_perc, Pb_atma)
     
     ' 2. ищем давление на приеме насоса
     Tintake_c = Tres_C - GeoGradT_Cm * (Hmes_m - Hpump_m)
-    PTintake = MF_dPpipe_atma(Hmes_m - Hpump_m, Pwf_atma, Qliq_scm3day, WCT_perc, Tres_C, Tintake_c, Angle_deg, dcas_mm, , gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, _
+    PTintake = MF_dPpipe_atm(Hmes_m - Hpump_m, Pwf_atma, Qliq_scm3day, fw_perc, Tres_C, Tintake_c, Angle_deg, dcas_mm, , gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, _
                   Bob_m3m3, , PVTcorr:=PVTcorr)
     Pintake_atma = PTintake(0)
     Tintake_c = PTintake(1)
@@ -766,7 +779,7 @@ gamma_gas = const_gamma_gas_default
     
     ' 4. ищем давление на выкиде с учетом сепарации
     Tdischarge_C = Tintake_c
-    PTdischarge = MF_dPpipe_atma(Hpump_m, Pbuf_atma, Qliq_scm3day, WCT_perc, Tdischarge_C, , Angle_deg, dtub_mm, , gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, _
+    PTdischarge = MF_dPpipe_atm(Hpump_m, Pbuf_atma, Qliq_scm3day, fw_perc, Tdischarge_C, , Angle_deg, dtub_mm, , gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, _
                   Bob_m3m3, , PVTcorr:=PVTcorr)
     Pdischarge_atma = PTdischarge(0)
     Tdischarge_C = PTdischarge(1)
@@ -775,9 +788,9 @@ gamma_gas = const_gamma_gas_default
     dPpump_fact_atma = Pdischarge_atma - Pintake_atma
     
     ' 6. ищем средний расход ГЖС через насос
-    Qmix_intake_m3day = MF_Qmix_m3day(Qliq_scm3day, WCT_perc, Pintake_atma, Tintake_c, gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, , PVTcorr, _
+    Qmix_intake_m3day = MF_Qmix_m3day(Qliq_scm3day, fw_perc, Pintake_atma, Tintake_c, gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, , PVTcorr, _
                         Ksep_d, Pintake_atma, Tintake_c)
-    Qmix_dis_m3day = MF_Qmix_m3day(Qliq_scm3day, WCT_perc, Pdischarge_atma, Tdischarge_C, gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, , PVTcorr, _
+    Qmix_dis_m3day = MF_Qmix_m3day(Qliq_scm3day, fw_perc, Pdischarge_atma, Tdischarge_C, gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, , PVTcorr, _
                         Ksep_d, Pintake_atma, Tintake_c)
     Qmix_av_m3day = (Qmix_intake_m3day + Qmix_dis_m3day) / 2
      
@@ -785,7 +798,7 @@ gamma_gas = const_gamma_gas_default
     PumpID = ESP_IDbyRate(ESP_Qnom_m3day)
     
     ' 8. определяем КПД насоса по характеристике для заданного среднего дебита
-    pump_eff = ESP_eff_fr(Qmix_av_m3day, 1, esp_freq, PumpID)
+    pump_eff = ESP_eff_fr(Qmix_av_m3day, 1, esp_freq_Hz, PumpID)
     
     ' 9. ищем полезную мощность по факту для насоса
     Power_liq_W = Qmix_av_m3day * dPpump_fact_atma * const_convert_atma_Pa / const_conver_day_sec
