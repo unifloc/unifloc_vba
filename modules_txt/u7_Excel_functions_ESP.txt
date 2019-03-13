@@ -6,6 +6,7 @@
 '=======================================================================================
 ' функции дл€ проведени€ расчетов по режимам работы ”Ё÷Ќ из интерфейса Excel
 Option Explicit
+Const PVT_DEFAULT = "gamma_gas:0,900;gamma_oil:0,750;gamma_wat:1,000;rsb_m3m3:100,000;Rp_m3m3:-1,000;Pb_atma:-1,000;Tres_C:90,000;Bob_m3m3:-1,000;Muob_cP:-1,000;PVTcorr:0;Ksep_fr:0,000;PKsep_atma:-1,000;TKsep_C:-1,000;"
 ' =============== функции дл€ расчета ”Ё÷Ќ  ============================
 '
 '
@@ -107,14 +108,13 @@ Public Function ESP_IDbyRate(Q As Double)
     If Q > 1200 Then ESP_IDbyRate = 264
     
 End Function
-Public Function ESP_dP_atm(Qliq_m3day As Double, fw_perc As Double, _
-                        Pin_atma As Double, _
-                        Optional Pout_atma As Double = -1, _
+Public Function ESP_dPsimple_atm(Qliq_m3day As Double, fw_perc As Double, _
+                        P_atma As Double, _
                         Optional NumStages As Integer = 1, Optional freq_Hz As Double = 50, _
                         Optional PumpID = 674, _
-                        Optional gamma_gas = const_gamma_gas_default, _
-                        Optional gamma_oil = const_gamma_oil_default, _
-                        Optional gamma_wat = const_gamma_wat_default, _
+                        Optional gamma_gas As Double = const_gamma_gas_default, _
+                        Optional gamma_oil As Double = const_gamma_oil_default, _
+                        Optional gamma_wat As Double = const_gamma_wat_default, _
                         Optional rsb_m3m3 = const_Rsb_default, _
                         Optional Rp_m3m3 As Double = -1, _
                         Optional Pb_atma As Double = -1, _
@@ -125,6 +125,66 @@ Public Function ESP_dP_atm(Qliq_m3day As Double, fw_perc As Double, _
                         Optional Ksep_fr As Double = 0, _
                         Optional PKsep_atma As Double = -1, _
                         Optional TKsep_C As Double = -1, _
+                        Optional Tin_C As Double = 50, _
+                        Optional Tdis_C As Double = 50, _
+                        Optional CalcFromIntake As Boolean = 1)
+' расчет перепада давлени€ в насосе при перекачке √∆— с заданными
+' характеристиками (харктеристики фдюида дл€ поверхности берутс€)
+' проста€ верси€ с полным заданием PVT свойств флюида
+' Qliq_m3day        - дебит жидкости на поверхности
+' fw_perc           - обводненность
+' Pin_atma          - давление на приеме насоса
+' Pout_atma         - давление на выкиде насоса, используетс€ дл€ расчета
+'                     сверху вниз и дл€ расчета деградации насоса. при расчете снизу вверх игнор
+' NumStages         - количество ступеней
+' freq_Hz           - частота, √ц
+' PumpID            - идентификатор насоса
+' PVT               - набор данных PVT
+' Tin_C             - температура на приеме насоа
+' Tdis_C            - температура на выкиде насоса. если =0 и CalcFromIntake = 1 то рассчитываетс€
+' CalcFromIntake    - режим расчета снизу вверх или сверху вниз
+' GasDegtType       - тип насоса по работе с газом
+' Kdegr             - коэффициент деградации напора
+' режимы расчета Ё÷Ќ
+'       1 - расчет от давлени€ на приеме вверх - флюид задан
+'       2 - расчет от давление на выходе вниз - флюид и сепараци€ задан (быстрый расчет)
+'       3 - расчет от давлени€ на выходе вниз - флюид задан, сепараци€ определ€етс€
+'       4 - расчет деградации по значени€м давлени€ на приеме и на выходе
+'
+    If Not checkID_ESP(PumpID) Then
+        ESP_dPsimple_atm = 0
+        Exit Function
+    End If
+    Dim Fluid As New CPVT
+    Fluid.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
+    Fluid.Qliq_scm3day = Qliq_m3day
+    Fluid.wc_perc = fw_perc
+    
+    
+    If PKsep_atma < 0 Then PKsep_atma = P_atma
+    If TKsep_C < 0 Then TKsep_C = Tin_C
+    If Ksep_fr > 0 And Ksep_fr <= 1 And CalcFromIntake Then
+        Call Fluid.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasnotGoesIntoSolution)
+    End If
+    
+    Set ESP.Fluid = Fluid
+    
+    ESP.freq_Hzuency = freq_Hz
+    ESP.StageNum = NumStages
+    'ESP.PressureDegradation = Kdegr
+    If CalcFromIntake Then
+        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake) ', GasDegtType)
+    Else
+        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake) ', GasDegtType)
+    End If
+    
+    ESP_dPsimple_atm = Array(ESP.Pdis_atma - ESP.Pintake_atma, ESP.Tdischarge_C - ESP.Tintake_c)
+End Function
+Public Function ESP_dP_atm(Qliq_m3day As Double, fw_perc As Double, _
+                        P_atma As Double, _
+                        Optional NumStages As Integer = 1, Optional freq_Hz As Double = 50, _
+                        Optional PumpID = 674, _
+                        Optional PVTstr As String = PVT_DEFAULT, _
                         Optional Tin_C As Double = 50, _
                         Optional Tdis_C As Double = 50, _
                         Optional CalcFromIntake As Boolean = 1, _
@@ -151,20 +211,21 @@ Public Function ESP_dP_atm(Qliq_m3day As Double, fw_perc As Double, _
 '       3 - расчет от давлени€ на выходе вниз - флюид задан, сепараци€ определ€етс€
 '       4 - расчет деградации по значени€м давлени€ на приеме и на выходе
 '
+On Error GoTo er1:
     If Not checkID_ESP(PumpID) Then
         ESP_dP_atm = 0
         Exit Function
     End If
-    Dim Fluid As New CPVT
-    Fluid.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
+    Dim Fluid As CPVT
+    
+    If PVTstr <> "" Then
+        Set Fluid = PVT_Decode_string(PVTstr)
+    End If
+    
     Fluid.Qliq_scm3day = Qliq_m3day
     Fluid.wc_perc = fw_perc
     
-    If PKsep_atma < 0 Then PKsep_atma = Pin_atma
-    If TKsep_C < 0 Then TKsep_C = Tin_C
-    If Ksep_fr > 0 And Ksep_fr <= 1 Then
-        Call Fluid.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasnotGoesIntoSolution)
-    End If
+    
     
     Set ESP.Fluid = Fluid
     
@@ -172,12 +233,16 @@ Public Function ESP_dP_atm(Qliq_m3day As Double, fw_perc As Double, _
     ESP.StageNum = NumStages
     ESP.PressureDegradation = Kdegr
     If CalcFromIntake Then
-        Call ESP.Calc_ESP(Pin_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
+        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
     Else
-        Call ESP.Calc_ESP(Pout_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
+        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
     End If
     
     ESP_dP_atm = Array(ESP.Pdis_atma - ESP.Pintake_atma, ESP.Tdischarge_C - ESP.Tintake_c)
+    Exit Function
+er1:
+    ESP_dP_atm = "error"
+    
 End Function
 ' расчет производительности системы ”Ё÷Ќ
 Public Function ESP_system_calc(Pintake_atma As Double, Qliq_m3day As Double, fw_perc As Double, _
@@ -282,7 +347,7 @@ Sub ќписание_ESP_dP_atma()
 End Sub
 'Public Function ESP_dPdown_atma(Pin_atma As Double, Qliq_m3day As Double, Optional Ksep_fr As Double = 0, Optional NumStages As Integer = 1, Optional freq_Hz As Double = 50, Optional PumpID = 674, _
 '                      Optional fw_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional rsb_m3m3 As Double = 100, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
-'                      Optional gamma_oil = const_gamma_oil_default, Optional gamma_wat = const_gamma_wat_default, Optional gamma_gas = const_gamma_gas_default, _
+'                      Optional gamma_oil as double = const_gamma_oil_default, Optional gamma_wat as double = const_gamma_wat_default, Optional gamma_gas as double = const_gamma_gas_default, _
 '                      Optional Bob_m3m3 As Double = -1, Optional Tin_C As Double = 50, Optional Tout_C As Double = 50, _
 '                      Optional PVTcorr As PVT_CORRELATION = 0, Optional CalcFromIntake As Integer = 1, _
 '                      Optional GasDegtType As Integer = 0, Optional Kdegr As Double = 0)
@@ -667,7 +732,7 @@ End Function
 '                             Optional dtub_mm As Double = 62, Optional dcas_mm As Double = 125, Optional dintake_mm As Double = 102, _
 '                             Optional Ksep_d As Double = 0.7, _
 '                             Optional fw_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional Rsb_m3m3 As Double = 100, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
-'                             Optional gamma_oil = const_gamma_oil_default, Optional gamma_wat = const_gamma_wat_default, Optional gamma_gas = const_gamma_gas_default, _
+'                             Optional gamma_oil as double = const_gamma_oil_default, Optional gamma_wat as double = const_gamma_wat_default, Optional gamma_gas as double = const_gamma_gas_default, _
 '                             Optional Bob_m3m3 As Double = -1, _
 '                             Optional esp_freq_Hz As Double = 50, Optional ESP_U_V As Double = 1000, _
 '                             Optional ESP_Motor_Power_nom As Double = 0)
@@ -683,7 +748,7 @@ Public Function Well_Power_w(ByVal Hmes_m As Double, ByVal Hpump_m As Double, _
                              Optional dtub_mm As Double = 62, Optional dcas_mm As Double = 125, Optional dintake_mm As Double = 102, _
                              Optional Ksep_d As Double = 0.7, _
                              Optional fw_perc As Double = 0, Optional Rp_m3m3 As Double = -1, Optional Pb_atma As Double = -1, Optional Tres_C As Double = 90, _
-                             Optional gamma_oil = const_gamma_oil_default, _
+                             Optional gamma_oil As Double = const_gamma_oil_default, _
                              Optional Bob_m3m3 As Double = -1, _
                              Optional esp_freq_Hz As Double = 50, Optional ESP_U_V As Double = 1000, _
                              Optional ESP_Power_W As Double = 0, Optional ESP_cos_phi As Double = 0.95, _
