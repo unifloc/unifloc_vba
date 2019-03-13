@@ -713,8 +713,18 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
     Dim sign_int As Integer
     Dim qmix As Double, qmix_degr As Double
     Dim gascorr As Double
+    
+    Dim dNst As Integer  ' шаг ускорения при интегрировании большими шагами
+    Dim Nst As Integer   ' шаг на текущей итерации
+    
+    Dim N As Integer     ' текущий номер ступени
+    Dim dPav As Double   ' поправки на давление и температуру при интегрировании
+    Dim dTav As Double
+    N = 1
+    dNst = 10 ' для начала пытаемся интегрировать такими шагами
+    dPav = 0:     dTav = 0
     gascorr = 1
-    On Error GoTo err1:
+On Error GoTo err1:
     
     If calc_from_dis Then
         Tst_C = Tdis_C
@@ -725,6 +735,7 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
         p_Pintake_atma = P_atma
         sign_int = 1
     End If
+    
     Pst_atma = P_atma
     dTpumpSum_C = 0
     p_HeadReal_m = 0
@@ -753,23 +764,41 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
         dTpumpSum_C = 0
         c_PCurve.AddPoint HmesStage_m(0), Pst_atma    ' запишем в выходной массив первые точки
         c_TCurve.AddPoint HmesStage_m(0), Tst_C
-        For i = 0 To p_StageNum - 1
-            Call .Calc_PVT(CDbl(Pst_atma), CDbl(Tst_C))
+        N = 1
+        i = 0
+        Do While N < p_StageNum + 1
+        'For i = 0 To p_StageNum - 1
+            If calc_from_dis Then
+                If p_StageNum + 1 - N - dNst > 0 Then ' смотрим какой будет величина следующего шага
+                    Nst = dNst                          ' мелкие шаги оставляем в зоне низкий давлений
+                Else
+                    Nst = 1
+                End If
+            Else
+                If (p_StageNum + 1 - N) Mod dNst = 0 Then ' смотрим какой будет величина следующего шага
+                    Nst = dNst                          ' мелкие шаги оставляем в зоне низкий давлений
+                Else
+                    Nst = 1
+                End If
+            End If
+            Call .Calc_PVT(Pst_atma + dPav, Tst_C + dTav)  ' делаем поправку на давление и температуру
             If i = 0 Then
                 gascorr = GasCorrection_d(.GasFraction_d, ESPtype)
             End If
             qmix = .Qmix_m3day
             qmix_degr = qmix * (1 + p_RateDegradation)
-            Head_mix = Get_ESP_Head_m(qmix_degr, 1, .MuMix_cSt)
+            Head_mix = Get_ESP_Head_m(qmix_degr, Nst, .MuMix_cSt)
             p_HeadReal_m = p_HeadReal_m + Head_mix
                 ' тут когда то надо сделать коррекцию характеристики на плотность
             dPStage = .rho_mix_kgm3 * Head_mix * const_g * const_convert_Pa_atma * (1 - p_PressureDegradation)
             Pst_atma = Pst_atma + sign_int * dPStage
+            dPav = dPStage / 2 * sign_int
+            
             ' оценим работу совершаемую насосом по перекачке жидкости
             PowFluid_Wt = qmix * const_convert_m3day_m3sec * dPStage * const_convert_atma_Pa   ' мощность с поправкой на плотность ГЖС
             PowFluidTot_Wt = PowFluidTot_Wt + PowFluid_Wt
             ' оценим мощность потребляемую насосом с вала
-            PowESP_Wt = Get_ESP_Power_W(qmix_degr, 1, .MuMix_cSt) * .rho_mix_kgm3 / 1000  '* (1 - p_PressureDegradation)              ' мощность потребляемая одной ступенью на воде
+            PowESP_Wt = Get_ESP_Power_W(qmix_degr, Nst, .MuMix_cSt) * .rho_mix_kgm3 / 1000  '* (1 - p_PressureDegradation)              ' мощность потребляемая одной ступенью на воде
             PowESPTot_Wt = PowESPTot_Wt + PowESP_Wt
             ' оценим КПД ступени в данных условиях
             If (PowESPTot_Wt > 0) Then
@@ -790,21 +819,30 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
             Else
                 dTpump_C = (Tdis_C - Tin_C) / StageNum * 1
             End If
-            If Tst_C < 299 Then Tst_C = Tst_C + sign_int * dTpump_C
-            If Tst_C > 300 Then Tst_C = 299
+            If Tst_C < 299 Then
+                Tst_C = Tst_C + sign_int * dTpump_C
+                dTav = sign_int * dTpump_C / 2
+            End If
+            If Tst_C > 300 Then
+                Tst_C = 299
+                dTav = 0
+            End If
             dTpumpSum_C = dTpumpSum_C + dTpump_C
             If saveCurve Then
-                c_QmixInPumpCurve.AddPoint i + 1, qmix
-                c_GasFractionInPumpCurve.AddPoint i + 1, .f_g
-                c_PressureInPumpCurve.AddPoint i + 1, Pst_atma
-                c_TempInPumpCurve.AddPoint i + 1, Tst_C
-                c_PowerFluidInPumpCurve.AddPoint i + 1, PowFluid_Wt
-                c_PowerESPInPumpCurve.AddPoint i + 1, PowESP_Wt
-                c_EffESPInPumpCurve.AddPoint i + 1, EffESP_d
-                c_PCurve.AddPoint HmesStage_m(i + 1), P_atma
-                c_TCurve.AddPoint HmesStage_m(i + 1), Tst_C
+                c_QmixInPumpCurve.AddPoint N, qmix
+                c_GasFractionInPumpCurve.AddPoint N, .f_g
+                c_PressureInPumpCurve.AddPoint N, Pst_atma
+                c_TempInPumpCurve.AddPoint N, Tst_C
+                c_PowerFluidInPumpCurve.AddPoint N, PowFluid_Wt
+                c_PowerESPInPumpCurve.AddPoint N, PowESP_Wt
+                c_EffESPInPumpCurve.AddPoint N, EffESP_d
+                c_PCurve.AddPoint HmesStage_m(N), P_atma
+                c_TCurve.AddPoint HmesStage_m(N), Tst_C
             End If
-        Next i
+            N = N + Nst
+            i = i + 1
+        Loop
+        'Next i
         If dTpumpSum_C > 298 Then
                 addLogMsg "Перегрев около УЭЦН, расчетная температура =" & Format(Tst_C, "##0") & _
                               " рост температуры на ступени =" & Format(dTpump_C, "##0") & _
@@ -815,13 +853,14 @@ Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, 
     End With
     p_PowerESP_Wt = PowESP_Wt
     p_PowerFluid_Wt = PowFluid_Wt
-     '   p_PowerMotor_Wt = PowESP_Wt / EffiencyMotor_d    ' заглушка считаем что КПД двигателя 0.9 и оцениваем мощность - потом надо исправить на реальный двигатель
+    
     If calc_from_dis Then
         p_Pintake_atma = Pst_atma
     Else
         p_Pdis_atma = Pst_atma
         p_Tdischarge_C = Tst_C
     End If
+    
     p_EffESP_d = EffESP_d
     Exit Sub
 err1:

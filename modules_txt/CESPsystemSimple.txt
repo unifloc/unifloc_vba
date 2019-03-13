@@ -1,0 +1,91 @@
+'=======================================================================================
+'Unifloc7.4  Boinae                                           khabibullin.ra@gubkin.ru
+'Ѕиблиотека расчетных модулей по нефт€ному инжинирингу
+'2000 - 2019 гг
+'
+'=======================================================================================
+'
+'
+' класс описывает систему Ё÷Ќ в простом варианте - один Ё÷Ќ+ѕЁƒ+кабель
+'
+Option Explicit
+Public ESPpump As CESPpump  ' сам насос
+' простой набор параметров дл€ описани€ ”Ё÷Ќ
+Public U_V As Double
+Public Power_nom_W As Double
+Public Power_motor_W
+Public freq_nom_Hz As Double
+Public motor_eff_fr As Double
+Public CS_eff_fr As Double
+Public transform_eff_fr As Double
+Public dPower_CS_W As Double
+Public dPower_transform_W As Double
+Public dPower_protector_W As Double
+Public dPower_gassep_W As Double
+Public Power_shaft_W As Double
+Public Power_CS_calc_W As Double
+Public Power_CS_teor_calc_W As Double
+Public Power_CS_meas_W As Double
+Public cable_R_Om As Double
+Public cable_dU_V As Double
+Public cable_dpower_W As Double
+Public cable_power_W As Double
+Public freq_Hz As Double
+Public slip As Double
+Public cos_phi As Double
+Public power_degr_fr As Double
+Public head_degr_fr As Double
+Public rate_degr_fr As Double
+Public I_A As Double
+Public Load_fr As Double
+Private Sub Class_Initialize()
+    U_V = 1000
+    Power_nom_W = 30000
+    freq_nom_Hz = 50
+    motor_eff_fr = 0.9
+    CS_eff_fr = 0.97
+    transform_eff_fr = 0.97
+    
+    cable_R_Om = 1.8
+    cable_dU_V = -1
+    freq_Hz = 50
+    slip = 0.05
+    cos_phi = 0.9
+    power_degr_fr = 0
+    head_degr_fr = 0
+    rate_degr_fr = 0
+    
+    dPower_protector_W = 400
+    dPower_gassep_W = 500
+End Sub
+Public Function calc_ESPsys(P_atma As Double, Tin_C As Double, _
+                            Tdis_C As Double, CalcFromIntake As Boolean)
+' функци€ расчета Ё÷Ќ
+'
+    '1. расчет распределени€ давлени€ в Ё÷Ќ
+    Call ESPpump.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake)
+    '2. ќценим мощность на валу
+    Power_shaft_W = ESPpump.PowerESP_Wt + dPower_protector_W + dPower_gassep_W
+    '3. ќценим электрическую мощность потребл€емую ѕЁƒ
+    Power_motor_W = Power_shaft_W / motor_eff_fr
+    '4. оценим потери в кабеле - дл€ этого найдем примерно ток двигател€
+    I_A = Power_motor_W / 1.732050808 / U_V / cos_phi
+    '5 по данным тока и сопротивлени€ кабел€ найдем падение напр€жени€ в кабеле
+    cable_dU_V = I_A * cable_R_Om
+    '6 по падению напр€жени€ оценим мощность рассеиваемую кабелем в тепло. учитываем 3 жилы. “ут учитываетс€ полный ток и активный и реактивный
+    cable_dpower_W = 3 * cable_dU_V * I_A
+    '7 найдет мощность электрическую на входе в кабель
+    cable_power_W = Power_motor_W + cable_dpower_W
+    '8. оценим потери мощность в трансформаторе и станции управлени€
+    dPower_transform_W = (1 - CS_eff_fr) * cable_power_W
+    dPower_CS_W = (1 - transform_eff_fr) * (cable_power_W + dPower_transform_W)
+    '9. оценим общую потребл€емую мощность ”Ё÷Ќ
+    Power_CS_teor_calc_W = cable_power_W + dPower_transform_W + dPower_CS_W
+    '10. внесем в мощность поправку на деградацию по мощности
+    Power_CS_calc_W = Power_CS_teor_calc_W * (1 - power_degr_fr)
+    
+'    degr = 1 - power_well_w /
+    
+'   Well_Power_w = Array(power_well_w, degr)
+'
+End Function
