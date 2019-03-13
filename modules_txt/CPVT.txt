@@ -1056,17 +1056,23 @@ Public Sub ModAfterSeparation(ByVal P_atma As Double, ByVal T_C As Double, ByVal
     Dim delta As Double
     Dim i As Integer
     Const N = 10
+    Dim Rpnew_with_Ksep As Double   ' новый ГФ с учетом сепарации газа
+    Dim Rpnew_Ksep_1 As Double      ' новый ГФ без учета сепарации
     Dim Rpnew As Double
         ' найдем сколько газа осталось в растворе при условиях сепарации
     With Me
         Rs = .calc_Rs_m3m3(P_atma, T_C)
         Bo = .Calc_Bo_m3m3(P_atma, T_C)
         
-        If GasSol = GasGoesIntoSolution Then   ' тогда газ успеет растворится
-            Rpnew = .Rp_m3m3 - (.Rp_m3m3 - Rs) * Ksep
-        Else                                   ' газ не растворяется, то же самое, что Ксеп = 1
-            Rpnew = .Rp_m3m3 - (.Rp_m3m3 - Rs)
-        End If
+        ' оценим как изменится газовый фактор за счет ухода части газа из потока
+        ' оцениваем двумя способами - буду влиять на работу опции растворения газа (фазовой неравновесности)
+        '   - с учетом сепарации (показывает новый ГФ если газ может потом растворяться)
+        '   - без учета сепарации (Ksep = 1 показывает ГФ если газ может только сжиматься)
+        
+        Rpnew_with_Ksep = .Rp_m3m3 - (.Rp_m3m3 - Rs) * Ksep
+        Rpnew_Ksep_1 = .Rp_m3m3 - (.Rp_m3m3 - Rs)
+        
+        
         delta = (.Pb_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
         ' запишем зависимость газосодержания от давления насыщения на память
         For i = 0 To N
@@ -1077,6 +1083,13 @@ Public Sub ModAfterSeparation(ByVal P_atma As Double, ByVal T_C As Double, ByVal
             Bo_Rs_curve.AddPoint Rsb_m3m3_tab, Bo_m3m3_tab
         Next i
         ' найдем сколько всего газа осталось в потоке
+        
+        If GasSol = GasGoesIntoSolution Then   ' тогда газ успеет растворится
+            Rpnew = Rpnew_with_Ksep
+        Else                                   ' газ не растворяется, то же самое, что Ксеп = 1
+            Rpnew = Rpnew_Ksep_1
+        End If
+        
         If Rpnew < .rsb_m3m3 Then
             ' Если газовый фактор становится меньше газосодержания, тогда надо скорректировать газосодержание и давление насыщения,
             ' которое будет от него зависеть
@@ -1085,7 +1098,8 @@ Public Sub ModAfterSeparation(ByVal P_atma As Double, ByVal T_C As Double, ByVal
             .rsb_m3m3 = Rpnew
             ' иначе газа из раствора не сепарировался - свойства не менялись ничего делать не надо
         End If
-    .Rp_m3m3 = Rpnew
+        ' итоговый газовый фактор всегда с учетом сепараци
+        .Rp_m3m3 = Rpnew_with_Ksep
     End With
 End Sub
 Public Sub BuildCurves(T_C As Double)
