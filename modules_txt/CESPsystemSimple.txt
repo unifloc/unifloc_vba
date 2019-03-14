@@ -7,29 +7,37 @@
 '
 '
 ' класс описывает систему Ё÷Ќ в простом варианте - один Ё÷Ќ+ѕЁƒ+кабель
-'
+' класс отвечатает и за расчет сепарации
 Option Explicit
 Public ESPpump As CESPpump  ' сам насос
+' описание газосепаратора
+Public isGasSep As Boolean
+Public KSepGasSep_fr As Double
+Public dPower_GasSep_W As Double
+Public KsepNat_fr As Double
+Public KsepTotal_fr As Double
 ' простой набор параметров дл€ описани€ ”Ё÷Ќ
 Public U_V As Double
 Public Power_nom_W As Double
 Public Power_motor_W
-Public freq_nom_Hz As Double
+Public Freq_nom_Hz As Double
 Public motor_eff_fr As Double
 Public CS_eff_fr As Double
-Public transform_eff_fr As Double
+Public Transform_eff_fr As Double
 Public dPower_CS_W As Double
 Public dPower_transform_W As Double
 Public dPower_protector_W As Double
-Public dPower_gassep_W As Double
 Public Power_shaft_W As Double
 Public Power_CS_calc_W As Double
 Public Power_CS_teor_calc_W As Double
 Public Power_CS_meas_W As Double
-Public cable_R_Om As Double
+Public cable_type_num As Integer
+Public cable_name As String
+Public cable_R_Omkm As Double
+Public cable_Tmax_C As Double
 Public cable_dU_V As Double
-Public cable_dpower_W As Double
-Public cable_power_W As Double
+Public cable_dPower_W As Double
+Public cable_Power_W As Double
 Public freq_Hz As Double
 Public slip As Double
 Public cos_phi As Double
@@ -38,15 +46,42 @@ Public head_degr_fr As Double
 Public rate_degr_fr As Double
 Public I_A As Double
 Public Load_fr As Double
+' параметры установки ”Ё÷Ќ в скважине
+Public HmesTop_m As Double
+Public dCas_mm As Double
+Public dIntake_mm As Double
+Public Angle_deg As Double
+' флюиды которые работают в системе ”Ё÷Ќ
+Private p_Fluid As CPVT
+Public FluidTub As CPVT
+Public FluidCas As CPVT
+Public FluidGasSep As CPVT
+' свойства дл€ управлени€ флюидом
+Public Property Get Fluid() As CPVT
+    Set Fluid = p_Fluid
+End Property
+Public Property Set Fluid(val As CPVT)
+    Set p_Fluid = val
+    ' сбросим также все другие флюиды
+    Set FluidTub = val
+    Set FluidCas = val
+    Set FluidGasSep = val
+    Set ESPpump.Fluid = val
+End Property
 Private Sub Class_Initialize()
+    ' парметры установки по умолчанию
+    dCas_mm = 150
+    dIntake_mm = 100
+    Angle_deg = 90
+    HmesTop_m = 1000
+    
     U_V = 1000
     Power_nom_W = 30000
-    freq_nom_Hz = 50
+    Freq_nom_Hz = 50
     motor_eff_fr = 0.9
     CS_eff_fr = 0.97
-    transform_eff_fr = 0.97
-    
-    cable_R_Om = 1.8
+    Transform_eff_fr = 0.97
+    Call SetCable(1)
     cable_dU_V = -1
     freq_Hz = 50
     slip = 0.05
@@ -56,31 +91,71 @@ Private Sub Class_Initialize()
     rate_degr_fr = 0
     
     dPower_protector_W = 400
-    dPower_gassep_W = 500
+    dPower_GasSep_W = 500
+    
+    isGasSep = True
+    KSepGasSep_fr = 0.5
 End Sub
+Public Sub SetCable(cable_type As Integer)
+    Select Case cable_type
+        Case 1
+            ' http://pskovgeokabel.ru/products/1_16/
+            cable_R_Omkm = 1.18
+            cable_name = " ѕпјпЅѕ-120 3x16"
+            cable_Tmax_C = 120
+    End Select
+    ' здесь добавить другие марки кабел€ при необходимости
+    ' потом когда нибудь можно будет и расчет параметров кабел€ сделать в термовставку тоже
+    cable_type_num = cable_type
+End Sub
+Public Function calc_separation(P_atma As Double, Tin_C As Double)
+' расчет сепарации и флюидов
+    Call p_Fluid.Calc_PVT(P_atma, Tin_C)
+    With p_Fluid
+        KsepNat_fr = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, _
+                                    .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, _
+                                    .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
+    End With
+    If isGasSep Then
+        KSepGasSep_fr = KSepGasSep_fr
+    Else
+        KSepGasSep_fr = 0
+    End If
+    KsepTotal_fr = KsepNat_fr + (1 - KsepNat_fr) * KSepGasSep_fr
+    Set FluidTub = p_Fluid.Clone()
+    Call FluidTub.ModAfterSeparation(P_atma, Tin_C, KsepTotal_fr, GasGoesIntoSolution)
+    Set FluidCas = p_Fluid.Clone() ' тут надо будет доделать чтобы считать затруб с газом
+    Set FluidGasSep = p_Fluid.Clone()
+    Call FluidGasSep.ModAfterSeparation(P_atma, Tin_C, KSepGasSep_fr, GasGoesIntoSolution)
+    
+    Set ESPpump.Fluid = FluidTub
+    
+End Function
 Public Function calc_ESPsys(P_atma As Double, Tin_C As Double, _
                             Tdis_C As Double, CalcFromIntake As Boolean)
 ' функци€ расчета Ё÷Ќ
 '
+    '0. оценим величину коэффициента сепарации
+    Call calc_separation(P_atma, Tin_C)
     '1. расчет распределени€ давлени€ в Ё÷Ќ
     Call ESPpump.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake)
     '2. ќценим мощность на валу
-    Power_shaft_W = ESPpump.PowerESP_Wt + dPower_protector_W + dPower_gassep_W
+    Power_shaft_W = ESPpump.PowerESP_Wt + dPower_protector_W + dPower_GasSep_W
     '3. ќценим электрическую мощность потребл€емую ѕЁƒ
     Power_motor_W = Power_shaft_W / motor_eff_fr
     '4. оценим потери в кабеле - дл€ этого найдем примерно ток двигател€
     I_A = Power_motor_W / 1.732050808 / U_V / cos_phi
     '5 по данным тока и сопротивлени€ кабел€ найдем падение напр€жени€ в кабеле
-    cable_dU_V = I_A * cable_R_Om
+    cable_dU_V = I_A * cable_R_Omkm * HmesTop_m / 1000
     '6 по падению напр€жени€ оценим мощность рассеиваемую кабелем в тепло. учитываем 3 жилы. “ут учитываетс€ полный ток и активный и реактивный
-    cable_dpower_W = 3 * cable_dU_V * I_A
+    cable_dPower_W = 3 * cable_dU_V * I_A
     '7 найдет мощность электрическую на входе в кабель
-    cable_power_W = Power_motor_W + cable_dpower_W
+    cable_Power_W = Power_motor_W + cable_dPower_W
     '8. оценим потери мощность в трансформаторе и станции управлени€
-    dPower_transform_W = (1 - CS_eff_fr) * cable_power_W
-    dPower_CS_W = (1 - transform_eff_fr) * (cable_power_W + dPower_transform_W)
+    dPower_transform_W = (1 - CS_eff_fr) * cable_Power_W
+    dPower_CS_W = (1 - Transform_eff_fr) * (cable_Power_W + dPower_transform_W)
     '9. оценим общую потребл€емую мощность ”Ё÷Ќ
-    Power_CS_teor_calc_W = cable_power_W + dPower_transform_W + dPower_CS_W
+    Power_CS_teor_calc_W = cable_Power_W + dPower_transform_W + dPower_CS_W
     '10. внесем в мощность поправку на деградацию по мощности
     Power_CS_calc_W = Power_CS_teor_calc_W * (1 - power_degr_fr)
     
