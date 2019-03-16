@@ -71,9 +71,6 @@ Private p_FastCalc As Boolean               ' флаг проведения быстрого расчета
  ' поправочные коэффициенты для расчета распределения давления
 Private p_betta_grav As Double
 Private p_betta_fric As Double
-' данные по сепарации, если заданы вручную - то ускоряют расчет, но могут быть и вычислены
-Private p_KsepTotal_d As Double
-Private p_PTsep As PTtype
 Public Event ReportProgress(msg As String)
 Private Sub Class_Initialize()
     With p_Param
@@ -87,28 +84,15 @@ Private Sub Class_Initialize()
     
     p_betta_grav = 1
     p_betta_fric = 1
-    p_KsepTotal_d = 0                       ' по умолчанию нет сепарации
+  ' p_KsepTotal_d = 0                        ' по умолчанию нет сепарации
 End Sub
  Public Property Get Kseptotal_d() As Double
-    Kseptotal_d = p_KsepTotal_d
- End Property
- 
- Public Property Get PTsep() As PTtype
-    PTsep = p_PTsep
- End Property
-  
- Public Sub SetKseptotal(val As Double, PTsep As PTtype)
-    If val >= 0 And val <= 1 And PTsep.P_atma > 0 And PTsep.T_C > 0 Then
-        p_KsepTotal_d = val
-        p_PTsep = PTsep
+    If IsESP Then
+        Kseptotal_d = ESP.KsepTotal_fr
     Else
-        addLogMsg_debug "CWell.Kseptotal_d установить не удалось, значение " & str(val) & _
-                                                                     " P = " & str(PTsep.P_atma) & _
-                                                                     " T = " & str(PTsep.T_C) & _
-                                                                     " вне диапазона"
+        Kseptotal_d = 0
     End If
- End Sub
- 
+ End Property
  Public Property Get betta_grav() As Double
     betta_grav = p_betta_grav
  End Property
@@ -211,24 +195,12 @@ End Property
  End Property
  
  Public Property Get FluidTub() As CPVT
-    'Set FluidTub = ESP.GasSeparator.FluidTub
+    If IsESP Then Set FluidTub = ESP.FluidTub
  End Property
  
  Public Property Get FluidCas() As CPVT
-    'Set Fluidcas = ESP.GasSeparator.Fluidcas
+    If IsESP Then Set FluidCas = ESP.FluidCas
  End Property
-' Public Property Get Ksep_d() As Double
-'    Ksep_d = ESP.Ksep_d
-' End Property
-'
-' Public Property Get KsepNat_d() As Double
-'    KsepNat_d = ESP.KsepNat_d
-' End Property
-'
-' Public Property Get KsepGasSep_d() As Double
-'    KsepGasSep_d = ESP.KsepGasSep_d
-' End Property
- 
  Public Property Set Fluid(val As CPVT)
  ' Установка PVT свойств для скважины
  ' Для разных сегментов скважины задается один и тот же флюид. После расчета скважины некоторые флюиды могут модифицироваться
@@ -238,9 +210,9 @@ End Property
    Set p_Pipe_WHeadHsp_Tubing.Fluid = Fluid
    Set p_Pipe_WHeadHspFact_Tubing.Fluid = Fluid
    Set Choke.Fluid = Fluid
-   'If IsESP Then
-   '    Set ESP.Fluid = Fluid
-   'End If
+   If IsESP Then
+       Set ESP.Fluid = Fluid
+   End If
    ' переводим в состояние "целостность нарушена"
    p_Calculated = False
  End Property
@@ -250,36 +222,27 @@ End Property
     Set ESP = p_ESP
  End Property
  
- Public Sub SetESP(val As CESPsystemSimple)
+ Public Property Set ESP(val As CESPsystemSimple)
    Set p_ESP = val
    If val Is Nothing Then GoTo noESP:
    ' переводим в состояние "целостность нарушена"
    p_Calculated = False
 On Error GoTo noESP
    p_ESP_on = True
-   'Set p_ESP.Fluid = Fluid
-   Exit Sub
+   Set p_ESP.Fluid = Fluid
+   Exit Property
 noESP:
    p_ESP_on = False
    addLogMsg_debug "насос отключен"
- End Sub
+ End Property
  
  Public Property Get IsESP() As Boolean
     IsESP = p_ESP_on
  End Property
  
-'  Public Property Let IsESP(val As Boolean)
-'    p_ESP_on = val
-' End Property
- 
  Property Get Dchoke_m() As Double
     Dchoke_m = p_Choke.Dchoke_m
  End Property
- 
-' Property Let Dchoke_m(val As Double)
-'    p_Choke.Dchoke_m = val
-'    p_Calculated = False
-' End Property
  
  Property Get Choke() As Cchoke
     Set Choke = p_Choke
@@ -293,7 +256,7 @@ noESP:
     p_choke_after_annulus_connection = choke_after_annulus_connection
  End Sub
  
- Public Sub cleatChoke()
+ Public Sub clearChoke()
     p_Choke.Dchoke_m = 0
  End Sub
  
@@ -307,6 +270,8 @@ noESP:
  
  Property Let Qliq_scm3day(Qval_scm3day As Double)
     Fluid.Qliq_scm3day = Qval_scm3day
+    ' далее надо сбросить все флюиды которые были в системе на единый, что возможно потребует пересчета
+    Set Fluid = Fluid
     p_Calculated = False
  End Property
  
@@ -320,55 +285,6 @@ noESP:
     W_kgsec = Fluid.Wm_kgsec
  End Property
  
- ' дебит газожидкостной смеси перед насосом в рабочих условиях
- Public Property Get QmixBeforePump_m3day() As Double
-   Fluid.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
-   QmixBeforePump_m3day = Fluid.Qmix_m3day
- End Property
- 
-' ' дебит газожидкостной смеси внути газосепаратора (после естественной сепарации)
-' Public Property Get QmixInGasSep_m3day() As Double
-'   ' надо рассчитать свойства флюида после частичной сепарации
-'   Dim fl As New CPVT
-'   fl.Copy Fluid
-'   Call fl.ModifyFluidTubPVTafterSeparation(Pintake_atma, Tintake_c, KsepNat_d)
-'   fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
-'   QmixInGasSep_m3day = fl.Qmix_m3day
-' End Property
- ' дебит газожидкостной смеси в насосе на первых ступенях (после естественной сепарации и газосепаратора)
- Public Property Get QmixPumpIntake_m3day() As Double
-   Dim fl As CPVT
-   Set fl = Fluid.GetCloneModAfterSeparation(Pintake_atma, Tintake_c, Kseptotal_d)
-   fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
-   QmixPumpIntake_m3day = fl.Qmix_m3day
- End Property
- 
- ' дебит газожидкостной смеси на выкиде насоса (на последних ступенях)
- Public Property Get QmixPumpOutlet_m3day() As Double
-   Dim fl As CPVT
-   Set fl = Fluid.GetCloneModAfterSeparation(Pdischarge_atma, Tdischarge_C, Kseptotal_d)
-   fl.Calc_PVT p_PTintake.P_atma, p_PTintake.T_C
-   QmixPumpOutlet_m3day = fl.Qmix_m3day
- End Property
- 
- Public Function GasFraction_d(P_atma As Double, T_C As Double, fl As CPVT, Ksep As Double)
-    Dim Qo As Double, Qw As Double, Qg As Double
-    GasFraction_d = fl.GasFraction_d(Ksep)
- End Function
- 
- Public Property Get GasFraction_BeforePump_d() As Double
-    GasFraction_BeforePump_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=0)
- End Property
- 
-' Public Property Get GasFraction_InGasSep_d() As Double
-'    GasFraction_InGasSep_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=KsepNat_d)
-' End Property
- Public Property Get GasFraction_PumpIntake_d() As Double
-    GasFraction_PumpIntake_d = GasFraction_d(p_PTintake.P_atma, p_PTintake.T_C, Fluid, Ksep:=Kseptotal_d)
- End Property
- Public Property Get GasFraction_PumpOutlet_d() As Double
-    GasFraction_PumpOutlet_d = GasFraction_d(p_PTdis.P_atma, p_PTdis.T_C, FluidTub, Ksep:=0)
- End Property
  
  Public Property Get Qo_scm3day() As Double
     Qo_scm3day = Fluid.Qo_m3day
@@ -393,14 +309,18 @@ End Property
     Dim Wc As Double
     Wc = wcval / 100
     Fluid.wc_fr = Wc
+    ' далее надо сбросить все флюиды которые были в системе на единый, что возможно потребует пересчета
+    Set Fluid = Fluid
    ' переводим в состояние "целостность нарушена"
     p_Calculated = False
  End Property
  
  Property Let Rp_m3m3(Rpval As Double)
-  Fluid.Rp_m3m3 = Rpval
+    Fluid.Rp_m3m3 = Rpval
+    ' далее надо сбросить все флюиды которые были в системе на единый, что возможно потребует пересчета
+    Set Fluid = Fluid
    ' переводим в состояние "целостность нарушена"
-  p_Calculated = False
+    p_Calculated = False
  End Property
  
  Public Property Get Tline_C() As Double
@@ -482,7 +402,8 @@ End Property
  End Property
  
  Public Sub InitWell(ByVal Hperf_m As Double, ByVal Hpump_m As Double, ByVal Udl_m As Double, _
-                     ByVal dCas_mm As Double, ByVal dtub_mm As Double, ByVal Tbh_C As Double, ByVal Twh_C As Double)
+                     ByVal dCas_mm As Double, ByVal dtub_mm As Double, ByVal Tbh_C As Double, _
+                     ByVal Twh_C As Double)
 ' метод для инициализации скважины простыми числами
  On Error GoTo err1:
     Dim HabsCurve_m As New TInterpolation
@@ -518,8 +439,12 @@ err1:
     Err.Raise kErrInitCalc, Err.Source, errMsg
  End Sub
  
-  Public Sub InitWellRange(ByVal Incl_Hmes_m_ As Range, ByVal Incl_Hvert_m_ As Range, Hperf_m, Htub_m, _
-                     dCas_mm, dtub_mm, ByVal Tbh_C As Double, ByVal Twh_C As Double)
+  Public Sub InitWellRange(ByVal Incl_Hmes_m_ As Range, _
+                           ByVal Incl_Hvert_m_ As Range, _
+                           ByVal Hperf_m As Double, ByVal Htub_m As Double, _
+                           ByVal dCas_mm As Double, ByVal dtub_mm As Double, _
+                           ByVal Tbh_C As Double, _
+                           ByVal Twh_C As Double)
 ' метод для инициализации скважины данными инсклинометрии и числами для остальных параметров
  On Error GoTo err1:
     Dim HabsCurve_m As New TInterpolation
@@ -595,7 +520,6 @@ err1:
     Err.Raise kErrInitCalc, Err.Source, errMsg
  End Sub
  
- 
  Private Sub InitWellFromTr()
  ' инициализация скважины по данным траектории скважин
     Call p_Pipe_WHeadHsp_Tubing.InitPipeConstrTr(Trajectory, 0, Trajectory.Hpump_m)
@@ -653,18 +577,22 @@ err1:
  End Sub
  
  Public Function dCasPumpIntake() As Double
- ' расчет диаметра колонны на глубине спуска насоса
-  Dim i As Integer
-  For i = LBound(p_Dtub_m) To UBound(p_Dtub_m)
-    If p_Dtub_m(i) = 0 Then
-        Exit For
-    End If
-  Next i
-  If i > UBound(p_Dtub_m) Then i = UBound(p_Dtub_m)
-  dCasPumpIntake = p_Dcas_m(i)
+    ' расчет диаметра колонны на глубине спуска насоса
+     Dim i As Integer
+     For i = LBound(p_Dtub_m) To UBound(p_Dtub_m)
+       If p_Dtub_m(i) = 0 Then
+           Exit For
+       End If
+     Next i
+     If i > UBound(p_Dtub_m) Then i = UBound(p_Dtub_m)
+     dCasPumpIntake = p_Dcas_m(i)
  End Function
  
- Private Function FindDegradation(ByVal kESP As Double, ByVal Plin As Double, Plin_targ As Double, Pwf_atma As Double, Tbh_C As Double)
+ Private Function FindDegradation(ByVal kESP As Double, _
+                                  ByVal Plin As Double, _
+                                  Plin_targ As Double, _
+                                  Pwf_atma As Double, _
+                                  Tbh_C As Double)
  ' функция для поиска значения деградации УЭЦН
  ' получает в качестве аргументов первое приближение для поиска и целевое значение линейного давления
  ' kESP = 1 - degr  поправочный коэфициент на насос
@@ -771,40 +699,36 @@ err1:
     p_Calculated = True
  End Function
  
- Public Function Calcfast_Pwf_Plin_atma(Plin_atma As Double, ByVal Tbh_C As Double, Optional saveCurve As CALC_RESULTS = noCurves)
+ Private Function CalcFast_Pwf_Plin_atma(Plin_atma As Double, ByVal Tbh_C As Double, Optional saveCurve As CALC_RESULTS = noCurves)
 ' быстрый метод расчета забойного давления через линейное (без итераций - прямой счет)
     
-    Dim flSep As CPVT   ' флюид для которого будет проводиться расчет выше сепарации
-    If p_KsepTotal_d > 0 Then
-        Set flSep = p_Fluid.GetCloneModAfterSeparation(PTsep.P_atma, PTsep.T_C, p_KsepTotal_d)
-    Else
-        Set flSep = p_Fluid
+    'Dim flSep As CPVT   ' флюид для которого будет проводиться расчет выше сепарации
+    If IsESP Then
+        Call ESP.calc_separation(Pintake_atma, Tintake_c)
+        Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.FluidTub
+        If isChoke() Then Set Choke.Fluid = ESP.FluidTub
     End If
     p_PTlin.P_atma = Plin_atma
     p_PTlin.T_C = Twh_C
     ' Расчет буферного давления по штуцеру
     If isChoke() Then
         p_PTbuf = Choke.Calc_Choke_Pbuf(p_PTlin)
-        If p_PTbuf.P_atma < 0 Then
-            p_PTbuf.P_atma = 1 ' p_PTbuf.P_atma
-        End If
+        If p_PTbuf.P_atma < 0 Then p_PTbuf.P_atma = 1
     Else
         p_PTbuf = p_PTlin
     End If
     p_Pipe_WHeadHsp_Tubing.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
-    Set p_Pipe_WHeadHsp_Tubing.Fluid = flSep
     
-    p_PTdis = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, saveCurve)  'Calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
+    p_PTdis = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, saveCurve)
     If IsESP() Then                                                 ' Если есть насос
-       ' Call ESP.Calc_ESP_dP_atma(p_PTintake )                                 ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
-        Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.FluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
+        Call ESP.calc_ESPsys(p_PTdis.P_atma, p_PTdis.T_C, p_PTdis.T_C, False)                                    ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
     Else                                                            ' Если насоса нет, то совпадают
-       p_PTintake = p_PTdis
+        p_PTintake = p_PTdis
     End If
  
     p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
     p_PTwf = p_Pipe_HspHvd.Calc_dPipe(p_PTintake, saveCurve)
-    Calcfast_Pwf_Plin_atma = p_PTwf.P_atma
+    CalcFast_Pwf_Plin_atma = p_PTwf.P_atma
     
     Call Curve(str_PtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.PCurve, p_Pipe_HspHvd.PCurve) ', ESP.PCurve   пока не включаем в расчет распределение давления в насосе, потом надо будет добавить
     Call Curve(str_TtubHmes_curve).AddPointsCurve(p_Pipe_WHeadHsp_Tubing.TCurve, p_Pipe_HspHvd.TCurve) ', ESP.TCurve
@@ -816,15 +740,17 @@ End Function
  ' функция расчета сверху вниз
  ' тут смотрим можно ли провести расчет быстро
  ' или надо вызывать медленный метод (итерациями снизу вверх)
+    ' надо сделать приближение по расчету давления - чтобы сработала сепарация
+    If Pintake_atma = 0 Then p_PTintake = SetPT(50, Tbh_C)
     If fast And p_Param.tempMethod <> AmbientTemp Then
-       Calc_Pwf_Plin_atma = Calcfast_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve)
+       Calc_Pwf_Plin_atma = CalcFast_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve)
     Else
-       Calc_Pwf_Plin_atma = Calcslow_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve)
+       Calc_Pwf_Plin_atma = CalcSlow_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve)
     End If
  
  End Function
  
-  Public Function Calcslow_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional saveCurve As CALC_RESULTS = noCurves)
+Private Function CalcSlow_Pwf_Plin_atma(ByVal Plin_atma As Double, ByVal Tbh_C As Double, Optional saveCurve As CALC_RESULTS = noCurves)
 ' @brief Calc_Pwf_Plin_atma расчет забойного давления по известному давлению в линии и конструкции скважины дихотомией
 ' @param Plin_atma - давление в линии
 ' @param Hd - динамический уровень
@@ -876,7 +802,7 @@ On Error GoTo err1:
     If Abs(Me.Pline_atma - Plin_atma) > const_well_P_tolerance Then
        addLogMsg "Calc_Pwf_Plin_atma: ошибка расчета забойного давления больше " & const_well_P_tolerance & ". Равна = " & Abs(Me.Pline_atma - Plin_atma)
     End If
-    Calcslow_Pwf_Plin_atma = p_PTwf.P_atma
+    CalcSlow_Pwf_Plin_atma = p_PTwf.P_atma
    ' переводим в состояние "целостность нарушена"
     p_Calculated = False
     Exit Function
@@ -940,13 +866,16 @@ On Error GoTo err1:
 '    End If
     If IsESP() Then                                                 ' Если есть насос
         ' 3. Расчет изменения температуры в насосе
+        ' сначала считаем сепарацию и модификацию флюидов
+        Call ESP.calc_separation(p_PTintake.P_atma, p_PTintake.T_C)
         If calcESPtemp Then
-            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, -1, True) ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
-            p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdischarge_C)
+            ' расчитываются параметры насоса и температура
+            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, -1, True)
         Else
-            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, p_PTintake.T_C, True)  ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
-            p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdischarge_C)
+            ' расчитываются параметры насоса при заданном распределении температур
+            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, p_PTintake.T_C, True)
         End If
+        p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdischarge_C)
         Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.FluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
     Else                                                            ' Если насоса нет, то совпадают
         p_PTdis = p_PTintake
@@ -1061,87 +990,109 @@ Private Function is_Hdyn_Larger_Hsp() As Boolean
     is_Hdyn_Larger_Hsp = IsESP() And p_Hd_m > p_Hsp_m
 End Function
         
-Public Function Calc_PinGasFrac_simple_atma(GasFrac_d As Double, T_C As Double, Optional Ksepar As Double = 0)
-'  расчет давления на приеме обеспечивающего заданную долю газа при определенное температуре
-Dim PinMin As Double, PInMax As Double  ' оценки снизу и сверху для доли газа
-Dim eps As Double
-Dim Pcalc As Double
-Dim i As Integer
-Dim gasfr As Double
-i = 0
-eps = 0.1 '  погрешность расчета
-If Ksepar < 0 Then Ksepar = 0
-If Ksepar > 1 Then Ksepar = 1
-PinMin = 1
-If GasFraction_d(PinMin, T_C, Fluid, Ksep:=Ksepar) < GasFrac_d Then
-    ' либо что то неправильно рассчиталось либо исходный gasfrac больше единицы задан, должно в расчете быть 1
-    Calc_PinGasFrac_simple_atma = 0
-  '  Debug.Assert False
-    Exit Function
-End If
-PInMax = Fluid.Calc_Pb_atma(Fluid.rsb_m3m3, T_C)
-If GasFraction_d(PInMax, T_C, Fluid, Ksep:=Ksepar) > GasFrac_d Then
-    ' либо что то неправильно рассчиталось либо исходный gasfrac менее нуля задан - должно в расчете быть ноль
-    Calc_PinGasFrac_simple_atma = PInMax
-  ' Debug.Assert False
-    Exit Function
-End If
-Do
-    i = i + 1   ' предохранитель от сваливания в бесконечный цикл
-    Pcalc = (PinMin + PInMax) / 2
-    gasfr = GasFraction_d(Pcalc, T_C, Fluid, Ksep:=Ksepar)
-    If GasFrac_d < gasfr Then
-        PinMin = Pcalc
-    Else
-        PInMax = Pcalc
-    End If
-    
-Loop Until (Abs(PinMin - PInMax) < eps) Or (i > 100)
-Calc_PinGasFrac_simple_atma = Pcalc
-End Function
-Public Function Calc_PwfGasFrac_atma(GasFrac_d As Double, Tbh_C As Double)
-'  расчет давления на приеме обеспечивающего заданную долю газа при определенное температуре
-Dim PwfMin As Double, PwfMax As Double  ' оценки снизу и сверху для доли газа
-Dim PinMin As Double, PInMax As Double
-Dim eps As Double
-Dim Pcalc As Double
-Dim i As Integer
-Dim gasfr As Double
-i = 0
-eps = 0.1 '  погрешность расчета
-PinMin = 1
-PwfMin = Calc_Pwf_PIn_atma(PinMin, Tbh_C)
-Call Calc_Plin_Pwf_atma(SetPT(PwfMin, Tbh_C), CalcCasing:=False)
-If GasFraction_PumpIntake_d < GasFrac_d Then
-    ' либо что то неправильно рассчиталось либо исходный gasfrac больше единицы задан, должно в расчете быть 1
-    Calc_PwfGasFrac_atma = 0
-  '  Debug.Assert False
-    Exit Function
-End If
-PInMax = Fluid.Calc_Pb_atma(Fluid.rsb_m3m3, Tbh_C)
-PwfMax = Calc_Pwf_PIn_atma(PInMax, Tbh_C)
-Call Calc_Plin_Pwf_atma(SetPT(PwfMax, Tbh_C), CalcCasing:=False)
-If GasFraction_PumpIntake_d > GasFrac_d Then
-    ' либо что то неправильно рассчиталось либо исходный gasfrac менее нуля задан - должно в расчете быть ноль
-    Calc_PwfGasFrac_atma = PInMax
-  ' Debug.Assert False
-    Exit Function
-End If
-Do
-    i = i + 1   ' предохранитель от сваливания в бесконечный цикл
-    Pcalc = (PinMin + PInMax) / 2
-    
-    Call Calc_Plin_Pwf_atma(SetPT(Pcalc, Tbh_C), CalcCasing:=False)
-    gasfr = GasFraction_PumpIntake_d
-    If GasFrac_d < gasfr Then
-        PinMin = Pcalc
-    Else
-        PInMax = Pcalc
-    End If
-    
-Loop Until (Abs(PinMin - PInMax) < eps) Or (i > 100)
-Calc_PwfGasFrac_atma = Pcalc
-End Function
+'Public Function Calc_PinGasFrac_simple_atma(GasFrac_d As Double, T_C As Double, Optional Ksepar As Double = 0)
+''  расчет давления на приеме обеспечивающего заданную долю газа при определенное температуре
+'
+'Dim PinMin As Double, PInMax As Double  ' оценки снизу и сверху для доли газа
+'Dim eps As Double
+'Dim Pcalc As Double
+'Dim i As Integer
+'Dim gasfr As Double
+'
+'i = 0
+'eps = 0.1 '  погрешность расчета
+'
+'If Ksepar < 0 Then Ksepar = 0
+'If Ksepar > 1 Then Ksepar = 1
+'
+'
+'PinMin = 1
+'If GasFraction_d(PinMin, T_C, Fluid, Ksep:=Ksepar) < GasFrac_d Then
+'    ' либо что то неправильно рассчиталось либо исходный gasfrac больше единицы задан, должно в расчете быть 1
+'    Calc_PinGasFrac_simple_atma = 0
+'  '  Debug.Assert False
+'    Exit Function
+'End If
+'
+'PInMax = Fluid.Calc_Pb_atma(Fluid.rsb_m3m3, T_C)
+'If GasFraction_d(PInMax, T_C, Fluid, Ksep:=Ksepar) > GasFrac_d Then
+'    ' либо что то неправильно рассчиталось либо исходный gasfrac менее нуля задан - должно в расчете быть ноль
+'    Calc_PinGasFrac_simple_atma = PInMax
+'  ' Debug.Assert False
+'    Exit Function
+'End If
+'
+'
+'Do
+'    i = i + 1   ' предохранитель от сваливания в бесконечный цикл
+'    Pcalc = (PinMin + PInMax) / 2
+'    gasfr = GasFraction_d(Pcalc, T_C, Fluid, Ksep:=Ksepar)
+'    If GasFrac_d < gasfr Then
+'        PinMin = Pcalc
+'    Else
+'        PInMax = Pcalc
+'    End If
+'
+'Loop Until (Abs(PinMin - PInMax) < eps) Or (i > 100)
+'Calc_PinGasFrac_simple_atma = Pcalc
+'
+'End Function
+'Public Function Calc_PwfGasFrac_atma(GasFrac_d As Double, Tbh_C As Double)
+''  расчет давления на приеме обеспечивающего заданную долю газа при определенное температуре
+'
+'Dim PwfMin As Double, PwfMax As Double  ' оценки снизу и сверху для доли газа
+'Dim PinMin As Double, PInMax As Double
+'Dim eps As Double
+'Dim Pcalc As Double
+'Dim i As Integer
+'Dim gasfr As Double
+'
+'i = 0
+'eps = 0.1 '  погрешность расчета
+'
+'
+'
+'PinMin = 1
+'PwfMin = Calc_Pwf_PIn_atma(PinMin, Tbh_C)
+'
+'Call Calc_Plin_Pwf_atma(SetPT(PwfMin, Tbh_C), CalcCasing:=False)
+'
+'If GasFraction_PumpIntake_d < GasFrac_d Then
+'    ' либо что то неправильно рассчиталось либо исходный gasfrac больше единицы задан, должно в расчете быть 1
+'    Calc_PwfGasFrac_atma = 0
+'  '  Debug.Assert False
+'    Exit Function
+'End If
+'
+'PInMax = Fluid.Calc_Pb_atma(Fluid.rsb_m3m3, Tbh_C)
+'PwfMax = Calc_Pwf_PIn_atma(PInMax, Tbh_C)
+'
+'Call Calc_Plin_Pwf_atma(SetPT(PwfMax, Tbh_C), CalcCasing:=False)
+'
+'If GasFraction_PumpIntake_d > GasFrac_d Then
+'    ' либо что то неправильно рассчиталось либо исходный gasfrac менее нуля задан - должно в расчете быть ноль
+'    Calc_PwfGasFrac_atma = PInMax
+'  ' Debug.Assert False
+'    Exit Function
+'End If
+'
+'
+'Do
+'    i = i + 1   ' предохранитель от сваливания в бесконечный цикл
+'    Pcalc = (PinMin + PInMax) / 2
+'
+'    Call Calc_Plin_Pwf_atma(SetPT(Pcalc, Tbh_C), CalcCasing:=False)
+'    gasfr = GasFraction_PumpIntake_d
+'    If GasFrac_d < gasfr Then
+'        PinMin = Pcalc
+'    Else
+'        PInMax = Pcalc
+'    End If
+'
+'Loop Until (Abs(PinMin - PInMax) < eps) Or (i > 100)
+'Calc_PwfGasFrac_atma = Pcalc
+'
+'End Function
 Public Function Build_PwhPwfcurve(Tbh_C As Double, Optional PlinMax As Double = -1, Optional Pwf1_atma As Double = -1, Optional Pstep As Integer = DEFAULT_PAN_STEP, Optional calcFast As Boolean = False) As TInterpolation
 ' @brief Build_PwhPwfcurve построение кривой зависимости буферного и линейного давлений на скважине от забойного давления
 ' @param Tbh_C - температура на забое скважины

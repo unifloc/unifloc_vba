@@ -7,15 +7,24 @@
 '
 '
 ' класс описывает систему ЭЦН в простом варианте - один ЭЦН+ПЭД+кабель
-' класс отвечатает и за расчет сепарации
+' класс отвечатает и за расчет сепарации и свойств флюидов
 Option Explicit
 Public ESPpump As CESPpump  ' сам насос
 ' описание газосепаратора
 Public isGasSep As Boolean
-Public KSepGasSep_fr As Double
+Public KSepGasSep_fr As Double           ' коэффициент сепарации газосепаратора
 Public dPower_GasSep_W As Double
+' параметры сепарации газа на приеме насоса
+' при расчете снизу вверх могут быть рассчитаны по корреляциям
+' могут быть использованы значения заданные вручную
+' при расчете сверху вниз значения параметров сепарации должны быть заданы вручную
+' должны быть заданы и значения давления и температуры сепарации
+Public isManualSeparationCalc As Boolean   ' флаг для ручного задания параметров сепарации
 Public KsepNat_fr As Double
-Public KsepTotal_fr As Double
+' property KsepTotal_fr As Double  defined below
+' для расчета сепарации надо либо задать, либо спасти значения при которых проводился расчет сепарации
+Public Psep_atma As Double
+Public Tsep_C As Double
 ' простой набор параметров для описания УЭЦН
 Public U_V As Double
 Public Power_nom_W As Double
@@ -70,6 +79,11 @@ Public Property Set Fluid(val As CPVT)
         Set ESPpump.Fluid = val
     'End If
 End Property
+Public Property Get KsepTotal_fr() As Double
+' общая сепарация УЭЦН параметр только для чтения
+' для задания вручную надо задать естественную сепарацию и сепарацию газосепаратора
+    KsepTotal_fr = KsepNat_fr + (1 - KsepNat_fr) * KSepGasSep_fr
+End Property
 Private Sub Class_Initialize()
     ' парметры установки по умолчанию
     dCas_mm = 150
@@ -96,7 +110,11 @@ Private Sub Class_Initialize()
     dPower_GasSep_W = 500
     
     isGasSep = True
+    isManualSeparationCalc = True
+    KsepNat_fr = 0.5
     KSepGasSep_fr = 0.5
+    Psep_atma = 100
+    Tsep_C = 60
 End Sub
 Public Sub SetCable(cable_type As Integer)
     Select Case cable_type
@@ -110,35 +128,51 @@ Public Sub SetCable(cable_type As Integer)
     ' потом когда нибудь можно будет и расчет параметров кабеля сделать в термовставку тоже
     cable_type_num = cable_type
 End Sub
-Public Function calc_separation(P_atma As Double, Tin_C As Double)
-' расчет сепарации и флюидов
-    Call p_Fluid.Calc_PVT(P_atma, Tin_C)
-    With p_Fluid
-        KsepNat_fr = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, _
-                                    .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, _
-                                    .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
-    End With
+Public Function calc_separation(P_atma As Double, T_C As Double)
+' расчет сепарации и соответствующих параметров флюидов
+' должен вызываться незавимо от расчета УЭЦН, так как при расчете сверху вниз
+'   необходимо заранее рассчитать параметры флюида выше насоса, чтобы правильно посчитать НКТ
+' P_atma  - давление при которой идет сепарация
+' T_C - температура при которой идет сепарация
+    Psep_atma = P_atma
+    Tsep_C = T_C
+    If Not isManualSeparationCalc Then
+        Call p_Fluid.Calc_PVT(Psep_atma, Tsep_C)
+        With p_Fluid
+            KsepNat_fr = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, _
+                                        .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, _
+                                        .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
+        End With
+    End If
+    ' потом, когда будет расчет газосепаратора - то надо будет разделить алгоритмы
+    ' ручного задания и задания с использованием газосепаратора
     If isGasSep Then
         KSepGasSep_fr = KSepGasSep_fr
     Else
         KSepGasSep_fr = 0
     End If
-    KsepTotal_fr = KsepNat_fr + (1 - KsepNat_fr) * KSepGasSep_fr
+    
     Set FluidTub = p_Fluid.Clone()
-    Call FluidTub.ModAfterSeparation(P_atma, Tin_C, KsepTotal_fr, GasGoesIntoSolution)
+    Call FluidTub.ModAfterSeparation(Psep_atma, Tsep_C, KsepTotal_fr, GasGoesIntoSolution)
     Set FluidCas = p_Fluid.Clone() ' тут надо будет доделать чтобы считать затруб с газом
     Set FluidGasSep = p_Fluid.Clone()
-    Call FluidGasSep.ModAfterSeparation(P_atma, Tin_C, KSepGasSep_fr, GasGoesIntoSolution)
+    Call FluidGasSep.ModAfterSeparation(Psep_atma, Tsep_C, KSepGasSep_fr, GasGoesIntoSolution)
     
     Set ESPpump.Fluid = FluidTub
     
 End Function
 Public Function calc_ESPsys(P_atma As Double, Tin_C As Double, _
-                            Tdis_C As Double, CalcFromIntake As Boolean) As PTtype
-' функция расчета ЭЦН
+                            Optional ByVal Tdis_C As Double = -1, _
+                            Optional ByVal CalcFromIntake As Boolean = True) As PTtype
+' функция расчета параметров работы УЭЦН
 '
-    '0. оценим величину коэффициента сепарации
-    Call calc_separation(P_atma, Tin_C)
+' P_atma - давление начала расчета (давление на приеме если CalcFromIntake = True)
+' Tin_C - температура на приеме насоса
+' Tdis_C - температура на выкиде насоса. если =-1 то рассчитывается при CalcFromIntake = True
+' CalcFromIntake - флаг показывает ведется ли расчет от давления на приеме или от выкида
+'                  при расчете сверху вниз температура должна быть задана с двух сторон
+'                  и сепарация будет учитываться в соответствии с параметрами заданными вручную
+    
     '1. расчет распределения давления в ЭЦН
     Call ESPpump.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake)
     '2. Оценим мощность на валу
@@ -167,3 +201,70 @@ Public Function calc_ESPsys(P_atma As Double, Tin_C As Double, _
 '   Well_Power_w = Array(power_well_w, degr)
 '
 End Function
+ Public Property Get PTsep() As PTtype
+    PTsep = SetPT(Psep_atma, Tsep_C)
+ End Property
+ Public Sub SetKseptotal(val As Double, PTsep As PTtype)
+ ' устанавливает значение сепарации для уэцн вручную
+     If val >= 0 And val <= 1 And PTsep.P_atma > 0 And PTsep.T_C > 0 Then
+         KSepGasSep_fr = 0
+         isGasSep = False
+         Psep_atma = PTsep.P_atma
+         Tsep_C = PTsep.T_C
+         KsepNat_fr = val
+         isManualSeparationCalc = True
+     Else
+         addLogMsg_debug "CESPsystemSimple.Kseptotal_d установить не удалось, значение " & str(val) & _
+                                                                  " P = " & str(PTsep.P_atma) & _
+                                                                  " T = " & str(PTsep.T_C) & _
+                                                                  " вне диапазона"
+     End If
+ End Sub
+ ' дебит газожидкостной смеси перед насосом в рабочих условиях
+ Public Property Get QmixBeforePump_m3day() As Double
+   Fluid.Calc_PVT ESP.Pintake_atma, ESP.Tintake_c
+   QmixBeforePump_m3day = Fluid.Qmix_m3day
+ End Property
+ 
+ ' дебит газожидкостной смеси внути газосепаратора (после естественной сепарации)
+ Public Property Get QmixInGasSep_m3day() As Double
+   ' надо рассчитать свойства флюида после частичной сепарации
+   FluidGasSep.Calc_PVT ESP.Pintake_atma, ESP.Tintake_c
+   QmixInGasSep_m3day = FluidGasSep.Qmix_m3day
+ End Property
+ ' дебит газожидкостной смеси в насосе на первых ступенях (после естественной сепарации и газосепаратора)
+ Public Property Get QmixPumpIntake_m3day() As Double
+   FluidTub.Calc_PVT ESP.Pintake_atma, ESP.Tintake_c
+   QmixPumpIntake_m3day = FluidTub.Qmix_m3day
+ End Property
+ 
+ ' дебит газожидкостной смеси на выкиде насоса (на последних ступенях)
+ Public Property Get QmixPumpOutlet_m3day() As Double
+   FluidTub.Calc_PVT ESP.Pdis_atma, ESP.Tdischarge_C
+   QmixPumpOutlet_m3day = FluidTub.Qmix_m3day
+ End Property
+ 
+' потом надо убрать наверное похоже лишняя функция с ошибкой в скважине
+'Public Function GasFraction_d(P_atma As Double, T_C As Double, fl As CPVT, Ksep As Double)
+'    Dim Qo As Double, Qw As Double, Qg As Double
+'    GasFraction_d = fl.GasFraction_d(Ksep)
+' End Function
+ 
+ Public Property Get GasFraction_BeforePump_d() As Double
+    Fluid.Calc_PVT ESP.Pintake_atma, ESP.Tintake_c
+    GasFraction_BeforePump_d = Fluid.GasFraction_d(0)
+ End Property
+ 
+ Public Property Get GasFraction_InGasSep_d() As Double
+    FluidGasSep.Calc_PVT ESP.Pintake_atma, ESP.Tintake_c
+    GasFraction_InGasSep_d = FluidGasSep.GasFraction_d(0)
+ End Property
+ Public Property Get GasFraction_PumpIntake_d() As Double
+    FluidTub.Calc_PVT ESP.Pintake_atma, ESP.Tintake_c
+    GasFraction_PumpIntake_d = FluidTub.GasFraction_d(0)
+ End Property
+ 
+ Public Property Get GasFraction_PumpOutlet_d() As Double
+    FluidTub.Calc_PVT ESP.Pdis_atma, ESP.Tdischarge_C
+    GasFraction_PumpOutlet_d = FluidTub.GasFraction_d(0)
+ End Property
