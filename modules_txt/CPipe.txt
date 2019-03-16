@@ -651,7 +651,10 @@ rough_m = RoughnessZ(L_m)       ' определяем шероховатость на заданной глубине
 Hv_m = HvertZ(L_m)              ' определяем вертикальную глубину для заданной измеренной глубины
 With Fluid
   'проверим на корректность исходных данных
-  If P_atma < const_minPpipe_atma Then Exit Function
+  If P_atma < const_minPpipe_atma Then
+    dp_dl = 0
+    GoTo endlab:
+  End If
   
   ' найдем все PVT в заданных условиях
   Call .Calc_PVT(P_atma, T_C)
@@ -756,7 +759,7 @@ With Fluid
  ' тут надо записать в результаты все расчетные параметры
  Dim res As PIPE_FLOW_PARAMS
  
- 
+endlab:
  res.dp_dl = dp_dl
  res.dt_dl = dt_dl
  
@@ -953,6 +956,13 @@ On Error GoTo err1:
     i = 0
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
+        If State.Y(0) < const_minPpipe_atma Then
+        ' при расчете давления получили отрицательные значения
+        ' может происходить про расчете в затрубе
+        ' тогда имитируем правильное завершение работы цикла
+            State.RepTerminationType = 2
+            Rtn = False
+        End If
         pfp = CalcGrad(State.X, State.Y(0), Tinit_C(State.X), calc_dtdl:=False)
         State.DY(0) = pfp.dp_dl
         i = i + 1
