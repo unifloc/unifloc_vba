@@ -70,6 +70,7 @@ Private p_FastCalc As Boolean               ' флаг проведения быстрого расчета
  ' поправочные коэффициенты для расчета распределения давления
 Private p_betta_grav As Double
 Private p_betta_fric As Double
+Private p_KsepTotal_fr As Double
 Public Event ReportProgress(msg As String)
 Private Sub Class_Initialize()
     With p_Param
@@ -92,6 +93,17 @@ End Sub
         Kseptotal_d = 0
     End If
  End Property
+ 
+ Public Sub setKseptotal_d(calc_method As SEPAR_CALC_METHOD, KsepNat_fr As Double, _
+                           Optional KsepGS_fr As Double = 0, _
+                           Optional Psep_atma As Double = -1, _
+                           Optional Tsep_C As Double = -1)
+    ' установка значения коэффициента сепарации извне
+    ' если значение равно = -1 то расчет по корреляции
+    ' если задано какое то значение, то оно будет использовано в расчете
+    ' если заданы значения давления и температуры, то они будут использоваться в расчете
+     Call ESP.SetKseptotal(calc_method, KsepNat_fr, KsepGS_fr, Psep_atma, Tsep_C)
+ End Sub
  Public Property Get betta_grav() As Double
     betta_grav = p_betta_grav
  End Property
@@ -723,6 +735,8 @@ err1:
     
     p_PTdis = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, saveCurve)
     If IsESP() Then                                                 ' Если есть насос
+            ' сначала считаем сепарацию и модификацию флюидов
+        Call ESP.calc_separation(p_PTintake.P_atma, p_PTintake.T_C)
         Call ESP.calc_ESPsys(p_PTdis.P_atma, p_PTdis.T_C, p_PTdis.T_C, False)                                    ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
     Else                                                            ' Если насоса нет, то совпадают
         p_PTintake = p_PTdis
@@ -878,13 +892,17 @@ End Function
 Public Function Calc_Tintake_C(ByVal TbeforePump_C As Double)
     Calc_Tintake_C = TbeforePump_C ' ESP.Calc_ESP_Tintake_C(TbeforePump_C, Qliq_scm3day, p_Pipe_HspHvd.DiamTop())
 End Function
-Public Function Calc_Plin_Pwf_atma(PTwf As PTtype, Optional CalcCasing As Boolean = True, Optional CalcChoke As Boolean = True, _
+Public Function Calc_Plin_Pwf_atma(PTwf As PTtype, _
+                                    Optional CalcCasing As Boolean = True, _
+                                    Optional CalcChoke As Boolean = True, _
                                     Optional calcESPtemp As Boolean = False, _
                                     Optional saveCurve As CALC_RESULTS = noCurves) As Double
 ' @brief расчет давления на устье через забойное давление (снизу -> вверх)
-' @param Pwf - исходное забойное давление
-' @param Tbh_c - температура на забое
+' @param Pwf - исходное забойное давление и температура
 ' @CalcCasing - флаг показывает надо ли считать ветку распределения давления по забтрубу - динамический уровень и затрубное давление
+' @CalcChoke - показывает надо ли считать штуцер
+' @calcESPtemp - показывает надо ли считать температуру в УЭЦН
+' @saveCurve - показывает насколько детально надо сохранять результаты расчета
 Dim Tintake_esp_C As Double
 Dim p_PTcas_temp As PTtype
 Dim Tan_C As Double
@@ -921,7 +939,7 @@ On Error GoTo err1:
     Else                                                            ' Если насоса нет, то совпадают
         p_PTdis = p_PTintake
     End If
-    If CalcCasing Then
+    If CalcCasing And IsESP() Then
         ' 10. Расчет расхода свободного газа двигающегося через затрубное пространство после сепарации
         ' для затруба считаем снизу вверх
         p_Pipe_WHeadHsp_Casing.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
@@ -949,11 +967,10 @@ On Error GoTo err1:
         End If
         Set Curve("Pcas_Hd") = p_Pipe_WHeadHsp_Casing.PCurve.CutByValue(p_Hd_m)
         
-'
 '        ' сохраним параметры для расчета распределения давления
-'        p_AmbientForm.Hdyn_m = p_Hd_m
-'        p_AmbientForm.Hpump_m = p_Hsp_m
-'        p_Pipe_WHeadHsp_Tubing.AddHmes_insert_m (p_Hd_m)
+        p_AmbientForm.Hdyn_m = p_Hd_m
+        p_AmbientForm.Hpump_m = p_Hsp_m
+        p_Pipe_WHeadHsp_Tubing.AddHmes_insert_m (p_Hd_m)
         
     End If
     ' 7. Расчет распределения давления в НКТ и расчет буферного давления c учетом движения в НКТ нефти после сепарации PVTtub

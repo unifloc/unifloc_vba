@@ -19,7 +19,10 @@ Public dPower_GasSep_W As Double
 ' могут быть использованы значения заданные вручную
 ' при расчете сверху вниз значения параметров сепарации должны быть заданы вручную
 ' должны быть заданы и значения давления и температуры сепарации
-Public isManualSeparationCalc As Boolean   ' флаг для ручного задания параметров сепарации
+Public isManualSeparationCalc As SEPAR_CALC_METHOD   ' флаг для ручного задания параметров сепарации
+                                           ' 0 - нет - расчет автоматический
+                                           ' 1 - Ксеп ручной, давления автомат
+                                           ' 2 - Ксеп ручной, давления и температура ручные
 Public KsepNat_fr As Double
 ' property KsepTotal_fr As Double  defined below
 ' для расчета сепарации надо либо задать, либо спасти значения при которых проводился расчет сепарации
@@ -138,16 +141,38 @@ Public Function calc_separation(P_atma As Double, T_C As Double)
 '   необходимо заранее рассчитать параметры флюида выше насоса, чтобы правильно посчитать НКТ
 ' P_atma  - давление при которой идет сепарация
 ' T_C - температура при которой идет сепарация
-    Psep_atma = P_atma
-    Tsep_C = T_C
-    Call p_Fluid.Calc_PVT(Psep_atma, Tsep_C)
-    If Not isManualSeparationCalc Then
-        With p_Fluid
-            KsepNat_fr = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, _
-                                        .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, _
-                                        .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
-        End With
-    End If
+    Select Case isManualSeparationCalc
+        Case byCorrealation
+            ' все по сепарации по корреляциям
+            Psep_atma = P_atma
+            Tsep_C = T_C
+            Call p_Fluid.Calc_PVT(Psep_atma, Tsep_C)
+            With p_Fluid
+                KsepNat_fr = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, _
+                                            .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, _
+                                            .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
+                                    
+            End With
+        Case pressureManual
+            ' берем значение ручное, давления как есть
+             Call p_Fluid.Calc_PVT(Psep_atma, Tsep_C)
+             With p_Fluid
+                KsepNat_fr = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, _
+                                            .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, _
+                                            .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
+                                    
+             End With
+        Case valueManual
+            ' берем и коэффициенты и давления как было задано при установке значений
+            Psep_atma = P_atma
+            Tsep_C = T_C
+            Call p_Fluid.Calc_PVT(Psep_atma, Tsep_C)
+        Case fullyManual
+            ' берем и коэффициенты и давления как было задано при установке значений
+            Call p_Fluid.Calc_PVT(Psep_atma, Tsep_C)
+        
+    End Select
+    
     ' потом, когда будет расчет газосепаратора - то надо будет разделить алгоритмы
     ' ручного задания и задания с использованием газосепаратора
     If isGasSep Then
@@ -213,21 +238,48 @@ End Function
  Public Property Get PTsep() As PTtype
     PTsep = SetPT(Psep_atma, Tsep_C)
  End Property
- Public Sub SetKseptotal(val As Double, PTsep As PTtype)
+ Public Sub SetKseptotal(calc_method As SEPAR_CALC_METHOD, KsepNat_fr As Double, _
+                         Optional KsepGS_fr As Double = 0, _
+                         Optional Psep_atma As Double = -1, _
+                         Optional Tsep_C As Double = -1)
  ' устанавливает значение сепарации для уэцн вручную
-     If val >= 0 And val <= 1 And PTsep.P_atma > 0 And PTsep.T_C > 0 Then
-         KSepGasSep_fr = 0
-         isGasSep = False
-         Psep_atma = PTsep.P_atma
-         Tsep_C = PTsep.T_C
-         KsepNat_fr = val
-         isManualSeparationCalc = True
+ ' сначала установим значение газосепаратора - оно всегда одинаково для всех вариантов
+    
+    If KsepGS_fr > 0 And KsepGS_fr <= 1 Then
+        isGasSep = True
+    Else
+       isGasSep = False
+    End If
+    KSepGasSep_fr = KsepGS_fr
+    
+    Me.Psep_atma = Psep_atma
+    Me.Tsep_C = Tsep_C
+    Me.KsepNat_fr = KsepNat_fr
+    
+    ' установим метод расчета
+    ' но так чтобы он не противоречил введенным данным
+     If KsepNat_fr >= 0 And KsepNat_fr <= 1 And PTsep.P_atma > 0 And PTsep.T_C > 0 Then
+        ' если ввели хорошие параметры то можно применить любой метод расчета
+         isManualSeparationCalc = calc_method
+     ElseIf KsepNat_fr >= 0 And KsepNat_fr <= 1 And PTsep.P_atma <= 0 Then
+        ' плохое значение давления не позволяет полностью ручной метод
+        If calc_method <> fullyManual Then
+            isManualSeparationCalc = calc_method
+        Else
+            isManualSeparationCalc = valueManual
+        End If
+     ElseIf (KsepNat_fr < 0 Or KsepNat_fr > 1) And (PTsep.P_atma > 0 And PTsep.T_C > 0) Then
+        ' плохая сепарация, но хорошие давления
+         If calc_method = byCorrealation Or calc_method = pressureManual Then
+            isManualSeparationCalc = calc_method
+         Else
+            isManualSeparationCalc = pressureManual
+        End If
      Else
-         addLogMsg_debug "CESPsystemSimple.Kseptotal_d установить не удалось, значение " & str(val) & _
-                                                                  " P = " & str(PTsep.P_atma) & _
-                                                                  " T = " & str(PTsep.T_C) & _
-                                                                  " вне диапазона"
+         ' плохая сепарация не позволяет ручной расчет
+         isManualSeparationCalc = byCorrealation
      End If
+     
  End Sub
  ' дебит газожидкостной смеси перед насосом в рабочих условиях
  Public Property Get QmixBeforePump_m3day() As Double
