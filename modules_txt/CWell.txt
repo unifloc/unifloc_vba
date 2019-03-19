@@ -365,21 +365,21 @@ End Property
     Hdyn_m = p_Hd_m
  End Property
  
- Public Property Get Pintake_atma() As Double
+ Public Property Get Pint_atma() As Double
  ' давление на приеме
-    Pintake_atma = p_PTintake.P_atma
+    Pint_atma = p_PTintake.P_atma
  End Property
  
- Public Property Get Tintake_C() As Double
-    Tintake_C = p_PTintake.T_C
+ Public Property Get Tint_C() As Double
+    Tint_C = p_PTintake.T_C
  End Property
  
- Public Property Get Pdischarge_atma() As Double
+ Public Property Get Pdis_atma() As Double
   ' давление на приеме
-    Pdischarge_atma = p_PTdis.P_atma
+    Pdis_atma = p_PTdis.P_atma
  End Property
- Public Property Get Tdischarge_C() As Double
-    Tdischarge_C = p_PTdis.T_C
+ Public Property Get Tdis_C() As Double
+    Tdis_C = p_PTdis.T_C
  End Property
  
  Public Property Get Pwf_atma() As Double
@@ -437,6 +437,10 @@ End Property
     
     Call tr.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Hpump_m)
     Set Trajectory = tr
+    
+    p_PTwf.T_C = Tbh_C
+    p_PTbuf.T_C = Twh_C
+    'Me.Tsurf_C = Twh_C
     
     geoGrad.AddPoint 0, Twh_C
     geoGrad.AddPoint Hperf_m, Tbh_C
@@ -571,15 +575,15 @@ err1:
  Public Sub InitTempLinear(ByVal Tbhinit_C As Double, ByVal Twhinit_C As Double)
  ' процедура для инициализации температуры в скважине, для линейнго расчета
     Dim TempGrad As Double
-    Dim Tintake_C As Double
+    Dim Tint_C As Double
     TempGrad = (Tbhinit_C - Twhinit_C) / p_Hvd_m
     p_PTwf.T_C = Tbhinit_C
     p_PTbuf.T_C = Twhinit_C
-    Tintake_C = Tbhinit_C - TempGrad * p_Pipe_HspHvd.LengthMes_m
+    Tint_C = Tbhinit_C - TempGrad * p_Pipe_HspHvd.LengthMes_m
     
-    p_Pipe_HspHvd.InitTlinear Tintake_C, Tbhinit_C
-    p_Pipe_WHeadHsp_Tubing.InitTlinear Twhinit_C, Tintake_C
-    p_Pipe_WHeadHsp_Casing.InitTlinear Twhinit_C, Tintake_C
+    p_Pipe_HspHvd.InitTlinear Tint_C, Tbhinit_C
+    p_Pipe_WHeadHsp_Tubing.InitTlinear Twhinit_C, Tint_C
+    p_Pipe_WHeadHsp_Casing.InitTlinear Twhinit_C, Tint_C
     
 '    ' теперь раскидаем температуру по трубам
 '    p_Pipe_HspHvd.dTdLinit = TempGradVert
@@ -670,7 +674,7 @@ err1:
  End Function
  
  Public Function Calc_Well(ByVal Plin_atma As Double, ByVal Pbuf_atma As Double, ByVal Pwf_atma As Double, ByVal Tbh_C As Double, _
-                         Optional Pintake_atma As Double = -1, Optional Hdyn_m As Double = -1, Optional Pan_atma As Double = -1, Optional CalcChoke As Boolean = True) As Boolean
+                         Optional Pint_atma As Double = -1, Optional Hdyn_m As Double = -1, Optional Pan_atma As Double = -1, Optional CalcChoke As Boolean = True) As Boolean
 'функция анализа работы скважины и определения ключевых параметров по скважине
 'надо еще сюда добавить расчет забойного давления по динамическому уровню или давлению на приеме и получится замкнутый анализ скважины
 'надо еще сюда добавить построение всех графиков по скважине
@@ -683,10 +687,10 @@ err1:
     Dim foundDegr As Boolean
     Calc_Well = True    ' по умолчанию ждем что все будет хорошо
     If Pwf_atma <= 0 Then   ' если забойное давление в явном виде не задано - стараемся его определить
-        If Pintake_atma > 0 Then  'если есть давление на приеме используем его
-            Pwf_atma = Calc_Pwf_PIn_atma(Pintake_atma, Tbh_C)
+        If Pint_atma > 0 Then  'если есть давление на приеме используем его
+            Call Calc_Pwf_PIn_atma(Pint_atma, Tbh_C)
         Else
-            Pwf_atma = Calc_Pwf_PanHd_atma(Pan_atma, Hdyn_m, Tbh_C)
+            Call Calc_Pwf_PanHd_atma(Pan_atma, Hdyn_m, Tbh_C)
         End If
     End If
     ' определили забойное давление на скважине
@@ -718,7 +722,7 @@ err1:
     
     'Dim flSep As CPVT   ' флюид для которого будет проводиться расчет выше сепарации
     If IsESP Then
-        Call ESP.calc_separation(Pintake_atma, Tintake_C)
+        Call ESP.calc_separation(Pint_atma, Tint_C)
         Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.FluidTub
         If isChoke() Then Set Choke.Fluid = ESP.FluidTub
     End If
@@ -735,7 +739,8 @@ err1:
     
     p_PTdis = p_Pipe_WHeadHsp_Tubing.Calc_dPipe(p_PTbuf, saveCurve)
     If IsESP() Then                                                 ' Если есть насос
-        Call ESP.calc_ESPsys(p_PTdis.P_atma, p_PTdis.T_C, p_PTdis.T_C, False)                                    ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
+        Call ESP.calc_ESPsys(p_PTdis.P_atma, p_PTdis.T_C, p_PTdis.T_C, False) ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
+        p_PTintake = SetPT(ESP.ESPpump.Pint_atma, ESP.ESPpump.Tint_C)
     Else                                                            ' Если насоса нет, то совпадают
         p_PTintake = p_PTdis
     End If
@@ -789,7 +794,7 @@ End Function
  ' тут смотрим можно ли провести расчет быстро
  ' или надо вызывать медленный метод (итерациями снизу вверх)
     ' надо сделать приближение по расчету давления - чтобы сработала сепарация
-    If Pintake_atma = 0 Then p_PTintake = SetPT(50, Tbh_C)
+    If Pint_atma = 0 Then p_PTintake = SetPT(50, Tbh_C)
     If fast And p_Param.tempMethod <> AmbientTemp Then
        Calc_Pwf_Plin_atma = CalcFast_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve, CalcCasing)
     Else
@@ -862,33 +867,29 @@ err1:
     Err.Raise 1
  End Function
  
-Public Function Calc_Pwf_PanHd_atma(ByVal Pan_atma As Double, ByVal Hd_m As Double, ByVal Tbh_C As Double) As Double
+Public Function Calc_Pwf_PanHd_atma(ByVal Pan_atma As Double, ByVal Hd_m As Double, ByVal Tbh_C As Double) As PTtype
 ' @brief Calc_Pwf_PanHd_atma - расчет забойного давления через динамический уровень
 ' @param Pan - затрубное давление
 ' @param Hd - динамический уровень
 ' @param Tbh_C - температура на забое скважины
 ' @return Подсчитанное для заданного динамического уровня давление
 On Error GoTo err1:
-'    Set Curve(str_Hd_Depend_Pwf) = Build_HdPwfcurve(Pan_atma, Tbh_C)
-'
-'    ' 3. По построенной кривой находим значение забойного давления соответствующее заданному динамическому уровню
-'    p_Pwf_atma = Curve(str_Hd_Depend_Pwf).FindMinOneSolution(Hd_m)
-'
-'    ' 4. Для обеспечение целостности данных по скважине проводим расчет распределения давления по скважине для найденного забойного давления
-'    ' расчет давления на устье через забойное давление
-'    p_Plin_atma = Calc_Plin_Pwf_atma(SetPT(p_Pwf_atma, Tbh_C))
-'
-'    ' todo спросить Рената какие значения еще сохранить, динамический уровень будет корректным?
-'    p_Pan_atma = Pan_atma
-'    p_Hd_m = Hd_m
-'    Calc_Pwf_PanHd_atma = p_Pwf_atma
-'   ' переводим в состояние "целостность нарушена"
+    Set Curve(str_Hd_Depend_Pwf) = Build_HdPwfcurve(Pan_atma, Tbh_C)
+    ' 3. По построенной кривой находим значение забойного давления соответствующее заданному динамическому уровню
+    p_PTwf.P_atma = Curve(str_Hd_Depend_Pwf).FindMinOneSolution(Hd_m)
+    ' 4. Для обеспечение целостности данных по скважине проводим расчет распределения давления по скважине для найденного забойного давления
+    ' расчет давления на устье через забойное давление
+    Call Calc_Plin_Pwf_atma(p_PTwf)
+    Me.Pan_atma = Pan_atma
+   ' Me.Hdyn_m = Hd_m
+    Calc_Pwf_PanHd_atma = p_PTwf
+   ' переводим в состояние "целостность нарушена"
 '    p_Calculated = False
 err1:
     ' тут надо среагировать на ошибку
 End Function
-Public Function Calc_Tintake_C(ByVal TbeforePump_C As Double)
-    Calc_Tintake_C = TbeforePump_C ' ESP.Calc_ESP_Tintake_C(TbeforePump_C, Qliq_scm3day, p_Pipe_HspHvd.DiamTop())
+Public Function Calc_Tint_C(ByVal TbeforePump_C As Double)
+    Calc_Tint_C = TbeforePump_C ' ESP.Calc_ESP_Tint_C(TbeforePump_C, Qliq_scm3day, p_Pipe_HspHvd.DiamTop())
 End Function
 Public Function Calc_Plin_Pwf_atma(PTwf As PTtype, _
                                     Optional CalcCasing As Boolean = True, _
@@ -924,14 +925,14 @@ On Error GoTo err1:
         ' 3. Расчет изменения температуры в насосе
         ' сначала считаем сепарацию и модификацию флюидов
         Call ESP.calc_separation(p_PTintake.P_atma, p_PTintake.T_C)
-        If calcESPtemp Then
-            ' расчитываются параметры насоса и температура
-            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, -1, True)
-        Else
+'        If calcESPtemp Then
+'            ' расчитываются параметры насоса и температура
+'            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, -1, True)
+'        Else
             ' расчитываются параметры насоса при заданном распределении температур
             Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, p_PTintake.T_C, True)
-        End If
-        p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdischarge_C)
+'        End If
+        p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdis_C)
         Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.FluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
         Set p_Pipe_WHeadHsp_Casing.Fluid = ESP.FluidCas
     Else                                                            ' Если насоса нет, то совпадают
@@ -1020,21 +1021,21 @@ err1:
     RaiseEvent ReportProgress("CWell.Calc_Plin_Pwf_atma: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
 End Function
-Public Function Calc_Pwf_PIn_atma(ByVal Pintake_atma As Double, ByVal Tintake_C As Double) As Double
+Public Function Calc_Pwf_PIn_atma(ByVal Pint_atma As Double, ByVal Tint_C As Double) As Double
 ' @function Calc_Pwf_PIn Расчет забойного давления по известному давлению на приеме насоса
-' @param Pintake_atma Давление на приеме насоса
-' @param p_Tintake_C Температура на приеме скважины
+' @param Pint_atma Давление на приеме насоса
+' @param p_Tint_C Температура на приеме скважины
 ' @return Подсчитанное забойное давление
 '' 1.Начало расчета. Заданы давление на приеме Pin, температура на забое скважины Tbh
-'    p_Pintake_atma = Pintake_atma
-'    p_Tintake_C = Tintake_C
+'    p_Pint_atma = Pint_atma
+'    p_Tint_C = Tint_C
 '' 2.Pwf=Pwf(Pin) По заданному давлению на приеме рассчитываем забойное давление
 '    p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
 '    ' Расчитываем давление на приеме (Pwf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
-'  '  p_Pwf_atma = p_Pipe_HspHvd.Calc_Pipe_PIncl_atma(Pintake_atma, Tintake_C, p_Tbh_C)
+'  '  p_Pwf_atma = p_Pipe_HspHvd.Calc_Pipe_PIncl_atma(Pint_atma, Tint_C, p_Tbh_C)
 '' 3. По найденному давлению на забое скважины восстанавливаем распределение давления в стволе скважины
 '' Считаем что температура на забое и на приеме совпадают, расчитанное могло отличаться, поэтому перезаписываем
-'    p_Tbh_C = p_Tintake_C
+'    p_Tbh_C = p_Tint_C
 '    p_Plin_atma = Calc_Plin_Pwf_atma(p_Pwf_atma, p_Tbh_C)
 '    Calc_Pwf_PIn_atma = p_Pwf_atma
    ' переводим в состояние "целостность нарушена"
@@ -1291,6 +1292,11 @@ Public Function Build_HdPwfcurve(Pan_atma As Double, Tbh_C As Double, Optional P
     Dim Plin_temp As Double
     Dim P_step As Double
     Dim processing As Boolean
+    Dim HdAtIntake As Boolean, Panold As Double
+    Dim Pwfold As Double, Pwfold1 As Double
+    Dim Hdold As Double
+    Dim itr As Integer, itr2 As Integer, itr3 As Integer
+    Dim Hdpump As Double
     
     If Pan_atma <= 0 Then
         addLogMsg "CWell.Build_HdPwfcurve: попытка построить график динамического уровня от забойного давления при затрубном давлении =" & Pan_atma
@@ -1298,9 +1304,9 @@ Public Function Build_HdPwfcurve(Pan_atma As Double, Tbh_C As Double, Optional P
     End If
     
     ' 1. Начало расчета. Заданы затрубное давление Pan, динамический уровень Hdyn, температура на забое скважины Tbh
-    Pan_atma = Pan_atma
+  '  Pan_atma = Pan_atma
   '  p_Tbh_C = Tbh_C
-    P_step = DEFAULT_PAN_STEP / 3
+    P_step = DEFAULT_PAN_STEP '/ 3
     ' 2. Строим графическую зависимость динамического уровня от забойного давления для заданных параметров скважины
     Curve(str_Hd_Depend_Pwf).ClearPoints
     processing = True
@@ -1309,43 +1315,46 @@ Public Function Build_HdPwfcurve(Pan_atma As Double, Tbh_C As Double, Optional P
         Pwf1_atma = Pwf_atma
     End If
     
-    Dim HdAtIntake As Boolean, Panold As Double, Pwfold As Double, Pwfold1 As Double, Hdold As Double, itr As Integer, Hdpump As Double
     HdAtIntake = False
-    
+    itr3 = 0
     Do
        Pwf_temp = Pan_atma
+       itr2 = 0
        Do
-            Pan_atma = Pan_atma
+            Me.Pan_atma = Pan_atma
             Plin_temp = Calc_Plin_Pwf_atma(SetPT(Pwf_temp, Tbh_C), CalcCasing:=True)
             
-            If Pan_atma < Pan_atma Then
+            If Me.Pan_atma < Pan_atma Then
             ' уровень на приеме - надо найти точно точку начала слома
                 HdAtIntake = True
-                Panold = Pan_atma
+                Panold = Me.Pan_atma
                 Pwfold = Pwf_temp
                 Hdold = p_Hd_m
                 Hdpump = p_Hd_m
             Else
-            
+            ' вышли в зону где уровень выше приема насоса
                 If HdAtIntake And Abs(Hdold - p_Hd_m) > 10 Then
+                    ' погрешность около точки слома по дин уровню больше 10 метров - надо уточнить лучше
                     Pwfold1 = Pwf_temp
                     itr = 0
                     Do
                         itr = itr + 1
                         Pwf_temp = (Pwfold1 + Pwfold) / 2
+                        Me.Pan_atma = Pan_atma
                         Plin_temp = Calc_Plin_Pwf_atma(SetPT(Pwf_temp, Tbh_C), CalcCasing:=True)
                         If p_Hd_m = Hdpump Then
                             HdAtIntake = True
-                            Panold = Pan_atma
+                            Panold = Me.Pan_atma
                             Pwfold = Pwf_temp
                             Hdold = p_Hd_m
                         Else
                             Pwfold1 = Pwf_temp
                         End If
-                    Loop While ((Abs(Hdpump - p_Hd_m) > 10) And (Panold < Pan_atma)) And itr < 10
+                    Loop While ((Abs(Hdpump - p_Hd_m) > 10) Or Abs(Pan_atma - Me.Pan_atma) > 2) And itr < 10 '
                 End If
-                Debug.Assert itr < 10
-                HdAtIntake = False
+'                Debug.Assert itr < 10
+                itr = 0
+                HdAtIntake = False ' сбросим флаг, что нашли точку слома
             End If
             
             Curve(str_Hd_Depend_Pwf).AddPoint Pwf_temp, p_Hd_m
@@ -1353,9 +1362,9 @@ Public Function Build_HdPwfcurve(Pan_atma As Double, Tbh_C As Double, Optional P
            
             Pwf_temp = Pwf_temp + P_step
             
-            Debug.Assert Pwf_temp < 300
-        
-        Loop While (Not is_Hdyn_Larger_Hsp And p_Hd_m > 0)
+'            Debug.Assert Pwf_temp < 300
+            itr2 = itr2 + 1
+        Loop While (Not is_Hdyn_Larger_Hsp And p_Hd_m > 0) And (itr2 < 100)
         
         ' проверка условий продолжения цикла
         If (Curve(str_Hd_Depend_Pwf).numPoints >= MinCountPoints_Calc_Pwf_PanHd_atma) Then
@@ -1371,11 +1380,11 @@ Public Function Build_HdPwfcurve(Pan_atma As Double, Tbh_C As Double, Optional P
             End If
         
         End If
-        
-    Loop While (processing)
+        itr3 = itr3 + 1
+    Loop While (processing) And (itr3 < 5)
         
     'восстановим после расчета необходимое распределение в скважине
-    Pan_atma = Pan_atma
+    Me.Pan_atma = Pan_atma
     Plin_temp = Calc_Plin_Pwf_atma(SetPT(Pwf1_atma, Tbh_C), CalcCasing:=True)
     
     Set Build_HdPwfcurve = Curve(str_Hd_Depend_Pwf)
@@ -1693,14 +1702,14 @@ End Sub
 '    AddS stor, 12, 0, "p_Pbuf_atma         ", Pbuf_atma
 '    AddS stor, 13, 0, "p_Pan_atma          ", p_Pan_atma
 ''    AddS stor, 14, 0, "p_Pdis_atma         ", Pdis_atma
-''    AddS stor, 15, 0, "p_Pintake_atma      ", p_Pintake_atma
+''    AddS stor, 15, 0, "p_Pint_atma      ", p_Pint_atma
 '    AddS stor, 16, 0, "p_Pwf_atma          ", Pwf_atma
 '    AddS stor, 17, 0, "--                    ", ""
 '    AddS stor, 18, 0, "--                    ", ""
 '    AddS stor, 19, 0, "--                    ", ""
 '
 '    AddS stor, 20, 0, "p_Twh_C            ", Twh_C
-' '   AddS stor, 21, 0, "p_Tintake_C        ", p_Tintake_C
+' '   AddS stor, 21, 0, "p_Tint_C        ", p_Tint_C
 ''    AddS stor, 22, 0, "p_p_TDis_CTbh_C    ", p_Tdis_C
 '    AddS stor, 23, 0, "p_Tbh_C            ", Tbh_C
 '    AddS stor, 24, 0, "--                    ", ""
@@ -2108,7 +2117,7 @@ End Property
 '    For i = 0 To numPoint
 '        qtest = (Qmax - qmin) / numPoint * i + qmin
 '        Qliq_scm3day = qtest
-'        Ks = Calc_SeparationAtIntake_d(p_Pintake_atma, p_Tintake_C)
+'        Ks = Calc_SeparationAtIntake_d(p_Pint_atma, p_Tint_C)
 '
 '        Curve(str_KsepNatQl_curve).AddPoint qtest, p_KsepNatural
 '        Curve(str_KsepGasSepQl_curve).AddPoint qtest, p_KsepGasSep_d
@@ -2125,7 +2134,7 @@ End Property
 '        Rptest = Rptest + 10
 '        Fluid.Rp_m3m3 = Rptest
 '
-'        Ks = Calc_SeparationAtIntake_d(p_Pintake_atma, p_Tintake_C)
+'        Ks = Calc_SeparationAtIntake_d(p_Pint_atma, p_Tint_C)
 '
 '        Curve(str_KsepNatRp_curve).AddPoint qtest, p_KsepNatural
 '        Curve(str_KsepGasSepRp_curve).AddPoint qtest, p_KsepGasSep_d
