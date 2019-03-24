@@ -30,11 +30,29 @@ Private p_PTwf As PTtype
 ' параметры расчета по трубе
 Private p_Param As PARAMCALC
 'Public TempCorrelation As TEMP_CALC_METHOD
-Public Curves As New Collection     ' коллекция кривых с результатами расчетов
+Private c_Curves As New Collection         ' коллекция кривых с результатами расчетов
 ' блок оценки качества данных
  'Private p_LogMsg As New CLogger                ' логгер
  
 Public Event ReportProgress(msg As String)
+Public Property Get Pwf_atma() As Double
+    Pwf_atma = p_PTwf.P_atma
+End Property
+Public Property Get Tbh_C() As Double
+    Tbh_C = p_PTwf.T_C
+End Property
+Public Property Get Pbuf_atma() As Double
+    Pbuf_atma = p_PTbuf.P_atma
+End Property
+Public Property Get Pline_atma() As Double
+    Pline_atma = p_PTlin.P_atma
+End Property
+Public Property Get Tline_C() As Double
+    Tline_C = p_PTlin.T_C
+End Property
+Public Property Get Tbuf_C() As Double
+    Tbuf_C = p_PTbuf.T_C
+End Property
 Public Property Let HFlowCorrelation(val As H_CORRELATION)
     Dim prm As PARAMCALC
     prm = Param
@@ -70,6 +88,27 @@ End Property
  
 Public Property Get Param() As PARAMCALC
     Param = p_Param
+End Property
+Public Property Get Curve(Key As String) As TInterpolation
+On Error Resume Next
+    Dim exists As Boolean
+    exists = Not IsEmpty(c_Curves.Item(Key))
+    If exists Then
+       Set Curve = c_Curves.Item(Key)
+    Else
+       Set Curve = New TInterpolation
+       c_Curves.Add Curve, Key
+    End If
+End Property
+Public Property Set Curve(Key As String, valNew As TInterpolation)
+ On Error Resume Next
+    Dim exists As Boolean
+    exists = Not IsEmpty(c_Curves.Item(Key))
+    If exists Then
+       c_Curves(Key) = valNew
+    Else
+       c_Curves.Add valNew, Key
+    End If
 End Property
 '===================================================================
 '
@@ -154,6 +193,7 @@ On Error GoTo err1:
    Call DcasCurve_mm.LoadFromVertRange(hmes_dcas_m_, dcas_arr_mm_)
    Call DtubCurve_mm.LoadFromVertRange(hmes_dtub_m_, dtub_arr_mm_)
    Call valves.LoadFromVertRange(GLV_Hmes_m_, GLV_dvalve_mm_)
+   Set valves.Fluid = Fluid
   
    Hperf_m = DcasCurve_mm.maxx
    Htub_m = DtubCurve_mm.maxx
@@ -313,6 +353,8 @@ Dim Tan_C As Double
 Dim pcur As TInterpolation
 Dim i As Integer
 Dim pipe As CPipe
+Dim Qgfree_tot_scm3day As Double
+Qgfree_tot_scm3day = 0
     
 On Error GoTo err1:
     ' 1. Start calculation from Pwf, Tbh
@@ -346,14 +388,45 @@ On Error GoTo err1:
                 Set pipe.Fluid = Fluid.Clone
             End If
             ' adding additional gas coming trough valve
-            pipe.Fluid.Qgfree_scm3day = pipe.Fluid.Qgfree_scm3day + pipe.GLVin.Qgas_scm3day(1, 1, 1)
+            Qgfree_tot_scm3day = Qgfree_tot_scm3day + pipe.GLVin.Qgas_scm3day(-1, -1, -1)
+            pipe.Fluid.Qgfree_scm3day = Qgfree_tot_scm3day
         End If
         pipe.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
         PT_temp = pipe.Calc_dPipe(PT_temp, saveCurve)
     Next i
-    
+    p_PTbuf = PT_temp
+    ' 4. Расчет линейного давления по штуцеру
+    If Choke.Dchoke_m > 0 And CalcChoke Then     ' пока отключено
+        p_PTlin = Choke.Calc_Choke_Plin(p_PTbuf)
+        If p_PTlin.P_atma < 0 Then
+            p_PTlin.P_atma = 1
+        End If
+    Else
+        p_PTlin = p_PTbuf
+    End If
     Calc_Plin_Pwf_atma = PT_temp.P_atma
     
+    If saveCurve > 0 Then
+        For i = 1 To PipesProd.Count
+            Call Curve(str_PtubHmes_curve).AddPointsCurve(PipesProd(i).PCurve)
+            Call Curve(str_TtubHmes_curve).AddPointsCurve(PipesProd(i).TCurve)
+            Call Curve(str_TambHmes_curve).AddPointsCurve(PipesProd(i).TambCurve)
+            If saveCurve > 1 Then
+                Call Curve(str_HlHmes_curve).AddPointsCurve(PipesProd(i).HlCurve)
+                Curve(str_HlHmes_curve).yName = "Hl"
+            End If
+        Next i
+        For i = 1 To PipesInj.Count
+           Call Curve(str_PcasHmes_curve).AddPointsCurve(PipesInj(i).PCurve)
+        Next i
+        
+        Curve(str_PtubHmes_curve).xName = "hmes ptub"
+        Curve(str_PtubHmes_curve).yName = "Ptub"
+        Curve(str_TtubHmes_curve).yName = "Ttub"
+        Curve(str_TambHmes_curve).yName = "Tamb"
+        Curve(str_PcasHmes_curve).xName = "hmes pcas"
+    
+    End If
     Exit Function
 err1:
     RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: ошибка какая то")
