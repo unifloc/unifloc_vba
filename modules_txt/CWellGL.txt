@@ -432,3 +432,66 @@ err1:
     RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
 End Function
+Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, _
+                                    ByVal Tbh_C As Double, _
+                                    Optional Pcas_inj_atma As Double = 1, _
+                                    Optional saveCurve As CALC_RESULTS = noCurves)
+' @brief Calc_Pwf_Plin_atma расчет забойного давления по известному давлению в линии и конструкции скважины дихотомией
+' @param Plin_atma - давление в линии
+' @param Hd - динамический уровень
+' @param Tbh_C - температура на забое скважины
+' @return Подсчитанное для заданного линейного давление
+On Error GoTo err1:
+    Dim Pwf1 As Double      ' первое приближение
+    Dim PwfUp As Double, PwfDown As Double
+    Dim PlinUp As Double, PlinDown As Double
+    Dim Plin0 As Double, Plin1 As Double
+    Dim found_solution As Boolean
+    Dim i As Integer
+    found_solution = False
+    i = 0
+    Pwf1 = 60
+    PwfUp = -1
+    PwfDown = -1
+    Do
+        ' ищем  приближения
+        Plin1 = Calc_Plin_Pwf_atma(SetPT(Pwf1, Tbh_C), Pcas_inj_atma, saveCurve:=noCurves)
+        If (Abs(Plin1 - Plin_atma) < const_well_P_tolerance) Then
+             found_solution = True
+             p_PTwf.P_atma = Pwf1
+             p_PTwf.T_C = Tbh_C
+        End If
+        If Not found_solution Then
+          If Plin1 > Plin_atma Then
+              PwfUp = Pwf1
+              PlinUp = Plin1
+              If PwfDown < 0 Then
+                  Pwf1 = PwfUp / 2
+              Else
+                  Pwf1 = PwfDown + (PwfUp - PwfDown) * (Plin_atma - PlinDown) / (PlinUp - PlinDown)
+              End If
+          Else
+              PwfDown = Pwf1
+              PlinDown = Plin1
+              If PwfUp < 0 Then
+                  Pwf1 = Pwf1 * 2
+              Else
+                  Pwf1 = (PwfUp + PwfDown) / 2
+              End If
+          End If
+        End If
+        i = i + 1
+    Loop While Not found_solution And i < 20
+    p_PTlin = SetPT(Calc_Plin_Pwf_atma(p_PTwf, Pcas_inj_atma, saveCurve:=saveCurve), Tbuf_C)
+    
+    If Abs(Pline_atma - Plin_atma) > const_well_P_tolerance Then
+       addLogMsg "Calc_Pwf_Plin_atma: ошибка расчета забойного давления больше " & const_well_P_tolerance & ". Равна = " & Abs(Me.Pline_atma - Plin_atma)
+    End If
+    Calc_Pwf_Plin_atma = p_PTwf.P_atma
+   ' переводим в состояние "целостность нарушена"
+   ' p_Calculated = False
+    Exit Function
+err1:
+    ' тут надо среагировать на ошибку
+    Err.Raise 1
+ End Function
