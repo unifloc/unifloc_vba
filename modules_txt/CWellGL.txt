@@ -9,36 +9,77 @@ Option Explicit
 '  класс для описания работы газлифтной скважины
 '
 '  предполагается, что есть пакер отделяющий затруб и газлифтные клапана
-Private p_NumValve As Integer     ' количество газлифтных клапанов. От этого зависит количество сегментов труб
-Private p_PipesProd As New Collection_    ' коллеция труб по которым идет добыча из которых состоит скважина
-Private p_PipesInj As New Collection_     '  коллекция труб по которым идет закачка газа
-Private p_Valves As New Collection_       ' коллекция клапанов установленных в скважине
-Private p_Hvalve_m() As Double      ' массив с глубинами расположения клапанов
-Private p_Fluid As New CPVT       ' флюиды из пласта
-Private p_Trajectory As New CTrajectory      ' полная траектория скважины с инклинометрии (основной способ задания скважины)
-Private p_AmbientForm As New CAmbientFormation  ' порода за пределями скважины   (new тут лишнее)
-Private p_Hpacker_m As Double ' глубина установки пакера, ограничивает глубину закачки газа
-Private p_Hvd_m As Double     ' глубина верхних дыр перфорации
+'Public NumValves As Integer
+' количество газлифтных клапанов. От этого зависит количество сегментов труб
+' should be read only - base on valves collection
+' штуцер установленный на поверхности
+Public Choke As New Cchoke
+Private PipesProd As New Collection_      ' коллеция труб по которым идет добыча из которых состоит скважина
+Private PipesInj As New Collection_       '  коллекция труб по которым идет закачка газа
+Private valves As New CGLValveSet         ' коллекция клапанов установленных в скважине
+'Private p_Hvalve_m() As Double              ' массив с глубинами расположения клапанов
+Public Fluid As New CPVT                 ' флюиды из пласта
+Public Trajectory As New CTrajectory     ' полная траектория скважины с инклинометрии (основной способ задания скважины)
+Public AmbientForm As New CAmbientFormation  ' порода за пределями скважины   (new тут лишнее)
+'Public Hpacker_m As Double               ' глубина установки пакера, ограничивает глубину закачки газа
+Public Hvd_m As Double                   ' глубина верхних дыр перфорации
 Private p_PTbuf As PTtype
 Private p_PTlin As PTtype
 Private p_PTcas As PTtype
 Private p_PTwf As PTtype
 ' параметры расчета по трубе
 Private p_Param As PARAMCALC
-Private c_Curves As New Collection_     ' коллекция кривых с результатами расчетов
- ' блок оценки качества данных
+'Public TempCorrelation As TEMP_CALC_METHOD
+Public Curves As New Collection_     ' коллекция кривых с результатами расчетов
+' блок оценки качества данных
  'Private p_LogMsg As New CLogger                ' логгер
  
- Public Event ReportProgress(msg As String)
+Public Event ReportProgress(msg As String)
+Public Property Let HFlowCorrelation(val As H_CORRELATION)
+    Dim prm As PARAMCALC
+    prm = Param
+    prm.correlation = val
+    Param = prm
+End Property
+ 
+Public Property Get HFlowCorrelation() As H_CORRELATION
+    HFlowCorrelation = Param.correlation
+End Property
+ 
+Public Property Let TempCorrelation(val As TEMP_CALC_METHOD)
+    Dim prm As PARAMCALC
+    prm = Param
+    prm.tempMethod = val
+    Param = prm
+End Property
+ 
+Public Property Get TempCorrelation() As TEMP_CALC_METHOD
+    TempCorrelation = Param.tempMethod
+End Property
+Public Property Let Param(val As PARAMCALC)
+    p_Param = val
+    Dim pipe As CPipe
+    
+    For Each pipe In PipesProd
+        pipe.Param = val
+    Next pipe
+    For Each pipe In PipesInj
+        pipe.Param = val
+    Next pipe
+End Property
+ 
+Public Property Get Param() As PARAMCALC
+    Param = p_Param
+End Property
+'===================================================================
+'
+'===================================================================
 Private Sub Class_Initialize()
-'    With p_Param
-'        '.CalcCorrection = 1
-'        .correlation = AnsariCor
-'        .FlowAtStart = FlowOutPipe
-'        .FlowDirection = FlowAgainstCoord
-'        .TempDirection = TempRaiseAlongCoord
-'        .tempMethod = AmbientTemp
-'    End With
+    With p_Param
+        .correlation = AnsariCor
+        .FlowDirection = FlowAgainstCoord
+        .tempMethod = AmbientTemp
+    End With
     
 '    Param = p_Param    ' здесь распространим все настройки на трубы
 End Sub
@@ -46,5 +87,209 @@ End Sub
 ' должен уметь задавать все трубы по скважине из исходных данных по траектории
 '
 '
-Public Sub InitWellGL()
+Public Sub InitWell(ByVal Hperf_m As Double, ByVal Htub_m As Double, ByVal Udl_m As Double, _
+                    ByVal dCas_mm As Double, ByVal dTub_mm As Double, ByVal Tbh_C As Double, _
+                    ByVal Twh_C As Double)
+' метод для инициализации скважины простыми числами
+On Error GoTo err1:
+   Dim errMsg As String
+   
+   ' задаем траекторию свола скважины, на основе которого потом будет задано все остальное
+   Dim tr As New CTrajectory
+   Dim HabsCurve_m As New TInterpolation  ' инклинометрия - две точки
+   HabsCurve_m.AddPoint 0, 0
+   HabsCurve_m.AddPoint Hperf_m, Hperf_m - Udl_m
+   
+   Dim DcasCurve_mm As New TInterpolation  ' casing diameter
+   DcasCurve_mm.AddPoint 0, dCas_mm
+   DcasCurve_mm.AddPoint Hperf_m, dCas_mm  ' casing goes from top to bottom here
+   
+   Dim DtubCurve_mm As New TInterpolation  ' tubing diameter
+   DtubCurve_mm.AddPoint 0, dTub_mm
+   DtubCurve_mm.AddPoint Htub_m, dTub_mm  ' goes to tubing setting depth
+   
+   ' initialise trajectory (same as ESP well class)
+   Call tr.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Htub_m)
+   Set Trajectory = tr
+   Call InitWellFromTr
+   
+   ' save given temperature distribution
+   Dim geoGrad As New TInterpolation
+   geoGrad.AddPoint 0, Twh_C
+   geoGrad.AddPoint Hperf_m, Tbh_C
+   
+   Dim ambTemp As New CAmbientFormation
+   Set ambTemp.AmbTempCurve = geoGrad
+   Set AmbientForm = ambTemp
+   
+   InitTempTr geoGrad
+   Exit Sub
+   
+err1:
+   errMsg = "CWell.InitWell: Ошибка простой инициализации скважины " & sDELIM & Err.Description
+   RaiseEvent ReportProgress(errMsg)
+   Err.Raise kErrInitCalc, Err.Source, errMsg
+End Sub
+Public Sub InitWellRangeAll(ByVal Incl_Hmes_m_ As Range, _
+                           ByVal Incl_Hvert_m_ As Range, _
+                           ByVal hmes_dcas_m_ As Range, _
+                           ByVal dcas_arr_mm_ As Range, _
+                           ByVal hmes_dtub_m_ As Range, _
+                           ByVal dtub_arr_mm_ As Range, _
+                           ByVal hmes_tamb_m_ As Range, _
+                           ByVal tamb_C_ As Range, _
+                           Optional ByVal GLV_Hmes_m_ As Range = Nothing, _
+                           Optional ByVal GLV_dvalve_mm_ As Range = Nothing)
+' метод для инициализации скважины из диапазонов измнения ключевых параметров
+On Error GoTo err1:
+   Dim HabsCurve_m As New TInterpolation
+   Dim DcasCurve_mm As New TInterpolation
+   Dim DtubCurve_mm As New TInterpolation
+   Dim geoGrad As New TInterpolation
+   Dim ambTemp As New CAmbientFormation
+   Dim Hperf_m As Double, Htub_m As Double
+   Dim errMsg As String
+   
+   Call HabsCurve_m.LoadFromVertRange(Incl_Hmes_m_, Incl_Hvert_m_)
+   Call DcasCurve_mm.LoadFromVertRange(hmes_dcas_m_, dcas_arr_mm_)
+   Call DtubCurve_mm.LoadFromVertRange(hmes_dtub_m_, dtub_arr_mm_)
+   Call valves.LoadFromVertRange(GLV_Hmes_m_, GLV_dvalve_mm_)
+  
+   Hperf_m = DcasCurve_mm.maxx
+   Htub_m = DtubCurve_mm.maxx
+   
+   Call Trajectory.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Htub_m, valves)
+   Call InitWellFromTr
+   
+   Call geoGrad.LoadFromVertRange(hmes_tamb_m_, tamb_C_)
+   Set ambTemp.AmbTempCurve = geoGrad
+   
+   Set AmbientForm = ambTemp
+   
+   InitTempTr geoGrad
+   Exit Sub
+err1:
+   errMsg = "CWell.InitWellRangeAll: Ошибка простой инициализации скважины " & sDELIM & Err.Description
+   RaiseEvent ReportProgress(errMsg)
+   Err.Raise kErrInitCalc, Err.Source, errMsg
+End Sub
+Private Sub InitWellFromTr()
+    Dim i As Integer, j As Integer
+    Dim segmUp_m As Double
+    Dim segmDown_m As Double
+    Dim pipe As CPipe
+    Dim pipe_
+    ' need to fill up individual pipe segments in well (production line)
+    ' 1 segment from bottom hole to Htub  (lowest)
+    ' next - from Htub to valve(0) depth - and so on
+    ' at this point valve depth values must be ok (sorted and non zero)
+        
+    ' set up pipe segments for injection line
+    ' 1 segment from lowest valve to upper
+    ' not interested for now what happens bellow lowest valve
+    
+    ' set up csing flow below tubing depth
+    segmDown_m = Trajectory.Hperf_m
+    segmUp_m = Trajectory.Htubing_m
+    If segmDown_m > segmUp_m Then
+        ' first segment from bottom to tubing depth exist
+        ' hae to be created here
+        Set pipe = New CPipe  ' creating new object
+        Set pipe.Fluid = Fluid
+        Call pipe.InitPipeConstrTr(Trajectory, segmUp_m, segmDown_m, pipeCasing)
+        PipesProd.Add pipe    ' save it to collection
+        segmDown_m = segmUp_m
+        i = valves.Count
+        segmUp_m = valves.Hmes_m(i) ' will work if there is no valves set
+        If i = 0 Then i = 1 ' if no valve - set to 1 to ensure next loop one iteration
+    End If
+    
+    For j = i To 1 Step -1
+        ' should be ok for numvalves = 0
+        Set pipe = New CPipe  ' creating new object
+        Set pipe.Fluid = Fluid
+        Call pipe.InitPipeConstrTr(Trajectory, segmUp_m, segmDown_m, pipeCasing)
+        PipesProd.Add pipe    ' save it to collection
+        
+        segmDown_m = segmUp_m
+        segmUp_m = valves.Hmes_m(j - 1)
+        If segmUp_m < segmDown_m Then
+            ' if exist segment
+            Set pipe = New CPipe  ' creating new object
+            Set pipe.Fluid = Fluid
+            Call pipe.InitPipeConstrTr(Trajectory, segmUp_m, segmDown_m, pipeAnnulus)
+            PipesInj.Add pipe
+        End If
+        
+    Next j
+'   Hvd_m = Trajectory.Htubing_m ' определим глубину спуска установки
+'   p_Hspvert_m = Trajectory.HabsZ_m(p_Hsp_m)    ' в том числе по вертикали
+'   Call p_Pipe_HspHvd.InitPipeConstrTr(Trajectory, Trajectory.Htubing_m, Trajectory.Hperf_m, 1)
+    Choke.Dup_m = 0.06
+    Choke.Ddown_m = 0.06
+    For Each pipe_ In PipesProd
+        Set pipe_.AmbientForm = AmbientForm
+    Next pipe_
+    For Each pipe_ In PipesInj
+        Set pipe_.AmbientForm = AmbientForm
+    Next pipe_
+    
+    Hvd_m = Trajectory.Hperf_m
+  ' переводим в состояние "целостность нарушена"
+'   p_Calculated = False
+End Sub
+ Public Sub InitTempTr(geoGrad As TInterpolation)
+' процедура для инициализации температуры в скважине, для линейнго расчета
+' при линейном расчете предполагается,
+' что температура меняется линейно относительно глубины скважины
+'
+   Dim TempGradVert As Double
+   p_PTwf.T_C = geoGrad.GetPoint(geoGrad.maxx)
+   p_PTbuf.T_C = geoGrad.GetPoint(geoGrad.minx)
+   
+   TempGradVert = (p_PTwf.T_C - p_PTbuf.T_C) / Hvd_m
+      
+   Dim i As Integer
+   For i = 0 To PipesProd.Count - 1
+       Set PipesProd(i).dTdLinit = TempGradVert
+   Next i
+   For i = 0 To PipesInj.Count - 1
+       Set PipesInj(i).dTdLinit = TempGradVert
+   Next i
+   
+   TempCorrelation = GeoGradTemp
+End Sub
+ 
+Public Sub InitTempLinear(ByVal Tbhinit_C As Double, ByVal Twhinit_C As Double)
+' процедура для инициализации температуры в скважине, для линейнго расчета
+   Dim TempGrad As Double
+   Dim i As Integer
+   Dim tempDown_C As Double
+   Dim tempUp_C As Double
+   Dim pipe As CPipe
+   Dim HvalveVert0_m  As Double
+   
+   TempGrad = (Tbhinit_C - Twhinit_C) / Hvd_m
+   p_PTwf.T_C = Tbhinit_C
+   p_PTbuf.T_C = Twhinit_C
+   
+   tempUp_C = Tbhinit_C
+   For i = 0 To PipesProd.Count - 1
+        Set pipe = PipesProd(i)
+        tempDown_C = tempUp_C
+        tempUp_C = tempDown_C - TempGrad * pipe.LengthMes_m
+        pipe.dTdLinit = TempGrad
+   Next i
+   
+   HvalveVert0_m = Trajectory.HabsZ_m(valves(0).Hmes_m)
+   tempUp_C = AmbientForm.AmbTemp_С(HvalveVert0_m)
+   For i = 0 To PipesInj.Count - 1
+        Set pipe = PipesInj(i)
+        tempDown_C = tempUp_C
+        tempUp_C = tempDown_C - TempGrad * pipe.LengthMes_m
+        pipe.dTdLinit = TempGrad
+   Next i
+   
+   TempCorrelation = StartEndTemp
+   
 End Sub
