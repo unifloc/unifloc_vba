@@ -759,7 +759,8 @@ End Function
                                     ByVal Tbh_C As Double, _
                                     Optional fast As Boolean = True, _
                                     Optional saveCurve As CALC_RESULTS = noCurves, _
-                                    Optional CalcCasing As Boolean = False)
+                                    Optional CalcCasing As Boolean = False, _
+                                    Optional calcESPtemp As Boolean = False)
  ' функция расчета сверху вниз
  ' тут смотрим можно ли провести расчет быстро
  ' или надо вызывать медленный метод (итерациями снизу вверх)
@@ -768,7 +769,7 @@ End Function
     If fast And p_Param.tempMethod <> AmbientTemp Then
        Calc_Pwf_Plin_atma = CalcFast_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve, CalcCasing)
     Else
-       Calc_Pwf_Plin_atma = CalcSlow_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve, CalcCasing)
+       Calc_Pwf_Plin_atma = CalcSlow_Pwf_Plin_atma(Plin_atma, Tbh_C, saveCurve, CalcCasing, calcESPtemp)
     End If
  
  End Function
@@ -776,7 +777,8 @@ End Function
 Private Function CalcSlow_Pwf_Plin_atma(ByVal Plin_atma As Double, _
                                         ByVal Tbh_C As Double, _
                                         Optional saveCurve As CALC_RESULTS = noCurves, _
-                                        Optional CalcCasing As Boolean = False)
+                                        Optional CalcCasing As Boolean = False, _
+                                        Optional calcESPtemp As Boolean = False)
 ' @brief Calc_Pwf_Plin_atma расчет забойного давления по известному давлению в линии и конструкции скважины дихотомией
 ' @param Plin_atma - давление в линии
 ' @param Hd - динамический уровень
@@ -796,7 +798,7 @@ On Error GoTo err1:
     PwfDown = -1
     Do
         ' ищем  приближения
-        Plin1 = Calc_Plin_Pwf_atma(SetPT(Pwf1, Tbh_C), CalcCasing, saveCurve:=noCurves)
+        Plin1 = Calc_Plin_Pwf_atma(SetPT(Pwf1, Tbh_C), CalcCasing, , calcESPtemp, saveCurve:=noCurves)
         If (Abs(Plin1 - Plin_atma) < const_well_P_tolerance) Then
              found_solution = True
              p_PTwf.P_atma = Pwf1
@@ -824,7 +826,8 @@ On Error GoTo err1:
         End If
         i = i + 1
     Loop While Not found_solution And i < 20
-    Me.Pline_atma = Calc_Plin_Pwf_atma(p_PTwf, CalcCasing, saveCurve:=saveCurve)
+    ' calc more one time to restore all what needed
+    Me.Pline_atma = Calc_Plin_Pwf_atma(p_PTwf, CalcCasing, , calcESPtemp, saveCurve:=saveCurve)
     If Abs(Me.Pline_atma - Plin_atma) > const_well_P_tolerance Then
        addLogMsg "Calc_Pwf_Plin_atma: ошибка расчета забойного давления больше " & const_well_P_tolerance & ". Равна = " & Abs(Me.Pline_atma - Plin_atma)
     End If
@@ -895,13 +898,13 @@ On Error GoTo err1:
         ' 3. Расчет изменения температуры в насосе
         ' сначала считаем сепарацию и модификацию флюидов
         Call ESP.calc_separation(p_PTintake.P_atma, p_PTintake.T_C)
-'        If calcESPtemp Then
+        If calcESPtemp Then
 '            ' расчитываются параметры насоса и температура
-'            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, -1, True)
-'        Else
+            Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, -1, True)
+        Else
             ' расчитываются параметры насоса при заданном распределении температур
             Call ESP.calc_ESPsys(p_PTintake.P_atma, p_PTintake.T_C, p_PTintake.T_C, True)
-'        End If
+        End If
         p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdis_C)
         Set p_Pipe_WHeadHsp_Tubing.Fluid = ESP.FluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
         Set p_Pipe_WHeadHsp_Casing.Fluid = ESP.FluidCas
