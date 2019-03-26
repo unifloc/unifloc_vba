@@ -233,6 +233,8 @@ Public Property Set ESP(val As CESPsystemSimple)
 On Error GoTo noESP
   p_ESP_on = True
   Set p_ESP.Fluid = Fluid
+  ' after ESP installation consruction must be reset to account ESP length
+  Call InitWellFromTr
   Exit Property
 noESP:
   p_ESP_on = False
@@ -502,22 +504,27 @@ err1:
 End Sub
  
 Private Sub InitWellFromTr()
+Dim ESPbottom_m As Double   ' ESP bottom - todo - move to main definition and account pressure drop along ESP
 ' инициализация скважины по данным траектории скважин
+    
    Call p_Pipe_WHeadHsp_Tubing.InitPipeConstrTr(Trajectory, 0, Trajectory.Htubing_m)
    Call p_Pipe_WHeadHspFact_Tubing.InitPipeConstrTr(Trajectory, 0, Trajectory.Htubing_m)
-   Call p_Pipe_WHeadHsp_Casing.InitPipeConstrTr(Trajectory, 0, Trajectory.Htubing_m, pipeCasing)
    p_Hsp_m = Trajectory.Htubing_m ' определим глубину спуска установки
    p_Hspvert_m = Trajectory.HabsZ_m(p_Hsp_m)    ' в том числе по вертикали
-   Call p_Pipe_HspHvd.InitPipeConstrTr(Trajectory, Trajectory.Htubing_m, Trajectory.Hperf_m, pipeCasing)
+   If IsESP Then
+       ESP.HmesTop_m = p_Hsp_m  ' установим глубину спуска оборудования
+       ESPbottom_m = ESP.HmesBottom_m
+   Else
+       ESPbottom_m = p_Hsp_m
+   End If
+   Call p_Pipe_WHeadHsp_Casing.InitPipeConstrTr(Trajectory, 0, ESPbottom_m, pipeCasing)
+   Call p_Pipe_HspHvd.InitPipeConstrTr(Trajectory, ESPbottom_m, Trajectory.Hperf_m, pipeCasing)
    Choke.Dup_m = 0.06
    Choke.Ddown_m = 0.06
    Set p_Pipe_HspHvd.AmbientForm = p_AmbientForm
    Set p_Pipe_WHeadHsp_Casing.AmbientForm = p_AmbientForm
    Set p_Pipe_WHeadHsp_Tubing.AmbientForm = p_AmbientForm
    Set p_Pipe_WHeadHspFact_Tubing.AmbientForm = p_AmbientForm
-   If IsESP Then
-       ESP.HmesTop_m = p_Hsp_m  ' установим глубину спуска оборудования
-   End If
    p_Hvd_m = Trajectory.Hperf_m
   ' переводим в состояние "целостность нарушена"
    p_Calculated = False
