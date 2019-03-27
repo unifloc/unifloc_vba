@@ -19,8 +19,9 @@ Private PipesInj As New Collection       '  коллекция труб по которым идет закач
 Private valves As New CGLValveSet         ' коллекция клапанов установленных в скважине
 'Private p_Hvalve_m() As Double              ' массив с глубинами расположения клапанов
 Public Fluid As New CPVT                 ' флюиды из пласта
+Public FluidInj As New CPVT              ' gas injected in annulus
 Public Trajectory As New CTrajectory     ' полная траектория скважины с инклинометрии (основной способ задания скважины)
-Public AmbientForm As New CAmbientFormation  ' порода за пределями скважины   (new тут лишнее)
+Private p_AmbientForm As New CAmbientFormation  ' порода за пределями скважины   (new тут лишнее)
 'Public Hpacker_m As Double               ' глубина установки пакера, ограничивает глубину закачки газа
 Public Hvd_m As Double                   ' глубина верхних дыр перфорации
 Private p_PTbuf As PTtype
@@ -110,6 +111,19 @@ Public Property Set Curve(Key As String, valNew As TInterpolation)
        c_Curves.Add valNew, Key
     End If
 End Property
+Public Property Get AmbientForm() As CAmbientFormation
+    Set AmbientForm = p_AmbientForm
+End Property
+Public Property Set AmbientForm(ByVal vNewValue As CAmbientFormation)
+    Dim pipe As CPipe
+    Set p_AmbientForm = vNewValue
+    For Each pipe In PipesProd
+        Set pipe.AmbientForm = p_AmbientForm
+    Next pipe
+    For Each pipe In PipesInj
+        Set pipe.AmbientForm = p_AmbientForm
+    Next pipe
+End Property
 '===================================================================
 '
 '===================================================================
@@ -119,7 +133,7 @@ Private Sub Class_Initialize()
         .FlowDirection = FlowAgainstCoord
         .tempMethod = AmbientTemp
     End With
-    
+    p_PTcas.T_C = 30
 '    Param = p_Param    ' здесь распространим все настройки на трубы
 End Sub
 ' метод инициализации газлифтной скважины
@@ -247,7 +261,7 @@ Private Sub InitWellFromTr()
         ' should be ok for numvalves = 0
         Set pipe = New CPipe  ' creating new object
         Set pipe.Fluid = Fluid
-        Call pipe.InitPipeConstrTr(Trajectory, segmUp_m, segmDown_m, pipeCasing)
+        Call pipe.InitPipeConstrTr(Trajectory, segmUp_m, segmDown_m, pipeTubing)
         If j < i Then
             Set pipe.GLVin = valves.valves(j + 1)
         End If
@@ -360,7 +374,7 @@ On Error GoTo err1:
     ' 1. Start calculation from Pwf, Tbh
     p_PTwf = PTwf
     PT_temp = PTwf
-    PTcas_temp = SetPT(Pcas_inj_atma, Tan_C)
+    PTcas_temp = SetPT(Pcas_inj_atma, p_PTcas.T_C)
     
     ' 2. calculate pressure distribution in annulus
     
