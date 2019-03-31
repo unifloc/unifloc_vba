@@ -1,12 +1,39 @@
 '=======================================================================================
-'Unifloc7.5  Boinae                                           khabibullin.ra@gubkin.ru
-'Библиотека расчетных модулей по нефтяному инжинирингу
-'2000 - 2019 гг
+'Unifloc 7.6  Vulpes zerda                                      khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
 '
 '=======================================================================================
 ' базовые функции для проведения расчетов из интерфейса Excel
 Option Explicit
 Public Function StartLog()
+End Function
+Private Function readPVT(Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
+                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
+                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
+                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
+                    Optional ByVal Rp_m3m3 = -1, _
+                    Optional ByVal Pb_atma = -1, _
+                    Optional ByVal Tres_C = const_Tres_default, _
+                    Optional ByVal Bob_m3m3 = -1, _
+                    Optional ByVal Muob_cP = -1, _
+                    Optional ByVal PVTcorr = StandingBased, _
+                    Optional ByVal Ksep_fr = 0, _
+                    Optional ByVal PKsep_atma = -1, _
+                    Optional ByVal TKsep_C = -1, _
+                    Optional ByVal PVTstr As String = "" _
+                    ) As CPVT
+    Dim PVT As CPVT
+    If PVTstr <> "" Then
+        Set PVT = PVT_Decode_string(PVTstr)
+    Else
+        Set PVT = New CPVT
+        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
+        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
+            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
+        End If
+    End If
+    Set readPVT = PVT
 End Function
 ' функция расчета объемного коэффициента газа
 Public Function PVT_Bg_m3m3(P_atma, T_C, _
@@ -23,7 +50,7 @@ Public Function PVT_Bg_m3m3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -65,19 +92,16 @@ Public Function PVT_Bg_m3m3(P_atma, T_C, _
 ' Возвращает значение объемного коэффициента газа, м3/м3
 ' для заданных термобарических условий.
 ' В основе расчета корреляция для z факотора
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Bg_m3m3 = PVT.Bg_m3m3
+    Exit Function
+err1:
+    PVT_Bg_m3m3 = "error"
+    addLogMsg "error in function : PVT_Bg_m3m3"
 End Function
 ' расчет объемного коэффициента нефти
 Public Function PVT_Bo_m3m3(P_atma, T_C, _
@@ -94,7 +118,7 @@ Public Function PVT_Bo_m3m3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -137,19 +161,16 @@ Public Function PVT_Bo_m3m3(P_atma, T_C, _
 ' Возвращает значение объемного коэффициента нефти, м3/м3
 ' для заданных термобарических условий.
 ' В основе расчета корреляции PVT
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Bo_m3m3 = PVT.Bo_m3m3
+    Exit Function
+err1:
+    PVT_Bo_m3m3 = "error"
+    addLogMsg "error in function : PVT_Bo_m3m3"
 End Function
 ' расчет объемного коэффициента воды
 Public Function PVT_Bw_m3m3(P_atma, T_C, _
@@ -166,7 +187,7 @@ Public Function PVT_Bw_m3m3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -208,19 +229,16 @@ Public Function PVT_Bw_m3m3(P_atma, T_C, _
 ' выходное значение - число
 ' Возвращает значение объемного коэффициента воды, м3/м3
 ' для заданных термобарических условий.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Bw_m3m3 = PVT.Bw_m3m3
+    Exit Function
+err1:
+    PVT_Bw_m3m3 = "error"
+    addLogMsg "error in function : PVT_Bw_m3m3"
 End Function
 ' расчет объемного коэффициента воды
 Public Function PVT_Sal_ppm(P_atma, T_C, _
@@ -237,7 +255,7 @@ Public Function PVT_Sal_ppm(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -279,19 +297,16 @@ Public Function PVT_Sal_ppm(P_atma, T_C, _
 ' выходное значение - число
 ' Возвращает соленость воды, ppm
 ' для заданных термобарических условий.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Sal_ppm = PVT.Sal_ppm
+    Exit Function
+err1:
+    PVT_Sal_ppm = "error"
+    addLogMsg "error in function : PVT_Sal_ppm"
 End Function
 ' расчет вязкости нефти
 Public Function PVT_Muo_cP(P_atma, T_C, _
@@ -308,7 +323,7 @@ Public Function PVT_Muo_cP(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -349,19 +364,16 @@ Public Function PVT_Muo_cP(P_atma, T_C, _
 '
 ' выходное значение - число - вязкость нефти
 '           при заданных термобарических условиях, сП
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Muo_cP = PVT.Muo_cP
+    Exit Function
+err1:
+    PVT_Muo_cP = "error"
+    addLogMsg "error in function : PVT_Muo_cP"
 End Function
 ' расчет вязкости газа
 Public Function PVT_Mug_cP(P_atma, T_C, _
@@ -378,7 +390,7 @@ Public Function PVT_Mug_cP(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -419,19 +431,16 @@ Public Function PVT_Mug_cP(P_atma, T_C, _
 '
 ' выходное значение - число - вязкость газа
 '           при заданных термобарических условиях, сП
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Mug_cP = PVT.Mug_cP
+    Exit Function
+err1:
+    PVT_Mug_cP = "error"
+    addLogMsg "error in function : PVT_Mug_cP"
 End Function
 ' расчет вязкости воды
 Public Function PVT_Muw_cP(P_atma, T_C, _
@@ -448,7 +457,7 @@ Public Function PVT_Muw_cP(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -489,19 +498,16 @@ Public Function PVT_Muw_cP(P_atma, T_C, _
 '
 ' выходное значение - число - вязкость воды
 '           при заданных термобарических условиях, сП
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Muw_cP = PVT.Muw_cP
+    Exit Function
+err1:
+    PVT_Muw_cP = "error"
+    addLogMsg "error in function : PVT_Muw_cP"
 End Function
 ' расчет газосодержания
 Public Function PVT_Rs_m3m3(P_atma, T_C, _
@@ -518,7 +524,7 @@ Public Function PVT_Rs_m3m3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -559,19 +565,16 @@ Public Function PVT_Rs_m3m3(P_atma, T_C, _
 '
 ' выходное значение - число - газосодержание при
 '           заданных термобарических условиях, м3/м3.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Rs_m3m3 = PVT.rs_m3m3
+    Exit Function
+err1:
+    PVT_Rs_m3m3 = "error"
+    addLogMsg "error in function : PVT_Rs_m3m3"
 End Function
 ' расчет коэффициента сверхсжимаемости газа
 Public Function PVT_Z(P_atma, T_C, _
@@ -588,7 +591,7 @@ Public Function PVT_Z(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -630,19 +633,16 @@ Public Function PVT_Z(P_atma, T_C, _
 ' выходное значение - число - z фактор газа.
 '           коэффициент сверхсжимаемости газа,
 '           безразмерная величина
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Z = PVT.z
+    Exit Function
+err1:
+    PVT_Z = "error"
+    addLogMsg "error in function : PVT_Z"
 End Function
 ' расчет плотности нефти
 Public Function PVT_Rhoo_kgm3(P_atma, T_C, _
@@ -659,7 +659,7 @@ Public Function PVT_Rhoo_kgm3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -700,19 +700,16 @@ Public Function PVT_Rhoo_kgm3(P_atma, T_C, _
 '
 ' выходное значение - число - плотность нефти
 '           при заданных термобарических условиях, кг/м3.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Rhoo_kgm3 = PVT.rho_oil_kgm3
+    Exit Function
+err1:
+    PVT_Rhoo_kgm3 = "error"
+    addLogMsg "error in function : PVT_Rhoo_kgm3"
 End Function
 ' расчет плотности газа
 Public Function PVT_Rhog_kgm3(P_atma, T_C, _
@@ -729,7 +726,7 @@ Public Function PVT_Rhog_kgm3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -770,19 +767,16 @@ Public Function PVT_Rhog_kgm3(P_atma, T_C, _
 '
 ' выходное значение - число - плотность газа
 '           при заданных термобарических условиях, кг/м3.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Rhog_kgm3 = PVT.rho_gas_kgm3
+    Exit Function
+err1:
+    PVT_Rhog_kgm3 = "error"
+    addLogMsg "error in function : PVT_Rhog_kgm3"
 End Function
 ' расчет плотности воды
 Public Function PVT_Rhow_kgm3(P_atma, T_C, _
@@ -799,7 +793,7 @@ Public Function PVT_Rhow_kgm3(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -840,19 +834,16 @@ Public Function PVT_Rhow_kgm3(P_atma, T_C, _
 '
 ' выходное значение - число - плотность воды
 '           при заданных термобарических условиях, кг/м3.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_Rhow_kgm3 = PVT.rho_water_kgm3
+    Exit Function
+err1:
+    PVT_Rhow_kgm3 = "error"
+    addLogMsg "error in function : PVT_Rhow_kgm3"
 End Function
 ' Расчет давления насыщения
 Public Function PVT_Pb_atma(T_C, _
@@ -869,7 +860,7 @@ Public Function PVT_Pb_atma(T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -909,18 +900,15 @@ Public Function PVT_Pb_atma(T_C, _
 '           если задана - перекрывает другие значения
 '
 ' выходное значение - число - давление насыщения.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
-    
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     PVT_Pb_atma = PVT.Calc_Pb_atma(rsb_m3m3, T_C)
+    Exit Function
+err1:
+    PVT_Pb_atma = "error"
+    addLogMsg "error in function : PVT_Pb_atma"
 End Function
 ' расчет коэффициента поверхностного натяжения нефть - газ
 Public Function PVT_SToilgas_Nm(P_atma, T_C, _
@@ -937,7 +925,7 @@ Public Function PVT_SToilgas_Nm(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -979,19 +967,16 @@ Public Function PVT_SToilgas_Nm(P_atma, T_C, _
 ' выходное значение - число
 ' Возвращает коэффициента поверхностного натяжения нефть - газ, Нм
 ' для заданных термобарических условий.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_SToilgas_Nm = PVT.sigma_o_Nm
+    Exit Function
+err1:
+    PVT_SToilgas_Nm = "error"
+    addLogMsg "error in function : PVT_SToilgas_Nm"
 End Function
 ' расчет коэффициента поверхностного натяжения вода - газ
 Public Function PVT_STwatgas_Nm(P_atma, T_C, _
@@ -1008,7 +993,7 @@ Public Function PVT_STwatgas_Nm(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -1050,19 +1035,16 @@ Public Function PVT_STwatgas_Nm(P_atma, T_C, _
 ' выходное значение - число
 ' Возвращает коэффициента поверхностного натяжения вода - газ, Нм
 ' для заданных термобарических условий.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_STwatgas_Nm = PVT.sigma_w_Nm
+    Exit Function
+err1:
+    PVT_STwatgas_Nm = "error"
+    addLogMsg "error in function : PVT_STwatgas_Nm"
 End Function
 ' расчет коэффициента поверхностного натяжения жидкость - газ
 Public Function PVT_STliqgas_Nm(P_atma, T_C, _
@@ -1079,7 +1061,7 @@ Public Function PVT_STliqgas_Nm(P_atma, T_C, _
                     Optional ByVal Ksep_fr = 0, _
                     Optional ByVal PKsep_atma = -1, _
                     Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -1121,37 +1103,53 @@ Public Function PVT_STliqgas_Nm(P_atma, T_C, _
 ' выходное значение - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
+    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, _
+                    Muob_cP, PVTcorr, Ksep_fr, PKsep_atma, TKsep_C, PVTstr)
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     PVT_STliqgas_Nm = PVT.sigma_liq_Nm
+    Exit Function
+err1:
+    PVT_STliqgas_Nm = "error"
+    addLogMsg "error in function : PVT_STliqgas_Nm"
+End Function
+' ===================================================================================================================
+'
+' ===================================================================================================================
+' функция расчета коэффициента Джоуля Томсона
+Public Function MF_CJT_Katm(P_atma, T_C, _
+                    Optional ByVal PVTstr As String = PVT_DEFAULT, _
+                    Optional ByVal Ql_m3day As Double = 10, _
+                    Optional ByVal fw_perc As Double = 0) As Double
+' обязательные аргументы функции
+' P_atma     давление, атм
+' Т_C       температура, С.
+'
+' опциональные аргументы функции
+'
+' PVTstr   encoded to string PVT properties of fluid
+' Ql_m3day liquid rate (at surface)
+' fw_perc  water fraction (watercut)
+' output - number
+On Error GoTo err1:
+    Dim PVT As New CPVT
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.Qliq_scm3day = Ql_m3day
+    PVT.fw_perc = fw_perc
+    Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
+    MF_CJT_Katm = PVT.CJT_Katm
+    Exit Function
+err1:
+    MF_CJT_Katm = "error"
+    addLogMsg "error in function : MF_CJT_Katm"
 End Function
 ' расчет объемного расхода газожидкостной смеси для заданных термобарических условий
-Public Function MF_Qmix_m3day(Qliq_m3day, wc_perc, P_atma, T_C, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 As Double = -1, _
-                    Optional ByVal Pb_atma As Double = -1, _
-                    Optional ByVal Tres_C As Double = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 As Double = -1, _
-                    Optional ByVal Muob_cP As Double = -1, _
-                    Optional ByVal PVTcorr = StandingBased, _
-                    Optional ByVal Ksep_fr As Double = 0, _
-                    Optional ByVal PKsep_atma As Double = -1, _
-                    Optional ByVal TKsep_C As Double = -1, _
-                    Optional ByVal PVTStr As String = "" _
-                    ) As Double
+Public Function MF_Qmix_m3day(ByVal Qliq_m3day As Double, _
+                              ByVal fw_perc As Double, _
+                              ByVal P_atma As Double, _
+                              ByVal T_C As Double, _
+                              Optional ByVal PVTstr As String = "") As Double
 ' обязательные аргументы функции
 ' Qliq_m3day дебит жидкости на поверхности
 ' wc_perc   объемная обводненность
@@ -1159,73 +1157,29 @@ Public Function MF_Qmix_m3day(Qliq_m3day, wc_perc, P_atma, T_C, _
 ' Т_C       температура, С.
 '
 ' опциональные аргументы функции
-' gamma_gas удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-'           имеет приоритет перед Rsb если Rp < Rsb
-' Pb_atma   Давление насыщения при  температуре Tres_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
-' Ksep_fr   коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' PKsep_atma    давление при которой была сепарация
-' TKsep_C       температура при которой была сепарация
+' PVTstr    encoded to string PVT properties of fluid
 ' PVTstr    закодированная строка с параметрами PVT.
 '           если задана - перекрывает другие значения
 '
 ' выходное значение - число - объемный расход ГЖС, м3/сут.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
-     
-    PVT.wc_perc = wc_perc
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.fw_perc = fw_perc
     PVT.Qliq_scm3day = Qliq_m3day
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     MF_Qmix_m3day = PVT.Qmix_m3day
+    Exit Function
+err1:
+    MF_Qmix_m3day = "error"
+    addLogMsg "error in function : MF_Qmix_m3day"
 End Function
 ' расчет плотности газожидкостной смеси для заданных  условий
-Public Function MF_Rhomix_kgm3(Qliq_m3day, wc_perc, P_atma, T_C, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 As Double = -1, _
-                    Optional ByVal Pb_atma As Double = -1, _
-                    Optional ByVal Tres_C As Double = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 As Double = -1, _
-                    Optional ByVal Muob_cP As Double = -1, _
-                    Optional ByVal PVTcorr = StandingBased, _
-                    Optional ByVal Ksep_fr As Double = 0, _
-                    Optional ByVal PKsep_atma As Double = -1, _
-                    Optional ByVal TKsep_C As Double = -1, _
-                    Optional ByVal PVTStr As String = "" _
-                    ) As Double
+Public Function MF_Rhomix_kgm3(ByVal Qliq_m3day As Double, _
+                              ByVal fw_perc As Double, _
+                              ByVal P_atma As Double, _
+                              ByVal T_C As Double, _
+                              Optional ByVal PVTstr As String = "") As Double
 ' обязательные аргументы функции
 ' Qliq_m3day дебит жидкости на поверхности
 ' wc_perc   объемная обводненность
@@ -1233,73 +1187,29 @@ Public Function MF_Rhomix_kgm3(Qliq_m3day, wc_perc, P_atma, T_C, _
 ' Т_C       температура, С.
 '
 ' опциональные аргументы функции
-' gamma_gas удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-'           имеет приоритет перед Rsb если Rp < Rsb
-' Pb_atma   Давление насыщения при  температуре Tres_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
-' Ksep_fr   коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' PKsep_atma    давление при которой была сепарация
-' TKsep_C       температура при которой была сепарация
+' PVTstr    encoded to string PVT properties of fluid (use PVT_Encode_string to make PVTstr)
 ' PVTstr    закодированная строка с параметрами PVT.
 '           если задана - перекрывает другие значения
 '
 ' выходное значение - число - плотность ГЖС, кг/м3.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
-     
-    PVT.wc_perc = wc_perc
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.fw_perc = fw_perc
     PVT.Qliq_scm3day = Qliq_m3day
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-        
     MF_Rhomix_kgm3 = PVT.rho_mix_kgm3
+    Exit Function
+err1:
+    MF_Rhomix_kgm3 = "error"
+    addLogMsg "error in function : MF_Rhomix_kgm3"
 End Function
 ' расчет вязкости газожидкостной смеси для заданных термобарических условий
-Public Function MF_Mumix_cP(Qliq_m3day, wc_perc, P_atma, T_C, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 As Double = -1, _
-                    Optional ByVal Pb_atma As Double = -1, _
-                    Optional ByVal Tres_C As Double = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 As Double = -1, _
-                    Optional ByVal Muob_cP As Double = -1, _
-                    Optional ByVal PVTcorr = StandingBased, _
-                    Optional ByVal Ksep_fr As Double = 0, _
-                    Optional ByVal PKsep_atma As Double = -1, _
-                    Optional ByVal TKsep_C As Double = -1, _
-                    Optional ByVal PVTStr As String = "" _
-                    ) As Double
+Public Function MF_Mumix_cP(ByVal Qliq_m3day As Double, _
+                              ByVal fw_perc As Double, _
+                              ByVal P_atma As Double, _
+                              ByVal T_C As Double, _
+                              Optional ByVal PVTstr As String = "") As Double
 ' обязательные аргументы функции
 ' Qliq_m3day дебит жидкости на поверхности
 ' wc_perc   объемная обводненность
@@ -1307,73 +1217,27 @@ Public Function MF_Mumix_cP(Qliq_m3day, wc_perc, P_atma, T_C, _
 ' Т_C       температура, С.
 '
 ' опциональные аргументы функции
-' gamma_gas удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-'           имеет приоритет перед Rsb если Rp < Rsb
-' Pb_atma   Давление насыщения при  температуре Tres_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
-' Ksep_fr   коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' PKsep_atma    давление при которой была сепарация
-' TKsep_C       температура при которой была сепарация
+' PVTstr    encoded to string PVT properties of fluid (use PVT_Encode_string to make PVTstr)
 ' PVTstr    закодированная строка с параметрами PVT.
 '           если задана - перекрывает другие значения
 '
-' выходное значение - число - объемный расход ГЖС, м3/сут.
+' выходное значение - число - вязкость ГЖС, м3/сут.
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
-     
-    PVT.wc_perc = wc_perc
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.fw_perc = fw_perc
     PVT.Qliq_scm3day = Qliq_m3day
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    
     MF_Mumix_cP = PVT.MuMix_cP
+    Exit Function
+err1:
+    MF_Mumix_cP = "error"
+    addLogMsg "error in function : MF_Mumix_cP"
 End Function
 ' расчет доли газа в потоке
 Public Function MF_GasFraction_d(P_atma, T_C, _
-                    Optional ByVal wc_perc = 0, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 = -1, _
-                    Optional ByVal Pb_atma = -1, _
-                    Optional ByVal Tres_C = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 = -1, _
-                    Optional ByVal Muob_cP = -1, _
-                    Optional ByVal PVTcorr = StandingBased, _
-                    Optional ByVal Ksep_fr = 0, _
-                    Optional ByVal PKsep_atma = -1, _
-                    Optional ByVal TKsep_C = -1, _
-                    Optional ByVal PVTStr As String = "" _
+                    Optional ByVal fw_perc = 0, _
+                    Optional ByVal PVTstr As String = "" _
                     ) As Double
 ' обязательные аргументы функции
 ' P_atma    давление, атм
@@ -1415,224 +1279,100 @@ Public Function MF_GasFraction_d(P_atma, T_C, _
 '
 '  выходное значение - число - доля газа в потоке
 ' (расходная без проскальзования)
+On Error GoTo err1:
     Dim PVT As CPVT
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
-    PVT.wc_perc = wc_perc
-    
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.fw_perc = fw_perc
     Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
     MF_GasFraction_d = PVT.GasFraction_d(0)
+    Exit Function
+err1:
+    MF_GasFraction_d = "error"
+    addLogMsg "error in function : MF_GasFraction_d"
 End Function
 ' расчет давления при котором достигается заданная доля газа в потоке
-Public Function MF_PGasFraction_atma(FreeGas_d, T_C, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal wc_perc = 0, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 As Double = -1, _
-                    Optional ByVal Pb_atma As Double = -1, _
-                    Optional ByVal Tres_C As Double = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 As Double = -1, _
-                    Optional ByVal Muob_cP As Double = -1, _
-                    Optional ByVal PVTcorr = StandingBased, _
-                    Optional ByVal Ksep_fr As Double = 0, _
-                    Optional ByVal PKsep_atma As Double = -1, _
-                    Optional ByVal TKsep_C As Double = -1, _
-                    Optional ByVal PVTStr As String = "" _
-                    ) As Double
+Public Function MF_PGasFraction_atma(ByVal FreeGas_d As Double, _
+                                     ByVal T_C As Double, _
+                                     ByVal fw_perc As Double, _
+                                     Optional ByVal PVTstr As String = PVT_DEFAULT) As Double
 ' обязательные аргументы функции
 ' FreeGas_d допустимая доля газа в потоке
 ' Т_C       температура, С.
 ' опциональные аргументы функции
-' gamma_gas        удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil        удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat        удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-' Pb_atma   давление насыщения, атм. Калибровочный параметр.
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
-' Ksep_fr   коэффициент сепарации - определяет изменение свойств
-'       нефти после сепарации определенной доли свободного газа.
-'       изменение свойств нефти зависит от условий при которых
-'       произошла сепарация газа, которые должны быть явно заданы
-' PKsep_atma    давление при которой была сепарация
-' TKsep_C       температура при которой была сепарация
 ' PVTstr    закодированная строка с параметрами PVT.
 '           если задана - перекрывает другие значения
 '
 ' выходное значение - число - давление, атма.
+On Error GoTo err1:
     Dim PVT As CPVT
-    Dim t As Double
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-            Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        End If
-    End If
-    PVT.wc_perc = wc_perc
-    
-    t = T_C
-    MF_PGasFraction_atma = PVT.PGasFraction_atma(FreeGas_d, t)
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.fw_perc = fw_perc
+    MF_PGasFraction_atma = PVT.PGasFraction_atma(FreeGas_d, T_C)
+    Exit Function
+err1:
+    MF_PGasFraction_atma = "error"
+    addLogMsg "error in function : MF_PGasFraction_atma"
 End Function
 ' расчет газового фактора
 ' при котором достигается заданная доля газа в потоке
-Public Function MF_RpGasFraction_m3m3(FreeGas_d, P_atma, T_C, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal wc_perc = 0, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 As Double = -1, _
-                    Optional ByVal Pb_atma As Double = -1, _
-                    Optional ByVal Tres_C As Double = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 As Double = -1, _
-                    Optional ByVal Muob_cP As Double = -1, _
-                    Optional ByVal PVTcorr = StandingBased, _
-                    Optional ByVal Ksep_fr As Double = 0, _
-                    Optional ByVal PKsep_atma As Double = -1, _
-                    Optional ByVal TKsep_C As Double = -1, _
-                    Optional ByVal PVTStr As String = "" _
-                    ) As Double
+Public Function MF_RpGasFraction_m3m3(ByVal FreeGas_d As Double, _
+                                     ByVal P_atma As Double, _
+                                     ByVal T_C As Double, _
+                                     ByVal fw_perc As Double, _
+                                     Optional ByVal PVTstr As String = PVT_DEFAULT) As Double
 ' обязательные аргументы функции
 ' FreeGas_d допустимая доля газа в потоке
 ' P_atma     давление, атм
 ' Т_C       температура, С.
 ' опциональные аргументы функции
-' gamma_gas        удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil        удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat        удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-' Pb_atma   давление насыщения, атм. Калибровочный параметр.
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
-' Ksep_fr   коэффициент сепарации - определяет изменение свойств
-'       нефти после сепарации определенной доли свободного газа.
-'       изменение свойств нефти зависит от условий при которых
-'       произошла сепарация газа, которые должны быть явно заданы
-' PKsep_atma    давление при которой была сепарация
-' TKsep_C       температура при которой была сепарация
 ' PVTstr    закодированная строка с параметрами PVT.
 '           если задана - перекрывает другие значения
 '
 ' выходное значение - число - газовый фактор, м3/м3.
+On Error GoTo err1:
     Dim PVT As CPVT
-    Dim t As Double, P As Double
-    If PVTStr <> "" Then
-        Set PVT = PVT_Decode_string(PVTStr)
-    Else
-        Set PVT = New CPVT
-        PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-        PVT.wc_perc = wc_perc
-    End If
-    If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-        Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-    End If
-    PVT.wc_perc = wc_perc
-    t = T_C
-    P = P_atma
-    MF_RpGasFraction_m3m3 = PVT.RpGasFraction_m3m3(FreeGas_d, P, t)
+    Set PVT = PVT_Decode_string(PVTstr)
+    PVT.fw_perc = fw_perc
+    MF_RpGasFraction_m3m3 = PVT.RpGasFraction_m3m3(FreeGas_d, P_atma, T_C)
+    Exit Function
+err1:
+    MF_RpGasFraction_m3m3 = "error"
+    addLogMsg "error in function : MF_RpGasFraction_m3m3"
 End Function
 ' расчет натуральной сепарации газа на приеме насоса
-Public Function MF_SeparNat_d(Pin_atma As Double, _
-        Qliq_m3day As Double, fw_perc, _
-        Optional ByVal Tin_C As Double = 50, _
-        Optional ByVal dIntake_mm As Double = 90, _
-        Optional ByVal dCas_mm As Double = 120, _
-        Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-        Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-        Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-        Optional ByVal rsb_m3m3 = const_Rsb_default, _
-        Optional ByVal Rp_m3m3 As Double = -1, _
-        Optional ByVal Pb_atma As Double = -1, _
-        Optional ByVal Tres_C As Double = const_Tres_default, _
-        Optional ByVal Bob_m3m3 As Double = -1, _
-        Optional ByVal Muob_cP As Double = -1, _
-        Optional ByVal PVTcorr = StandingBased) As Double
+Public Function MF_SeparNat_d(ByVal Pin_atma As Double, _
+                              ByVal Qliq_m3day As Double, _
+                                Optional ByVal fw_perc As Double = 0, _
+                                Optional ByVal Tin_C As Double = 50, _
+                                Optional ByVal dIntake_mm As Double = 90, _
+                                Optional ByVal dCas_mm As Double = 120, _
+                                Optional ByVal wc_perc = 0, _
+                                Optional ByVal PVTstr As String = PVT_DEFAULT) As Double
 '----------------------------------------------------------------
 ' Pin_atma       - давление сепарации
 ' Qliq_m3day    - дебит жидкости в поверхностных условиях
-' fw_perc      - обводненность
+' fw_perc       - обводненность
 ' Tin_C         - температура сепарации
 ' dintake_mm    - диаметр приемной сетки
 ' dcas_mm       - диаметр эксплуатационной колонны
-' gamma_gas        удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil        удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat        удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-' Pb_atma   давление насыщения, атм. Калибровочный параметр.
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
+' PVTstr    закодированная строка с параметрами PVT.
+'           если задана - перекрывает другие значения
+On Error GoTo err1:
     Dim Fluid As New CPVT
-    Call Fluid.SetRpRsb(Rp_m3m3, CDbl(rsb_m3m3))
-    Fluid.Pb_atma = Pb_atma
-    Fluid.Tres_C = Tres_C
-    Fluid.PVT_CORRELATION = PVTcorr
-    Fluid.Bob_m3m3 = Bob_m3m3
-    Fluid.gamma_g = gamma_gas
-    Fluid.gamma_o = gamma_oil
-    Fluid.gamma_w = gamma_wat
-    
+    Set Fluid = PVT_Decode_string(PVTstr)
     Fluid.Qliq_scm3day = Qliq_m3day
-    Fluid.wc_perc = fw_perc
-    
+    Fluid.fw_perc = fw_perc
     Call Fluid.Calc_PVT(Pin_atma, Tin_C)
     With Fluid
         MF_SeparNat_d = unf_calc_natural_separation(dIntake_mm / 1000, dCas_mm / 1000, .Qliq_scm3day, .Qgas_scm3day, .Bo_m3m3, .Bg_m3m3, .sigma_o_Nm, .RhoOil_sckgm3, .rhoGas_sckgm3, .wc_perc)
     End With
-    
+    Exit Function
+err1:
+    MF_SeparNat_d = "error"
+    addLogMsg "error in function :MF_SeparNat_d"
 End Function
 Public Function MF_SeparTotal_d(SepNat As Double, _
-                        SepGasSep As Double) As Double
+                                SepGasSep As Double) As Double
 ' SepNat        - естественная сепарация
 ' SepGasSep     - искусственная сепарация (газосепаратор)
     MF_SeparTotal_d = SepNat + (1 - SepNat) * SepGasSep
@@ -1653,19 +1393,20 @@ Public Function MF_PrGrad(ByVal d_m As Double, _
 ' объемные коэффициенты по умолчанию заданы равными единицам - если их не трогать, значит дебиты в рабочих условиях
 ' газосодержание равно нулю по умолчанию - значит весь газ который указан идет в потоке
 ' пока только для Ансари - потом можно распространить и на другие методы
-Dim rho_osc_kgm3 As Double
-Dim rho_gsc_kgm3 As Double
-Dim dPdLg_out_atmm As Double
-Dim dPdLf_out_atmm As Double
-Dim Vsl_out_msec As Double
-Dim Vsg_out_msec As Double
-Dim Hl_out_fr As Double
-Dim fpat_out_num
-Dim dPdLa_out_atmm As Double
-Dim PrGrad
-rho_osc_kgm3 = gamma_oil * const_rho_ref
-rho_gsc_kgm3 = gamma_gas * const_rho_air
+    Dim rho_osc_kgm3 As Double
+    Dim rho_gsc_kgm3 As Double
+    Dim dPdLg_out_atmm As Double
+    Dim dPdLf_out_atmm As Double
+    Dim Vsl_out_msec As Double
+    Dim Vsg_out_msec As Double
+    Dim Hl_out_fr As Double
+    Dim fpat_out_num
+    Dim dPdLa_out_atmm As Double
+    Dim PrGrad
+    
 On Error GoTo er1:
+    rho_osc_kgm3 = gamma_oil * const_rho_ref
+    rho_gsc_kgm3 = gamma_gas * const_rho_air
     PrGrad = unf_AnsariGradient(d_m, theta_deg, eps_m, _
                                 Ql_rc_m3day, Qg_rc_m3day, _
                                 Muo_cP, Mug_cP, _
@@ -1673,156 +1414,27 @@ On Error GoTo er1:
                                 rho_osc_kgm3, _
                                 rho_gsc_kgm3, _
                                 P_atma)
-    
     MF_PrGrad = PrGrad
-    
-Exit Function
+    Exit Function
 er1:
-MF_PrGrad = 0
+    MF_PrGrad = "error"
 End Function
 '  расчет перепада давления и распределения температуры в трубе
 '  с использованием многофазных корреляций
-Public Function MF_dPpipe_atm(Q_m3Day, fw_perc, _
-                Hmes0_m As Double, Hmes1_m As Double, _
-                Pcalc_atma As Double, _
-                Optional ByVal Tcalc_C As Double = 50, _
-                Optional ByVal theta_deg As Double = 90, _
-                Optional ByVal d_mm As Double = 60, _
-                Optional ByVal roughness_m As Double = 0.0001, _
-                Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                Optional ByVal Rp_m3m3 As Double = -1, _
-                Optional ByVal Pb_atma As Double = -1, _
-                Optional ByVal Tres_C As Double = const_Tres_default, _
-                Optional ByVal Bob_m3m3 As Double = -1, _
-                Optional ByVal Muob_cP As Double = -1, _
-                Optional ByVal PVTcorr = StandingBased, _
-                Optional ByVal Ksep_fr As Double = 0, _
-                Optional ByVal PKsep_atma As Double = -1, _
-                Optional ByVal TKsep_C As Double = -1, _
-                Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                Optional ByVal Tother_C As Double = -1, _
-                Optional ByVal betta_grav = 1, Optional ByVal betta_fric = 1)
-'
-'
-' Обязательные параметры
-' Q_m3Day       - дебит жидкости в поверхностных условиях
-' fw_perc      - обводненность
-' Hmes0_m       - начальная координата трубы, м
-' Hmes1_m       - конечная координата трубы, м
-'                 расчет всегда ведется от начальной координаты к
-'                 конечной. если Hmes0_m < Hmes1_m то расчет
-'                 идет сверху вниз для вертикальной трубы
-'                 иначе расчет идет снизу вверх
-' Pcalc_atma    - давление с которого начинается расчет, атм
-'                 граничное значение для проведения расчета
-' Необязательные параметры
-' стандартные набор PVT параметров
-' Tcalc_C       - температура в точке где задано давление, С
-' theta_deg     - угол направления потока к горизонтали
-'                 (90 - вертикальная труба вверх)
-'                 может принимать отрицательные значения
-' d_mm          - внутрнний диаметр трубы
-' roughness_m   - шероховатость трубы
-' gamma_gas     - удельная плотность газа, по воздуху.
-'                   const_gamma_gas_default = 0.6
-' gamma_oil     - удельная плотность нефти, по воде.
-'                   const_gamma_oil_default = 0.86
-' gamma_wat     - удельная плотность воды, по воде.
-'                   const_gamma_wat_default = 1
-' Rsb_m3m3      - газосодержание при давлении насыщения, м3/м3.
-'                   const_Rsb_default = 100
-' Rp_m3m3       - замерной газовый фактор, м3/м3.
-' Pb_atma       - давление насыщения, атм. Калибровочный параметр.
-' Tres_C        - пластовая температура, С.
-'                 Учитывается при расчете давления насыщения.
-' Bob_m3m3      - объемный коэффициент нефти, м3/м3.
-' Muob_cP       - вязкость нефти при давлении насыщения
-'                 По умолчанию рассчитывается по корреляции
-' PVTcorr       - номер набора PVT корреляций для расчета
-'                 StandingBased = 0 - на основе кор-ии Стендинга
-'                 McCainBased = 1 - на основе кор-ии Маккейна
-'                 StraigthLine = 2 - упрощенные зависимости
-' Ksep_fr       - коэффициент сепарации - определяет изменение
-'               свойств нефти после сепарации  доли  газа.
-'               изменение свойств нефти зависит от условий
-'               сепарация газа, которые должны быть явно заданы
-' PKsep_atma    - давление при которой была сепарация
-' TKsep_C       - температура при которой была сепарация
-' HydrCorr      - гидравлическая корреляция, H_CORRELATION
-'                   BeggsBriilCor = 0
-'                   AnsariCor = 1
-'                   UnifiedCor = 2
-'                   Gray = 3
-'                   HagedornBrown = 4
-'                   SakharovMokhov = 5
-' Tother_C      - температура на другом конце трубы
-'                 по умолчанию температура вдоль трубы постоянна
-'                 если задано то меняется линейно по трубе
-' выходное значение - число - давление на другом конце трубы atma.
-    Dim dPT(2) As Double
-    Dim PT
-    PT = MF_Ppipe_atma(Q_m3Day, fw_perc, _
-                Hmes0_m, Hmes1_m, _
-                Pcalc_atma, _
-                 Tcalc_C, _
-                 theta_deg, _
-                 d_mm, _
-                 roughness_m, _
-                 gamma_gas, _
-                 gamma_oil, _
-                 gamma_wat, _
-                 rsb_m3m3, _
-                 Rp_m3m3, _
-                 Pb_atma, _
-                 Tres_C, _
-                 Bob_m3m3, _
-                 Muob_cP, _
-                 PVTcorr, _
-                 Ksep_fr, _
-                 PKsep_atma, _
-                 TKsep_C, _
-                 HydrCorr, _
-                 Tother_C, _
-                 betta_grav, betta_fric)
-                 
-    If Hmes0_m < Hmes1_m Then
-        dPT(0) = PT(0) - Pcalc_atma
-        dPT(1) = PT(1) - Tcalc_C
-    Else
-        dPT(0) = Pcalc_atma - PT(0)
-        dPT(1) = Tcalc_C - PT(1)
-    End If
-    
-    MF_dPpipe_atm = dPT
-End Function
-'  расчет давления и распределения температуры в трубе
-'  с использованием многофазных корреляций
-Public Function MF_Ppipe_atma(Q_m3Day, fw_perc, _
-                Hmes0_m As Double, Hmes1_m As Double, _
-                Pcalc_atma As Double, _
-                Optional ByVal Tcalc_C As Double = 50, _
-                Optional ByVal theta_deg As Double = 90, _
-                Optional ByVal d_mm As Double = 60, _
-                Optional ByVal roughness_m As Double = 0.0001, _
-                Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                Optional ByVal Rp_m3m3 As Double = -1, _
-                Optional ByVal Pb_atma As Double = -1, _
-                Optional ByVal Tres_C As Double = const_Tres_default, _
-                Optional ByVal Bob_m3m3 As Double = -1, _
-                Optional ByVal Muob_cP As Double = -1, _
-                Optional ByVal PVTcorr = StandingBased, _
-                Optional ByVal Ksep_fr As Double = 0, _
-                Optional ByVal PKsep_atma As Double = -1, _
-                Optional ByVal TKsep_C As Double = -1, _
-                Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                Optional ByVal Tother_C As Double = -1, _
-                Optional ByVal betta_grav = 1, Optional ByVal betta_fric = 1)
+Public Function MF_dPpipe_atm(ByVal Q_m3Day As Double, _
+                                ByVal fw_perc As Double, _
+                                ByVal Hmes0_m As Double, _
+                                ByVal Hmes1_m As Double, _
+                                ByVal Pcalc_atma As Double, _
+                                Optional ByVal PVTstr As String = PVT_DEFAULT, _
+                                Optional ByVal theta_deg As Double = 90, _
+                                Optional ByVal d_mm As Double = 60, _
+                                Optional ByVal HydrCorr As H_CORRELATION = 0, _
+                                Optional ByVal Tcalc_C As Double = 50, _
+                                Optional ByVal Tother_C As Double = -1, _
+                                Optional ByVal betta_grav = 1, _
+                                Optional ByVal betta_fric = 1, _
+                                Optional ByVal roughness_m As Double = 0.0001)
 '
 ' Обязательные параметры
 ' Q_m3Day       - дебит жидкости в поверхностных условиях
@@ -1837,37 +1449,12 @@ Public Function MF_Ppipe_atma(Q_m3Day, fw_perc, _
 '                 граничное значение для проведения расчета
 ' Необязательные параметры
 ' стандартные набор PVT параметров
-' Tcalc_C       - температура в точке где задано давление, С
+' PVTstr    закодированная строка с параметрами PVT.
+'           если задана - перекрывает другие значения
 ' theta_deg     - угол направления потока к горизонтали
 '                 (90 - вертикальная труба вверх)
 '                 может принимать отрицательные значения
 ' d_mm          - внутрнний диаметр трубы
-' roughness_m   - шероховатость трубы
-' gamma_gas     - удельная плотность газа, по воздуху.
-'                   const_gamma_gas_default = 0.6
-' gamma_oil     - удельная плотность нефти, по воде.
-'                   const_gamma_oil_default = 0.86
-' gamma_wat     - удельная плотность воды, по воде.
-'                   const_gamma_wat_default = 1
-' Rsb_m3m3      - газосодержание при давлении насыщения, м3/м3.
-'                   const_Rsb_default = 100
-' Rp_m3m3       - замерной газовый фактор, м3/м3.
-' Pb_atma       - давление насыщения, атм. Калибровочный параметр.
-' Tres_C        - пластовая температура, С.
-'                 Учитывается при расчете давления насыщения.
-' Bob_m3m3      - объемный коэффициент нефти, м3/м3.
-' Muob_cP       - вязкость нефти при давлении насыщения
-'                 По умолчанию рассчитывается по корреляции
-' PVTcorr       - номер набора PVT корреляций для расчета
-'                 StandingBased = 0 - на основе кор-ии Стендинга
-'                 McCainBased = 1 - на основе кор-ии Маккейна
-'                 StraigthLine = 2 - упрощенные зависимости
-' Ksep_fr       - коэффициент сепарации - определяет изменение
-'               свойств нефти после сепарации  доли  газа.
-'               изменение свойств нефти зависит от условий
-'               сепарация газа, которые должны быть явно заданы
-' PKsep_atma    - давление при которой была сепарация
-' TKsep_C       - температура при которой была сепарация
 ' HydrCorr      - гидравлическая корреляция, H_CORRELATION
 '                   BeggsBriilCor = 0
 '                   AnsariCor = 1
@@ -1875,9 +1462,90 @@ Public Function MF_Ppipe_atma(Q_m3Day, fw_perc, _
 '                   Gray = 3
 '                   HagedornBrown = 4
 '                   SakharovMokhov = 5
+' Tcalc_C       - температура в точке где задано давление, С
 ' Tother_C      - температура на другом конце трубы
 '                 по умолчанию температура вдоль трубы постоянна
 '                 если задано то меняется линейно по трубе
+' betta_grav    - поправка на гравитационную составляющую перепада давления
+' betta_fric    - поправка на трение в перепаде давления
+' roughness_m   - шероховатость трубы
+' выходное значение - число - перепад давления в трубе.
+On Error GoTo err1:
+    Dim dPT(2) As Double
+    Dim PT
+    PT = MF_Ppipe_atma(Q_m3Day, fw_perc, _
+                Hmes0_m, Hmes1_m, _
+                Pcalc_atma, _
+                PVTstr, _
+                theta_deg, _
+                d_mm, _
+                HydrCorr, _
+                Tcalc_C, Tother_C, _
+                betta_grav, betta_fric, _
+                roughness_m)
+    If Hmes0_m < Hmes1_m Then
+        dPT(0) = PT(0) - Pcalc_atma
+        dPT(1) = PT(1) - Tcalc_C
+    Else
+        dPT(0) = Pcalc_atma - PT(0)
+        dPT(1) = Tcalc_C - PT(1)
+    End If
+    MF_dPpipe_atm = dPT
+    Exit Function
+err1:
+    MF_dPpipe_atm = "error"
+    addLogMsg "error in function : MF_dPpipe_atm"
+End Function
+'  расчет давления и распределения температуры в трубе
+'  с использованием многофазных корреляций
+Public Function MF_Ppipe_atma(ByVal Q_m3Day As Double, _
+                                ByVal fw_perc As Double, _
+                                ByVal Hmes0_m As Double, _
+                                ByVal Hmes1_m As Double, _
+                                ByVal Pcalc_atma As Double, _
+                                Optional ByVal PVTstr As String = PVT_DEFAULT, _
+                                Optional ByVal theta_deg As Double = 90, _
+                                Optional ByVal d_mm As Double = 60, _
+                                Optional ByVal HydrCorr As H_CORRELATION = 0, _
+                                Optional ByVal Tcalc_C As Double = 50, _
+                                Optional ByVal Tother_C As Double = -1, _
+                                Optional ByVal betta_grav = 1, _
+                                Optional ByVal betta_fric = 1, _
+                                Optional ByVal roughness_m As Double = 0.0001)
+'
+' Обязательные параметры
+' Q_m3Day       - дебит жидкости в поверхностных условиях
+' fw_perc       - обводненность
+' Hmes0_m       - начальная координата трубы, м
+' Hmes1_m       - конечная координата трубы, м
+'                 расчет всегда ведется от начальной координаты к
+'                 конечной. если Hmes0_m < Hmes1_m то расчет
+'                 идет сверху вниз для вертикальной трубы
+'                 иначе расчет идет снизу вверх
+' Pcalc_atma    - давление с которого начинается расчет, атм
+'                 граничное значение для проведения расчета
+' Необязательные параметры
+' стандартные набор PVT параметров
+' PVTstr    закодированная строка с параметрами PVT.
+'           если задана - перекрывает другие значения
+' theta_deg     - угол направления потока к горизонтали
+'                 (90 - вертикальная труба вверх)
+'                 может принимать отрицательные значения
+' d_mm          - внутрнний диаметр трубы
+' HydrCorr      - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Tcalc_C       - температура в точке где задано давление, С
+' Tother_C      - температура на другом конце трубы
+'                 по умолчанию температура вдоль трубы постоянна
+'                 если задано то меняется линейно по трубе
+' betta_grav    - поправка на гравитационную составляющую перепада давления
+' betta_fric    - поправка на трение в перепаде давления
+' roughness_m   - шероховатость трубы
 ' выходное значение - число - давление на другом конце трубы atma.
 On Error GoTo err1:
     ' first check trivial initial data
@@ -1890,13 +1558,9 @@ On Error GoTo err1:
     Dim PTcalc As PTtype
     Dim TM As TEMP_CALC_METHOD
     ' initialize PVT properties
-    PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-    If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-        Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-    End If
-    PVT.PVT_CORRELATION = PVTcorr
+    Set PVT = PVT_Decode_string(PVTstr)
     PVT.Qliq_scm3day = Q_m3Day
-    PVT.wc_perc = fw_perc
+    PVT.fw_perc = fw_perc
     Set pipe.Fluid = PVT
     ' initialize boundary conditions
     PTcalc.P_atma = Pcalc_atma
@@ -1917,38 +1581,31 @@ On Error GoTo err1:
     
     Exit Function
 err1:
-    MF_Ppipe_atma = Array(Pcalc_atma, Tcalc_C)
-    addLogMsg ("ошибка при расчете dPipe")
+    'MF_Ppipe_atma = Array(Pcalc_atma, Tcalc_C)
+    MF_Ppipe_atma = Array("error", "error")
+    addLogMsg ("MF_Ppipe_atma: error")
 End Function
 '  расчет давления и распределения температуры в трубе
 '  при барботаже (движение газа в затрубе при неподвижной жидкости)
 '  с использованием многофазных корреляций
-Public Function MF_PpipeZLNF_atma(Q_m3Day, fw_perc, _
-                Hmes0_m As Double, Hmes1_m As Double, _
-                Pcalc_atma As Double, _
-                Optional ByVal Tcalc_C As Double = 50, _
-                Optional ByVal theta_deg As Double = 90, _
-                Optional ByVal d_mm As Double = 60, _
-                Optional ByVal roughness_m As Double = 0.0001, _
-                Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                Optional ByVal Rp_m3m3 As Double = -1, _
-                Optional ByVal Pb_atma As Double = -1, _
-                Optional ByVal Tres_C As Double = const_Tres_default, _
-                Optional ByVal Bob_m3m3 As Double = -1, _
-                Optional ByVal Muob_cP As Double = -1, _
-                Optional ByVal PVTcorr = StandingBased, _
-                Optional ByVal Ksep_fr As Double = 0, _
-                Optional ByVal PKsep_atma As Double = -1, _
-                Optional ByVal TKsep_C As Double = -1, _
-                Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                Optional ByVal Tother_C As Double = -1, _
-                Optional ByVal betta_grav = 1, Optional ByVal betta_fric = 1)
+Public Function MF_PpipeZLNF_atma(ByVal Q_m3Day As Double, _
+                                ByVal fw_perc As Double, _
+                                ByVal Hmes0_m As Double, _
+                                ByVal Hmes1_m As Double, _
+                                ByVal Pcalc_atma As Double, _
+                                Optional ByVal PVTstr As String = PVT_DEFAULT, _
+                                Optional ByVal theta_deg As Double = 90, _
+                                Optional ByVal d_mm As Double = 60, _
+                                Optional ByVal HydrCorr As H_CORRELATION = 0, _
+                                Optional ByVal Tcalc_C As Double = 50, _
+                                Optional ByVal Tother_C As Double = -1, _
+                                Optional ByVal betta_grav = 1, _
+                                Optional ByVal betta_fric = 1, _
+                                Optional ByVal roughness_m As Double = 0.0001, _
+                                Optional ByVal Qgcas_free_scm3day As Double = 50)
 '
 ' Обязательные параметры
-' Q_m3Day       - дебит жидкости в поверхностных условиях
+' Q_m3Day       - дебит жидкости в поверхностных условиях (учтется при расчете газа в затрубе)
 ' fw_perc       - обводненность
 ' Hmes0_m       - начальная координата трубы, м
 ' Hmes1_m       - конечная координата трубы, м
@@ -1960,37 +1617,12 @@ Public Function MF_PpipeZLNF_atma(Q_m3Day, fw_perc, _
 '                 граничное значение для проведения расчета
 ' Необязательные параметры
 ' стандартные набор PVT параметров
-' Tcalc_C       - температура в точке где задано давление, С
+' PVTstr    закодированная строка с параметрами PVT.
+'           если задана - перекрывает другие значения
 ' theta_deg     - угол направления потока к горизонтали
 '                 (90 - вертикальная труба вверх)
 '                 может принимать отрицательные значения
 ' d_mm          - внутрнний диаметр трубы
-' roughness_m   - шероховатость трубы
-' gamma_gas     - удельная плотность газа, по воздуху.
-'                   const_gamma_gas_default = 0.6
-' gamma_oil     - удельная плотность нефти, по воде.
-'                   const_gamma_oil_default = 0.86
-' gamma_wat     - удельная плотность воды, по воде.
-'                   const_gamma_wat_default = 1
-' Rsb_m3m3      - газосодержание при давлении насыщения, м3/м3.
-'                   const_Rsb_default = 100
-' Rp_m3m3       - замерной газовый фактор, м3/м3.
-' Pb_atma       - давление насыщения, атм. Калибровочный параметр.
-' Tres_C        - пластовая температура, С.
-'                 Учитывается при расчете давления насыщения.
-' Bob_m3m3      - объемный коэффициент нефти, м3/м3.
-' Muob_cP       - вязкость нефти при давлении насыщения
-'                 По умолчанию рассчитывается по корреляции
-' PVTcorr       - номер набора PVT корреляций для расчета
-'                 StandingBased = 0 - на основе кор-ии Стендинга
-'                 McCainBased = 1 - на основе кор-ии Маккейна
-'                 StraigthLine = 2 - упрощенные зависимости
-' Ksep_fr       - коэффициент сепарации - определяет изменение
-'               свойств нефти после сепарации  доли  газа.
-'               изменение свойств нефти зависит от условий
-'               сепарация газа, которые должны быть явно заданы
-' PKsep_atma    - давление при которой была сепарация
-' TKsep_C       - температура при которой была сепарация
 ' HydrCorr      - гидравлическая корреляция, H_CORRELATION
 '                   BeggsBriilCor = 0
 '                   AnsariCor = 1
@@ -1998,9 +1630,15 @@ Public Function MF_PpipeZLNF_atma(Q_m3Day, fw_perc, _
 '                   Gray = 3
 '                   HagedornBrown = 4
 '                   SakharovMokhov = 5
+'                 для барботажа принудительно на основе Ансари пока
+' Tcalc_C       - температура в точке где задано давление, С
 ' Tother_C      - температура на другом конце трубы
 '                 по умолчанию температура вдоль трубы постоянна
 '                 если задано то меняется линейно по трубе
+' betta_grav    - поправка на гравитационную составляющую перепада давления
+' betta_fric    - поправка на трение в перепаде давления
+' roughness_m   - шероховатость трубы
+' Qgcas_free_scm3day    - количество газа в затрубе
 ' выходное значение - число - давление на другом конце трубы atma.
 On Error GoTo err1:
     ' first check trivial initial data
@@ -2014,16 +1652,15 @@ On Error GoTo err1:
     Dim TM As TEMP_CALC_METHOD
     Dim Qg_free_scm3day As Double
     ' initialize PVT properties
-    PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3, Muob_cP
-    PVT.PVT_CORRELATION = PVTcorr
+    Set PVT = PVT_Decode_string(PVTstr)
     PVT.Qliq_scm3day = Q_m3Day
-    PVT.wc_perc = fw_perc
-    Call PVT.Calc_PVT(PKsep_atma, TKsep_C)
-    Qg_free_scm3day = PVT.QgasInSitu_scm3day ' свободный газ до сепарации
-    If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-        Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-        Qg_free_scm3day = Qg_free_scm3day * Ksep_fr ' оставляем газ только в затрубе который
-    End If
+    PVT.fw_perc = fw_perc
+    'Call PVT.Calc_PVT(PKsep_atma, TKsep_C)
+   ' Qg_free_scm3day = PVT.QgasInSitu_scm3day ' свободный газ до сепарации
+   'If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
+    '    Call PVT.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
+    PVT.Qgfree_scm3day = Qgcas_free_scm3day  ' оставляем газ только в затрубе который
+    'End If
     Set pipe.Fluid = PVT
     ' initialize boundary conditions
     PTcalc.P_atma = Pcalc_atma
@@ -2044,7 +1681,7 @@ On Error GoTo err1:
     
     Exit Function
 err1:
-    MF_PpipeZLNF_atma = Array(Pcalc_atma, Tcalc_C)
+    MF_PpipeZLNF_atma = Array("error", "error")
     addLogMsg ("ошибка при расчете dPipe")
 End Function
 Private Function ArrayOut(PT As PTtype)
@@ -2060,20 +1697,9 @@ Public Function MF_dPChoke_atm(dPipe_mm, dchoke_mm, _
             Qliq_m3day, fw_perc, _
             Optional ByVal Tchoke_C As Double = 20, _
             Optional ByVal Calc_from_P0 As Boolean = True, _
-            Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-            Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-            Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-            Optional ByVal rsb_m3m3 = const_Rsb_default, _
-            Optional ByVal Rp_m3m3 As Double = -1, _
-            Optional ByVal Pb_atma As Double = -1, _
-            Optional ByVal Tres_C As Double = const_Tres_default, _
-            Optional ByVal Bob_m3m3 As Double = -1, _
-            Optional ByVal Muob_cP As Double = -1, _
-            Optional ByVal PVTcorr = StandingBased, _
-            Optional ByVal Ksep_fr As Double = 0, _
-            Optional ByVal PKsep_atma As Double = -1, _
-            Optional ByVal TKsep_C As Double = -1)
+            Optional ByVal PVTstr As String = PVT_DEFAULT)
             
+On Error GoTo err1:
     Dim PT
     Dim dPT(2) As Double
     
@@ -2082,19 +1708,7 @@ Public Function MF_dPChoke_atm(dPipe_mm, dchoke_mm, _
             Qliq_m3day, fw_perc, _
             Tchoke_C, _
             Calc_from_P0, _
-            gamma_gas, _
-            gamma_oil, _
-            gamma_wat, _
-            rsb_m3m3, _
-            Rp_m3m3, _
-            Pb_atma, _
-            Tres_C, _
-            Bob_m3m3, _
-            Muob_cP, _
-            PVTcorr, _
-            Ksep_fr, _
-            PKsep_atma, _
-            TKsep_C)
+            PVTstr)
     If Calc_from_P0 Then
         dPT(0) = Pin_atma - PT(0)
     Else
@@ -2104,26 +1718,21 @@ Public Function MF_dPChoke_atm(dPipe_mm, dchoke_mm, _
     
     MF_dPChoke_atm = dPT
     
+    Exit Function
+err1:
+    MF_dPChoke_atm = "error"
+    addLogMsg "error in function : MF_dPChoke_atm"
 End Function
 ' расчет давления в штуцере
-Public Function MF_PChoke_atm(dPipe_mm, dchoke_mm, _
-            Pin_atma, Pout_atma, _
-            Qliq_m3day, fw_perc, _
-            Optional ByVal Tchoke_C As Double = 20, _
-            Optional ByVal Calc_from_P0 As Boolean = True, _
-            Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-            Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-            Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-            Optional ByVal rsb_m3m3 = const_Rsb_default, _
-            Optional ByVal Rp_m3m3 As Double = -1, _
-            Optional ByVal Pb_atma As Double = -1, _
-            Optional ByVal Tres_C As Double = const_Tres_default, _
-            Optional ByVal Bob_m3m3 As Double = -1, _
-            Optional ByVal Muob_cP As Double = -1, _
-            Optional ByVal PVTcorr = StandingBased, _
-            Optional ByVal Ksep_fr As Double = 0, _
-            Optional ByVal PKsep_atma As Double = -1, _
-            Optional ByVal TKsep_C As Double = -1)
+Public Function MF_PChoke_atm(ByVal dPipe_mm As Double, _
+                                ByVal dchoke_mm As Double, _
+                                ByVal Pin_atma As Double, _
+                                ByVal Pout_atma As Double, _
+                                ByVal Qliq_m3day As Double, _
+                                ByVal fw_perc As Double, _
+                                Optional ByVal Tchoke_C As Double = 20, _
+                                Optional ByVal Calc_from_P0 As Boolean = True, _
+                                Optional ByVal PVTstr As String = "")
 ' dPipe_mm      - диаметр трубы до и после штуцера
 ' dChoke_mm     - диаметр штуцера (эффективный)
 ' Pin_atma       - давление на входе (высокой стороне)
@@ -2133,160 +1742,56 @@ Public Function MF_PChoke_atm(dPipe_mm, dchoke_mm, _
 ' опциональные аргументы функции
 ' Tchoke_C      - температура, С.
 ' Calc_from_P0 - показывает направление расчета штуцера
-' gamma_gas        удельная плотность газа, по воздуху.
-'           const_gamma_gas_default = 0.6
-' gamma_oil        удельная плотность нефти, по воде.
-'           const_gamma_oil_default = 0.86
-' gamma_wat        удельная плотность воды, по воде.
-'           const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'           const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3.
-' Pb_atma   давление насыщения, атм. Калибровочный параметр.
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3.
-' Muob_cP   вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций для расчета
-'           StandingBased = 0 - на основе кор-ии Стендинга
-'           McCainBased = 1 - на основе кор-ии Маккейна
-'           StraigthLine = 2 - на основе упрощенных зависимостей
-' Ksep_fr   коэффициент сепарации - определяет изменение свойств
-'       нефти после сепарации определенной доли свободного газа.
-'       изменение свойств нефти зависит от условий при которых
-'       произошла сепарация газа, которые должны быть явно заданы
-' PKsep_atma    давление при которой была сепарация
-' TKsep_C       температура при которой была сепарация
+' PVTstr    закодированная строка с параметрами PVT.
+'           если задана - перекрывает другие значения
 ' выходное значение - число - перепад давления на штуцере.
+On Error GoTo err1:
     Dim Choke As New Cchoke
     Dim PT As PTtype
-    Call Choke.Fluid.SetRpRsb(Rp_m3m3, CDbl(rsb_m3m3))
-    Choke.Fluid.Pb_atma = Pb_atma
-    Choke.Fluid.Tres_C = Tres_C
-    Choke.Fluid.PVT_CORRELATION = PVTcorr
-    Choke.Fluid.Bob_m3m3 = Bob_m3m3
-    Choke.Fluid.gamma_g = gamma_gas
-    Choke.Fluid.gamma_o = gamma_oil
-    Choke.Fluid.gamma_w = gamma_wat
-    If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-        Call Choke.Fluid.ModAfterSeparation(PKsep_atma, TKsep_C, _
-                                            Ksep_fr, GasGoesIntoSolution)
-    End If
+    Dim PVT As CPVT
+    Set PVT = PVT_Encode_string(PVTstr)
+    Set Choke.Fluid = PVT
     Choke.Fluid.Qliq_scm3day = Qliq_m3day
     Choke.Fluid.wc_perc = fw_perc
-    
     Choke.Ddown_m = dPipe_mm / 1000
     Choke.Dup_m = dPipe_mm / 1000
     Choke.Dchoke_m = dchoke_mm / 1000
-    
     If Calc_from_P0 Then
         PT = Choke.Calc_Choke_Plin(SetPT(Pin_atma, Tchoke_C))
     Else
         PT = Choke.Calc_Choke_Pbuf(SetPT(Pout_atma, Tchoke_C))
     End If
-    
     MF_PChoke_atm = Array(PT.P_atma, PT.T_C)   ' на выходе выдаем массив
+    Exit Function
+err1:
+    MF_PChoke_atm = "error"
+    addLogMsg "error in function : MF_PChoke_atm"
 End Function
-'' Расчет перепада давления в штуцере (против потока)
-'Public Function MF_dPChokeUp_atma(dPipe_mm, dchoke_mm, Pdown_atma, Qliq_m3day, fw_perc, _
-'                        Optional Tchoke_C = 20, _
-'                        Optional gamma_gas as double = const_gamma_gas_default, _
-'                        Optional gamma_oil as double = const_gamma_oil_default, _
-'                        Optional gamma_wat as double = const_gamma_wat_default, _
-'                        Optional Rsb_m3m3 = const_Rsb_default, _
-'                        Optional Rp_m3m3 As Double = -1, _
-'                        Optional Pb_atma As Double = -1, _
-'                        Optional Tres_C As Double = const_Tres_default, _
-'                        Optional Bob_m3m3 As Double = -1, _
-'                        Optional Muob_cP As Double = -1, _
-'                        Optional PVTcorr = StandingBased, _
-'                        Optional Ksep_fr As Double = 0, _
-'                        Optional PKsep_atma As Double = -1, _
-'                        Optional TKsep_C As Double = -1)
-'
-'' dPipe_mm      - диаметр трубы до и после штуцера
-'' dChoke_mm     - диаметр штуцера (эффективный)
-'' Pdown_atma     - давление на выходе (низкой стороне)
-'' Qliq_m3day    - дебит жидкости в пов условиях
-'' fw_perc      - обводненность
-'' данные PVT
-'    Dim choke As New Cchoke
-'    Dim PT As PTtype
-'    Call choke.Fluid.SetRpRsb(Rp_m3m3, Rsb_m3m3)
-'    choke.Fluid.Pb_atma = Pb_atma
-'    choke.Fluid.Tres_C = Tres_C
-'    choke.Fluid.PVT_CORRELATION = PVTcorr
-'    choke.Fluid.Bob_m3m3 = Bob_m3m3
-'    choke.Fluid.gamma_g = gamma_gas
-'    choke.Fluid.gamma_o = gamma_oil
-'    choke.Fluid.gamma_w = gamma_wat
-'    If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-''        Call PVT.Calc_PVT(PKsep_atma, TKsep_C)
-'        Call choke.Fluid.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-'    End If
-'    choke.Ddown_m = dPipe_mm / 1000
-'    choke.Dup_m = dPipe_mm / 1000
-'    choke.Dchoke_m = dchoke_mm / 1000
-'
-'    choke.Fluid.Qliq_scm3day = Qliq_m3day
-'    choke.Fluid.wc_perc = fw_perc
-'    PT = choke.Calc_Choke_Pbuf(SetPT(Pdown_atma, Tchoke_C))
-'    MF_dPChokeUp_atma = Array(PT.P_atma, PT.T_C)   ' на выходе выдаем массив
-'
-'
-'End Function
  ' функция расчета дебита жидкости через штуцер
 Public Function MF_QChoke_m3day(dPipe_mm, dchoke_mm, Pup_atma, Pdown_atma, fw_perc, _
                         Optional ByVal Tchoke_C = 20, _
-                        Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                        Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                        Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                        Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                        Optional ByVal Rp_m3m3 As Double = -1, _
-                        Optional ByVal Pb_atma As Double = -1, _
-                        Optional ByVal Tres_C As Double = const_Tres_default, _
-                        Optional ByVal Bob_m3m3 As Double = -1, _
-                        Optional ByVal Muob_cP As Double = -1, _
-                        Optional ByVal PVTcorr = StandingBased, _
-                        Optional ByVal Ksep_fr As Double = 0, _
-                        Optional ByVal PKsep_atma As Double = -1, _
-                        Optional ByVal TKsep_C As Double = -1)
+                        Optional ByVal PVTstr As String = "")
 ' dPipe_mm      - диаметр трубы до и после штуцера
 ' dChoke_mm     - диаметр штуцера (эффективный)
 ' Pdown_atma     - давление на выходе (низкой стороне)
 ' Pup_atma       - давление на входе (высокой стороне)
 ' fw_perc      - обводненность
 ' данные PVT
-                       
+On Error GoTo err1:
     Dim Choke As New Cchoke
-    Call Choke.Fluid.SetRpRsb(Rp_m3m3, CDbl(rsb_m3m3))
-    Choke.Fluid.Pb_atma = Pb_atma
-    Choke.Fluid.Tres_C = Tres_C
-    Choke.Fluid.PVT_CORRELATION = PVTcorr
-    Choke.Fluid.Bob_m3m3 = Bob_m3m3
-    Choke.Fluid.gamma_g = gamma_gas
-    Choke.Fluid.gamma_o = gamma_oil
-    Choke.Fluid.gamma_w = gamma_wat
-    If Ksep_fr > 0 And Ksep_fr <= 1 And PKsep_atma > 0 And TKsep_C > 0 Then
-'        Call PVT.Calc_PVT(PKsep_atma, TKsep_C)
-        Call Choke.Fluid.ModAfterSeparation(PKsep_atma, TKsep_C, Ksep_fr, GasGoesIntoSolution)
-    End If
+    Dim PVT As CPVT
+    Set PVT = PVT_Decode_string(PVTstr)
+    Set Choke.Fluid = PVT
     Choke.Ddown_m = dPipe_mm / 1000
     Choke.Dup_m = dPipe_mm / 1000
     Choke.Dchoke_m = dchoke_mm / 1000
-    
-'    choke.Fluid.Qliq_scm3day = Qliq_m3day
+'    Choke.Fluid.Qliq_scm3day = Qliq_m3day
     Choke.Fluid.wc_perc = fw_perc
-    On Error GoTo er1:
-    
     MF_QChoke_m3day = Choke.Choke_liquid_rate(Pup_atma, Pdown_atma, Tchoke_C)
     Exit Function
-er1:
+err1:
     addLogMsg "QChoke_m3day: Расчет дебита через штуцер завершился с ошибкой Pup_atm=" & Pup_atma & " Pup_atma =" & Pdown_atma
     MF_QChoke_m3day = 0
-    
 End Function
 ' ==============  функции для расчета пласта ==========================
 ' =====================================================================
@@ -2302,6 +1807,7 @@ Public Function IPR_Ql_sm3Day(PI_m3dayatm, Pr_atma, Pwf_atma, _
 ' fw_perc      - обводненность
 ' Pb_atma        - давление насыщения
 '
+On Error GoTo err1:
     Dim res As New CReservoir
     If Pb_atma <= 0 Then Pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
     res.InitProp Pr_atma, Pb_atma, fw_perc
@@ -2309,6 +1815,12 @@ Public Function IPR_Ql_sm3Day(PI_m3dayatm, Pr_atma, Pwf_atma, _
     
     IPR_Ql_sm3Day = res.Calc_Q_m3Day(Pwf_atma)
     Set res = Nothing
+    
+    
+    Exit Function
+err1:
+    IPR_Ql_sm3Day = "error"
+    addLogMsg "error in function : IPR_Ql_sm3Day"
 End Function
 ' расчет дебита по давлению и продуктивности
 Public Function IPR_Pwf_atma(PI_m3dayatm, Pr_atma, Ql_m3day, _
@@ -2322,6 +1834,7 @@ Public Function IPR_Pwf_atma(PI_m3dayatm, Pr_atma, Ql_m3day, _
 ' fw_perc      - обводненность
 ' Pb_atma        - давление насыщения
 '
+On Error GoTo err1:
     Dim res As New CReservoir
     If Pb_atma <= 0 Then Pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
     res.InitProp Pr_atma, Pb_atma, fw_perc
@@ -2329,6 +1842,11 @@ Public Function IPR_Pwf_atma(PI_m3dayatm, Pr_atma, Ql_m3day, _
     
     IPR_Pwf_atma = res.Calc_Pwf_atma(Ql_m3day)
     Set res = Nothing
+    
+    Exit Function
+err1:
+    IPR_Pwf_atma = "error"
+    addLogMsg "error in function : IPR_Pwf_atma"
 End Function
 ' расчет продуктивности
 Public Function IPR_PI_sm3dayatm(Qtest_m3day, Pwftest_atma, Pr_atma, _
@@ -2342,288 +1860,16 @@ Public Function IPR_PI_sm3dayatm(Qtest_m3day, Pwftest_atma, Pr_atma, _
 ' fw_perc      - обводненность
 ' Pb_atma        - давление насыщения
 '
+On Error GoTo err1:
     Dim res As New CReservoir
     If Pb_atma <= 0 Then Pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
     res.InitProp Pr_atma, Pb_atma, fw_perc
     On Error Resume Next
     IPR_PI_sm3dayatm = res.Calc_PI_m3DayAtm(Qtest_m3day, Pwftest_atma)
     Set res = Nothing
-End Function
-'Функция для вычисления соответствующего диаметра порта клапана через заданный расход газа и давления в затрубе и в НКТ на глубине клапан
-'Для вычисления используется уравнение Thornhill-Crave
-'Возвращает диаметр порта клапана в мм
-Public Function GL_dchoke_mm(Qg_m3d As Double, Pu_atma As Double, Pd_atma As Double, gamma_g As Double, Tu_C As Double)
-    If Qg_m3d <= 0 Then
-        GL_dchoke_mm = 0
-        Exit Function
-    End If
     
-    If Pu_atma < Pd_atma Then
-        GL_dchoke_mm = -1
-        Exit Function
-    End If
-    Dim K As Double
-    K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
-    
-    Dim Pu_psi As Double
-    Dim Pd_psi As Double
-    Pu_psi = Pu_atma * 14.2233 'upstream pressure, psi
-    Pd_psi = Pd_atma * 14.2233 'downstream pressure, psi
-    
-    Dim Tu_F As Double
-    Tu_F = Tu_C / 100 * 180 + 32
-    
-    Dim CD As Double  ' discharge coefficient
-    CD = 0.865
-    
-    Dim G As Double
-    G = 32.17 'ft/sec^2
-    
-    Dim Qg_Mcfd As Double
-    Qg_Mcfd = Qg_m3d / 28.31993658
-    
-    Dim Pd_Pu_crit As Double
-    Pd_Pu_crit = (2 / (K + 1)) ^ (K / (K - 1))
-    
-    Dim Pd_Pu As Double
-    Pd_Pu = Pd_atma / Pu_atma
-    
-    Dim c0 As Double, c1 As Double, c2 As Double
-    c0 = ((Pd_Pu ^ (2 / K) - Pd_Pu ^ (1 + 1 / K))) ^ 0.5
-    c1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
-    c2 = (2 * G * K / (K - 1)) ^ 0.5
-    
-    Dim a As Double
-    
-    If Pd_Pu <= Pd_Pu_crit Then
-        a = Qg_Mcfd / (155.5 * CD * Pu_psi * c1 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
-    Else
-        a = Qg_Mcfd / (155.5 * CD * Pu_psi * c0 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
-    End If
-    
-    Dim d_in As Double
-    d_in = (a * 4 / Application.PI) ^ 0.5
-    
-    GL_dchoke_mm = d_in / 0.03937
-End Function
-Function GL_dPgasPipe_atmg(ByVal H_m As Double, ByVal P_atmg As Double, ByVal T_C As Double, _
-                               Optional ByVal dCas_mm As Double = 125, _
-                               Optional ByVal dTub_mm As Double = 73, _
-                               Optional ByVal gamma_gas As Double = 0.8, _
-                               Optional ByVal Qg_scm3day As Double = 10000, _
-                               Optional ByVal roughness As Double = 0.001, _
-                               Optional ByVal theta As Double = 90 _
-                               ) As Double
-  
-'de - external diameter, m
-'di - interior diameter, m
-'gamma_gas - relative density of gas
-'qg_sc - gas flow, m3/d
-'eps - pipe roughness, m
-'theta - ,degree
-'length - pipe length, m
-'T - temperature, C
-'P - pressure, atma
-Dim de, di, qg_sc, eps, length, t, P
-de = dCas_mm / 1000
-di = dTub_mm / 1000
-qg_sc = Qg_scm3day
-eps = roughness
-length = H_m
-t = T_C
-P = P_atmg
-    
-    'convert m3/d to scf/d
-    qg_sc = qg_sc * 3.28 ^ 3
-    
-    Dim P_MPa As Double, P_psi As Double
-    P_MPa = P * 0.1013 'convert atma to Mpa
-    P_psi = P * 14.696 ' convert atma to psi
-    
-    
-    Dim T_K As Double, T_F As Double
-    T_K = t + 273 'convert Celcsius to Kelvin
-    T_F = (9 / 5) * t + 32 'convert Celcsius to Fahrengheit
-     
-    Dim T_pc As Double
-    Dim p_pc As Double
-    Dim z As Double
-    
-'        T_pc = PseudoTemperatureStanding(gamma_gas)
-'        p_pc = PseudoPressureStanding(gamma_gas)
-'        Z = ZFactorDranchuk(T_K / T_pc, P_MPa / p_pc)
-    z = unf_Calc_Zgas_d(T_K, P_MPa, gamma_gas)
-    
-    eps = eps * 39.3701 'convert m to in
-    
-    Dim de_in As Double, di_in As Double
-    di_in = di * 39.3701 'convert m to in
-    de_in = de * 39.3701 'convert m to in
-    Dim dh As Double, da As Double, deq As Double
-    dh = de_in - di_in
-    da = (de_in ^ 2 - di_in ^ 2) ^ 0.5
-    If di_in = 0 Then
-        deq = de_in
-    Else
-        deq = (de_in ^ 2 + di_in ^ 2 - (de_in ^ 2 - di_in ^ 2) / Log(de_in / di_in)) / (de_in - di_in)
-    End If
-    Dim mu_g As Double
-    mu_g = unf_calc_Mug_cP(T_K, P_MPa, z, gamma_gas)
-    Dim Re As Double
-    Re = 0.020107 * gamma_gas * Abs(qg_sc) * deq / mu_g / da ^ 2
-    Dim a As Double, B As Double
-    a = (2.457 * Log(1 / ((7 / Re) ^ 0.9 + 0.27 * eps / deq))) ^ 16
-    B = (37530 / Re) ^ 16
-    Dim f_moody As Double
-    f_moody = 8 * ((8 / Re) ^ 12 + 1 / ((a + B) ^ 1.5)) ^ (1 / 12)
-    
-    Dim gradP As Double
-    
-    gradP = -0.018786 * gamma_gas * (P_psi + 14.7) * Sin(theta * Application.PI / 180) / (T_F + 460) / z + (1.2595 * 10 ^ (-11)) * f_moody * (T_F + 460) * z * gamma_gas * (qg_sc ^ 2) / (P_psi + 14.7) / dh / da ^ 4
-    gradP = gradP * 0.068 / 0.3048 'convert psi/ft to atma/m
-    
-    GL_dPgasPipe_atmg = P + gradP * length
-    
-    
-End Function
-' function to calculated gas passage trough orifice or gas valve
-' link in K Brawn AL 2A - Craft, Holden, Graves (p.111)
-' also found in Mischenko book
-Public Function GL_Qgasvalve_m3day(d_mm As Double, Pu_atma As Double, Pd_atma As Double, gamma_g As Double, Tu_C As Double)
-    
-    Dim K As Double
-    K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
-    
-    Dim d_in As Double
-    d_in = d_mm * 0.03937
-    
-    Dim Pu_psi As Double
-    Dim Pd_psi As Double
-    Pu_psi = Pu_atma * 14.2233 'upstream pressure, psi
-    Pd_psi = Pd_atma * 14.2233 'downstream pressure, psi
-    
-    Dim Tu_F As Double
-    Tu_F = Tu_C / 100 * 180 + 32
-    
-    Dim Pd_Pu_crit As Double
-    Pd_Pu_crit = (2 / (K + 1)) ^ (K / (K - 1))
-    
-    
-    Dim CD As Double  ' discharge coefficient
-    CD = 0.865
-    
-    Dim G As Double
-    G = 32.17 'ft/sec^2
-    
-    Dim c0 As Double, c1 As Double, c2 As Double
-    c1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
-    c2 = (2 * G * K / (K - 1)) ^ 0.5
-    
-    Dim a As Double
-    a = Application.PI * d_in ^ 2 / 4 'area of choke, sq in.
-    
-    Dim Qg_crit As Double
-    Qg_crit = 155.5 * CD * a * Pu_psi * c1 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5 'critical flow ratio, Mcf/d
-    
-    Dim Pd_Pu As Double
-    Pd_Pu = Pd_atma / Pu_atma
-    
-    If Pd_Pu >= 1 Then
-        GL_Qgasvalve_m3day = 0
-        Exit Function
-    End If
-    
-    If Pd_Pu <= 0 Then
-        GL_Qgasvalve_m3day = 0
-        Exit Function
-    End If
-    
-    If Pd_Pu <= Pd_Pu_crit Then
-        GL_Qgasvalve_m3day = Qg_crit * 28.31993658
-    Else
-        c0 = ((Pd_Pu ^ (2 / K) - Pd_Pu ^ (1 + 1 / K))) ^ 0.5
-        GL_Qgasvalve_m3day = Qg_crit * 28.31993658 * c0 / c1
-    End If
-End Function
-Public Function GL_Pd_gas_valve_atma(d_mm As Double, Pu_atma As Double, Qg_m3day As Double, gamma_g As Double, Tu_C As Double)
-' расчет перепада давления на клапане при проходе газа через него
-Dim Qmax_m3day As Double, Qtest_m3day As Double
-Dim Pd As Double, Pd2 As Double, Pd1 As Double
-Pd = 1
-    Dim K As Double
-    K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
-    Dim Pd_Pu_crit As Double
-    Pd_Pu_crit = (2 / (K + 1)) ^ (K / (K - 1))
-'    Dim Pd_Pu As Double
-'    Pd_Pu = Pd_atma / Pu_atma
- Dim i As Integer
- i = 0
-Qmax_m3day = GL_Qgasvalve_m3day(d_mm, Pu_atma, Pd, gamma_g, Tu_C)
-If Qmax_m3day > Qg_m3day Then
-    Pd1 = Pd_Pu_crit * Pu_atma
-    Pd2 = Pu_atma
-    Do
-        i = i + 1
-        Pd = (Pd2 + Pd1) / 2
-        Qtest_m3day = GL_Qgasvalve_m3day(d_mm, Pu_atma, Pd, gamma_g, Tu_C)
-        If Qg_m3day > Qtest_m3day Then
-            Pd2 = Pd
-        Else
-            Pd1 = Pd
-        End If
-    Loop While (Abs(Qg_m3day - Qtest_m3day) > 0.01) And (i < 100)
-    GL_Pd_gas_valve_atma = Pd
-Else
-    GL_Pd_gas_valve_atma = Pu_atma
-End If
-End Function
-    
-' функция расчета коэффициента Джоуля Томсона
-Public Function PVT_CJT_Katm(P_atma, T_C, _
-                    Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                    Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
-                    Optional ByVal gamma_wat As Double = const_gamma_wat_default, _
-                    Optional ByVal rsb_m3m3 = const_Rsb_default, _
-                    Optional ByVal Rp_m3m3 As Double = -1, _
-                    Optional ByVal Pb_atma As Double = -1, _
-                    Optional ByVal Tres_C As Double = const_Tres_default, _
-                    Optional ByVal Bob_m3m3 As Double = -1, _
-                    Optional ByVal Ql_m3day As Double = 10, _
-                    Optional ByVal wc_perc As Double = 0, _
-                    Optional ByVal PVTcorr = StandingBased) As Double
-' обязательные аргументы функции
-' P_atma     давление, атм
-' Т_C       температура, С.
-'
-' опциональные аргументы функции
-' gamma_gas        удельная плотность газа, по воздуху.
-'               const_gamma_gas_default = 0.6
-' gamma_oil        удельная плотность нефти, по воде.
-'               const_gamma_oil_default = 0.86
-' gamma_wat        удельная плотность воды, по воде.
-'               const_gamma_wat_default = 1
-' Rsb_m3m3  газосодержание при давлении насыщения, м3/м3.
-'               const_Rsb_default = 100
-' Rp_m3m3   замерной газовый фактор, м3/м3. Калибровочный параметр.
-'           По умолчанию не задается, рассчитывается по газосодержанию
-' Pb_atma    давление насыщения, атм. Калибровочный параметр.
-'           По умолчанию не задается, рассчитывается по корреляции
-' Tres_C    пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'               const_Tres_default = 90
-' Bob_m3m3  объемный коэффициент нефти, м3/м3. Калибровочный параметрв.
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr   номер набора PVT корреляций используемых для расчета
-'               StandingBased = 0 - на основе кор-ии Стендинга
-'               McCainBased = 1 - на основе кор-ии Маккейна
-'               StraigthLine = 2 - на основе упрощенных зависимостей
-'
-' выходное значение - число - объемный коэффициент газа при заданных
-'           термобарических условиях, м3/м3.
-    Dim PVT As New CPVT
-    PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Pb_atma, Bob_m3m3, PVTcorr, Tres_C, Rp_m3m3
-    PVT.Qliq_scm3day = Ql_m3day
-    PVT.wc_perc = wc_perc
-    Call PVT.Calc_PVT(CDbl(P_atma), CDbl(T_C))
-    PVT_CJT_Katm = PVT.CJT_Katm
+    Exit Function
+err1:
+    IPR_PI_sm3dayatm = "error"
+    addLogMsg "error in function :IPR_PI_sm3dayatm"
 End Function

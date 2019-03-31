@@ -1,153 +1,168 @@
-Option Explicit
-'=======================================================================================
-'Unifloc7.5  Boinae                                           khabibullin.ra@gubkin.ru
-'Библиотека расчетных модулей по нефтяному инжинирингу
-'2000 - 2019 гг
+'Option Explicit
+''=======================================================================================
+''Unifloc 7.6  Vulpes zerda                                           khabibullin.ra@gubkin.ru
+''Petroleum engineering calculations modules (macroses)
+''2000 - 2019
+''
+''=======================================================================================
 '
-'=======================================================================================
-' класс обеспечения считывания и записи данных с листа Excel
-' содержит соответствие исходных параметров для расчета и их расположения на листе Excel
-' позволяет считать данные с листа и потом использовать их
-' позволяет также записать данные на лист
+'' класс обеспечения считывания и записи данных с листа Excel
+'' содержит соответствие исходных параметров для расчета и их расположения на листе Excel
+'' позволяет считать данные с листа и потом использовать их
+'' позволяет также записать данные на лист
+''
+'' содержит перечень всех параметров в виде коллекции
+'' хранит только уникальный индекс параметра по которому к нему ощуствляется доступ
+'' вся остальная информация о параметре хранится в классе параметра
 '
-' содержит перечень всех параметров в виде коллекции
-' хранит только уникальный индекс параметра по которому к нему ощуствляется доступ
-' вся остальная информация о параметре хранится в классе параметра
-Private p_Params As New Collection    ' набор значений которые должны быть загружены
-Private p_ActWorkSheet As Worksheet   ' текуший лист с которым работает класс
-'Private p_LogMsg As New CLogger       ' логгер
-Public Event ReportProgress(msg As String)
-Private Sub Class_Initialize()
-' 'Set' LogMsg = getLogMsg  ' на всякий случай установим для класса вненший логгер
- Set p_ActWorkSheet = ActiveSheet   ' по умолчанию ссылаемся на текущий лист
-End Sub
-'Public Property Get' LogMsg() As CLogger
-'    'Set' LogMsg = p_LogMsg
+'Private p_Params As New Collection    ' набор значений которые должны быть загружены
+'Private p_ActWorkSheet As Worksheet   ' текуший лист с которым работает класс
+''Private p_LogMsg As New CLogger       ' логгер
+'Public Event ReportProgress(msg As String)
+'
+'
+'Private Sub Class_Initialize()
+'' 'Set' LogMsg = getLogMsg  ' на всякий случай установим для класса вненший логгер
+' Set p_ActWorkSheet = ActiveSheet   ' по умолчанию ссылаемся на текущий лист
+'End Sub
+'
+''Public Property Get' LogMsg() As CLogger
+''    'Set' LogMsg = p_LogMsg
+''End Property
+''
+''Public Property 'Set' LogMsg(val As CLogger)
+'' ' распространяем систему логирования на все вложенные объекты
+''    Set p_LogMsg = val
+''    On Error Resume Next
+''    Dim el As CexcelParam
+''    For Each el In p_Params
+''        Set el.LogMsg = val
+''    Next
+''End Property
+'
+'Public Sub Clear()
+'' очищаем коллекцию загруженных элементов
+'    Dim elem As CexcelParam
+'    For Each elem In p_Params
+'        p_Params.Remove elem.name
+'        Set elem = Nothing
+'    Next elem
+'End Sub
+'
+'Private Property Get elem(name As String) As CexcelParam
+'' метод для получения доступа к элементу списка по имени
+'    Dim needToLoadFromExcel As Boolean
+'    needToLoadFromExcel = False
+'    If name = "" Then
+'        name = "Nothing"
+'        GoTo er2:
+'    End If
+'    On Error GoTo er1:
+'        Set elem = p_Params.Item(name)
+'        ' нашли нужное значение, выходим из функции
+'        If needToLoadFromExcel Then 'возможно мы еще не считывали этот элемент из книги - пытаемся сделать это тут
+'            Set elem = AddNewValueFromRange(name)
+'            Select Case elem.typeVal
+'                Case VAL_DOUBLE
+'                    addLogMsg ("CexcelParamList: Зарегистрировали новый числовой параметр из книги Excel " & name & " = " & elem.valDouble)
+'                Case VAL_STRING
+'                    addLogMsg ("CexcelParamList: Зарегистрировали новый строковый параметр из книги Excel " & name & " = " & elem.valString)
+'                Case VAL_CURVE
+'                    addLogMsg ("CexcelParamList: Зарегистрировали новую кривую  из книги Excel " & name & " точек: " & elem.ValCurve.numPoints & ".")
+'            End Select
+'        End If
+'        Exit Property
+'er1:
+'    ' не удалось прочитать значение
+'    If Not needToLoadFromExcel Then
+'        needToLoadFromExcel = True
+'        Resume Next
+'    End If
+'er2:
+'    addLogMsg ("CexcelParamList: Сбой при регистрации нового параметра из книги Excel: " & name)
+'    Err.Raise kErrReadDataFromWorksheet, "КСписокПараметровКнигиExcel.val", "Ошибка чтения параметра: " & name
 'End Property
 '
-'Public Property 'Set' LogMsg(val As CLogger)
-' ' распространяем систему логирования на все вложенные объекты
-'    Set p_LogMsg = val
-'    On Error Resume Next
+'' универсальное свойство для чтения параметра
+'Public Property Get val(name As String)
+'' метод ищет значение для параметра с именем name
 '    Dim el As CexcelParam
-'    For Each el In p_Params
-'        Set el.LogMsg = val
-'    Next
+'    ' пытаемся найти значение в списке ранее зарегистрированных параметров
+'    Set el = elem(name)     ' ищем нужный элемент, если будет ошибка, то исключение всплывает вверх
+'    '  проверим какой тип элемента был прочитан под этим названием
+'    If el.typeVal = VAL_DOUBLE Then
+'        val = el.valDouble
+'    ElseIf el.typeVal = VAL_STRING Then
+'        val = el.valString
+'    ElseIf el.typeVal = VAL_CURVE Then
+'        Set val = el.ValCurve
+'    Else
+'        val = const_default_wrong_read_num    ' если значение не числовое то ставим туда значение по умолчанию
+'    End If
 'End Property
-Public Sub Clear()
-' очищаем коллекцию загруженных элементов
-    Dim elem As CexcelParam
-    For Each elem In p_Params
-        p_Params.Remove elem.name
-        Set elem = Nothing
-    Next elem
-End Sub
-Private Property Get elem(name As String) As CexcelParam
-' метод для получения доступа к элементу списка по имени
-    Dim needToLoadFromExcel As Boolean
-    needToLoadFromExcel = False
-    If name = "" Then
-        name = "Пустое значение"
-        GoTo er2:
-    End If
-    On Error GoTo er1:
-        Set elem = p_Params.Item(name)
-        ' нашли нужное значение, выходим из функции
-        If needToLoadFromExcel Then 'возможно мы еще не считывали этот элемент из книги - пытаемся сделать это тут
-            Set elem = AddNewValueFromRange(name)
-            Select Case elem.typeVal
-                Case VAL_DOUBLE
-                    addLogMsg ("Зарегистрировали новый числовой параметр из книги Excel " & name & " = " & elem.valDouble)
-                Case VAL_STRING
-                    addLogMsg ("Зарегистрировали новый строковый параметр из книги Excel " & name & " = " & elem.valString)
-                Case VAL_CURVE
-                    addLogMsg ("Зарегистрировали новую кривую  из книги Excel " & name & " точек: " & elem.ValCurve.numPoints & ".")
-            End Select
-        End If
-        Exit Property
-er1:
-    ' не удалось прочитать значение
-    If Not needToLoadFromExcel Then
-        needToLoadFromExcel = True
-        Resume Next
-    End If
-er2:
-    addLogMsg ("Сбой при регистрации нового параметра из книги Excel: " & name)
-    Err.Raise kErrReadDataFromWorksheet, "КСписокПараметровКнигиExcel.val", "Ошибка чтения параметра: " & name
-End Property
-' универсальное свойство для чтения параметра
-Public Property Get val(name As String)
-' метод ищет значение для параметра с именем name
-    Dim el As CexcelParam
-    ' пытаемся найти значение в списке ранее зарегистрированных параметров
-    Set el = elem(name)     ' ищем нужный элемент, если будет ошибка, то исключение всплывает вверх
-    '  проверим какой тип элемента был прочитан под этим названием
-    If el.typeVal = VAL_DOUBLE Then
-        val = el.valDouble
-    ElseIf el.typeVal = VAL_STRING Then
-        val = el.valString
-    ElseIf el.typeVal = VAL_CURVE Then
-        Set val = el.ValCurve
-    Else
-        val = const_default_wrong_read_num    ' если значение не числовое то ставим туда значение по умолчанию
-    End If
-End Property
-Public Property Let val(name As String, vNewValue)
-' метод записи значения в заданное поле на листе Excel
-On Error GoTo er1:
-    Dim el As CexcelParam
-    Set el = elem(name)
-    If VarType(vNewValue) = vbDouble Or VarType(vNewValue) = vbInteger Then
-        el.valDouble = vNewValue
-    ElseIf VarType(vNewValue) = vbString Then
-        el.valString = vNewValue
-    Else
-        Err.Raise kErrWriteDataFromWorksheet, "КСписокПараметровКнигиExcel.val", "Ошибка записи параметра: " & name & " = " & vNewValue
-    End If
-    Exit Property
-er1:
-    ' может не быть в списке параметра с таким именем или в него не удалось записать значение
-    addLogMsg ("Сбой записи значения " & name & " = " & vNewValue)
-End Property
-Public Property Set val(name As String, vNewValue)
-' метод записи кривой в заданное поле на листе Excel
-On Error GoTo er1:
-    Dim el As CexcelParam
-    Set el = elem(name)
-    If TypeOf vNewValue Is TInterpolation Then Set el.ValCurve = vNewValue
-    Exit Property
-er1:
-    ' может не быть в списке параметра с таким именем или в него не удалось записать значение
-    addLogMsg ("Сбой записи кривой " & name & " на лист Excel ")
-End Property
-' функция, которая пытается загрузить новый элемент данных из книги Excel
-Private Function AddNewValueFromRange(name As String, Optional rngDescription As String = "") As CexcelParam
-' метод создает новый элемент списка данных и загружает его числовое значение из диапазона Excel
-' диапазон Excel должен быть передан в виде строки - ссылки на объект без указания листа
-  Dim elem As New CexcelParam
-  On Error GoTo er1:
-'    Set elem.LogMsg =' LogMsg                ' первым делом прицепляем логгер, чтобы можно было поднимать сообщения снизу
-    elem.RangeLink = name                   ' здесь загружаем range в объект параметра листа Excel, тут же определяется тип
-    elem.Description = rngDescription       ' сохраняем его полученное описание
-    elem.name = name                        ' в этой версии имя совпадает с названием диапазона, хотя раньше это могли быть разные значения
-    p_Params.Add elem, name
-    Set AddNewValueFromRange = elem
-    addLogMsg ("Прочитан новый элемент их книги Excel: " & name & " Описание: " & rngDescription)  ' сбросим сообщение наверх
- Exit Function
-er1:
-   addLogMsg ("Сбой при загрузке параметра " & name & " из ячейки " & name & ". Ошибка: " & Err.Description)
-   Err.Raise kErrReadDataFromWorksheet, "КСписокПараметровКнигиExcel.AddNewValueFromRange", "Ошибка. неверный параметр чтения из книги " & name
-End Function
-' установка листа должна проводится до считывания
-Public Property Get ActWorkSheet() As Variant
- Set ActWorkSheet = p_ActWorkSheet
-End Property
-Public Property Set ActWorkSheet(ByVal vNewValue As Variant)
- '  здесь ожидаем, что будет передан объект листа
- If TypeOf vNewValue Is Worksheet Then
-    Set p_ActWorkSheet = vNewValue
- End If
-End Property
-Public Property Get Count() As Variant
-    Count = p_Params.Count
-End Property
+'
+'Public Property Let val(name As String, vNewValue)
+'' метод записи значения в заданное поле на листе Excel
+'On Error GoTo er1:
+'    Dim el As CexcelParam
+'    Set el = elem(name)
+'    If VarType(vNewValue) = vbDouble Or VarType(vNewValue) = vbInteger Then
+'        el.valDouble = vNewValue
+'    ElseIf VarType(vNewValue) = vbString Then
+'        el.valString = vNewValue
+'    Else
+'        Err.Raise kErrWriteDataFromWorksheet, "КСписокПараметровКнигиExcel.val", "Ошибка записи параметра: " & name & " = " & vNewValue
+'    End If
+'    Exit Property
+'er1:
+'    ' может не быть в списке параметра с таким именем или в него не удалось записать значение
+'    addLogMsg ("CexcelParamList: error write variable " & name & " = " & vNewValue)
+'End Property
+'
+'Public Property Set val(name As String, vNewValue)
+'' метод записи кривой в заданное поле на листе Excel
+'On Error GoTo er1:
+'    Dim el As CexcelParam
+'    Set el = elem(name)
+'    If TypeOf vNewValue Is TInterpolation Then Set el.ValCurve = vNewValue
+'    Exit Property
+'er1:
+'    ' может не быть в списке параметра с таким именем или в него не удалось записать значение
+'    addLogMsg ("Сбой записи кривой " & name & " на лист Excel ")
+'End Property
+'
+'' функция, которая пытается загрузить новый элемент данных из книги Excel
+'Private Function AddNewValueFromRange(name As String, Optional rngDescription As String = "") As CexcelParam
+'' метод создает новый элемент списка данных и загружает его числовое значение из диапазона Excel
+'' диапазон Excel должен быть передан в виде строки - ссылки на объект без указания листа
+'  Dim elem As New CexcelParam
+'  On Error GoTo er1:
+''    Set elem.LogMsg =' LogMsg                ' первым делом прицепляем логгер, чтобы можно было поднимать сообщения снизу
+'    elem.RangeLink = name                   ' здесь загружаем range в объект параметра листа Excel, тут же определяется тип
+'    elem.Description = rngDescription       ' сохраняем его полученное описание
+'    elem.name = name                        ' в этой версии имя совпадает с названием диапазона, хотя раньше это могли быть разные значения
+'    p_Params.Add elem, name
+'    Set AddNewValueFromRange = elem
+'    addLogMsg ("Прочитан новый элемент их книги Excel: " & name & " Описание: " & rngDescription)  ' сбросим сообщение наверх
+' Exit Function
+'er1:
+'   addLogMsg ("Сбой при загрузке параметра " & name & " из ячейки " & name & ". Ошибка: " & Err.Description)
+'   Err.Raise kErrReadDataFromWorksheet, "КСписокПараметровКнигиExcel.AddNewValueFromRange", "Ошибка. неверный параметр чтения из книги " & name
+'End Function
+'
+'' установка листа должна проводится до считывания
+'Public Property Get ActWorkSheet() As Variant
+' Set ActWorkSheet = p_ActWorkSheet
+'End Property
+'
+'Public Property Set ActWorkSheet(ByVal vNewValue As Variant)
+' '  здесь ожидаем, что будет передан объект листа
+' If TypeOf vNewValue Is Worksheet Then
+'    Set p_ActWorkSheet = vNewValue
+' End If
+'End Property
+'
+'Public Property Get Count() As Variant
+'    Count = p_Params.Count
+'End Property
+'
