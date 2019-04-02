@@ -1,0 +1,177 @@
+Option Explicit
+Function CubicSpline(R As Range, _
+                     M As Long, _
+                     iType As Long) As Variant
+    ' shg 2009-0203
+    
+    ' UDF wrapper for adCubicSpline
+    ' See adCubicSpline for an explanation of m and iType
+    Dim y()     As Double
+    Dim cell    As Excel.Range
+    Dim i       As Long
+    ReDim y(0 To R.Count - 1)
+    
+    For Each cell In R
+        y(i) = cell.Value
+        i = i + 1
+    Next cell
+    
+    ' return the result as a column vector
+    CubicSpline = WorksheetFunction.Transpose(adCubicSpline(y, M, iType))
+End Function
+Function adCubicSpline(y() As Double, _
+                       M As Long, _
+                       iType As Long) As Double()
+    ' shg 2009-0203
+    '     2011-0803 modestly restructured
+    
+    ' Returns a zero-based array containing m points on each segment
+    ' of the cubic spline determined by the control points in y()
+    ' y() contains (by definition) n + 1 points: y(0), y(1), ..., y(n)
+    ' The n + 1 points define n segments.
+    '   iType Description                        Points Returned
+    '     1   Open (natural) spline              1 + m * n
+    '     2   Closed spline w/o closing segment  1 + m * n
+    '     3   Closed spline w/ closing segment   1 + m * (n + 1)
+    '     4   Tangent spline                     1 + m * (n - 2)
+    ' For a Tangent spline, the end points define the tangents at the
+    ' first interior points, and the first and last segments are not
+    ' included in the spline.
+    Dim n       As Long         ' number of segments
+    
+    Dim Di()    As Double       ' segment derivatives
+    Dim a       As Double       ' cubic coefficient
+    Dim b       As Double       ' cubic coefficient
+    Dim c       As Double       ' cubic coefficient
+    Dim d       As Double       ' cubic coefficient
+    
+    Dim ad()    As Double       ' zero-based output array
+    Dim k       As Long         ' index to ad()
+    Dim t       As Double       ' segment interpolation parameter
+    Dim i       As Long         ' index to segments
+    Dim iLB     As Long         ' lower bound of segments [0|1]
+    Dim iUB     As Long         ' upper bound of segments [n-2|n-1|n]
+    Dim ip1     As Long         ' "i plus 1"
+    Dim j       As Long         ' index to point along segment
+    
+    n = UBound(y)
+    
+    ' get the derivatives
+    CubicSplineDi y, iType, Di
+    Select Case iType
+        Case 1    ' Open
+            ' return n * m + 1
+            ReDim ad(0 To n * M)
+            iLB = 0
+            iUB = n - 1
+        Case 2    ' Closed w/ no closing segment
+            ' return n * m + 1 points
+            ReDim ad(0 To n * M)
+            iLB = 0
+            iUB = n - 1
+        Case 3    ' Closed w/ closing segment
+            ' return m more points (segment that closes the first and last point)
+            ReDim ad(0 To (n + 1) * M)
+            iLB = 0
+            iUB = n
+        Case 4    ' Tangent
+            ' return 2 * m fewer points (skip first and last segments)
+            ReDim ad(0 To (n - 2) * M)
+            iLB = 1
+            iUB = n - 2
+        Case Else
+            MsgBox "Undefined Type: " & iType, vbOKOnly, "SplineSeg"
+            Exit Function
+    End Select
+    For i = iLB To iUB
+        ip1 = i + 1
+        If ip1 > n Then ip1 = 0 ' only applicable when iUB = n
+        
+        ' get coefficients from derivative
+        a = y(i)
+        b = Di(i)
+        c = 3 * (y(ip1) - y(i)) - 2 * Di(i) - Di(ip1)
+        d = 2 * (y(i) - y(ip1)) + Di(i) + Di(ip1)
+        ' compute the spline points
+        For j = 0 To M - 1
+            t = j / M
+            ad(k) = a + (b + (c + d * t) * t) * t
+            k = k + 1
+        Next j
+    Next i
+    
+    ' add the last point, set the output, and exit
+    ad(k) = a + b + c + d
+    adCubicSpline = ad
+End Function
+Sub CubicSplineDi(y() As Double, iType As Long, Di() As Double)
+    ' shg 2009-0203
+    
+    ' Returns the n+1 derivatives of the cubic spline
+    ' connecting the points in 0-based array y()
+    ' iType = 1:    Normal spline
+    ' iType = 2, 3: Closed spline
+    ' iType = 4:    Tangent Spline
+    ' Richard Bartels et al: An Introduction Splines for use in Computer Graphics and Geometric Modeling
+    ' http://mathworld.wolfram.com/CubicSpline.html
+    ' http://math.fullerton.edu/mathews/n2003/CubicSplinesMod.html
+    ' http://www.physics.utah.edu/~detar/phys6720/handouts/cubic_spline/cubic_spline/node1.html
+    ' http://www.physics.arizona.edu/~restrepo/475A/Notes/sourcea/node35.html
+    Dim n       As Long     ' there are n + 1 points
+    Dim i       As Long     ' index to points
+    Dim adTD()  As Double   ' tri-diagonal matrix
+    Dim adRS()  As Double   ' right-side matrix
+    Dim v       As Variant
+    n = UBound(y)
+    ReDim adTD(0 To n, 0 To n)
+    ReDim adRS(0 To n, 0 To 0)
+    ' main diagonal = 4
+    For i = 0 To n
+        adTD(i, i) = 4#
+    Next i
+    ' upper and lower sub-diagonals = 1
+    For i = 1 To n
+        adTD(i - 1, i) = 1#
+        adTD(i, i - 1) = 1#
+    Next i
+    ' right-side matrix (interior)
+    For i = 1 To n - 1
+        adRS(i, 0) = 3# * (y(i + 1) - y(i - 1))
+    Next i
+    Select Case iType
+        Case 1  ' open (natural) spline
+            ' coeff matrix
+            adTD(0, 0) = 2#    ' UL corner
+            adTD(n, n) = 2#    ' LR corner
+            ' right side matrix
+            adRS(0, 0) = 3# * (y(1) - y(0))
+            adRS(n, 0) = 3# * (y(n) - y(n - 1))
+        Case 2, 3:    ' closed spline
+            adTD(0, n) = 1#    ' UR corner
+            adTD(n, 0) = 1#    ' LL corner
+            adRS(0, 0) = 3# * (y(1) - y(n))
+            adRS(n, 0) = 3# * (y(0) - y(n - 1))
+        Case 4:    ' tangent spline
+            ' 1. for slope at first interior points
+            adTD(0, 0) = 0#
+            adTD(n, n) = 0#
+            adRS(0, 0) = y(1) - y(0)
+            adRS(n, 0) = y(n) - y(n - 1)
+            ' 2. for curvature at first interior points
+            ' adTD(1, 0) = 0#
+            adTD(1, 1) = 2#
+            '
+            adTD(n - 1, n - 2) = 0#
+            adTD(n - 1, n - 1) = 2#
+            adRS(1, 0) = 3# * (y(2) - y(1))
+            adRS(n - 1, 0) = 3# * (y(n) - y(n - 1))
+    End Select
+    'dbpMat "adTD and adRS", adTD, adRS
+    ' only a variant can receive the result of MMULT
+    v = WorksheetFunction.MMult(WorksheetFunction.MInverse(adTD), adRS)
+    
+    ReDim Di(0 To n)
+    For i = 0 To n
+        Di(i) = v(i + 1, 1)
+    Next i
+End Sub
