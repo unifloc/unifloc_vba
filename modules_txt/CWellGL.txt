@@ -557,6 +557,8 @@ End Function
 Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, _
                                     ByVal Tbh_C As Double, _
                                     Optional Pcas_inj_atma As Double = 1, _
+                                    Optional Qgas_inj_scm3day As Double = 0, _
+                                    Optional ByVal CalcChoke As Boolean = True, _
                                     Optional saveCurve As CALC_RESULTS = noCurves)
 ' @brief Calc_Pwf_Plin_atma расчет забойного давления по известному давлению в линии и конструкции скважины дихотомией
 ' @param Plin_atma - давление в линии
@@ -577,7 +579,7 @@ On Error GoTo err1:
     PwfDown = -1
     Do
         ' ищем  приближения
-        Plin1 = Calc_Plin_Pwf_atma_(SetPT(Pwf1, Tbh_C), Pcas_inj_atma, saveCurve:=noCurves)
+        Plin1 = Calc_Plin_Pwf_atma_(SetPT(Pwf1, Tbh_C), Pcas_inj_atma, Qgas_inj_scm3day, saveCurve:=noCurves)
         If (Abs(Plin1 - Plin_atma) < const_well_P_tolerance) Then
              found_solution = True
              p_PTwf.P_atma = Pwf1
@@ -604,16 +606,23 @@ On Error GoTo err1:
         End If
         i = i + 1
     Loop While Not found_solution And i < 20
-    p_PTlin = SetPT(Calc_Plin_Pwf_atma_(p_PTwf, Pcas_inj_atma, saveCurve:=saveCurve), Tbuf_C)
+    
+    If i = 20 Then
+       addLogMsg "CWellGL.Calc_Pwf_Plin_atma: max iteration num reached. i = " & CStr(i) & " tolerance reached = " & CStr(Abs(Plin1 - Plin_atma))
+    End If
+    
+    p_PTlin = SetPT(Calc_Plin_Pwf_atma_(p_PTwf, Pcas_inj_atma, Qgas_inj_scm3day, saveCurve:=saveCurve), Tbuf_C)
     
     If Abs(Pline_atma - Plin_atma) > const_well_P_tolerance Then
-       addLogMsg "Calc_Pwf_Plin_atma: ошибка расчета забойного давления больше " & const_well_P_tolerance & ". Равна = " & Abs(Me.Pline_atma - Plin_atma)
+       addLogMsg "CWellGL.Calc_Pwf_Plin_atma: BHP estimation error exceeds tolerance " & const_well_P_tolerance & ". Equal = " & Abs(Me.Pline_atma - Plin_atma)
     End If
     Calc_Pwf_Plin_atma = p_PTwf.P_atma
-   ' переводим в состояние "целостность нарушена"
-   ' p_Calculated = False
+    
     Exit Function
 err1:
     ' тут надо среагировать на ошибку
-    Err.Raise 1
+        On Error Resume Next
+    RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: some general error")
+    Err.Raise Err.Number, Err.Source, Err.Description
+    Exit Function
  End Function
