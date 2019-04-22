@@ -64,8 +64,9 @@ Private esp_AreaShaft_m2 As Double            ' площадь поперечного сечения вала
 Private esp_ShaftPowerLimit_W As Double       ' максимальная мощность передаваемая валом на номинальной частоте
 Private esp_ShaftPowerLimitMax_W As Double    ' максимальная мощность передаваемая валом на номинальной частоте для высокопрочного вала
 Private esp_HousingPressureLimit_atma As Double ' максимальное давление на корпус
-Private p_PressureDegradation As Double     ' деградация характеристики УЭЦН по напору
-Private p_RateDegradation As Double         ' деградация характеристики УЭЦН по дебиту
+Private p_cfHead_fr As Double         ' деградация характеристики УЭЦН по напору
+Private p_cfRate_fr As Double         ' деградация характеристики УЭЦН по дебиту
+Private p_cfPower_fr As Double        ' деградация по мощности (она же по КПД системы)
 'Private p_GasFraction As Double             ' доля газа на входе в насос
 Private p_HCorrVisc As Double               ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
 Private p_QCorrVisc As Double               ' для дебита
@@ -238,12 +239,36 @@ End Property
 Public Property Get Pdis_atma() As Double
     Pdis_atma = p_Pdis_atma
 End Property
- Public Property Get PressureDegradation() As Double
-    PressureDegradation = p_PressureDegradation
+ Public Property Get cfHead_fr() As Double
+    cfHead_fr = p_cfHead_fr
  End Property
  
- Public Property Let PressureDegradation(val As Double)
-    p_PressureDegradation = val
+ Public Property Let cfHead_fr(val As Double)
+    p_cfHead_fr = val
+ End Property
+ 
+ Public Property Get cfRate_fr() As Double
+    cfRate_fr = p_cfRate_fr
+ End Property
+ 
+ Public Property Let cfRate_fr(val As Double)
+    p_cfRate_fr = val
+ End Property
+ 
+ Public Property Get cfPower_fr() As Double
+    cfPower_fr = p_cfPower_fr
+ End Property
+ 
+ Public Property Let cfPower_fr(val As Double)
+    p_cfPower_fr = val
+ End Property
+ 
+ Public Property Get cfEff_fr() As Double
+    cfPower_fr = p_cfPower_fr
+ End Property
+ 
+ Public Property Let cfEff_fr(val As Double)
+    p_cfPower_fr = val
  End Property
  
 Public Property Get Tint_C() As Double
@@ -778,11 +803,11 @@ On Error GoTo err1:
                 gascorr = GasCorrection_d(.GasFraction_d, ESPtype)
             End If
             qmix = .Qmix_m3day
-            qmix_degr = qmix * (1 + p_RateDegradation)
-            Head_mix = Get_ESP_Head_m(qmix_degr, Nst, .MuMix_cSt)
+            qmix_degr = qmix * (1 + p_cfRate_fr)
+            Head_mix = Get_ESP_Head_m(qmix_degr, Nst, .MuMix_cSt) * (1 - p_cfHead_fr)
             p_HeadReal_m = p_HeadReal_m + Head_mix
                 ' тут когда то надо сделать коррекцию характеристики на плотность
-            dPStage = .rho_mix_kgm3 * Head_mix * const_g * const_convert_Pa_atma * (1 - p_PressureDegradation)
+            dPStage = .rho_mix_kgm3 * Head_mix * const_g * const_convert_Pa_atma
             Pst_atma = Pst_atma + sign_int * dPStage
             dPav = dPStage / 2 * sign_int
             
@@ -790,7 +815,7 @@ On Error GoTo err1:
             PowFluid_Wt = qmix * const_convert_m3day_m3sec * dPStage * const_convert_atma_Pa   ' мощность с поправкой на плотность ГЖС
             PowFluidTot_Wt = PowFluidTot_Wt + PowFluid_Wt
             ' оценим мощность потребляемую насосом с вала
-            PowESP_Wt = Get_ESP_Power_W(qmix_degr, Nst, .MuMix_cSt) * .rho_mix_kgm3 / 1000  '* (1 - p_PressureDegradation)              ' мощность потребляемая одной ступенью на воде
+            PowESP_Wt = Get_ESP_Power_W(qmix_degr, Nst, .MuMix_cSt) * .rho_mix_kgm3 / 1000 * (1 + p_cfPower_fr)               ' мощность потребляемая одной ступенью на воде
             PowESPTot_Wt = PowESPTot_Wt + PowESP_Wt
             ' оценим КПД ступени в данных условиях
             If (PowESPTot_Wt > 0) Then
@@ -799,7 +824,7 @@ On Error GoTo err1:
             End If
             
             If (PowESP_Wt > 0) Then
-                EffStage = PowFluid_Wt / PowESP_Wt ' Get_ESP_effeciency_fr(qmix, .MuMix_cSt)
+                EffStage = PowFluid_Wt / PowESP_Wt
             Else: EffStage = 0
             End If
             
@@ -1033,8 +1058,10 @@ Private Sub Class_Initialize()
     esp_HousingPressureLimit_atma = 390  ' 390 атм максимальное давление на корпус
     ESP_freq_Hz = 50
     
-    p_PressureDegradation = 0 ' по умолчанию нет деградации
-    p_RateDegradation = 0 ' по умолчанию нет деградации
+    p_cfHead_fr = 0 ' по умолчанию нет деградации
+    p_cfRate_fr = 0 ' по умолчанию нет деградации
+    p_cfPower_fr = 0 ' по умолчанию нет деградации
+    
     p_StageNum = 1
     p_freq_Hz = 50
     ID = 0
@@ -1074,12 +1101,12 @@ For i = 0 To numPoints
     c_PowerCurve.AddPoint qcalc, Get_ESP_Power_W(qcalc)
     c_EffeciencyCurve.AddPoint qcalc, Get_ESP_effeciency_fr(qcalc)
     
-    degr_temp = PressureDegradation
-    PressureDegradation = 0
+    degr_temp = cfHead_fr
+    cfHead_fr = 0
     Call Calc_ESP(p_Pint_atma, p_Tint_C)
     c_NominalPressureDropCurve.AddPoint qcalc, p_Pdis_atma - p_Pint_atma
     
-    PressureDegradation = degr_temp
+    cfHead_fr = degr_temp
     Call Calc_ESP(p_Pint_atma, p_Tint_C)
     c_RealPressureDropCurve.AddPoint qcalc, p_Pdis_atma - p_Pint_atma
     c_RealPowerCurve.AddPoint qcalc, p_PowerFluid_Wt
@@ -1131,24 +1158,10 @@ Public Function Copy(pump As CESPpump) As Boolean
  esp_PowerKoefficients = pump.PowerKoefficients()
  esp_EffKoefficients = pump.EffKoefficients()
  
- p_PressureDegradation = pump.PressureDegradation
+ p_cfHead_fr = pump.cfHead_fr
+ p_cfRate_fr = pump.cfRate_fr
  
-' p_RateDegradation As Double
-'
-'
-'
-' c_HeadCurve As New TInterpolation    ' номинальный напор
-' c_PowerCurve As New TInterpolation   ' номинальная мощность потребляемая УЭЦН
-' c_EffeciencyCurve As New TInterpolation  ' номинальный КПД потребляемый УЭЦН
-'
-' c_NominalPressureDropCurve As New TInterpolation   ' кривая номинального перепада давления при заданном давлении на приеме
-' c_RealPressureDropCurve As New TInterpolation      ' кривая реального, с учетом деградации и поправок перепада давления при заданном давлении на приеме
-' c_RealPowerCurve As New TInterpolation             ' кривая реального потребления энергии насосом
-' c_RealEfficiencyCurve As New TInterpolation        ' кривая реальной эффективности насоса
-'
-' c_GasFractionInPumpCurve As New TInterpolation     ' кривая распределения доли газа внутри ЭЦН
-' c_PressureInPumpCurve As New TInterpolation        ' давление внутри насоса
-' c_TempInPumpCurve As New TInterpolation            ' температура внутри насоса
+ 
     
     
 End Function

@@ -4,44 +4,93 @@
 '2000 - 2019
 '
 '=======================================================================================
-'
+' класс для расчета свойств скважины c газлифтом - распределение давления и температуры в скважине
 Option Explicit
-'  класс для описания работы газлифтной скважины
-'
-'  предполагается, что есть пакер отделяющий затруб и газлифтные клапана
-'Public NumValves As Integer
-' количество газлифтных клапанов. От этого зависит количество сегментов труб
-' should be read only - base on valves collection
+Option Base 0
+Implements IWell
+' ============ general well objects ===========
 ' штуцер установленный на поверхности
-Public Choke As New Cchoke
+' choke always exist in well (but can have diam = 0 means - no influence on flow)
+Private p_choke As New Cchoke
+' input fluid object
+Private p_Fluid As New CPVT                  ' флюид из пласта
+Public Trajectory As New CTrajectory         ' полная траектория скважины с инклинометрии (основной способ задания скважины)
+' abbient formation object needed for full temperature calculation
+' must be accessed through property - in order to pass it to pipes properly
+Private p_AmbientForm As New CAmbientFormation
+Private p_PTbuf As PTtype
+Private p_PTlin As PTtype
+'Private p_PTcas As PTtype
+Private p_PTwf As PTtype
+' temperature params
+' температура задается отдельно, поэтому для удобства прямые параметры для работы с температурной моделью скважины заданы
+Private p_Twh_C As Double
+Private p_Tsurf_C As Double
+Private p_Tbh_C As Double
+Private p_Tvalve_C As Double
+Private p_Tres_C As Double
+Private p_Param As PARAMCALC                 ' параметры расчета по трубе
+ ' поправочные коэффициенты для расчета распределения давления
+Private p_betta_grav As Double
+Private p_betta_fric As Double
+Public Curve As New CCurves ' коллекция кривых с результатами расчетов
+Public Event ReportProgress(msg As String)
+' ============Gas Lift well objects =======================================
+'  класс для описания работы газлифтной скважины
+'  предполагается, что есть пакер отделяющий затруб и газлифтные клапана
+Public isCalcCasing As Boolean
 Private PipesProd As New Collection      ' коллеция труб по которым идет добыча из которых состоит скважина
 Private PipesInj As New Collection       '  коллекция труб по которым идет закачка газа
 Private valves As New CGLValveSet         ' коллекция клапанов установленных в скважине
-'Private p_Hvalve_m() As Double              ' массив с глубинами расположения клапанов
-Private p_Fluid As New CPVT                 ' fluid in well
 Private p_FluidCas As New CPVT
 ' it is assumed - one fluid in tubing - other in casing
 ' in gasing gas - with additional amount of gas in flow
 Private p_Qgas_inj_scm3day As Double          '
-Public Trajectory As New CTrajectory     ' полная траектория скважины с инклинометрии (основной способ задания скважины)
-Private p_AmbientForm As New CAmbientFormation  ' порода за пределями скважины   (new тут лишнее)
-'Public Hpacker_m As Double               ' глубина установки пакера, ограничивает глубину закачки газа
-Public Hvd_m As Double                   ' глубина верхних дыр перфорации
-Private p_PTbuf As PTtype
-Private p_PTlin As PTtype
-Private p_PTcas As PTtype
 Private p_PTgas_inj As PTtype
-Private p_PTwf As PTtype
-' параметры расчета по трубе
-Private p_Param As PARAMCALC
-'Public TempCorrelation As TEMP_CALC_METHOD
-Private c_Curves As New Collection         ' коллекция кривых с результатами расчетов
-' блок оценки качества данных
- 'Private p_LogMsg As New CLogger                ' логгер
+' ============ constructor ====================
+Private Sub Class_Initialize()
+    With p_Param
+        .correlation = AnsariCor
+        .FlowDirection = FlowAgainstCoord
+        .tempMethod = AmbientTemp
+    End With
+    p_PTgas_inj.T_C = 30
+    p_betta_grav = 1
+    p_betta_fric = 1
+    isCalcCasing = True
+End Sub
+'------------------------------------------------------------
+' choke general  properties
+'------------------------------------------------------------
+Property Get Choke() As Cchoke
+   Set Choke = p_choke
+End Property
+Public Sub SetChoke(dchoke_mm, Optional dTub_mm = 62)
+' установка параметров штуцера
+   p_choke.Dchoke_m = dchoke_mm / 1000
+   p_choke.Ddown_m = dTub_mm / 1000
+   p_choke.Dup_m = dTub_mm / 1000
+End Sub
  
-Public Event ReportProgress(msg As String)
+Public Sub clearChoke()
+   p_choke.Dchoke_m = 0
+End Sub
+Private Function isChoke() As Boolean
+   isChoke = p_choke.Dchoke_m > 0
+End Function
+'------------------------------------------------------------
+' fluid general properties
+'------------------------------------------------------------
+Public Property Get Fluid() As CPVT
+    Set Fluid = p_Fluid
+End Property
+Public Property Get FluidTub() As CPVT
+    Set FluidTub = p_Fluid
+End Property
+Public Property Get FluidCas() As CPVT
+    Set FluidCas = p_FluidCas
+End Property
 Public Property Set Fluid(val As CPVT)
-    Dim vlv As CGLvalve
     Dim pipe As CPipe
     ' set main tubing fluid here
     Set p_Fluid = val
@@ -58,50 +107,51 @@ Public Property Set Fluid(val As CPVT)
     Set Choke.Fluid = p_Fluid
     Set valves.Fluid = p_Fluid
 End Property
-Public Property Get Fluid() As CPVT
-    Set Fluid = p_Fluid
+' ---------------------------------------------------------------
+' flow correlations tuning methods
+' ---------------------------------------------------------------
+Public Property Get betta_grav() As Double
+   betta_grav = p_betta_grav
 End Property
-Public Property Get FluidCas() As CPVT
-    Set FluidCas = p_FluidCas
+Public Property Get betta_fric() As Double
+   betta_fric = p_betta_fric
 End Property
-Public Property Get Pwf_atma() As Double
-    Pwf_atma = p_PTwf.P_atma
+Public Property Let betta_grav(val As Double)
+   Dim pipe As CPipe
+   If val > 0 And val < 2 Then
+   ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
+        For Each pipe In PipesProd
+            pipe.betta_grav = val
+        Next pipe
+        For Each pipe In PipesInj
+            pipe.betta_grav = val
+        Next pipe
+        p_betta_grav = val
+        If val <> 1 Then addLogMsg_debug "CWellGL.betta_grav = " & str(val) & " warning. correction to multiphase flow correlation active!"
+   Else
+        addLogMsg_debug "CWellGL.betta_grav: value " & str(val) & " not set. Out of range"
+   End If
 End Property
-Public Property Let Pwf_atma(val As Double)
-    p_PTwf.P_atma = val
+ 
+Public Property Let betta_fric(val As Double)
+   Dim pipe As CPipe
+   If val > 0 And val < 2 Then
+   ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
+        For Each pipe In PipesProd
+            pipe.betta_fric = val
+        Next pipe
+        For Each pipe In PipesInj
+            pipe.betta_fric = val
+        Next pipe
+        p_betta_fric = val
+        If val <> 1 Then addLogMsg_debug "CWellGL.betta_fric = " & str(val) & " warning. correction to multiphase flow correlation friction active!"
+   Else
+        addLogMsg_debug "CWellGL.betta_fric: value " & str(val) & " not set. Out of range"
+   End If
 End Property
-Public Property Get Pcas_atma() As Double
-    Pcas_atma = p_PTcas.P_atma
-End Property
-Public Property Let Pcas_atma(val As Double)
-    p_PTcas.P_atma = val
-End Property
-Public Property Get Pgas_inj_atma() As Double
-    Pgas_inj_atma = p_PTgas_inj.P_atma
-End Property
-Public Property Let Pgas_inj_atma(val As Double)
-    p_PTgas_inj.P_atma = val
-End Property
-Public Property Get Tbh_C() As Double
-    Tbh_C = p_PTwf.T_C
-End Property
-Public Property Get Pbuf_atma() As Double
-    Pbuf_atma = p_PTbuf.P_atma
-End Property
-Public Property Let Pbuf_atma(val As Double)
-    p_PTbuf.P_atma = val
-End Property
-Public Property Get Pline_atma() As Double
-    Pline_atma = p_PTlin.P_atma
-End Property
-Public Property Let Pline_atma(val As Double)
-    p_PTlin.P_atma = val
-End Property
-Public Property Get Tline_C() As Double
-    Tline_C = p_PTlin.T_C
-End Property
-Public Property Get Tbuf_C() As Double
-    Tbuf_C = p_PTbuf.T_C
+ 
+Public Property Get HFlowCorrelation() As H_CORRELATION
+    HFlowCorrelation = Param.correlation
 End Property
 Public Property Let HFlowCorrelation(val As H_CORRELATION)
     Dim prm As PARAMCALC
@@ -110,8 +160,8 @@ Public Property Let HFlowCorrelation(val As H_CORRELATION)
     Param = prm
 End Property
  
-Public Property Get HFlowCorrelation() As H_CORRELATION
-    HFlowCorrelation = Param.correlation
+Public Property Get TempCorrelation() As TEMP_CALC_METHOD
+    TempCorrelation = Param.tempMethod
 End Property
  
 Public Property Let TempCorrelation(val As TEMP_CALC_METHOD)
@@ -121,8 +171,8 @@ Public Property Let TempCorrelation(val As TEMP_CALC_METHOD)
     Param = prm
 End Property
  
-Public Property Get TempCorrelation() As TEMP_CALC_METHOD
-    TempCorrelation = Param.tempMethod
+Public Property Get Param() As PARAMCALC
+    Param = p_Param
 End Property
 Public Property Let Param(val As PARAMCALC)
     p_Param = val
@@ -136,29 +186,27 @@ Public Property Let Param(val As PARAMCALC)
     Next pipe
 End Property
  
-Public Property Get Param() As PARAMCALC
-    Param = p_Param
+'------------------------------------------------------------
+' temperature general properties
+'------------------------------------------------------------
+Public Property Get Tline_C() As Double
+    Tline_C = p_PTlin.T_C
 End Property
-Public Property Get Curve(Key As String) As TInterpolation
-On Error Resume Next
-    Dim exists As Boolean
-    exists = Not IsEmpty(c_Curves.Item(Key))
-    If exists Then
-       Set Curve = c_Curves.Item(Key)
-    Else
-       Set Curve = New TInterpolation
-       c_Curves.Add Curve, Key
-    End If
+Public Property Get Tbuf_C() As Double
+    Tbuf_C = p_PTbuf.T_C
 End Property
-Public Property Set Curve(Key As String, valNew As TInterpolation)
- On Error Resume Next
-    Dim exists As Boolean
-    exists = Not IsEmpty(c_Curves.Item(Key))
-    If exists Then
-       c_Curves(Key) = valNew
-    Else
-       c_Curves.Add valNew, Key
-    End If
+ 
+Public Property Get Tbh_C() As Double
+    Tbh_C = p_PTwf.T_C
+End Property
+ 
+Public Property Get Twh_C() As Double
+    Twh_C = p_PTbuf.T_C
+End Property
+Public Property Get Tsurf_C() As Double
+    On Error Resume Next
+    Tsurf_C = p_PTbuf.T_C
+    Tsurf_C = AmbientForm.AmbTemp_С(0)
 End Property
 Public Property Get AmbientForm() As CAmbientFormation
     Set AmbientForm = p_AmbientForm
@@ -172,28 +220,269 @@ Public Property Set AmbientForm(ByVal vNewValue As CAmbientFormation)
     For Each pipe In PipesInj
         Set pipe.AmbientForm = p_AmbientForm
     Next pipe
+    
+    Call InitWellTemperature
 End Property
-'===================================================================
-'
-'===================================================================
-Private Sub Class_Initialize()
-    With p_Param
-        .correlation = AnsariCor
-        .FlowDirection = FlowAgainstCoord
-        .tempMethod = AmbientTemp
-    End With
-    p_PTcas.T_C = 30
+'------------------------------------------------------------
+' pressure general properties
+'------------------------------------------------------------
+Public Property Get Pline_atma() As Double
+   Pline_atma = p_PTlin.P_atma
+End Property
+Public Property Get Pbuf_atma() As Double
+' buffer pressure
+   Pbuf_atma = p_PTbuf.P_atma
+End Property
+Public Property Get Pwf_atma() As Double
+' давление на забое
+   Pwf_atma = p_PTwf.P_atma
+End Property
+Public Property Get Pan_atma() As Double
+' annulus presure
+   Pan_atma = p_PTgas_inj.P_atma
+End Property
+Public Property Get Pcas_atma() As Double
+    Pcas_atma = p_PTgas_inj.P_atma
+End Property
+'------------------------------------------------------------
+' well rates general properties
+'------------------------------------------------------------
+Property Let Qliq_scm3day(Qval_scm3day As Double)
+   Fluid.Qliq_scm3day = Qval_scm3day
+   ' далее надо сбросить все флюиды которые были в системе на единый, что возможно потребует пересчета
+   Set Fluid = Fluid
+ '  p_Calculated = False
+End Property
+' дебит жидкости из скважины в поверхностных условиях
+Public Property Get Qliq_scm3day() As Double
+   Qliq_scm3day = p_Fluid.Qliq_scm3day
+End Property
+Public Property Get W_kgsec() As Double
+'    массовый расход продукции рассчитаем
+   W_kgsec = p_Fluid.Wm_kgsec
+End Property
+Public Property Get Qo_scm3day() As Double
+   Qo_scm3day = p_Fluid.Qo_m3day
+End Property
+Public Property Get Qo_sctday() As Double
+   Qo_sctday = Qliq_scm3day * (1 - p_Fluid.wc_fr) * p_Fluid.gamma_o
+End Property
+Public Property Get Qw_scm3day() As Double
+   Qw_scm3day = Qliq_scm3day * p_Fluid.wc_fr
+End Property
+Public Property Get Qg_scm3day() As Double
+   Qg_scm3day = p_Fluid.Qgas_scm3day
+End Property
+Property Get fw_perc() As Double
+    fw_perc = p_Fluid.wc_perc
+End Property
+Property Let fw_perc(wcval As Double)
+   Dim Wc As Double
+   Wc = wcval / 100
+   Fluid.wc_fr = Wc
+   ' далее надо сбросить все флюиды которые были в системе на единый, что возможно потребует пересчета
+   Set Fluid = p_Fluid
+End Property
+Property Let Rp_m3m3(Rpval As Double)
+   Fluid.Rp_m3m3 = Rpval
+   ' далее надо сбросить все флюиды которые были в системе на единый, что возможно потребует пересчета
+   Set Fluid = p_Fluid
+End Property
+' ---------------------------------------------------------------
+' service function
+' ---------------------------------------------------------------
+   
+ Public Function Clone() As CWellGL
+    Dim wl As New CWellGL
+    Dim i As Integer
+    Set wl.Trajectory = Trajectory   ' это должно сработать вместо инициализации
+    Call wl.Choke.Copy(Choke)
+    Set wl.Fluid = Fluid.Clone
+    
+    Set Clone = wl
+ End Function
+    
+ 
+ 
+' =======================================
+' методы инициализации скважины
+' =======================================
+Public Sub InitWellConstruction(ByVal Hperf_m As Double, _
+                                ByVal Htub_m As Double, _
+                        Optional ByVal dCas_mm As Double = 125, _
+                        Optional ByVal dTub_mm As Double = 72, _
+                        Optional ByVal Udl_m As Double = 0, _
+                        Optional ByVal hmes_incl_range_m_ = -1, _
+                        Optional ByVal hvert_incl_range_m_ = -1, _
+                        Optional ByVal hmes_dcas_range_m_ = -1, _
+                        Optional ByVal dcas_range_mm_ = -1, _
+                        Optional ByVal hmes_dtub_range_m_ = -1, _
+                        Optional ByVal dtub_range_mm_ = -1)
+    ' универсальный метод инициализации скважины - должен использоваться для инициализации скважины
+    ' поддерживает три варианта инициалиции
+    '       - с упрощенным набором данных с удлинением (загрузка из тех режима)
+    '       - с заданием инклинометрии через range и упрощенным набором труб (диаметры)
+    '       - с заданием инклинометрии и диаметров с использованием range
+    '
+    ' параметры обязательные для всех вариантов задания
+    ' Hperf_m               - глубина перфорации измеренная, м. Используется для расчета забойного давления
+    ' Htub_m                - глубина спуска НКТ измеренная, м. Соответствует глубине спуска насоса
+    '
+    ' параметры упрощенного режима задания
+    ' dCas_mm               - внутренний диамет эксплуатационной колонны, мм
+    ' dTub_mm               - внешний диамет НКТ, мм (толщина стенки 10 мм)
+    ' Udl_m                 - удлинение на глубину перфорации, м (разница между измеренной и вертикальной глубиной)
+    '
+    ' параметры детального задания скважины  (все - вертикальные range)
+    ' hmes_incl_range_m_    - измеренная глубина скважины для задания инклинометрии
+    ' hvert_incl_range_m_   - вертикальная глубина скважины для задания инклинометрии
+    '                       - если инклинометрии как range задана, то удлинение игнорируется
+    '
+    ' hmes_dcas_range_m_    - измеренная глубина для задания диаметра эксплуатационной колонны (начинается с 0)
+    ' dcas_range_mm_        - диаметр эксплуатационной колонны на соответствующей глубине (действует от глубины и вниз до след изменения)
+    ' hmes_dtub_range_m_    - измеренная глубина для задания диаметра НКТ
+    ' dtub_range_mm_        - диаметр НКТ внешний на соответствующей глубине (действует от глубины и вниз до след изменения)
+    '                       - для полного задания скважины все range должны быть заданы
+    
+    
+    
+    Dim simpleNumbers As Boolean
+    Dim fullRange As Boolean
+    Dim inclRange As Boolean
+    Dim fullArray As Boolean
+    
+    simpleNumbers = IsNumeric(hmes_incl_range_m_)
+    inclRange = IsObject(hmes_incl_range_m_) And IsObject(hvert_incl_range_m_)
+    fullRange = inclRange And IsObject(hmes_dcas_range_m_) And IsObject(dcas_range_mm_) And _
+                              IsObject(hmes_dtub_range_m_) And IsObject(dtub_range_mm_)
+    
+    If simpleNumbers Then
+    ' use simple numbers here
+        Call FillWellConstructionSimple(Hperf_m, Htub_m, Udl_m, dCas_mm, dTub_mm)
+    ElseIf fullRange Then
+        Call FillWellConstructionRangeAll(hmes_incl_range_m_, hvert_incl_range_m_, hmes_dcas_range_m_, _
+                              dcas_range_mm_, hmes_dtub_range_m_, dtub_range_mm_, _
+                              Hperf_m, Htub_m)
+'    ElseIf inclRange Then
+'        Call FillWellConstructionRange(hmes_incl_range_m_, hvert_incl_range_m_, Hperf_m, Htub_m, dCas_mm, dTub_mm)
+    End If
+    
+End Sub
+Public Sub InitWellTemperature(Optional ByVal Tbh_C As Double = -1, _
+                               Optional ByVal Twh_C As Double = -1, _
+                               Optional ByVal hmes_tamb_arr_m_ = -1, _
+                               Optional ByVal tamb_arr_C_ = -1)
+   ' основная функция инициализации температуры в скважине
+   ' задает по исходным данным объект AmbientForm, который определяет параметры температуры в скважине
+   '
+   ' если никакие параметры не заданы, скважине переинициализируется используя уже заданный объект p_AmbientForm
+   '
+   ' Tbh_C              - температура на забое скважины
+   ' Twh_C              - температура на устье скважины
+   ' hmes_tamb_arr_m_   - массив (range) измеренных глубин для задания распределения температуры по глубине
+   ' tamb_arr_C_        - значения температуры по глубине
+   
+   
+    Dim simpleNumbers As Boolean
+    Dim ambRange As Boolean
+    Dim newTempValues As Boolean
+    
+    Dim geoGrad As New TInterpolation
+    Dim ambTemp As New CAmbientFormation
+    Dim RangX As Range, RangY As Range
+On Error GoTo err1:
+    simpleNumbers = IsNumeric(hmes_tamb_arr_m_)
+    ambRange = IsObject(hmes_tamb_arr_m_) And IsObject(tamb_arr_C_)
+    newTempValues = ((Tbh_C > 20) And (Twh_C > 0)) Or ambRange
+    
+    If newTempValues Then
+        If simpleNumbers Then
+            geoGrad.AddPoint 0, Twh_C
+            geoGrad.AddPoint Trajectory.Hperfvert_m, Tbh_C
+        ElseIf ambRange Then
+            Set RangX = hmes_tamb_arr_m_
+            Set RangY = tamb_arr_C_
+            Call geoGrad.LoadFromVertRange(RangX, RangY)
+        End If
+        Set ambTemp.AmbTempCurve = geoGrad
+        Set p_AmbientForm = ambTemp
+    End If
+    
+    ' here we must have p_AmbientForm ready for initialisation
+    
+    p_Tbh_C = p_AmbientForm.AmbTemp_С(Trajectory.Hperfvert_m)
+    p_Twh_C = p_AmbientForm.AmbTemp_С(0)
+    p_Tsurf_C = p_Twh_C
+    p_Tres_C = Fluid.Tres_C
+    
+    ' инициализируем все элементы скважины для расчета по линейной зависимости от измеренной глубине
+    ' это метод расчета по умолчанию
+    ' все другие режимы расчета используют объект p_AmbientForm и не зависят от этой инициализации
+    Dim TempGrad As Double
+    Dim Tint_C As Double
+    TempGrad = (p_Tbh_C - p_Twh_C) / Trajectory.Hperf_m
+    
+     
+    Dim i As Integer
+    Dim tempDown_C As Double
+    Dim tempUp_C As Double
+    Dim pipe As CPipe
+    Dim HvalveVert0_m  As Double
+    
+    
+    tempUp_C = p_Tbh_C
+    For i = 1 To PipesProd.Count
+         Set pipe = PipesProd(i)
+         tempDown_C = tempUp_C
+         tempUp_C = tempDown_C - TempGrad * pipe.LengthMes_m
+         pipe.InitTlinear tempUp_C, tempDown_C
+    Next i
+    
+    HvalveVert0_m = Trajectory.HabsZ_m(valves.Hmes_lowest_m)
+    tempUp_C = AmbientForm.AmbTemp_С(HvalveVert0_m)
+    For i = 1 To PipesInj.Count
+         Set pipe = PipesInj(i)
+         tempDown_C = tempUp_C
+         tempUp_C = tempDown_C - TempGrad * pipe.LengthMes_m
+         pipe.InitTlinear tempUp_C, tempDown_C
+    Next i
+    ' зададим значения всех температур в ключевых точках в соответствии с исходными параметрами
+    ' некоторые из этих параметров потом могут быть перевычисленны
+    p_PTbuf.T_C = p_Twh_C
+    p_PTlin.T_C = p_Twh_C
+    p_PTgas_inj.T_C = p_Twh_C
+    p_PTwf.T_C = p_Tbh_C
+    
+    Exit Sub
+err1:
+    Dim errMsg As String
+    errMsg = "CWellGL.InitWellTemperature: error in temperature init " & sDELIM & Err.Description
+    RaiseEvent ReportProgress(errMsg)
+    Err.Raise kErrInitCalc, Err.Source, errMsg
 End Sub
 ' метод инициализации газлифтной скважины
 ' должен уметь задавать все трубы по скважине из исходных данных по траектории
 '
 '
-Public Sub InitWell(ByVal Hperf_m As Double, ByVal Htub_m As Double, ByVal Udl_m As Double, _
-                    ByVal dCas_mm As Double, ByVal dTub_mm As Double, ByVal Tbh_C As Double, _
-                    ByVal Twh_C As Double, _
-                            Optional ByVal GLV_Hmes_m = 0, _
-                            Optional ByVal GLV_dvalve_mm = 0, _
-                            Optional ByVal GLV_Pbellow_atma = 0)
+Public Sub IninWellGLV(Optional ByVal GLV_Hmes_m = 0, _
+                       Optional ByVal GLV_dvalve_mm = 0, _
+                       Optional ByVal GLV_Pbellow_atma = 0)
+   Dim RangeX As Range
+   Dim RangeY As Range
+   If IsObject(GLV_Hmes_m) Then
+        Set RangeX = GLV_Hmes_m
+        Set RangeY = GLV_dvalve_mm
+        Call valves.LoadFromVertRange(RangeX, RangeY)
+   ElseIf IsArray(GLV_Hmes_m) Then
+        Call valves.LoadFromArray(GLV_Hmes_m, GLV_dvalve_mm, GLV_Pbellow_atma)
+   End If
+  
+End Sub
+Private Sub FillWellConstructionSimple(ByVal Hperf_m As Double, _
+                    ByVal Htub_m As Double, _
+                    ByVal Udl_m As Double, _
+                    ByVal dCas_mm As Double, _
+                    ByVal dTub_mm As Double)
 ' метод для инициализации скважины простыми числами
 On Error GoTo err1:
    Dim errMsg As String
@@ -212,42 +501,26 @@ On Error GoTo err1:
    DtubCurve_mm.AddPoint 0, dTub_mm
    DtubCurve_mm.AddPoint Htub_m, dTub_mm  ' goes to tubing setting depth
    
-   If IsArray(GLV_Hmes_m) Then
-        Call valves.LoadFromArray(GLV_Hmes_m, GLV_dvalve_mm, GLV_Pbellow_atma)
-   End If
    ' initialise trajectory (same as ESP well class)
    Call tr.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Htub_m)
    Set Trajectory = tr
-   Call InitWellFromTr
+   Call FillWellConstructionTr
    
-   ' save given temperature distribution
-   Dim geoGrad As New TInterpolation
-   geoGrad.AddPoint 0, Twh_C
-   geoGrad.AddPoint Hperf_m, Tbh_C
-   
-   Dim ambTemp As New CAmbientFormation
-   Set ambTemp.AmbTempCurve = geoGrad
-   Set AmbientForm = ambTemp
-   
-   InitTempTr geoGrad
    Exit Sub
    
 err1:
-   errMsg = "CWell.InitWell: Ошибка простой инициализации скважины " & sDELIM & Err.Description
+   errMsg = "CWellGL.FillWellConstructionSimple: Ошибка простой инициализации скважины " & sDELIM & Err.Description
    RaiseEvent ReportProgress(errMsg)
    Err.Raise kErrInitCalc, Err.Source, errMsg
 End Sub
-Public Sub InitWellRangeAll(ByVal Incl_Hmes_m_ As Range, _
+Private Sub FillWellConstructionRangeAll(ByVal Incl_Hmes_m_ As Range, _
                            ByVal Incl_Hvert_m_ As Range, _
                            ByVal hmes_dcas_m_ As Range, _
                            ByVal dcas_arr_mm_ As Range, _
                            ByVal hmes_dtub_m_ As Range, _
                            ByVal dtub_arr_mm_ As Range, _
-                           ByVal hmes_tamb_m_ As Range, _
-                           ByVal tamb_C_ As Range, _
-                           Optional ByVal GLV_Hmes_m_ As Range = Nothing, _
-                           Optional ByVal GLV_dvalve_mm_ As Range = Nothing, _
-                           Optional ByVal GLV_Pbellow_atma_ As Range = Nothing)
+                           ByVal Hperf_m As Double, _
+                           ByVal Htub_m As Double)
 ' метод для инициализации скважины из диапазонов измнения ключевых параметров
 On Error GoTo err1:
    Dim HabsCurve_m As New TInterpolation
@@ -255,35 +528,254 @@ On Error GoTo err1:
    Dim DtubCurve_mm As New TInterpolation
    Dim geoGrad As New TInterpolation
    Dim ambTemp As New CAmbientFormation
-   Dim Hperf_m As Double, Htub_m As Double
    Dim errMsg As String
    
    Call HabsCurve_m.LoadFromVertRange(Incl_Hmes_m_, Incl_Hvert_m_)
    Call DcasCurve_mm.LoadFromVertRange(hmes_dcas_m_, dcas_arr_mm_)
    Call DtubCurve_mm.LoadFromVertRange(hmes_dtub_m_, dtub_arr_mm_)
-   
-   Call valves.LoadFromVertRange(GLV_Hmes_m_, GLV_dvalve_mm_)
-'   Set valves.Fluid = Fluid
   
    Hperf_m = DcasCurve_mm.maxx
    Htub_m = DtubCurve_mm.maxx
    
    Call Trajectory.InitTrajectoryHabs(HabsCurve_m, DcasCurve_mm, DtubCurve_mm, Hperf_m, Htub_m, valves)
-   Call InitWellFromTr
+   Call FillWellConstructionTr
    
-   Call geoGrad.LoadFromVertRange(hmes_tamb_m_, tamb_C_)
-   Set ambTemp.AmbTempCurve = geoGrad
-   
-   Set AmbientForm = ambTemp
-   
-   InitTempTr geoGrad
    Exit Sub
 err1:
    errMsg = "CWell.InitWellRangeAll: Ошибка простой инициализации скважины " & sDELIM & Err.Description
    RaiseEvent ReportProgress(errMsg)
    Err.Raise kErrInitCalc, Err.Source, errMsg
 End Sub
-Private Sub InitWellFromTr()
+' ============================================================
+' основные расчетные функции
+' ============================================================
+Public Sub SetQgasInj(Optional ByVal Pcas_inj_atma As Double = 1, _
+                      Optional ByVal Qgas_inj_scm3day As Double = -1)
+    p_Qgas_inj_scm3day = Qgas_inj_scm3day
+    p_PTgas_inj.P_atma = Pcas_inj_atma
+End Sub
+Public Function Calc_Plin_Pwf_atma_(ByVal Pwf_atma As Double, _
+                            Optional ByVal saveCurve As CALC_RESULTS = noCurves) As Double
+' @brief расчет давления на устье через забойное давление (снизу -> вверх)
+' @param Pwf - исходное забойное давление и температура
+' @Qgas_inj_scm3day - gas rate injected. If given - used at deepest GLV
+' @CalcCasing - флаг показывает надо ли считать ветку распределения давления по забтрубу - динамический уровень и затрубное давление
+' @CalcChoke - показывает надо ли считать штуцер
+' @saveCurve - показывает насколько детально надо сохранять результаты расчета
+Dim Tintake_esp_C As Double
+Dim PT_temp As PTtype
+Dim PTcas_temp As PTtype
+Dim Tan_C As Double
+Dim pcur As TInterpolation
+Dim i As Integer
+Dim pipe As CPipe
+Dim Qgfree_tot_scm3day As Double
+Qgfree_tot_scm3day = 0
+Dim Fluid_Pipe_Below As CPVT
+' first initialize temp fluid with general one
+Set Fluid_Pipe_Below = Fluid
+' flag show if lowest GLV has been acounted
+Dim LowestGLVdone As Boolean
+LowestGLVdone = False
+Dim Qgas_inj_GLV_scm3day As Double
+Qgas_inj_GLV_scm3day = 0
+    
+On Error GoTo err1:
+    ' 1. Start calculation from Pwf, Tbh
+    p_PTwf.P_atma = Pwf_atma
+    PT_temp = p_PTwf
+    PTcas_temp = p_PTgas_inj 'SetPT(Pcas_inj_atma, p_PTcas.T_C)
+    
+    ' 2. calculate pressure distribution in annulus
+    
+    For i = PipesInj.Count To 1 Step -1
+        Set pipe = PipesInj(i)
+        pipe.Param = ParamCalcFromTop(Gas, TempCorrelation)
+        PTcas_temp = pipe.Calc_dPipe(PTcas_temp, saveCurve)
+        If Not pipe.GLVin Is Nothing Then
+            ' if  there is a valve - save PT in casing at valve intake
+            pipe.GLVin.Pin_atma = PTcas_temp.P_atma
+            pipe.GLVin.Tin_C = PTcas_temp.T_C
+        End If
+    Next i
+    
+    ' 3. calc tubing pressure
+    For i = 1 To PipesProd.Count
+        ' first segment - from bottom to tubing depth then goes up
+        Set pipe = PipesProd(i)
+        ' taking fluid from previos segment - if we had gas injected below it will acounted here
+        Set pipe.Fluid = Fluid_Pipe_Below
+        ' check if there is a valve on pipe bottom
+        ' GLV meant it is possible ijection point
+        If Not pipe.GLVin Is Nothing Then
+            ' if valve set up then estimate gas coming through valve
+            pipe.GLVin.Pout_atma = PT_temp.P_atma   ' pressure at pipe bottom from previos step
+            pipe.GLVin.Tout_C = PT_temp.T_C
+            ' adding additional gas coming trough valve
+On Error GoTo err2:
+            If p_Qgas_inj_scm3day > 0 Then
+                ' use manual Qgas in well
+                If Not LowestGLVdone Then
+                    Qgas_inj_GLV_scm3day = p_Qgas_inj_scm3day
+                    LowestGLVdone = True
+                Else
+                    Qgas_inj_GLV_scm3day = 0
+                End If
+            Else
+                Qgas_inj_GLV_scm3day = pipe.GLVin.calc_Qgas_scm3day(-1, -1, -1)
+                i = i / 0
+            End If
+            pipe.GLVin.Qgas_inj_scm3day = Qgas_inj_GLV_scm3day
+On Error GoTo err1:
+            Qgfree_tot_scm3day = Qgfree_tot_scm3day + Qgas_inj_GLV_scm3day
+            If Qgas_inj_GLV_scm3day > 0 Then
+                Set pipe.Fluid = Fluid_Pipe_Below.Clone
+                pipe.Fluid.Qgfree_scm3day = Qgfree_tot_scm3day
+                Set Fluid_Pipe_Below = pipe.Fluid
+            End If
+        End If
+     
+        pipe.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
+        PT_temp = pipe.Calc_dPipe(PT_temp, saveCurve)
+    Next i
+    p_PTbuf = PT_temp
+    p_PTlin = p_PTbuf
+On Error GoTo err3:
+    ' 4. Расчет линейного давления по штуцеру
+    If Choke.Dchoke_m > 0 Then      ' пока отключено
+        Set Choke.Fluid = pipe.Fluid   ' take fluid from last pipe
+        p_PTlin = Choke.Calc_Choke_Plin(p_PTbuf)
+        If p_PTlin.P_atma < 0 Then
+            p_PTlin.P_atma = 1
+        End If
+    End If
+On Error GoTo err1:
+    Calc_Plin_Pwf_atma_ = PT_temp.P_atma
+    
+    If saveCurve > 0 Then
+        For i = 1 To PipesProd.Count
+            Set pipe = PipesProd(i)
+            Call Curve(str_PtubHmes_curve).AddPointsCurve(pipe.Curves("c_P"))
+            Call Curve(str_TtubHmes_curve).AddPointsCurve(pipe.Curves("c_T"))
+            Call Curve(str_TambHmes_curve).AddPointsCurve(pipe.Curves("c_Tamb"))
+            If saveCurve > 1 Then
+                Call Curve(str_HlHmes_curve).AddPointsCurve(pipe.Curves("c_Hl"))
+                Curve(str_HlHmes_curve).yName = "Hl"
+            End If
+        Next i
+        For i = 1 To PipesInj.Count
+           Set pipe = PipesInj(i)
+           Call Curve(str_PcasHmes_curve).AddPointsCurve(pipe.Curves("c_P"))
+           Call Curve(str_TcasHmes_curve).AddPointsCurve(pipe.Curves("c_T"))
+        Next i
+        
+        Curve(str_PtubHmes_curve).xName = "hmes ptub"
+        Curve(str_PtubHmes_curve).yName = "Ptub"
+        
+        Curve(str_TtubHmes_curve).xName = "hmes Ttub"
+        Curve(str_TtubHmes_curve).yName = "Ttub"
+        
+        Curve(str_TambHmes_curve).xName = "hmes Tamb"
+        Curve(str_TambHmes_curve).yName = "Tamb"
+        
+        Curve(str_PcasHmes_curve).xName = "hmes pcas"
+        Curve(str_PcasHmes_curve).yName = "pcas"
+        
+        Curve(str_TcasHmes_curve).xName = "hmes pcas"
+        Curve(str_TcasHmes_curve).yName = "Tcas"
+    End If
+    Exit Function
+err1:
+    On Error Resume Next
+    RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: some general error")
+    Err.Raise Err.Number, Err.Source, Err.Description
+    Exit Function
+err2:
+    On Error Resume Next
+    addLogMsg "CWellGL.Calc_Plin_Pwf_atma:error while GLV Hmes = " & CStr(pipe.GLVin.Hmes_m) & " calc - Qgas_inj_GLV_scm3day = " & CStr(Qgas_inj_GLV_scm3day)
+    Resume Next
+    Exit Function
+err3:
+    On Error Resume Next
+    addLogMsg "CWellGL.Calc_Plin_Pwf_atma:error while choke calc - choke have been  ignored"
+    Resume Next
+End Function
+Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, _
+                                    ByVal Tbh_C As Double, _
+                                    Optional saveCurve As CALC_RESULTS = noCurves)
+' @brief Calc_Pwf_Plin_atma расчет забойного давления по известному давлению в линии и конструкции скважины дихотомией
+' @param Plin_atma - давление в линии
+' @param Hd - динамический уровень
+' @param Tbh_C - температура на забое скважины
+' @return Подсчитанное для заданного линейного давление
+On Error GoTo err1:
+    Dim Pwf1 As Double      ' первое приближение
+    Dim PwfUp As Double, PwfDown As Double
+    Dim PlinUp As Double, PlinDown As Double
+    Dim Plin0 As Double, Plin1 As Double
+    Dim found_solution As Boolean
+    Dim i As Integer
+    found_solution = False
+    i = 0
+    Pwf1 = 60
+    PwfUp = -1
+    PwfDown = -1
+    Do
+        ' ищем  приближения
+    '    Call SetQgasInj(p_PTgas_inj.P_atma, p_Qgas_inj_scm3day)
+        Plin1 = Calc_Plin_Pwf_atma_(Pwf1, saveCurve:=noCurves)
+        If (Abs(Plin1 - Plin_atma) < const_well_P_tolerance) Then
+             found_solution = True
+             p_PTwf.P_atma = Pwf1
+             p_PTwf.T_C = Tbh_C
+        End If
+        If Not found_solution Then
+          If Plin1 > Plin_atma Then
+              PwfUp = Pwf1
+              PlinUp = Plin1
+              If PwfDown < 0 Then
+                  Pwf1 = PwfUp / 2
+              Else
+                  Pwf1 = PwfDown + (PwfUp - PwfDown) * (Plin_atma - PlinDown) / (PlinUp - PlinDown)
+              End If
+          Else
+              PwfDown = Pwf1
+              PlinDown = Plin1
+              If PwfUp < 0 Then
+                  Pwf1 = Pwf1 * 2
+              Else
+                  Pwf1 = (PwfUp + PwfDown) / 2
+              End If
+          End If
+        End If
+        i = i + 1
+    Loop While Not found_solution And i < 20
+    
+    If i = 20 Then
+       addLogMsg "CWellGL.Calc_Pwf_Plin_atma: max iteration num reached. i = " & CStr(i) & " tolerance reached = " & CStr(Abs(Plin1 - Plin_atma))
+    End If
+    
+   ' Call SetQgasInj(Pcas_inj_atma, Qgas_inj_scm3day)
+    p_PTlin = SetPT(Calc_Plin_Pwf_atma_(p_PTwf.P_atma, saveCurve:=saveCurve), Tbuf_C)
+    
+    If Abs(Pline_atma - Plin_atma) > const_well_P_tolerance Then
+       addLogMsg "CWellGL.Calc_Pwf_Plin_atma: BHP estimation error exceeds tolerance " & const_well_P_tolerance & ". Equal = " & Abs(Me.Pline_atma - Plin_atma)
+    End If
+    Calc_Pwf_Plin_atma = p_PTwf.P_atma
+    
+    Exit Function
+err1:
+    ' тут надо среагировать на ошибку
+        On Error Resume Next
+    RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: some general error")
+    Err.Raise Err.Number, Err.Source, Err.Description
+    Exit Function
+ End Function
+ 
+' =============================================================================
+' specific properties and functions
+' =============================================================================
+Private Sub FillWellConstructionTr()
     Dim i As Integer, j As Integer
     Dim segmUp_m As Double
     Dim segmDown_m As Double
@@ -348,281 +840,96 @@ Private Sub InitWellFromTr()
         Set pipe.AmbientForm = AmbientForm
     Next pipe
     
-    Hvd_m = Trajectory.Hperf_m
-  ' переводим в состояние "целостность нарушена"
-'   p_Calculated = False
 End Sub
- Public Sub InitTempTr(geoGrad As TInterpolation)
-' процедура для инициализации температуры в скважине, для линейнго расчета
-' при линейном расчете предполагается,
-' что температура меняется линейно относительно глубины скважины
+' Public Sub InitTempTr(geoGrad As TInterpolation)
+'' процедура для инициализации температуры в скважине, для линейнго расчета
+'' при линейном расчете предполагается,
+'' что температура меняется линейно относительно глубины скважины
+''
+'   Dim TempGradVert As Double
+'   Dim pipe As CPipe
 '
-   Dim TempGradVert As Double
-   Dim pipe As CPipe
-   p_PTwf.T_C = geoGrad.GetPoint(geoGrad.maxx)
-   p_PTbuf.T_C = geoGrad.GetPoint(geoGrad.minx)
-   
-   TempGradVert = (p_PTwf.T_C - p_PTbuf.T_C) / Hvd_m
-      
-   For Each pipe In PipesProd
-       pipe.dTdLinit = TempGradVert
-   Next pipe
-   For Each pipe In PipesInj
-       pipe.dTdLinit = TempGradVert
-   Next pipe
-   
-   TempCorrelation = GeoGradTemp
-End Sub
+'   p_PTwf.T_C = geoGrad.GetPoint(geoGrad.maxx)
+'   p_PTbuf.T_C = geoGrad.GetPoint(geoGrad.minx)
+'
+'   TempGradVert = (p_PTwf.T_C - p_PTbuf.T_C) / Trajectory.Hperf_m
+'
+'   For Each pipe In PipesProd
+'       pipe.dTdLinit = TempGradVert
+'   Next pipe
+'   For Each pipe In PipesInj
+'       pipe.dTdLinit = TempGradVert
+'   Next pipe
+'
+'   TempCorrelation = GeoGradTemp
+'
+'End Sub
  
-Public Sub InitTempLinear(ByVal Tbhinit_C As Double, ByVal Twhinit_C As Double)
-' процедура для инициализации температуры в скважине, для линейнго расчета
-   Dim TempGrad As Double
-   Dim i As Integer
-   Dim tempDown_C As Double
-   Dim tempUp_C As Double
-   Dim pipe As CPipe
-   Dim HvalveVert0_m  As Double
-   
-   TempGrad = (Tbhinit_C - Twhinit_C) / Hvd_m
-   p_PTwf.T_C = Tbhinit_C
-   p_PTbuf.T_C = Twhinit_C
-   
-   tempUp_C = Tbhinit_C
-   For i = 1 To PipesProd.Count
-        Set pipe = PipesProd(i)
-        tempDown_C = tempUp_C
-        tempUp_C = tempDown_C - TempGrad * pipe.LengthMes_m
-        pipe.InitTlinear tempUp_C, tempDown_C
-   Next i
-   
-   HvalveVert0_m = Trajectory.HabsZ_m(valves.Hmes_lowest_m)
-   tempUp_C = AmbientForm.AmbTemp_С(HvalveVert0_m)
-   For i = 1 To PipesInj.Count
-        Set pipe = PipesInj(i)
-        tempDown_C = tempUp_C
-        tempUp_C = tempDown_C - TempGrad * pipe.LengthMes_m
-        pipe.InitTlinear tempUp_C, tempDown_C
-   Next i
-   
-   TempCorrelation = StartEndTemp
-   
-End Sub
-Public Function Calc_Plin_Pwf_atma_(PTwf As PTtype, _
-                                    Optional ByVal Pcas_inj_atma As Double = 1, _
-                                    Optional ByVal Qgas_inj_scm3day As Double = -1, _
-                                    Optional ByVal CalcChoke As Boolean = True, _
-                                    Optional ByVal saveCurve As CALC_RESULTS = noCurves) As Double
-' @brief расчет давления на устье через забойное давление (снизу -> вверх)
-' @param Pwf - исходное забойное давление и температура
-' @Qgas_inj_scm3day - gas rate injected. If given - used at deepest GLV
-' @CalcCasing - флаг показывает надо ли считать ветку распределения давления по забтрубу - динамический уровень и затрубное давление
-' @CalcChoke - показывает надо ли считать штуцер
-' @saveCurve - показывает насколько детально надо сохранять результаты расчета
-Dim Tintake_esp_C As Double
-Dim PT_temp As PTtype
-Dim PTcas_temp As PTtype
-Dim Tan_C As Double
-Dim pcur As TInterpolation
-Dim i As Integer
-Dim pipe As CPipe
-Dim Qgfree_tot_scm3day As Double
-Qgfree_tot_scm3day = 0
-Dim Fluid_Pipe_Below As CPVT
-' first initialize temp fluid with general one
-Set Fluid_Pipe_Below = Fluid
-' flag show if lowest GLV has been acounted
-Dim LowestGLVdone As Boolean
-LowestGLVdone = False
-Dim Qgas_inj_GLV_scm3day As Double
-Qgas_inj_GLV_scm3day = 0
-    
-On Error GoTo err1:
-    ' 1. Start calculation from Pwf, Tbh
-    p_PTwf = PTwf
-    PT_temp = PTwf
-    PTcas_temp = SetPT(Pcas_inj_atma, p_PTcas.T_C)
-    
-    ' 2. calculate pressure distribution in annulus
-    
-    For i = PipesInj.Count To 1 Step -1
-        Set pipe = PipesInj(i)
-        pipe.Param = ParamCalcFromTop(Gas, TempCorrelation)
-        PTcas_temp = pipe.Calc_dPipe(PTcas_temp, saveCurve)
-        If Not pipe.GLVin Is Nothing Then
-            ' if  there is a valve - save PT in casing at valve intake
-            pipe.GLVin.Pin_atma = PTcas_temp.P_atma
-            pipe.GLVin.Tin_C = PTcas_temp.T_C
-        End If
-    Next i
-    
-    ' 3. calc tubing pressure
-    For i = 1 To PipesProd.Count
-        ' first segment - from bottom to tubing depth then goes up
-        Set pipe = PipesProd(i)
-        ' taking fluid from previos segment - if we had gas injected below it will acounted here
-        Set pipe.Fluid = Fluid_Pipe_Below
-        ' check if there is a valve on pipe bottom
-        ' GLV meant it is possible ijection point
-        If Not pipe.GLVin Is Nothing Then
-            ' if valve set up then estimate gas coming through valve
-            pipe.GLVin.Pout_atma = PT_temp.P_atma   ' pressure at pipe bottom from previos step
-            pipe.GLVin.Tout_C = PT_temp.T_C
-            ' adding additional gas coming trough valve
-On Error GoTo err2:
-            If Qgas_inj_scm3day > 0 Then
-                ' use manual Qgas in well
-                If Not LowestGLVdone Then
-                    Qgas_inj_GLV_scm3day = Qgas_inj_scm3day
-                    LowestGLVdone = True
-                Else
-                    Qgas_inj_GLV_scm3day = 0
-                End If
-            Else
-                Qgas_inj_GLV_scm3day = pipe.GLVin.calc_Qgas_scm3day(-1, -1, -1)
-                i = i / 0
-            End If
-            pipe.GLVin.Qgas_inj_scm3day = Qgas_inj_GLV_scm3day
-On Error GoTo err1:
-            Qgfree_tot_scm3day = Qgfree_tot_scm3day + Qgas_inj_GLV_scm3day
-            If Qgas_inj_GLV_scm3day > 0 Then
-                Set pipe.Fluid = Fluid_Pipe_Below.Clone
-                pipe.Fluid.Qgfree_scm3day = Qgfree_tot_scm3day
-                Set Fluid_Pipe_Below = pipe.Fluid
-            End If
-        End If
-     
-        pipe.Param = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
-        PT_temp = pipe.Calc_dPipe(PT_temp, saveCurve)
-    Next i
-    p_PTbuf = PT_temp
-    p_PTlin = p_PTbuf
-On Error GoTo err3:
-    ' 4. Расчет линейного давления по штуцеру
-    If Choke.Dchoke_m > 0 And CalcChoke Then     ' пока отключено
-        Set Choke.Fluid = pipe.Fluid   ' take fluid from last pipe
-        p_PTlin = Choke.Calc_Choke_Plin(p_PTbuf)
-        If p_PTlin.P_atma < 0 Then
-            p_PTlin.P_atma = 1
-        End If
-    End If
-On Error GoTo err1:
-    Calc_Plin_Pwf_atma_ = PT_temp.P_atma
-    
-    If saveCurve > 0 Then
-        For i = 1 To PipesProd.Count
-            Call Curve(str_PtubHmes_curve).AddPointsCurve(PipesProd(i).PCurve)
-            Call Curve(str_TtubHmes_curve).AddPointsCurve(PipesProd(i).TCurve)
-            Call Curve(str_TambHmes_curve).AddPointsCurve(PipesProd(i).TambCurve)
-            If saveCurve > 1 Then
-                Call Curve(str_HlHmes_curve).AddPointsCurve(PipesProd(i).HlCurve)
-                Curve(str_HlHmes_curve).yName = "Hl"
-            End If
-        Next i
-        For i = 1 To PipesInj.Count
-           Call Curve(str_PcasHmes_curve).AddPointsCurve(PipesInj(i).PCurve)
-           Call Curve(str_TcasHmes_curve).AddPointsCurve(PipesInj(i).TCurve)
-        Next i
-        
-        Curve(str_PtubHmes_curve).xName = "hmes ptub"
-        Curve(str_PtubHmes_curve).yName = "Ptub"
-        
-        Curve(str_TtubHmes_curve).xName = "hmes Ttub"
-        Curve(str_TtubHmes_curve).yName = "Ttub"
-        
-        Curve(str_TambHmes_curve).xName = "hmes Tamb"
-        Curve(str_TambHmes_curve).yName = "Tamb"
-        
-        Curve(str_PcasHmes_curve).xName = "hmes pcas"
-        Curve(str_PcasHmes_curve).yName = "pcas"
-        
-        Curve(str_TcasHmes_curve).xName = "hmes pcas"
-        Curve(str_TcasHmes_curve).yName = "Tcas"
-    End If
-    Exit Function
-err1:
-    On Error Resume Next
-    RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: some general error")
-    Err.Raise Err.Number, Err.Source, Err.Description
-    Exit Function
-err2:
-    On Error Resume Next
-    addLogMsg "CWellGL.Calc_Plin_Pwf_atma:error while GLV Hmes = " & CStr(pipe.GLVin.Hmes_m) & " calc - Qgas_inj_GLV_scm3day = " & CStr(Qgas_inj_GLV_scm3day)
-    Resume Next
-    Exit Function
-err3:
-    On Error Resume Next
-    addLogMsg "CWellGL.Calc_Plin_Pwf_atma:error while choke calc - choke have been  ignored"
-    Resume Next
+ 
+Public Property Get Pgas_inj_atma() As Double
+    Pgas_inj_atma = p_PTgas_inj.P_atma
+End Property
+Public Property Let Pgas_inj_atma(val As Double)
+    p_PTgas_inj.P_atma = val
+End Property
+' ======================================================================
+' Iwell implementation
+' ======================================================================
+Private Function IWell_CalcDown(Pline_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
+ '   IWell_CalcDown = Calc_Pwf_Plin_atma(Pline_atma, Tbh_C, saveCurve:=saveCurve)
 End Function
-Public Function Calc_Pwf_Plin_atma(ByVal Plin_atma As Double, _
-                                    ByVal Tbh_C As Double, _
-                                    Optional Pcas_inj_atma As Double = 1, _
-                                    Optional Qgas_inj_scm3day As Double = 0, _
-                                    Optional ByVal CalcChoke As Boolean = True, _
-                                    Optional saveCurve As CALC_RESULTS = noCurves)
-' @brief Calc_Pwf_Plin_atma расчет забойного давления по известному давлению в линии и конструкции скважины дихотомией
-' @param Plin_atma - давление в линии
-' @param Hd - динамический уровень
-' @param Tbh_C - температура на забое скважины
-' @return Подсчитанное для заданного линейного давление
-On Error GoTo err1:
-    Dim Pwf1 As Double      ' первое приближение
-    Dim PwfUp As Double, PwfDown As Double
-    Dim PlinUp As Double, PlinDown As Double
-    Dim Plin0 As Double, Plin1 As Double
-    Dim found_solution As Boolean
-    Dim i As Integer
-    found_solution = False
-    i = 0
-    Pwf1 = 60
-    PwfUp = -1
-    PwfDown = -1
-    Do
-        ' ищем  приближения
-        Plin1 = Calc_Plin_Pwf_atma_(SetPT(Pwf1, Tbh_C), Pcas_inj_atma, Qgas_inj_scm3day, saveCurve:=noCurves)
-        If (Abs(Plin1 - Plin_atma) < const_well_P_tolerance) Then
-             found_solution = True
-             p_PTwf.P_atma = Pwf1
-             p_PTwf.T_C = Tbh_C
-        End If
-        If Not found_solution Then
-          If Plin1 > Plin_atma Then
-              PwfUp = Pwf1
-              PlinUp = Plin1
-              If PwfDown < 0 Then
-                  Pwf1 = PwfUp / 2
-              Else
-                  Pwf1 = PwfDown + (PwfUp - PwfDown) * (Plin_atma - PlinDown) / (PlinUp - PlinDown)
-              End If
-          Else
-              PwfDown = Pwf1
-              PlinDown = Plin1
-              If PwfUp < 0 Then
-                  Pwf1 = Pwf1 * 2
-              Else
-                  Pwf1 = (PwfUp + PwfDown) / 2
-              End If
-          End If
-        End If
-        i = i + 1
-    Loop While Not found_solution And i < 20
-    
-    If i = 20 Then
-       addLogMsg "CWellGL.Calc_Pwf_Plin_atma: max iteration num reached. i = " & CStr(i) & " tolerance reached = " & CStr(Abs(Plin1 - Plin_atma))
-    End If
-    
-    p_PTlin = SetPT(Calc_Plin_Pwf_atma_(p_PTwf, Pcas_inj_atma, Qgas_inj_scm3day, saveCurve:=saveCurve), Tbuf_C)
-    
-    If Abs(Pline_atma - Plin_atma) > const_well_P_tolerance Then
-       addLogMsg "CWellGL.Calc_Pwf_Plin_atma: BHP estimation error exceeds tolerance " & const_well_P_tolerance & ". Equal = " & Abs(Me.Pline_atma - Plin_atma)
-    End If
-    Calc_Pwf_Plin_atma = p_PTwf.P_atma
-    
-    Exit Function
-err1:
-    ' тут надо среагировать на ошибку
-        On Error Resume Next
-    RaiseEvent ReportProgress("CWellGL.Calc_Plin_Pwf_atma: some general error")
-    Err.Raise Err.Number, Err.Source, Err.Description
-    Exit Function
- End Function
+Private Function IWell_CalcUp(Pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
+ '   IWell_CalcUp = Calc_Plin_Pwf_atma(Pwf_atma, saveCurve:=saveCurve)
+End Function
+Private Function IWell_CalcWell(Pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
+End Function
+Private Property Get IWell_cfBettaFric() As Double
+    IWell_cfBettaFric = betta_fric
+End Property
+Private Property Get IWell_cfBettaGrav() As Double
+    IWell_cfBettaGrav = betta_grav
+End Property
+Private Property Get IWell_cfChoke() As Double
+    IWell_cfChoke = Choke.cfChoke
+End Property
+Private Property Get IWell_cfESP() As Double
+    IWell_cfESP = ESP.cfHead_fr
+    ' пока учитывается только по напору
+    ' наверное потом надо будет добавить по дебиту и по мощности как то
+End Property
+Private Property Get IWell_cfFw() As Double
+    IWell_cfFw = 0
+End Property
+Private Property Get IWell_cfGLinj() As Double
+    IWell_cfGLinj = 0
+End Property
+Private Property Get IWell_cfRp() As Double
+    IWell_cfRp = 0
+End Property
+Private Property Get IWell_fw() As Double
+    IWell_fw = Fluid.fw_perc
+End Property
+Private Property Get IWell_Pintake() As Double
+    IWell_Pintake = 0
+End Property
+Private Property Get IWell_Pline() As Double
+    IWell_Pline = p_PTlin.P_atma
+End Property
+Private Property Get IWell_Pwf() As Double
+    IWell_Pwf = p_PTwf.P_atma
+End Property
+Private Property Get IWell_Pwh() As Double
+    IWell_Pwh = p_PTbuf.P_atma
+End Property
+Private Property Get IWell_Qgascas() As Double
+    IWell_Qgascas = 0
+End Property
+Private Property Get IWell_Qgasinj() As Double
+    IWell_Qgasinj = 0
+End Property
+Private Property Let IWell_Qliq(RHS As Double)
+    Fluid.Qliq_scm3day = RHS
+End Property
+Private Property Get IWell_Qliq() As Double
+    IWell_Qliq = Fluid.Qliq_scm3day
+End Property

@@ -11,7 +11,7 @@
  Private p_Fluid As CPVT
  Private ESPdesign As New CESPpump              ' специальный насос с постоянным напором для расчета дизайна
  ' параметры пласта
- Private P_Reservoir As New CReservoir
+ Private P_Reservoir As New CReservoirVogel
  ' параметры скважины
  Private WithEvents p_well As CWell
  Private WithEvents WellAnalyse As CWell                ' скважина для проведения построения графиков при проведении анализа
@@ -109,7 +109,7 @@
     Set Reservoir.Fluid = val
  End Property
  
- Public Property Get Reservoir() As CReservoir
+ Public Property Get Reservoir() As CReservoirVogel
    Set Reservoir = P_Reservoir
  End Property
  
@@ -141,10 +141,10 @@
     Qliq_scm3day = Fluid.Qliq_scm3day
  End Property
  
- Public Property Let Pwf_atma(val As Double)
-    p_PwfSol_atma = val
-    p_well.Pwf_atma = val
- End Property
+' Public Property Let Pwf_atma(val As Double)
+'    p_PwfSol_atma = val
+'    p_well.Pwf_atma = val
+' End Property
  
  Public Property Get Pwf_atma() As Double
     Pwf_atma = p_PwfSol_atma
@@ -172,9 +172,9 @@ End Sub
 Public Property Get Curve(Key As String) As TInterpolation
 On Error Resume Next
     Dim exists As Boolean
-    exists = Not IsEmpty(c_Curves.Item(Key))
+    exists = Not IsEmpty(c_Curves.item(Key))
     If exists Then
-       Set Curve = c_Curves.Item(Key)
+       Set Curve = c_Curves.item(Key)
     Else
        Set Curve = New TInterpolation
        c_Curves.Add Curve, Key
@@ -183,7 +183,7 @@ End Property
 Public Property Set Curve(Key As String, valNew As TInterpolation)
  On Error Resume Next
     Dim exists As Boolean
-    exists = Not IsEmpty(c_Curves.Item(Key))
+    exists = Not IsEmpty(c_Curves.item(Key))
     If exists Then
        c_Curves(Key) = valNew
     Else
@@ -261,7 +261,7 @@ End Property
   On Error GoTo err1:
    RaiseEvent ReportProgress("CProdSystem.Calc_Solution_PI: Запуск поиска решения задачи узлового анализа PI " & Format(P_Reservoir.PI_m3dayatm, "##0.00"))
    ' 1. Начало расчета. Анализируем входные данные, записываем их в свойства класса
-   p_well.Pline_atma = Pline_atma
+  '''' p_well.Pline_atma = Pline_atma
   
    ' 2. Рассчитываем кривую оттока для скважины
    ' 2.1 Пределы расчета кривой оттока от 0 м3/сут до максимально дебита скважины Qmax
@@ -283,7 +283,7 @@ End Property
    
         For i = 0 To numsol - 1
             Qliq_scm3day = c_PS_curve.SolutionPointX(i + 1)
-            Pwf_atma = P_Reservoir.Calc_Pwf_atma(Qliq_scm3day)
+          ''''  Pwf_atma = P_Reservoir.Calc_Pwf_atma(Qliq_scm3day)
         Next i
         
    RaiseEvent ReportProgress("CProdSystem.Calc_Solution_PI: Решение построение. Кол-во решений = " & numsol & " Pwf = " & Format(p_PwfSol_atma, "##0.00"))
@@ -305,10 +305,10 @@ err1:
     numPoints = Curve("c_PlinQl_curve").FindSolutions(Plin_atma)
     If numPoints >= 1 Then
         Qliq_scm3day = Curve("c_PlinQl_curve").FindMaxOneSolution(Plin_atma)
-        Pwf_atma = Reservoir.Calc_Pwf_atma(Qliq_scm3day)
+     ''''   Pwf_atma = Reservoir.Calc_Pwf_atma(Qliq_scm3day)
     Else
         Qliq_scm3day = 0
-        Pwf_atma = Reservoir.Calc_Pwf_atma(Qliq_scm3day)
+     ''''   Pwf_atma = Reservoir.Calc_Pwf_atma(Qliq_scm3day)
     End If
     
     Exit Sub
@@ -378,8 +378,8 @@ setQ:
         
         If Q < maxQres Then
             
-            Call WellDesign.Calc_Well(Pbuf_atma, Pbuf_atma, Pwf, Tbh_C)
-            p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.ESPPressureDegradation)
+          ''''  Call WellDesign.Calc_Well(Pbuf_atma, Pbuf_atma, Pwf, Tbh_C)
+            p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.cfHead_fr)
             ' набор кривых полученных при расчете дизайна установки под скважину
             c_HeadRequiredQl_curve.AddPoint Q, p_ESPdesignHead_m                   ' напор необходимый для данной скважины для данного дебита
             p_ESPdesignRate_m3day = WellDesign.ESP.QmixPumpIntake_m3day
@@ -424,10 +424,10 @@ End If
     WellDesign.Qliq_scm3day = Q
     p_Qldesign_m3day = Q
         
-    Call WellDesign.Calc_Well(Pbuf_atma, Pbuf_atma, Pwf, Tbh_C)
+  ''''  Call WellDesign.Calc_Well(Pbuf_atma, Pbuf_atma, Pwf, Tbh_C)
     
     p_ESPdesigndP_atma = WellDesign.Pdis_atma - WellDesign.Pint_atma
-    p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.ESPPressureDegradation)
+    p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.cfHead_fr)
     p_ESPdesignRate_m3day = WellDesign.ESP.QmixPumpIntake_m3day     ' надо будет поправить чтобы тут использовался средний дебит а не максимальный
   '  p_ESPdesignPower_W = WellDesign.ESP.PowerMotor_Wt
     ' теперь тут надо вытащить забойное давление - определить продуктивность и построить кривые VLP и IPR
@@ -504,7 +504,7 @@ End If
     
         ' проведем расчет скважины для заданных параметров
         ' для скважины должен быть задан дебит, конструкция и прочие параметры
-        degr_good = p_well.Calc_Well(Plin_atma, Pbuf_atma, Pwf_atma, Tbh_C, Pint_atma, Hdyn_m, Pan_atma)
+      '  degr_good = p_well.Calc_Well(Plin_atma, Pbuf_atma, Pwf_atma, Tbh_C, Pint_atma, Hdyn_m, Pan_atma)
         If Not degr_good Then
              p_Error_msg = "Деградацию УЭЦН определить не удалось"
              RaiseEvent ReportProgress("CProdSystem: Деградацию УЭЦН определить не удалось ")
@@ -522,7 +522,7 @@ End If
     
     p_Twh_C = p_well.Twh_C
                           
-    RaiseEvent ReportProgress("CProdSystem: Расчет скважины завершен.   | ESPPressureDegradation = " & Format(p_well.ESP.ESPPressureDegradation, "#0.00") _
+    RaiseEvent ReportProgress("CProdSystem: Расчет скважины завершен.   | cfHead_fr = " & Format(p_well.ESP.cfHead_fr, "#0.00") _
                                                                                        & "| well.choke.KCalibr  = " & Format(p_well.Choke.KCalibr, "#0.00") & ".")
 '    Call BuildCurves(Pan_atma, Tbh_C, Pwf_atma)
 '
@@ -724,7 +724,8 @@ End If
     Pwfstep = (MaxPwf - MinPwf) / NumIntervals
     Q = Reservoir.Calc_Q_m3Day(Pwf)
     Me.Qliq_scm3day = Q
-    Pwh_atma = well.Calc_Plin_Pwf_atma(SetPT(Pwf, well.Tbh_C), CalcCasing:=False)
+    well.isCalcCasing = False
+    Pwh_atma = well.Calc_Plin_Pwf_atma(Pwf)
     Pintake = well.Pint_atma          ' вытаскиваем значение из скважины
     Curve("c_PlinQl_curve").AddPoint Me.Qliq_scm3day, Pwh_atma
     Pwf_0 = Pwf
@@ -737,7 +738,8 @@ End If
          If Pwf < 1 Then Pwf = 1
          Q = Reservoir.Calc_Q_m3Day(Pwf)                         ' нашли точку по индикаторной кривой
          Me.Qliq_scm3day = Q                                       ' установили дебит для расчета
-         Pwh_atma = well.Calc_Plin_Pwf_atma(SetPT(Pwf, well.Tbh_C), CalcCasing:=False)
+         well.isCalcCasing = False
+         Pwh_atma = well.Calc_Plin_Pwf_atma(Pwf)
          If Pwh_atma > 1 Then FirstPointDone = True
          If Pwh_atma > Pwh_targ_atma And Pwf = 1 Then
          ' значит даже при атмосферном давлении устьевое будет выше необходимого
@@ -758,7 +760,8 @@ End If
                  j = j + 1
                  Pwf = (Pwf_0 + Pwf_1) / 2
                  Me.Qliq_scm3day = Reservoir.Calc_Q_m3Day(Pwf)
-                 Pwh_atma = well.Calc_Plin_Pwf_atma(SetPT(Pwf, well.Tbh_C), CalcCasing:=False)
+                 well.isCalcCasing = False
+                 Pwh_atma = well.Calc_Plin_Pwf_atma(Pwf)
                  Curve("c_PlinQl_curve").AddPoint Me.Qliq_scm3day, Pwh_atma
                  
                  RaiseEvent ReportProgress("BuildNodalWHCurve_PI: Ищем пересечение. Точка i = " & i & " j = " & j & ":  Pwf = " & s(Pwf) & ":  Pwh_atma =" & s(Pwh_atma))
@@ -818,8 +821,8 @@ err1:
     Set WellAnalyse = p_well.Clone()    ' клонируем скважину, чтобы расчеты по анализу чувствительности не влияли на основную скважину
     Set WellAnalyseTopDown = p_well.Clone() ' эта скважина нужна для расчет кривой лифта с учетом ЭЦН
     
-    WellAnalyseTopDown.ESP.ESPPressureDegradation = p_well.ESP.ESPPressureDegradation
-    WellAnalyse.ESP.ESPPressureDegradation = p_well.ESP.ESPPressureDegradation
+    WellAnalyseTopDown.ESP.cfHead_fr = p_well.ESP.cfHead_fr
+    WellAnalyse.ESP.cfHead_fr = p_well.ESP.cfHead_fr
     
     Set WellSelfFlow = p_well.Clone()   ' клонируем еще одну скважину чтобы построить кривую VLP без учета насоса
     Set WellSelfFlow.ESP = Nothing
@@ -871,7 +874,8 @@ setQ:
         End If
         
         If Q < maxQres Then
-            Call WellAnalyse.Calc_Plin_Pwf_atma(SetPT(Pwf, Tbh_C), CalcCasing:=True)
+            well.isCalcCasing = False
+            Call WellAnalyse.Calc_Plin_Pwf_atma(Pwf)
             
             WellAnalyseESPdP = WellAnalyse.Pdis_atma - WellAnalyse.Pint_atma  ' нашли перепад давления при текущем дебите и забойном по пласту
             If (Abs(WellAnalyseESPdP) > 1) Then             ' здесь 1 это допустимая погрешность расчета
@@ -890,8 +894,8 @@ setQ:
                     End If
                 End If
             End If
-            Call WellDesign.Calc_Well(Plin_atma, 0, Pwf, Tbh_C, CalcChoke:=False)
-            p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.ESPPressureDegradation)
+         ''''   Call WellDesign.Calc_Well(Plin_atma, 0, Pwf, Tbh_C, CalcChoke:=False)
+            p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.cfHead_fr)
             ' набор кривых полученных при расчете дизайна установки под скважину
             c_HeadRequiredQl_curve.AddPoint Q, p_ESPdesignHead_m                   ' напор необходимый для данной скважины для данного дебита
             p_ESPdesignRate_m3day = WellDesign.ESP.QmixPumpIntake_m3day
@@ -938,12 +942,12 @@ Loop Until Q >= maxQ
     Q = P_Reservoir.Calc_Q_m3Day(Pwf)
     WellDesign.Qliq_scm3day = Q
         
-    Call WellDesign.Calc_Well(Plin_atma, 0, Pwf, Tbh_C, CalcChoke:=False)
+  ''''  Call WellDesign.Calc_Well(Plin_atma, 0, Pwf, Tbh_C, CalcChoke:=False)
     
     p_Pwfdesign_atma = Pwf
     p_Qldesign_m3day = Q
     p_ESPdesigndP_atma = WellDesign.Pdis_atma - WellDesign.Pint_atma
-    p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.ESPPressureDegradation)
+    p_ESPdesignHead_m = 100 * (1 - WellDesign.ESP.cfHead_fr)
     p_ESPdesignRate_m3day = WellDesign.ESP.QmixPumpIntake_m3day     ' надо будет поправить чтобы тут использовался средний дебит а не максимальный
  '   p_ESPdesignPower_W = WellDesign.ESP.PowerMotor_Wt
     ' теперь тут надо вытащить забойное давление - определить продуктивность и построить кривые VLP и IPR
