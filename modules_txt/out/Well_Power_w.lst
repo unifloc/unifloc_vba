@@ -1,0 +1,174 @@
+''
+'Public Function Well_Power_w(ByVal Hmes_m As Double, ByVal Hpump_m As Double, _
+'                             ByVal Pbuf_atma As Double, ByVal Plin_atma As Double, ByVal Pwf_atma As Double, _
+'                             ByVal ESP_Qnom_m3day As Double, ByVal ESP_head_m As Double, _
+'                             ByVal PI_m3dayatm As Double, _
+'                             Optional ByVal Pr_atma As Double = 250, _
+'                             Optional ByVal Udl_m As Double = 0, _
+'                             Optional ByVal dTub_mm As Double = 62, Optional ByVal dCas_mm As Double = 125, Optional ByVal dIntake_mm As Double = 102, _
+'                             Optional ByVal Ksep_d As Double = 0.7, _
+'                             Optional ByVal fw_perc As Double = 0, Optional ByVal Rp_m3m3 As Double = -1, Optional ByVal Pb_atma As Double = -1, Optional ByVal Tres_C As Double = 90, _
+'                             Optional ByVal gamma_oil As Double = const_gamma_oil_default, _
+'                             Optional ByVal Bob_m3m3 As Double = -1, _
+'                             Optional ByVal ESP_freq_Hz As Double = 50, Optional ByVal ESP_U_V As Double = 1000, _
+'                             Optional ByVal ESP_Power_W As Double = 0, Optional ByVal ESP_cos_phi As Double = 0.95, _
+'                             Optional ByVal ESP_cable_R_Om As Double = 1.8, Optional ByVal ESP_power_degr As Double = 0)
+'
+'' Входные параметры
+'' Hmes_m - измерененная глубина кровли пласта, м (точка для которой будет проводиться расчет забойного давления)
+'' Hpump_m - измеренная глубина установки насоса, м
+'' Pbuf_atma - буферное давление, атм
+'' Plin_atma - линейное давление, атм
+'' Pwf_atma  - забойное давление, атм
+'' ESP_Qnom_m3day
+'' ESP_head_m
+'' PI_m3dayatm
+'' PowerMes_W   - потребляемая мощность УЭЦН по замеру, Вт, по умолчанию не учитывается
+'' Pr_atma
+'' Udl_m  - удлинение, м,  отклонение вертикальной глубины от изменеренной  (по умолчанию равно 0)
+'' dtub_mm       - диаметр НКТ, внутренний
+'' dcas_mm       - диаметр эксплуатационной колонны в месте уставноки НКТ
+'' dintake_mm    - диаметр приемной сетки
+'' Ksep_d        - коэффициент сепарации
+'' fw_perc
+'' Rp_m3m3
+'' Rsb_m3m3
+'' Pb_atma
+'' Tres_C
+'' gamma_oil
+'' gamma_wat
+'' gamma_gas
+'' Bob_m3m3
+'' PVTcorr
+''
+''
+''
+''
+''
+'
+'Dim gamma_wat As Double
+'gamma_wat = const_gamma_wat_default
+'Dim gamma_gas As Double
+'gamma_gas = const_gamma_gas_default
+'    Dim PVTcorr As PVT_CORRELATION
+'    PVTcorr = 0
+'    Dim rsb_m3m3 As Double
+'    rsb_m3m3 = Rp_m3m3
+'    Dim Angle_deg As Double
+'    Dim Qliq_scm3day As Double   ' дебит скважины на поверхности
+'    Dim Qmix_intake_m3day As Double, Qmix_dis_m3day   ' дебит ГЖС на приеме насоса после сепарации
+'    Dim Qmix_av_m3day As Double
+'    Dim PTintake, PTdischarge
+'    Dim Pint_atma As Double, Pdis_atma As Double
+'    Dim Tint_C As Double, Tdis_C As Double
+'    Dim GeoGradT_Cm As Double ' геотермальный градиент температуры
+'    Dim dPpump_fact_atma As Double    ' перепад давления развиваемый ЭЦН по факту
+'    Dim dPpump_teor_atma As Double    ' перепад давления ЭЦН по характеристике
+'
+'    Dim PumpID
+'    Dim pump_eff As Double
+'    Dim Power_liq_W As Double
+'    Dim Power_pump_w As Double
+'    Dim dPower_protector_W As Double
+'    Dim dPower_GasSep_W As Double
+'    Dim Power_shaft_W As Double
+'    Dim motor_eff As Double
+'    Dim Power_motor_W As Double
+'
+'    Dim power_cable_w As Double
+'    Dim dpower_cable_w As Double
+'    Dim dpower_trans_w As Double
+'    Dim dPower_CS_W As Double
+'
+'    Dim power_well_w As Double
+'
+'    Dim Imotor_A As Double
+'    Dim dUcable_V As Double
+'
+'    Dim degr As Double
+'    ' расчет потребления энергии
+'    GeoGradT_Cm = 0.03
+'
+'    ' считаем какой угол наклона скважины
+'    Angle_deg = 90 - ArcCos((Hmes_m - Udl_m) / Hmes_m) / const_Pi * 180
+'
+'    ' 1. Расчитываем дебит жидкости по продуктивности
+'    Qliq_scm3day = IPR_Ql_sm3Day(PI_m3dayatm, Pr_atma, Pwf_atma, fw_perc, Pb_atma)
+'
+'    ' 2. ищем давление на приеме насоса
+'    Tint_C = Tres_C - GeoGradT_Cm * (Hmes_m - Hpump_m)
+'    PTintake = MF_dPpipe_atm(Hmes_m - Hpump_m, Pwf_atma, Qliq_scm3day, fw_perc, Tres_C, Tint_C, Angle_deg, dCas_mm, , gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, _
+'                  Bob_m3m3, , PVTcorr:=PVTcorr)
+'    Pint_atma = PTintake(0)
+'    Tint_C = PTintake(1)
+'    ' 3. ищем или учитываем коэффициент сепарации
+'
+'    ' 4. ищем давление на выкиде с учетом сепарации
+'    Tdis_C = Tint_C
+'    PTdischarge = MF_dPpipe_atm(Hpump_m, Pbuf_atma, Qliq_scm3day, fw_perc, Tdis_C, , Angle_deg, dTub_mm, , gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, _
+'                  Bob_m3m3, , PVTcorr:=PVTcorr)
+'    Pdis_atma = PTdischarge(0)
+'    Tdis_C = PTdischarge(1)
+'
+'    ' 5. ищем фактический перепад давления в насосе
+'    dPpump_fact_atma = Pdis_atma - Pint_atma
+'
+'    ' 6. ищем средний расход ГЖС через насос
+'    Qmix_intake_m3day = MF_Qmix_m3day(Qliq_scm3day, fw_perc, Pint_atma, Tint_C, gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, , PVTcorr, _
+'                        Ksep_d, Pint_atma, Tint_C)
+'    Qmix_dis_m3day = MF_Qmix_m3day(Qliq_scm3day, fw_perc, Pdis_atma, Tdis_C, gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, Rp_m3m3, Pb_atma, Tres_C, Bob_m3m3, , PVTcorr, _
+'                        Ksep_d, Pint_atma, Tint_C)
+'    Qmix_av_m3day = (Qmix_intake_m3day + Qmix_dis_m3day) / 2
+'
+'    ' 7. определяем насос
+'    PumpID = ESP_IDbyRate(ESP_Qnom_m3day)
+'
+'    ' 8. определяем КПД насоса по характеристике для заданного среднего дебита
+'    pump_eff = ESP_eff_fr(Qmix_av_m3day, 1, ESP_freq_Hz, PumpID)
+'
+'    ' 9. ищем полезную мощность по факту для насоса
+'    Power_liq_W = Qmix_av_m3day * dPpump_fact_atma * const_convert_atma_Pa / const_conver_day_sec
+'
+'    ' 10. ищем мощность потребляемую насосом с вала
+'    Power_pump_w = Power_liq_W / pump_eff
+'
+'    ' 11 оценим мощности потребляемые гидрозащитой и газосепаратором и найдем мощность на валу
+'    dPower_protector_W = 400
+'    dPower_GasSep_W = 500
+'
+'    Power_shaft_W = Power_pump_w + dPower_protector_W + dPower_GasSep_W
+'
+'    ' 12 оценим мощность потребляемую двигателем
+'
+'    motor_eff = 0.9   ' пока так - потом сделать надо расчет по характеристике
+'
+'    Power_motor_W = Power_shaft_W / motor_eff
+'
+'    ' 13 оценим потери в кабеле - для этого найдем примерно ток двигателя
+'
+'    Imotor_A = Power_motor_W / 1.732050808 / ESP_U_V / ESP_cos_phi
+'
+'    ' 14 по данным тока и сопротивления кабеля найдем падение напряжения в кабеле
+'
+'    dUcable_V = Imotor_A * ESP_cable_R_Om
+'
+'    ' 15 по падению напряжения оценим мощность рассеиваемую кабелем в тепло. учитываем 3 жилы. Тут учитывается полный ток и активный и реактивный
+'
+'    dpower_cable_w = 3 * dUcable_V * Imotor_A
+'    power_cable_w = Power_motor_W + dpower_cable_w
+'
+'    dpower_trans_w = 0.03 * power_cable_w
+'    dPower_CS_W = 0.03 * power_cable_w
+'
+'    power_well_w = power_cable_w + dpower_trans_w + dPower_CS_W
+'    power_well_w = power_well_w / (1 - ESP_power_degr)
+'
+'    degr = 1 - power_well_w / ESP_Power_W
+'
+'    Well_Power_w = Array(power_well_w, degr)
+'
+'End Function
+'
+'
+'
+'
