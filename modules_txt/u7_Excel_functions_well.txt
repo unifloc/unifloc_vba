@@ -32,7 +32,7 @@ Private Function well_InitData(Q_m3Day, fw_perc, _
     
     Set well = Well_Decode_string(wellStr)
     Set well.Fluid = PVT
-  '  well.Pan_atma = Pcas_atma
+    well.Pcas_atma = Pcas_atma
     well.HFlowCorrelation = HydrCorr
      
     Set ESPsystem = ESP_Decode_string(ESPStr)
@@ -52,8 +52,8 @@ Private Function Well_out_arr(well As CWellESP, Optional FirsrCol As Integer = 0
         ' подготовим данные для вывода
         ' данные выводятся в одну линию, чтобы, хотя бы теоретически, можно было вывести данные по скважине в таблице
         ' во второй строке выводятся подписи параметров, если необходимо
-        ReDim ar1(20)
-        ReDim ar2(20)
+        ReDim ar1(21)
+        ReDim ar2(21)
         Dim i As Integer
         ' первый параметр настраиваемый
         i = 0
@@ -103,7 +103,8 @@ Private Function Well_out_arr(well As CWellESP, Optional FirsrCol As Integer = 0
         ar1(i) = .Tint_C:  ar2(i) = "Tint_C"
         i = i + 1
         ar1(i) = .Tbh_C:  ar2(i) = "Tbh_C"
-        
+        i = i + 1
+        ar1(i) = .ESP.cfHead_fr:  ar2(i) = "ESP corr factor"
         
 '        ar1 = Array(0, "", .Pline_atma, .Pbuf_atma, .Pdis_atma, .Pint_atma, .Pwf_atma, "Давления атм, линейное, буферное, на выкиде насоса, на приеме насоса, забойное")
 '        ar2 = Array(0, "", .Tsurf_C, .Twh_C, .Tdis_C, .Tint_C, .Tbh_C, "Температура С, на поверхности, буферное, на выкиде насоса, на приеме насоса, забойное")
@@ -194,34 +195,36 @@ Public Function Well_Pwf_Plin_atma(Plin_atma, Q_m3Day, fw_perc, _
         Well_Pwf_Plin_atma = ar
     End If
 End Function
-Public Function Well_calcKdegr_fr(Pwf_atma, Pbuf_atma, Q_m3Day, _
-                      Optional ByVal Hperf_m = 2500, Optional ByVal Hpump_m = 2000, Optional ByVal Udl_m = 0, Optional ByVal dCas_mm = 127, Optional ByVal dTub_mm = 62, Optional ByVal dChoke_mm = -1, _
-                      Optional ByVal fw_perc = 0, Optional ByVal Rp_m3m3 As Double = -1, Optional ByVal rsb_m3m3 As Double = 100, Optional ByVal Pb_atma As Double = -1, Optional ByVal Tres_C As Double = 90, _
-                      Optional ByVal gamma_oil As Double = const_gamma_oil_default, Optional ByVal gamma_wat As Double = const_gamma_wat_default, Optional ByVal gamma_gas As Double = const_gamma_gas_default, _
-                      Optional ByVal Bob_m3m3 As Double = -1, Optional ByVal Twh_C As Double = 10, Optional ByVal Tbh_C As Double = 80, _
-                      Optional ByVal roughness_m As Double = 0.0001, _
-                      Optional ByVal ESP_ID = 0, Optional ByVal ESP_numStages = 0, Optional ByVal ESP_freq_Hz = 50, _
-                      Optional ByVal PVTcorr As PVT_CORRELATION = 0, Optional ByVal HydrCorr As H_CORRELATION = 0, Optional ByVal Ksep_fr As Double = 0)
-' функция расчета линейного давления скважины по забойному
-'    Dim well As CWellESP
-'    Set well = InitWellData(Q_m3Day, _
-'                       Hperf_m, Hpump_m, Udl_m, dCas_mm, dTub_mm, dchoke_mm, _
-'                       fw_perc, Rp_m3m3, rsb_m3m3, Pb_atma, Tres_C, _
-'                       gamma_oil, gamma_wat, gamma_gas, _
-'                       Bob_m3m3, Twh_C, Tbh_C, _
-'                       roughness_m, _
-'                       ESP_ID, ESP_numStages, ESP_freq_Hz, _
-'                       PVTcorr, HydrCorr, Ksep_fr)
-''    Set well.Pbuf_atma = Pbuf_atma
-'    Call well.Calc_Well(Pbuf_atma, Pbuf_atma, Pwf_atma, Tbh_C, CalcChoke:=False)
-''    Call well.fin(SetPT(Pwf_atma, Tbh_C))     ' проведем расчет
-''    Call well.Calc_Plin_Pwf_atma(SetPT(Pwf_atma, Tbh_C))     ' проведем расчет
-'    ' в качестве результата выведем рад расчитанных значений давления
-'    With well
-'        Well_calcKdegr_fr = Array(Array(.ESP.cfHead_fr, .Pline_atma, .Pbuf_atma, .Pdis_atma, .Pint_atma, .Pwf_atma, "деградация ЭЦН ,Давления атм, линейное, буферное, на приеме насоса, на выкиде насоса, забойное"), _
-'                                  Array(.Kseptotal_d, .Tsurf_C, .Twh_C, .Tdis_C, .Tint_C, .Tbh_C, "Ксеп,Температура С, на поверхности, буферное, на приеме насоса, на выкиде насоса, забойное"))
-'    ' можно еще добавить сюда вывод кривых распределения давления и температуры по стволу и еще 4 параметров  (потом)
-'    End With
+Public Function Well_calcKdegr_fr(ByVal Pwf_atma As Double, _
+                      ByVal Pbuf_atma As Double, _
+                      ByVal Plin_atma As Double, _
+                      ByVal Q_m3Day As Double, _
+                      ByVal fw_perc As Double, _
+                      Optional ByVal Pcas_atma As Double = 10, _
+                      Optional wellStr As String = WELL_DEFAULT, _
+                      Optional PVTstr As String = PVT_DEFAULT, _
+                      Optional ESPStr As String = ESP_DEFAULT, _
+                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
+                      Optional ByVal Ksep_fr As Double = -1, _
+                      Optional ByVal Psep_atma As Double = 40, _
+                      Optional ByVal Tsep_C As Double = 40, _
+                      Optional ByVal Kdegr_d As Double = 0, _
+                      Optional ByVal param_num As Integer = 0)
+' функция коэфициента деградации УЭЦН по параметрам скважины
+    Dim well As CWellESP
+    Dim ar
+    Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
+                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
+'    Set well.Pbuf_atma = Pbuf_atma
+    Call well.Calc_Well(Plin_atma, Pbuf_atma, Pwf_atma, Pcas_atma)
+    ' проведем расчет
+    ' в качестве результата выведем ряд расчитанных значений давления
+    ar = Well_out_arr(well, 1)
+    If param_num > 0 Then
+        Well_calcKdegr_fr = Array(ar(0)(param_num), ar(1)(param_num))
+    Else
+        Well_calcKdegr_fr = ar
+    End If
 End Function
 Public Function Well_Pwf_Hdyn_atma(Pwf_atma, Q_m3Day, fw_perc, _
                       Optional ByVal Pcas_atma As Double = 10, _

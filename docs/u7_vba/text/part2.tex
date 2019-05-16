@@ -1,0 +1,792 @@
+\chapter{Функции модуля «u7\_Excel\_functions»}
+\section{Расчёт физико-химических свойств флюидов (PVT)}
+Для расчёта физико-химических свойств пластовых флюидов используется модель нелетучей нефти. Для всех функций, реализующих расчёт с учётом PVT свойств необходимо задавать одинаковый полный набор параметров, описывающих нефть, газ и воду.  При этом для некоторых частных функций не все параметры будут влиять на результат расчёта, тем не менее эти параметры необходимо задавать. Это сделано для унификации методик расчёта – при любом вызове функции проводится расчёт всех свойств модели нелетучей нефти, но возвращаются только необходимые данные. Это обстоятельности может замедлить расчёты с использованием функций Excel.
+ 
+\subsection{Обозначения PVT параметров}
+Типовой набор параметров приведён ниже:
+
+%\putlisting{listings/uf7_vars.lst}
+
+
+\begin{itemize}
+	
+\item	$\gamma_g$  - \mintinline{vb.net}{gamma_gas} - удельная плотность газа, по воздуху. Стандартное обозначение переменной \mintinline{vb.net}{gamma_gas}. Безразмерная величина. Следует обратить внимание, что удельная плотность газа по воздуху не совпадает с плотностью воздуха в г/см3, поскольку плотность воздуха при стандартных условиях \mintinline[breaklines]{vb.net}{Const const_rho_air = 1.205} при температуре 20 °С и давлении 101325 Па для сухого воздуха. По умолчанию задается значение \mintinline[breaklines]{vb.net}{const_gg_default = 0.6}
+
+\item $\gamma_o$  - \mintinline{vb.net}{gamma_oil} - удельная плотность нефти, по воде. Стандартное обозначение переменной \mintinline{vb.net}{gamma_oil}. Безразмерная величина, но по значению совпадает с плотность в г/см3. По умолчанию задаётся значение \mintinline{vb.net}{const_go_default = 0.86}
+
+\item $\gamma_w$  - \mintinline{vb.net}{gamma_wat}- удельная плотность воды, по воде. Стандартное обозначение переменной \mintinline{vb.net}{gamma_wat}. Безразмерная величина, но по значению совпадает с плотность в г/см3. По умолчанию задаётся значение \mintinline{vb.net}{const_gw_default = 1} Плотность воды может отличаться от задаваемой по умолчанию, например для воды с большой минерализацией.  
+
+\item $R_{sb}$- газосодержание при давлении насыщения, м3/м3. Стандартное обозначение в коде \mintinline{vb.net}{Rsb_m3m3}. Значение по умолчанию \mintinline{vb.net}{const_Rsb_default = 100}
+
+\item $R_p$-  замерной газовый фактор, м3/м3. Стандартное обозначение в коде \mintinline{vb.net}{Rp_m3m3}. Калибровочный параметр. По умолчанию используется значение равное газосодержанию при давлении насыщения. Если задаётся значение меньшее чем газосодержание при давлении насыщения, то последнее принимается равным газовому фактору (приоритет у газового фактора, потому что как правило это замерное значение в отличии от газосодержания определяемого по результатам лабораторных исследований проб нефти).
+
+\item $P_b$ - давление насыщения, атм. Стандартное обозначение в коде \mintinline{vb.net}{Pb_atm}. Калибровочный параметр. По умолчанию не задаётся, рассчитывается по корреляции. Если задан, то все расчёты по корреляциям корректируются с учётом заданного параметра. При задании давления насыщения обязательно должна быть задана температура пласта – температура при которой было определено давление насыщения. 
+
+\item $T_{res}$- пластовая температура, \textcelsius. Стандартное обозначение в коде \mintinline{vb.net}{Tres_C}. Учитывается при расчёте давления насыщения. По умолчанию принято значение 90 \textcelsius.
+
+\item $B_{ob}$ - объёмный коэффициент нефти, м3/м3. Стандартное обозначение в коде \mintinline{vb.net}{Bob_m3m3}. Калибровочный параметр. По умолчанию рассчитывается по корреляции. Если задан, то все расчёты по корреляциям корректируются с учётом заданного параметра.
+
+\item $\mu_{ob}$ - вязкость нефти при давлении насыщения, сП. Стандартное обозначение \mintinline{vb.net}{Muob_cP}. Калибровочный параметр. По умолчанию рассчитывается по корреляции. Если задан, то все расчёты по корреляциям корректируются с учётом заданного параметра.
+
+\item PVTcorr - номер набора PVT корреляций используемых для расчёта. 
+\begin{itemize}	
+	\item 	StandingBased = 0 - на основе корреляции Стендинга
+	\item 	McCainBased = 1 - на основе корреляции Маккейна
+	\item 	StraigthLine = 2 - на основе упрощённых зависимостей
+\end{itemize}
+
+\item PVTstr - закодированная строка с параметрами PVT. Если задана - перекрывает другие значения. Позволяет задать PVT параметры ссылкой всего на одну ячейку в Excel. Введена для удобства использования функций с большим числом параметров из Excel. Может быть сгенерирована вызовом функции \mintinline{vb.net}{PVT_Encode_string}.
+
+\item $K_s$ – коэффициент сепарации газа. Определяет изменение свойств флюида после отделения части газа из потока в результате сепарации при определённых давлении и температуре. По умолчанию предполагается, что сепарации нет $K_s$=0. Для корректного задания свойств флюида после сепарации части газа необходимо также задать параметры $P_{ksep}$, $T_{ksep}$
+
+\item $P_{ksep}$ - Давление при которой произошла сепарация части газа. Необходимо для расчёта свойств флюида с учётом сепарации. 
+
+\item $T_{ksep}$ - Температура при которой произошла сепарация части газа. Необходимо для расчёта свойств флюида с учётом сепарации. 
+
+\end{itemize}
+
+\subsection{Стандартные условия} 
+Многие параметры нефти, газа и воды существенно зависят от давления и температуры. Например объем занимаемый определённым количеством газа примерно в два раза снизится при повышении давления в два раза. 
+
+Поэтому для удобства фиксации и сравнения параметров они часто приводятся к \href{https://ru.wikipedia.org/wiki/%D0%A1%D1%82%D0%B0%D0%BD%D0%B4%D0%B0%D1%80%D1%82%D0%BD%D1%8B%D0%B5_%D1%83%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F}{стандартным или нормальным условиям} - определённым давлениям и температуре. 
+	
+Принятые в разных дисциплинах и разных организациях точные значения давления и температуры в стандартных условиях могут различаться (смотри например \url{https://en.wikipedia.org/wiki/Standard_conditions_for_temperature_and_pressure}), поэтому указание значений физических величин без уточнения условий, в которых они приводятся, может приводить к ошибкам. Наряду с термином «стандартные условия» применяется термин «нормальные условия». «Нормальные условия» обычно отличаются от «стандартных» тем, что под нормальным давлением принимается давление равное 101 325 Па = 1 атм = 760 мм рт. ст.
+
+Обычно в монографиях SPE принято, что стандартное давление для газов, жидкостей и твёрдых тел, равное $10^5$ Па (100 кПа, 1 бар); стандартная температура для газов, равная 15.6 °С соответствующая 60 °F. 
+
+В Российском ГОСТ 2939-63  принято, что стандартное давление для газов, жидкостей и твёрдых тел, равное $10.13^5$ Па (101325 Па, 1 атм); стандартная температура для газов, равная 20 °С соответствующая 68 °F. 
+
+В \unf приняты следующие значения стандартных условий
+%\putlisting{listings/standard_cond.lst}
+
+
+
+\begin{listing}[H]
+	\begin{minted}[fontsize=\small]{vb.net}
+Public Const const_Psc_atma As Double = 1
+Public Const const_Tsc_C = 20
+Public Const const_convert_atma_Pa = 101325
+	\end{minted}
+	\caption{Принятые параметры стандартных условий в расчетах}
+	\label{lst:code_standard_cond}
+\end{listing}
+
+\subsection{PVT\_Pb\_atma – давление насыщения}
+Функция рассчитывает давление насыщения по известным данным газосодержания при давлении насыщения, $\gamma_g, \gamma_o, T_r$.
+
+При проведении расчётов с использованием значения давления насыщения, следует помнить, что давление насыщения является функцией температуры. В частности при калибровки результатов расчётов на известное значение давления насыщения $P_b$ следует указывать значение пластовой температуры $T_r$ при котором давление насыщения было получено. 
+
+В наборе корреляций на основе корреляции Стендинга расчет давления насыщения проводится по корреляции Стендинга \cite{Yukos_PVT_2002}
+
+\putlisting{listings/PVT_Pb_atma.lst}
+
+Пример расчёта с использованием функции \mintinline{vb.net}{PVT_Pb_atma} для различных наборов PVT корреляций приведён на рисунке ниже. Видно, что результаты расчетов по различным корреляциях дают качественно схожие результаты, но не совпадают друг с другом.  Отличия, по всей видимости,  обусловленные применением различных наборов исходных данных использовавшихся авторами. Поэтому при проведении расчетов для конкретного месторождения актуальной является задача выбора адекватного набора корреляций. Макросы \unf позволяют провести расчет с использованием различных подходов, но при этом выбор корреляции остается за пользователем. 
+
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$R_{sb} \;  m^3/m^3$,
+ylabel=$P_b\; atma$,
+legend pos=north west,
+title=Standing]
+\addplot table [y=T20, x=Rs]{data/Pb_T_data.txt};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T60, x=Rs]{data/Pb_T_data.txt};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T100, x=Rs]{data/Pb_T_data.txt};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T140, x=Rs]{data/Pb_T_data.txt};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$R_{sb} \;  m^3/m^3$,
+ylabel=$P_b\; atma$,
+legend pos=north west,
+title = McCain]
+\addplot table [y=T20, x=Rs]{data/Pb_T_data1.txt};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T60, x=Rs]{data/Pb_T_data1.txt};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T100, x=Rs]{data/Pb_T_data1.txt};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T140, x=Rs]{data/Pb_T_data1.txt};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+
+При проведении расчётов с использованием набора корреляций на основе корреляций МакКейна следует учитывать, что они работают только для температур более 18 градусов Цельсия. При более низких значениях температуры расчёт будет проводиться для 18 градусов Цельсия. 
+
+\subsection{PVT\_Rs\_m3m3 – газосодержание}
+
+Газосодержание это отношения объёма газа растворенного в нефти к объёму нефти приведённые к стандартным условиям. 
+
+$$R_s = \frac{(V_g)_{sc}}{(V_o)_{sc}}$$
+
+Газосодержание является одним из ключевых свойств нефти при расчётах производительности скважин и работы скважинного оборудования. Динамика изменения газосодержания во многом определяет количество свободного газа в потоке и должна учитываться при проведении расчётов. 
+
+При задании PVT свойств нефти часто используют значение газосодержания при давлении насыщения $r_{sb}$ - определяющее объем газа растворенного в нефти в пластовых условиях. В модели флюида \unf газосодержание при давлении насыщения является исходным параметров нефти и должно быть обязательно задано. 
+
+Следует отличать газосодержание в нефти при давлении насыщения $R_sb$ и газовый фактор $R_p$.
+
+$$R_p = \frac{(Q_g)_{sc}}{(Q_o)_{sc}}$$
+
+Газовый фактор $R_{p}$  в отличии от газосодержания $R_{sb}$  является, вообще говоря, параметром скважины - показывает отношение объёма добытого газа из скважины к объёму добытой нефти приведённые к стандартным условиям. Газосодержание же является свойством нефти - показывает сколько газа растворено в нефти. Если газ добываемой из скважины это газ который выделился из нефти в процессе подъёма, что характерно для недонасыщенных нефтей, то значения газового фактора и газосодержания будут совпадать. Если газ поступает в скважину не непосредственно из добываемой нефти, а например фильтруется из газовой шапки или поступает через негерметичность ствола скважины - то в такой скважине газовый фактор может значительно превышать значение газосодержания. Такая ситуация может быть смоделирована в \unf. Для этого необходимо наряду с газосодержанием при давлении насыщения $R_{sb}$ задать значение газового фактора $R_p$. В этом случае газосодержание при давлении насыщения $R_{sb}$  будет определять динамику выделения попутного газа из нефти при снижении давления, а газовый фактор $R_p$ определять общее количество газа в потоке. 
+
+При определённых условиях газовый фактор может быть меньше газосодержания. Это происходит, когда газ выделяется в призабойной зоне и скапливается в ней не поступая в скважину вместе с нефтью. Но такие условия возникают достаточно редко, существуют на скважине ограниченное время и представляют интерес больше для разработчиков нежели чем для технологов. С точки зрения анализа работы скважины и скважинного оборудования можно считать, что значение газового фактора не может быть меньше газосодержания при давлении насыщения. Такой предположение реализовано в \unf. При этом значение газового фактора технически легче измерить чем газосодержание - поэтому при противоречии значений газового фактора и газосодержания при давлении насыщения приоритет отдаётеся газовому фактору. 
+
+
+\putlisting{listings/PVT_Rs_m3m3.lst}
+
+Примеры расчёта с использованием функции \mintinline{vb.net}{PVT_Rs_m3m3} для различных наборов PVT корреляций приведён на рисунке ниже.
+
+\newcommand{\RsDataFile}{data/Rs_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$R_{sb} \;  m^3/m^3$,
+ylabel=$P_b\; atma$,
+legend pos=south east,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\RsDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\RsDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\RsDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\RsDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$R_{sb} \;  m^3/m^3$,
+ylabel=$P_b\; atma$,
+legend pos=south east,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\RsDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\RsDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\RsDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\RsDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+
+\subsection{PVT\_Bo\_m3m3 – объёмный коэффициент нефти}
+
+Функция рассчитывает объёмный коэффициент нефти для произвольных термобарических условий. 
+Объёмный коэффициент нефти определяется как отношение объёма занимаемого нефтью в пластовых условиях к объёму занимаемому нефтью при стандартных условиях. 
+
+$$B_o = \frac{(V_o)_{rc}}{(V_o)_{sc}}$$
+
+Нефть в пласте занимает больший объем чем на поверхности за счёт растворенного в ней газа. Соответственно объёмный коэффициент нефти обычно имеет значение больше 1 при давлениях больше чем стандартное.
+
+Для калибровки значения объёмного коэффициента можно использовать значение объёмного коэффициента нефти при давлении насыщения $B_{ob}$. 
+
+Следует отметить, что вообще говоря значение объёмного коэффициента нефти при давлении насыщения не является значением при пластовых условиях (при давлении выше давления насыщения играет роль сжимаемость нефти), однако при анализе производительности скважины и скважинного оборудования можно условно считать, что значение объёмного коэффициента при давлении насыщения соответствует значению  объёмного коэффициента в пластовых условиях.  
+
+\putlisting{listings/PVT_Bo_m3m3.lst}
+
+Примеры расчёта с использованием функции \mintinline{vb.net}{PVT_Bo_m3m3} для различных наборов PVT корреляций приведён на рисунке ниже.
+
+Объёмный коэффициент нефти хорошо коррелирует со значением газосодержания. Поэтому различный вид кривых на рисунке ниже связан с первую очередь с различным газосодержанием при проведении расчётов.
+
+\newcommand{\BoDataFile}{data/Bo_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$B_o\;  m^3/m^3$,
+legend pos=south east,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\BoDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\BoDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\BoDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\BoDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$B_o\;  m^3/m^3$,
+legend pos=south east,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\BoDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\BoDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\BoDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\BoDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Bg\_m3m3 – объёмный коэффициент газа}
+Функция рассчитывает объёмный коэффициент нефтяного газа для произвольных термобарических условий. 
+
+Объёмный коэффициент газа определяется как отношение объема занимаемого газом для произвольных термобарических условий (при определенном давлении и температуре) к объёму занимаемому газом при стандартных условиях. 
+
+$$B_g = \frac{V_g(P,T)}{(V_g)_{sc}}$$
+
+Значение объемного коэффиента газа может быть определено исходя из уравнения состояния газа
+
+$$ PV = z \nu RT  $$
+
+откуда можно получить 
+
+$$ B_g = z \frac{P_{sc}}{P} \frac{T}{T_{sc}} $$
+
+где $P_{sc}, T_{sc}$ давление (атм) и температура (К) при стандартных условиях, $P,T$ давление (атм) и температура (K) при расчетных условиях, $z$ коэффициент сверхсжимаемости газа, который вообще говоря зависит от давления и температуры $z = z(P,T)$. 
+
+\putlisting{listings/PVT_Bg_m3m3.lst}
+
+\newcommand{\DataFile}{data/Bg_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+ymode=log, 
+xlabel=$P\; atma$,
+ylabel=$B_g\\;  m^3/m^3$,
+legend pos=north east,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\DataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\DataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\DataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\DataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+ymode=log, 
+xlabel=$P\; atma$,
+ylabel=$B_g\;  m^3/m^3$,
+legend pos=north east,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\DataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\DataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\DataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\DataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Bw\_m3m3 – объёмный коэффициент воды}
+Функция рассчитывает объёмный коэффициент воды для произвольных термобарических условий. 
+
+Объёмный коэффициент воды определяется как отношение объёма занимаемого водой для произвольных термобарических условий (при определённом давлении и температуре) к объёму занимаемому водой при стандартных условиях. 
+
+$$B_w = \frac{V_w(P,T)}{(V_w)_{sc}}$$
+
+\putlisting{listings/PVT_Bw_m3m3.lst}
+
+\subsection{PVT\_Muo\_cP – вязкость нефти}
+Функция рассчитывает вязкость нефти при заданных термобарических условиях по корреляции. Расчёт может быть откалиброван на известное значение вязкости нефти при давлении равном давлению насыщения и при пластовой температуре за счёт задания калибровочного параметра \mintinline{vb.net}{Muob_cP}. При калибровке динамика изменения будет соответствовать расчету по корреляции, но значения будут масштабированы таким образом, чтобы при давлении насыщения удовлетворить калибровочному параметру.
+
+При расчёте следует обратить внимание, что значение вязкости коррелирует со значением плотности нефти. Как правило вязкость тяжёлых нефтей выше чем для легких.
+
+При расчёте с использованием набора корреляций на основе корреляции Стендинга - вязкость как дегазированной нефти и нефти с учетом растворенного газа рассчитывается по корреляции Беггса Робинсона \cite{Yukos_PVT_2002}. 
+Корреляции для расчета вязкости разгазированной и газонасыщенной нефти, разработанные Beggs \& Robinson, основаны на 2000 замерах 600 различных нефтей.
+Диапазоны значений основных свойств, использованных для разработки данной корреляции, приведены в таблице ниже.
+\begin{center}
+	\begin{tabular}{ccc}
+		давление, atma & \textbf{8.96…483.} \\
+		температура, °C & \textbf{37…127}  \\
+		газосодержание, $R_s \; m^3 /m^3$ & \textbf{3.6…254}\\
+		относительная плотность нефти по воде,, $\gamma_o$ & \textbf{0.725…0.956} \\
+	\end{tabular}
+\end{center}
+   
+\putlisting{listings/PVT_Muo_cP.lst}
+
+\newcommand{\MuDataFile}{data/Muo_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\mu_o\; cP$,
+legend pos=north east,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\MuDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\MuDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\MuDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\MuDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\mu_o\; cP$,
+legend pos=north east,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\MuDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\MuDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\MuDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\MuDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Mug\_cP – вязкость газа}
+
+Функция рассчитывает вязкость газа при заданных термобарических условиях. Результат расчета в сП.  Используется подход предложенный Lee  \cite{Lee_1966}, который хорошо подходит для большинства натуральных газов. 
+В отличии от нефти и других жидкостей вязкость газа, как правило, значительно ниже, что определяет высокую подвижность газа. 
+Более подробное описание методов расчета вязкости газа можно найти на странице  \href{http://petrowiki.org/Gas_viscosity}{http://petrowiki.org/gas\_viscosity}
+
+
+\putlisting{listings/PVT_Mug_cP.lst}
+
+\newcommand{\MugDataFile}{data/Mug_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\mu_g\; cP$,
+legend pos=north west,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\MugDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\MugDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\MugDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\MugDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\mu_g\; cP$,
+legend pos=north west,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\MugDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\MugDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\MugDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\MugDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Muw\_cP – вязкость воды}
+
+Функция рассчитывает вязкость воды при заданных термобарических условиях. Результат расчета выдается в сП. 
+Вязкость воды зависит от давления, температуры и наличия растворенных примесей. В общем вязкость аоды растет при росте давления, снижении температуры, повышении солености. 
+Растворение газа почти не влияет на вязкость воды и в расчетах не учитывается. 
+Расчет проводится по корреляции McCain \cite{McCain_1991}
+
+Более подробное описание методов расчета вязкости газа можно найти на странице  \href{http://petrowiki.org/Produced_water_properties}{http://petrowiki.org/Produced\_water\_properties}
+
+
+\putlisting{listings/PVT_Muw_cP.lst}
+
+
+Следует отметить, что вязкость воды достаточно сильно зависит от температуры, в то время как зависимость от давления менее выражена.
+
+\newcommand{\MuwDataFile}{data/Muw_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\mu_w\; cP$,
+legend pos=north west,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\MuwDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\MuwDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\MuwDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\MuwDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\mu_w\; cP$,
+legend pos=north west,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\MuwDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\MuwDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\MuwDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\MuwDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Rhoo\_kgm3 – плотность нефти}
+Функция вычисляет значение плотности нефти при заданных термобарических условиях. Результат расчета имеет размерность кг/м3. 
+
+
+\putlisting{listings/PVT_Rhoo_kgm3.lst}
+
+\newcommand{\RhooDataFile}{data/Rhoo_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\rho_o\; kg/m^3$,
+legend pos=north east,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\RhooDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\RhooDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\RhooDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\RhooDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\rho_o \; kg/m^3$,
+legend pos=north east,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\RhooDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\RhooDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\RhooDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\RhooDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+
+
+\subsection{PVT\_Rhog\_kgm3 – плотность газа}
+\putlisting{listings/PVT_Rhog_kgm3.lst}
+	
+\newcommand{\RhogDataFile}{data/Rhog_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\rho_g\; kg/m^3$,
+legend pos=north west,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\RhogDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\RhogDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\RhogDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\RhogDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\rho_g \; kg/m^3$,
+legend pos=north west,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\RhogDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\RhogDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\RhogDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\RhogDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Rhow\_kgm3 – плотность воды}
+\putlisting{listings/PVT_Rhow_kgm3.lst}
+
+\newcommand{\RhowDataFile}{data/Rhow_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\rho_w\; kg/m^3$,
+legend pos=north east,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\RhowDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\RhowDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\RhowDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\RhowDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$\rho_w \; kg/m^3$,
+legend pos=north east,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\RhowDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\RhowDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\RhowDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\RhowDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{PVT\_Z – коэффициент сверхсжимаемости газа}
+
+Функция позволяет рассчитать коэффициент сверхсжимаемости газа. 
+
+
+$$ PV = z \nu RT  $$
+
+
+
+\putlisting{listings/PVT_Z.lst}
+
+\newcommand{\zDataFile}{data/Z_P_data.txt}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$Z$,
+legend pos=south west,
+title=Standing]
+\addplot table [y=T_0_20, x=P]{\zDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_0_60, x=P]{\zDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_0_100, x=P]{\zDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_0_140, x=P]{\zDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=0.8]
+\begin{axis}[
+xlabel=$P\; atma$,
+ylabel=$Z$,
+legend pos=south west,
+title = McCain]
+\addplot table [y=T_1_20, x=P]{\zDataFile};
+\addlegendentry{$T = 20$ С}
+\addplot table [y=T_1_60, x=P]{\zDataFile};
+\addlegendentry{$T = 60$ С}
+\addplot table [y=T_1_100, x=P]{\zDataFile};
+\addlegendentry{$T = 100$ С}
+\addplot table [y=T_1_140, x=P]{\zDataFile};
+\addlegendentry{$T = 140$ С}
+\end{axis}
+\end{tikzpicture}
+
+\section{Расчёт свойств потока}
+
+\subsection{MF\_Qmix\_m3day – расход газожидкостной смеси}
+
+Функция позволяет рассчитать объемный расход газожидкостной смеси при заданных термобарических условиях. 
+
+$$Q_{mix} = Q_w B_w(P,T) + Q_o B_o(P,T)  + Q_o  (R_p - R_s(P,T)) B_g(P,T) $$
+
+\putlisting{listings/MF_Qmix_m3day.lst}
+
+\subsection{MF\_Rhomix\_kgm3 – плотность газожидкостной смеси}
+
+Функция позволяет рассчитать плотность газожидкостной смеси при заданных термобарических условиях. 
+
+\putlisting{listings/MF_Rhomix_kgm3.lst}
+
+\subsection{MF\_GasFraction\_d – доля газа в потоке}
+Функция расчёта доли свободного газа в потоке (без учёта проскальзывания) в зависимости от термобарических условий для заданного флюида. 
+В отличии от функций PVT учитывается обводнённость.
+\putlisting{listings/MF_GasFraction_d.lst}
+
+\subsection{MF\_PGasFraction\_atma – целевое давления для заданной доли газа в потоке}
+Функция расчёта давления при котором достигается заданная доля свободного газа в потоке (без учёта проскальзывания) . 
+В отличии от функций PVT учитывается обводнённость.
+Следует учитывать, что при вызове функции пересчитывается состояние смеси с различными термобарическими условиями.
+\putlisting{listings/MF_PGasFraction_atma.lst}
+
+\subsection{MF\_RpGasFraction\_m3m3 – целевой газовый фактор для заданной доли газа в потоке}
+Функция расчёта давления при котором достигается заданная доля свободного газа в потоке (без учёта проскальзывания) . 
+В отличии от функций PVT учитывается обводнённость.
+Следует учитывать, что при вызове функции пересчитывается состояние смеси с различными термобарическими условиями.
+\putlisting{listings/MF_RpGasFraction_m3m3.lst}
+
+\section{Сепарация газа в скважине}
+
+В скважинах оборудованных системами механизированной добычи нефти важную роль играет процесс сепарации газа на приёме насоса. Под сепарацией газа понимается отделение части свободного газа из потока и перенаправление его по отдельному гидравлическому каналу на поверхность. В результате сепарации газа меняются свойства флюида поступающего в насос и НКТ выше насоса. Оценка величины сепарации может быть проведена приведёнными ниже функциями.
+
+\subsection{MF\_SeparNat\_d – естественная сепарация газа}
+
+Функция рассчитывает естественную сепарацию газа на приёме насоса в скважине с использованием корреляции Маркеса \cite{Marquez_2003} . Результат - безразмерная величина в диапазоне от 0 до 1. 
+
+\putlisting{listings/MF_SeparNat_d.lst}
+
+\subsection{MF\_SeparTotal\_d – естественная сепарация газа}
+
+Функция рассчитывает полную сепарацию газа на приёме насосе в скважине по известным значениям естественной сепарации газа и коэффициента сепарации газосепаратора. Результат - безразмерная величина в диапазоне от 0 до 1. 
+
+\putlisting{listings/MF_SeparTotal_d.lst}
+
+
+\section{Расчёт многофазного потока в штуцере}
+
+\subsection{Модель потока через штуцер}
+
+%Тут надо будет нарисовать схему штуцера и пояснить что и как называется в коде. 
+
+Штуцер или локальное гидравлическое сопротивление - элемент скважины или системы трубопроводов применяемых для создания дополнительного перепада давления в системе и ограничения потока. 
+Возможны различные варианты реализации штуцера - со штуцерное камерой, с угловым краном позволяющим менять диаметр штуцера и другие.
+Ключевым параметром штуцера является диаметр \(d_{choke} \) определяющий его способность к ограничению потока. 
+
+Как и у любого элемента гидравлического потока есть три ключевых параметра - давление на входе \( P_{in} \) , \( P_0\), давление на выходе \(P_{out}\) , \( P_1\) и расход газожидкостной смеси, обычно задаваемый в стандартных условиях \(Q_{liq} \).
+ 
+
+\subsection{MF\_PChoke\_atm – Расчет давления на входе и на выходе штуцера}
+Функция позволяет рассчитать давление на входе или выходе штуцера по известному давлению на противоположном конце при известных параметрах потока (дебите жидкости, обводненности, газовому фактору). Расчет проводится по корреляции Перкинса \cite{Perkins_1993} с учетом многофазного потока.  
+\putlisting{listings/MF_Pchoke_atm.lst}
+
+\subsection{MF\_dPChoke\_atm – Расчёт перепада давления в штуцере}
+Функция позволяет рассчитать по известному линейному давлению и дебиту или по известному буферному давлению и дебиту перепад давления.  Расчет проводится по корреляции Перкинса \cite{Perkins_1993} с учетом многофазного потока.  
+Функция возвращает перепад давления и температуры в виде массива.
+\putlisting{listings/MF_dPchoke_atm.lst}
+
+
+
+\newpage
+\subsection{MF\_QChoke\_m3day – функция расчёта дебита жидкости через штуцер}
+Функция позволяет рассчитать по известному буферному давлению и линейному давлению дебит жидкости. Расчет проводится по корреляции Перкинса \cite{Perkins_1993} с учетом многофазного потока.  
+
+\putlisting{listings/MF_QChoke_m3day.lst}
+
+\newpage
+\section{Расчет многофазного потока в трубе}
+
+
+
+\subsection{MF\_dPpipe\_atma – расчёт перепада давления в трубе}
+
+Функция позволяет рассчитать перепад давления в участке трубопровода. 
+
+Функция возвращает давление и температуру в виде массива.
+
+\putlisting{listings/MF_dPpipe_atm.lst}
+
+Ниже на рисунке приведены результаты расчёта кривой оттока (перепада давления в вертикальной трубе) для различных корреляций реализованных в \unf.
+
+\newcommand{\dPipeDataFile}{data/dPipe.txt}
+\begin{tikzpicture}[scale=1]
+\begin{axis}[
+width=14cm,
+height=10cm,
+xlabel=$Q\; m^3 / day$,
+ylabel=$P_{wf} \; atma$,
+legend pos=south east,
+title=Pipe Pressure Drop]
+\addplot table [y=P_0, x=Q]{\dPipeDataFile};
+\addlegendentry{Beggs Brill}
+\addplot table [y=P_1, x=Q]{\dPipeDataFile};
+\addlegendentry{Ansari}
+\addplot table [y=P_2, x=Q]{\dPipeDataFile};
+\addlegendentry{Unified}
+\addplot table [y=P_3, x=Q]{\dPipeDataFile};
+\addlegendentry{Gray}
+\addplot table [y=P_4, x=Q]{\dPipeDataFile};
+\addlegendentry{Hagedorn Brown}
+\addplot table [y=P_5, x=Q]{\dPipeDataFile};
+\addlegendentry{Sakharov Mokhov}
+\end{axis}
+\end{tikzpicture}
+
+
+
+\newpage
+\section{Расчет многофазного потока в пласте}
+\newpage
+\subsection{IPR\_PI\_sm3dayatm – расчёт продуктивности}
+Функция позволяет рассчитать коэффициент продуктивности скважины.
+\begin{listing}[H]
+	\begin{minted}{vb.net}
+' расчёт продуктивности
+Public Function IPR_PI_sm3dayatm(Qtest_m3day, Pwftest_atm, Pr_atm, _
+Optional WCT_perc As Double = 0, Optional Pb_atm As Double = -1)
+	'
+	' Qtest_m3day   - тестовый дебит скважины
+	' Pwftest_atm   - тестовое забойное давление
+	' Pr_atm        - пластовое давление, атм
+	'
+	' необязательные параметры
+	' WCT_perc      - обводненность
+	' Pb_atm        - давление насыщения
+	'
+	\end{minted}
+	\caption{Объявление функции расчёта продуктивности}
+	\label{lst:codedIPR_PI}
+\end{listing}
+\newpage
+\subsection{IPR\_Pwf\_atm – расчёт дебита по давлению и продуктивности}
+Функция позволяет рассчитать дебит жидкости скважины по известным значениям давления и продуктивности.
+
+\begin{listing}[H]
+	\begin{minted}{vb.net}
+' расчёт дебита по давлению и продуктивности
+Public Function IPR_Pwf_atm(PI_m3dayatm, Pr_atm, Ql_m3day, _
+Optional WCT_perc As Double = 0, Optional Pb_atm As Double = -1)
+'
+' PI_m3dayatm   - коэффициент продуктивности
+' Pr_atm        - пластовое давление, атм
+' Ql_m3day      - дебит жидкости скважины на поверхности
+'
+' необязательные параметры
+' WCT_perc      - обводненность
+' Pb_atm        - давление насыщения
+'
+	\end{minted}
+	\caption{Объявление функции расчёта дебита по давлению и продуктивности}
+	\label{lst:codedIPR_Pwf}
+\end{listing}
+\newpage
+\subsection{IPR\_Ql\_sm3Day – расчёт дебита по давлению и продуктивности}
+Функция позволяет рассчитать дебита по давлению и продуктивности.
+\begin{listing}[H]
+	\begin{minted}{vb.net}
+' расчёт дебита по давлению и продуктивности
+Public Function IPR_Ql_sm3Day(PI_m3dayatm, Pr_atm, Pwf_atm, _
+Optional WCT_perc As Double = 0, Optional Pb_atm As Double = -1)
+'
+' PI_m3dayatm   - коэффициент продуктивности
+' Pr_atm        - пластовое давление, атм
+' Pwf_atm       - забойное давление
+'
+' необязательные параметры
+' WCT_perc      - обводненность
+' Pb_atm        - давление насыщения
+'
+
+	\end{minted}
+	\caption{Объявление функции расчёта дебита по давлению и продуктивности}
+	\label{lst:codedIPR_Ql}
+\end{listing}
+
+
+\newpage
