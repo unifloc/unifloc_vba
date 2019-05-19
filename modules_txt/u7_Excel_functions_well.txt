@@ -8,7 +8,9 @@
 Option Explicit
 ' ==============  функции для расчета скважины ==========================
 ' =====================================================================
-Private Function well_InitData(Q_m3Day, fw_perc, _
+' функция для шаблонного чтения данных по скважине в интерфейсных функциях
+Private Function well_InitData(Q_m3Day, _
+                               fw_perc, _
                       Optional Pcas_atma As Double = 10, _
                       Optional wellStr As String = WELL_DEFAULT, _
                       Optional PVTstr As String = PVT_DEFAULT, _
@@ -16,272 +18,412 @@ Private Function well_InitData(Q_m3Day, fw_perc, _
                       Optional HydrCorr As H_CORRELATION = 0, _
                       Optional Ksep_fr As Double = 0, _
                       Optional Kdegr_d As Double = 0) As CWellESP
-    ' функция для шаблонного чтения данных по скважине в интерфейсных функциях
-    '
-    ' на входе данные по конструкции скважины, PVT, ЭЦН берутся из строк с закодированными параметрами
-    '    следует использовать функции Encode для передачи параметров
-    ' на выходе объект скважина с загруженными данными
+' исходные параметры
+' Q_m3Day    - дебит жидкости, на поверхности
+' fw_perc    - обводненность (объемная на поверхности)
+' ----------- опциональные параметры
+' Pcas_atma - затрубное давление
+'     если не задано динамический уровень не рассчитывается
+' wellStr  - закодированные параметры конструкции скважины
+' PVTstr - закодированные параметры флюидов
+' ESPStr - закодированные параметры УЭЦН
+' HydrCorr      - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Ksep_fr - коэффициент сепарации.
+'           если задан - то используется вместо расчетного
+'           явное задание коэффициента серации ускоряет расчет
+' Kdegr_d - коэффициент деградации УЭЦН
+' на входе данные по конструкции скважины, PVT, ЭЦН
+' берутся из строк с закодированными параметрами
+' следует использовать функции Encode для передачи параметров
+' на выходе объект скважина с загруженными данными
+    
     Dim well As New CWellESP
     Dim PVT As New CPVT
     Dim pmp As CESPpump
     Dim ESPsystem As New CESPsystemSimple
-    
+    ' read PVT data from encoded string
     Set PVT = PVT_Decode_string(PVTstr)
+    ' set liquid rate
     PVT.Qliq_scm3day = Q_m3Day
+    ' set water cut - correcting percent to fraction
     PVT.wc_fr = fw_perc / 100
-    
+    ' set well construction from encoded string
+    ' also set temperature parameters (BHT and WHT)
     Set well = Well_Decode_string(wellStr)
+    ' link well with fluid object
     Set well.Fluid = PVT
+    ' set casing pressure
     well.Pcas_atma = Pcas_atma
+    ' set hydraulic correlation
     well.HFlowCorrelation = HydrCorr
-     
+    ' set temperature model with temperature gradient
+    well.TempCorrelation = GeoGradTemp
+    ' read ESP object from encoded string
     Set ESPsystem = ESP_Decode_string(ESPStr)
+    ' link well with ESP object
     Set well.ESP = ESPsystem
+    ' set correction factor for ESP
     well.ESP.cfHead_fr = Kdegr_d
+    ' set separation coefficient if given
     If Ksep_fr > 0 And Ksep_fr <= 1 Then
         Call well.SetKseptotal_d(valueManual, Ksep_fr, 0)
     Else
         Call well.SetKseptotal_d(byCorrealation, Ksep_fr)
     End If
-        
+    ' return result well object
     Set well_InitData = well
 End Function
+' function prepares output array for public functions
+' подготовим данные для вывода
 Private Function Well_out_arr(well As CWellESP, Optional FirsrCol As Integer = 0)
+' данные выводятся в одну линию, чтобы, хотя бы теоретически, можно было вывести данные по скважине в таблице
+' во второй строке выводятся подписи параметров, если необходимо
+' первый параметр настраиваемый
     Dim ar1, ar2
+    Dim res As New Dictionary
+   
+    ReDim ar1(21)
+    ReDim ar2(21)
+    Dim i As Integer
     With well
-        ' подготовим данные для вывода
-        ' данные выводятся в одну линию, чтобы, хотя бы теоретически, можно было вывести данные по скважине в таблице
-        ' во второй строке выводятся подписи параметров, если необходимо
-        ReDim ar1(21)
-        ReDim ar2(21)
-        Dim i As Integer
-        ' первый параметр настраиваемый
-        i = 0
-        ar1(0) = "":  ar2(0) = ""
-        ' блок параметров по давлениям
-        i = i + 1
-        ar1(i) = .Pline_atma:  ar2(i) = "Pline_atma"
-        i = i + 1
-        ar1(i) = .Pbuf_atma:  ar2(i) = "Pbuf_atma"
-        i = i + 1
-        ar1(i) = .Pdis_atma:  ar2(i) = "Pdis_atma"
-        i = i + 1
-        ar1(i) = .Pint_atma:  ar2(i) = "Pint_atma"
-        i = i + 1
-        ar1(i) = .Pwf_atma:  ar2(i) = "Pwf_atma"
-        i = i + 1
-        ar1(i) = .Pan_atma:   ar2(i) = "Pan_atma"
-        ' динамический уровень
-        i = i + 1
-        ar1(i) = .Hdyn_m:   ar2(i) = "Hdyn_m"
-        ' электрические параметры
-        i = i + 1
-        ar1(i) = .ESP.Power_CS_calc_W:  ar2(i) = ".Power_W"
-        i = i + 1
-        ar1(i) = .ESP.freq_Hz:  ar2(i) = "freq_Hz"
-        i = i + 1
-        ar1(i) = .ESP.I_A:  ar2(i) = "I_A"
-        i = i + 1
-        ar1(i) = .ESP.Load_fr:  ar2(i) = "Load_fr"
-        i = i + 1
-        ar1(i) = .ESP.ESPpump.EffiencyESP_d:  ar2(i) = "EffESP_d"
-        ' параметры сепарации
-        i = i + 1
-        ar1(i) = .ESP.KsepTotal_fr:  ar2(i) = "KsepTotal_fr"
-        i = i + 1
-        ar1(i) = .ESP.KsepNat_fr:  ar2(i) = "KsepNat_fr"
-        i = i + 1
-        ar1(i) = .ESP.KSepGasSep_fr:   ar2(i) = "KSepGasSep_fr "
-        ' параметры температуры
-        i = i + 1
-        ar1(i) = .Tsurf_C:  ar2(i) = "Tsurf_C"
-        i = i + 1
-        ar1(i) = .Twh_C:  ar2(i) = "Twh_C"
-        i = i + 1
-        ar1(i) = .Tdis_C:  ar2(i) = "Tdis_C"
-        i = i + 1
-        ar1(i) = .Tint_C:  ar2(i) = "Tint_C"
-        i = i + 1
-        ar1(i) = .Tbh_C:  ar2(i) = "Tbh_C"
-        i = i + 1
-        ar1(i) = .ESP.cfHead_fr:  ar2(i) = "ESP corr factor"
+        Call res.Add(.Pline_atma, "Pline_atma")
+        Call res.Add(.Pbuf_atma, "Pbuf_atma")
+        Call res.Add(.Pdis_atma, "Pdis_atma")
+        Call res.Add(.Pint_atma, "Pint_atma")
+        Call res.Add(.Pwf_atma, "Pwf_atma")
+        Call res.Add(.Pcas_atma, "Pcas_atma")
+        Call res.Add(.Hdyn_m, "Hdyn_m")
+        Call res.Add(.ESP.Power_CS_calc_W, "ESP.Power_CS_calc_W")
+        Call res.Add(.ESP.freq_Hz, "ESP.freq_Hz")
+        Call res.Add(.ESP.I_A, "ESP.I_A")
+        Call res.Add(.ESP.Load_fr, "ESP.Load_fr")
+        Call res.Add(.ESP.ESPpump.EffiencyESP_d, "ESP.ESPpump.EffiencyESP_d")
+        Call res.Add(.ESP.KsepTotal_fr, "ESP.KsepTotal_fr")
+        Call res.Add(.ESP.KsepNat_fr, "ESP.KsepNat_fr")
+        Call res.Add(.ESP.KSepGasSep_fr, "ESP.KSepGasSep_fr")
+        Call res.Add(.Tsurf_C, "Tsurf_C")
+        Call res.Add(.Twh_C, "Twh_C")
+        Call res.Add(.Tdis_C, "Tdis_C")
+        Call res.Add(.Tint_C, "Tint_C")
+        Call res.Add(.Tbh_C, "Tbh_C")
+        Call res.Add(.ESP.cfHead_fr, "ESP.cfHead_fr")
         
-'        ar1 = Array(0, "", .Pline_atma, .Pbuf_atma, .Pdis_atma, .Pint_atma, .Pwf_atma, "Давления атм, линейное, буферное, на выкиде насоса, на приеме насоса, забойное")
-'        ar2 = Array(0, "", .Tsurf_C, .Twh_C, .Tdis_C, .Tint_C, .Tbh_C, "Температура С, на поверхности, буферное, на выкиде насоса, на приеме насоса, забойное")
-'        ar3 = Array(0, "", .ESP.Power_CS_calc_W, .ESP.I_A, .ESP.Load_fr, .ESP.KsepTotal_fr, .ESP.ESPpump.EffiencyESP_d, "Мощность, Ток, Загрузка, Сепарация ")
-        
-        Select Case FirsrCol
-            Case 0
-                ar1(0) = .Pline_atma: ar2(0) = "Plin"
-            Case 1
-                ar1(0) = .Pwf_atma:   ar2(0) = "Pwf"
-            Case 2
-                ar1(0) = .Qliq_scm3day:   ar2(0) = "Qliq"
-        End Select
-        
+        For i = 1 To 21
+            ar1(i) = res.Items()(i):  ar2(i) = res.Keys()(i)
+        Next i
+        ' first column can have any number
+        ' set it here
+        ar1(0) = ar1(FirsrCol): ar2(0) = ar2(FirsrCol)
+                
         Well_out_arr = Array(ar1, ar2)
     ' можно еще добавить сюда вывод кривых распределения давления и температуры по стволу и еще 4 параметров  (потом)
     End With
 End Function
-Public Function Well_Plin_Pwf_atma(ByVal Pwf_atma As Double, ByVal Q_m3Day As Double, ByVal fw_perc As Double, _
-                      Optional ByVal Pcas_atma As Double = 10, _
-                      Optional wellStr As String = WELL_DEFAULT, _
-                      Optional PVTstr As String = PVT_DEFAULT, _
-                      Optional ESPStr As String = ESP_DEFAULT, _
-                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                      Optional ByVal Ksep_fr As Double = 0, _
-                      Optional ByVal Kdegr_d As Double = 0, _
-                      Optional ByVal param_num As Integer = 0)
-' функция расчета линейного давления скважины по забойному
-    Dim well As CWellESP
-    Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
-                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
-    Call well.Calc_Plin_Pwf_atma(Pwf_atma)          ' проведем расчет
-    ' в качестве результата выведем ряд расчитанных значений давления
-    Well_Plin_Pwf_atma = Well_out_arr(well, 0)
-End Function
-Public Function Well_calc(ByVal Pwf_atma As Double, ByVal Q_m3Day As Double, ByVal fw_perc As Double, _
-                      Optional ByVal Pcas_atma As Double = 10, _
-                      Optional wellStr As String = WELL_DEFAULT, _
-                      Optional PVTstr As String = PVT_DEFAULT, _
-                      Optional ESPStr As String = ESP_DEFAULT, _
-                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                      Optional ByVal Ksep_fr As Double = 0, _
-                      Optional ByVal Kdegr_d As Double = 0, _
-                      Optional ByVal param_num As Integer = 0)
-' функция расчета прозвольного параметра скважины по забойному давлению
-    Dim well As CWellESP
-    Dim ar
-    Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
-                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
-    Call well.Calc_Plin_Pwf_atma(Pwf_atma)         ' проведем расчет
-    ' в качестве результата выведем ряд расчитанных значений давления
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета линейного давления по забойному для скважины
+' расчет снизу-вверх, простой и быстрый расчет
+Public Function Well_Plin_Pwf_atma( _
+                 ByVal Q_m3Day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal Pwf_atma As Double, _
+        Optional ByVal Pcas_atma As Double = -1, _
+        Optional ByVal wellStr As String = WELL_DEFAULT, _
+        Optional ByVal PVTstr As String = PVT_DEFAULT, _
+        Optional ByVal ESPStr As String = ESP_DEFAULT, _
+        Optional ByVal HydrCorr As H_CORRELATION = 0, _
+        Optional ByVal Ksep_fr As Double = 0, _
+        Optional ByVal Kdegr_d As Double = 0, _
+        Optional ByVal param_num As Integer = 0 _
+                                    )
+' исходные параметры
+' Q_m3Day    - дебит жидкости, на поверхности
+' fw_perc    - обводненность (объемная на поверхности)
+' Pwf_atma - забойное давление
+' ----------- опциональные параметры
+' Pcas_atma - затрубное давление
+'     если не задано динамический уровень не рассчитывается
+' wellStr  - закодированные параметры конструкции скважины
+' PVTstr - закодированные параметры флюидов
+' ESPStr - закодированные параметры УЭЦН
+' HydrCorr      - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Ksep_fr - коэффициент сепарации.
+'           если задан - то используется вместо расчетного
+'           явное задание коэффициента серации ускоряет расчет
+' Kdegr_d - коэффициент деградации УЭЦН
+' param_num - параметры для вывода в качестве результата
+'             если не задан выводятся все в виде массива
+' ----------- результаты расчета
+' массив параметры работы системы "пласт - скважина - УЭЦН"
+'description_end
     
-    ar = Well_out_arr(well, 0)
-    Well_calc = Array(ar(0)(param_num), ar(1)(param_num))
-    If param_num > 0 Then
-        Well_calc = Array(ar(0)(param_num), ar(1)(param_num))
-    Else
-        Well_calc = ar
-    End If
+    Dim well As CWellESP
+    ' read all data to well object
+    Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
+                             wellStr, PVTstr, ESPStr, HydrCorr, Ksep_fr, Kdegr_d)
+    ' call calc method
+    Call well.calc_Plin_Pwf_atma(Pwf_atma)
+    ' return results
+    Well_Plin_Pwf_atma = Well_out_arr(well, param_num)
+    
 End Function
-Public Function Well_Pwf_Plin_atma(Plin_atma, Q_m3Day, fw_perc, _
-                      Optional ByVal Pcas_atma As Double = 10, _
-                      Optional wellStr As String = WELL_DEFAULT, _
-                      Optional PVTstr As String = PVT_DEFAULT, _
-                      Optional ESPStr As String = ESP_DEFAULT, _
-                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                      Optional ByVal Ksep_fr As Double = -1, _
-                      Optional ByVal Psep_atma As Double = 40, _
-                      Optional ByVal Tsep_C As Double = 40, _
-                      Optional ByVal Kdegr_d As Double = 0, _
-                      Optional ByVal param_num As Integer = 0)
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета забойного давления по устьевому для скважины
+' расчет сверху-вниз, считает быстро за счет угадывания сепарации
+'                     температура только линейная или по градиенту
+Public Function Well_Pwf_Plin_atma( _
+                 ByVal Q_m3Day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal Plin_atma As Double, _
+        Optional ByVal Pcas_atma As Double = -1, _
+        Optional ByVal wellStr As String = WELL_DEFAULT, _
+        Optional ByVal PVTstr As String = PVT_DEFAULT, _
+        Optional ByVal ESPStr As String = ESP_DEFAULT, _
+        Optional ByVal HydrCorr As H_CORRELATION = 0, _
+        Optional ByVal Ksep_fr As Double = -1, _
+        Optional ByVal Psep_atma As Double = 40, _
+        Optional ByVal Tsep_C As Double = 40, _
+        Optional ByVal Kdegr_d As Double = 0, _
+        Optional ByVal param_num As Integer = 0)
 ' функция расчета забойного давления скважины по линейному
 ' на основе устьевых параметров работы скважины
+' исходные параметры
+' Q_m3Day    - дебит жидкости, на поверхности
+' fw_perc    - обводненность (объемная на поверхности)
+' Plin_atma - линейное (устьевое) давление
+' ----------- опциональные параметры
+' Pcas_atma - затрубное давление
+'     если не задано динамический уровень не рассчитывается
+' wellStr  - закодированные параметры конструкции скважины
+' PVTstr - закодированные параметры флюидов
+' ESPStr - закодированные параметры УЭЦН
+' HydrCorr      - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Ksep_fr - коэффициент сепарации.
+'           если задан - то используется вместо расчетного
+'           явное задание коэффициента серации ускоряет расчет
+' Psep_atma - давление сепарации
+' Tsep_C - температура сепарации
+'           при расчете сверху вниз неизвестны параметры сепарации
+'           если задать их явно (угадать)
+'           тогда расчет упрощается и ускоряется
+' Kdegr_d - коэффициент деградации УЭЦН
+' param_num - параметры для вывода в качестве результата
+'             если не задан выводятся все в виде массива
+' ----------- результаты расчета
+' массив параметры работы системы "пласт - скважина - УЭЦН"
+'description_end
     Dim well As CWellESP
     Dim ar
+    ' read all data to well object
     Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
-                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
+                             wellStr, PVTstr, ESPStr, HydrCorr, Ksep_fr, Kdegr_d)
     ' при расчете сверху вниз задаем какие то значения сепарации наугад
     Call well.SetKseptotal_d(fullyManual, Ksep_fr, 0, Psep_atma, Tsep_C)
     well.isCalcCasing = True
-    Call well.Calc_Pwf_Plin_atma(Plin_atma, well.Tbh_C, fast:=True)
     ' проведем расчет
+    Call well.calc_Pwf_Plin_atma(Plin_atma, well.Tbh_C, fast:=True)
     ' в качестве результата выведем ряд расчитанных значений давления
-    ar = Well_out_arr(well, 1)
-    If param_num > 0 Then
-        Well_Pwf_Plin_atma = Array(ar(0)(param_num), ar(1)(param_num))
-    Else
-        Well_Pwf_Plin_atma = ar
-    End If
+    Well_Pwf_Plin_atma = Well_out_arr(well, param_num)
 End Function
-Public Function Well_calcKdegr_fr(ByVal Pwf_atma As Double, _
-                      ByVal Pbuf_atma As Double, _
-                      ByVal Plin_atma As Double, _
-                      ByVal Q_m3Day As Double, _
-                      ByVal fw_perc As Double, _
-                      Optional ByVal Pcas_atma As Double = 10, _
-                      Optional wellStr As String = WELL_DEFAULT, _
-                      Optional PVTstr As String = PVT_DEFAULT, _
-                      Optional ESPStr As String = ESP_DEFAULT, _
-                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                      Optional ByVal Ksep_fr As Double = -1, _
-                      Optional ByVal Psep_atma As Double = 40, _
-                      Optional ByVal Tsep_C As Double = 40, _
-                      Optional ByVal Kdegr_d As Double = 0, _
-                      Optional ByVal param_num As Integer = 0)
-' функция коэфициента деградации УЭЦН по параметрам скважины
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция адаптации модели скважины по данным эксплуатации
+' подбирает коэффициента деградации УЭЦН и штуцера
+' по замера на поверхности и на забое/приеме насоса
+Public Function Well_calcKdegr_fr( _
+                     ByVal Q_m3Day As Double, _
+                     ByVal fw_perc As Double, _
+                     ByVal Pdown_atma As Double, _
+                     ByVal Pbuf_atma As Double, _
+            Optional Pdown_at_intake As Boolean = False, _
+            Optional ByVal Plin_atma As Double = -1, _
+            Optional ByVal Pcas_atma As Double = -1, _
+            Optional ByVal wellStr As String = WELL_DEFAULT, _
+            Optional ByVal PVTstr As String = PVT_DEFAULT, _
+            Optional ByVal ESPStr As String = ESP_DEFAULT, _
+            Optional ByVal HydrCorr As H_CORRELATION = 0, _
+            Optional ByVal Ksep_fr As Double = -1, _
+            Optional ByVal Kdegr_d As Double = 0, _
+            Optional ByVal param_num As Integer = 0)
+' исходные параметры
+' Q_m3Day    - дебит жидкости, на поверхности
+' fw_perc    - обводненность (объемная на поверхности)
+' Pdown_atma - давление ниже насоса (внизу) для расчета
+'     либо забойное давление (по умолчанию)
+'     либо давление на приеме
+'     определяется опциональным параметром Pdown_at_intake
+' Pbuf_atma  - буферное давление
+' ----------- опциональные параметры
+' Pdown_at_intake - флаг определяет точку расчета давления
+'                   ниже насоса. По умолчанию забойное
+' Plin_atma - линейное давление
+'             если не задано штуцер не учитывается
+' Pcas_atma - затрубное давление
+'     если не задано динамический уровень не рассчитывается
+' wellStr  - закодированные параметры конструкции скважины
+' PVTstr - закодированные параметры флюидов
+' ESPStr - закодированные параметры УЭЦН
+' HydrCorr      - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Ksep_fr - коэффициент сепарации.
+'           если задан - то используется вместо расчетного
+'           явное задание коэффициента серации ускоряет расчет
+' Kdegr_d - коэффициент деградации УЭЦН
+' param_num - параметры для вывода в качестве результата
+'             если не задан выводятся все в виде массива
+' ----------- результаты расчета
+' массив параметры работы системы "пласт - скважина - УЭЦН"
+'description_end
+    
     Dim well As CWellESP
+    Dim Pwf_temp_atma As Double
     Dim ar
+    ' read all data to well object
     Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
-                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
-'    Set well.Pbuf_atma = Pbuf_atma
-    Call well.Calc_Well(Plin_atma, Pbuf_atma, Pwf_atma, Pcas_atma)
+                             wellStr, PVTstr, ESPStr, HydrCorr, Ksep_fr, Kdegr_d)
+    ' calc BHP if needed from intake pressure
+    If Pdown_at_intake Then
+        Pwf_temp_atma = well.calc_Pwf_Pintake_atma(Pdown_atma)
+    Else
+        Pwf_temp_atma = Pdown_atma
+    End If
     ' проведем расчет
+    Call well.calc_Well(Plin_atma, Pbuf_atma, Pwf_temp_atma, Pcas_atma)
     ' в качестве результата выведем ряд расчитанных значений давления
-    ar = Well_out_arr(well, 1)
-    If param_num > 0 Then
-        Well_calcKdegr_fr = Array(ar(0)(param_num), ar(1)(param_num))
-    Else
-        Well_calcKdegr_fr = ar
-    End If
+    Well_calcKdegr_fr = Well_out_arr(well, param_num)
+    
 End Function
-Public Function Well_Pwf_Hdyn_atma(Pwf_atma, Q_m3Day, fw_perc, _
-                      Optional ByVal Pcas_atma As Double = 10, _
-                      Optional ByVal Hdyn_m As Double = 0, _
-                      Optional wellStr As String = WELL_DEFAULT, _
-                      Optional PVTstr As String = PVT_DEFAULT, _
-                      Optional ESPStr As String = ESP_DEFAULT, _
-                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                      Optional ByVal Ksep_fr As Double = 0, _
-                      Optional ByVal Kdegr_d As Double = 0, _
-                      Optional ByVal param_num As Integer = 0)
-' функция расчета прозвольного параметра скважины по забойному давлению
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета забойного давления скважины по динамическому уровню
+Public Function Well_Pwf_Hdyn_atma( _
+                     ByVal Q_m3Day As Double, _
+                     ByVal fw_perc As Double, _
+                     ByVal Pcas_atma As Double, _
+                     ByVal Hdyn_m As Double, _
+            Optional ByVal wellStr As String = WELL_DEFAULT, _
+            Optional ByVal PVTstr As String = PVT_DEFAULT, _
+            Optional ByVal ESPStr As String = ESP_DEFAULT, _
+            Optional ByVal HydrCorr As H_CORRELATION = 0, _
+            Optional ByVal Ksep_fr As Double = 0, _
+            Optional ByVal Kdegr_d As Double = 0, _
+            Optional ByVal param_num As Integer = 0)
+' исходные параметры
+' Q_m3Day   - дебит жидкости, на поверхности
+' fw_perc   - обводненность (объемная на поверхности)
+' Pcas_atma - затрубное давление
+' Hdyn_m    - динамический уровень (при данном затрубном)
+' ----------- опциональные параметры
+' wellStr   - закодированные параметры конструкции скважины
+' PVTstr    - закодированные параметры флюидов
+' ESPStr    - закодированные параметры УЭЦН
+' HydrCorr      - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Ksep_fr   - коэффициент сепарации.
+'           если задан - то используется вместо расчетного
+'           явное задание коэффициента серации ускоряет расчет
+' Kdegr_d   - коэффициент деградации УЭЦН
+' param_num - параметры для вывода в качестве результата
+'             если не задан выводятся все в виде массива
+' ----------- результаты расчета
+' массив параметры работы системы "пласт - скважина - УЭЦН"
+'description_end
+    
     Dim well As CWellESP
     Set well = well_InitData(Q_m3Day, fw_perc, Pcas_atma, _
-                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
-    Call well.Calc_Pwf_PanHd_atma(Pcas_atma, Hdyn_m, well.Tbh_C)          ' проведем расчет
+                             wellStr, PVTstr, ESPStr, HydrCorr, Ksep_fr, Kdegr_d)
+    Call well.calc_Pwf_PanHd_atma(Pcas_atma, Hdyn_m, well.Tbh_C)          ' проведем расчет
     ' в качестве результата выведем ряд расчитанных значений давления
     Dim ar
-    ar = Well_out_arr(well, 0)
-    If param_num > 0 Then
-        Well_Pwf_Hdyn_atma = Array(ar(0)(param_num), ar(1)(param_num))
-    Else
-        Well_Pwf_Hdyn_atma = ar
-    End If
+    Well_Pwf_Hdyn_atma = Well_out_arr(well, param_num)
+    
 End Function
-Public Function Nodal_Qliq_scm3day(PI_m3dayatm, Plin_atma, fw_perc, _
-                      Optional ByVal Pres_atma = 250, _
-                      Optional ByVal Pcas_atma As Double = 10, _
-                      Optional wellStr As String = WELL_DEFAULT, _
-                      Optional PVTstr As String = PVT_DEFAULT, _
-                      Optional ESPStr As String = ESP_DEFAULT, _
-                      Optional ByVal HydrCorr As H_CORRELATION = 0, _
-                      Optional ByVal Ksep_fr As Double = 0, _
-                      Optional ByVal Kdegr_d As Double = 0, _
-                      Optional ByVal param_num As Integer = 0)
-' расчет узлового анализа по скважине
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета узлового анализа системы "пласт - скважина - УЭЦН"
+' по заданным параетрам пласта, скважины и УЭЦН
+' определяется рабочий дебит и забойное давление
+Public Function nodal_Qliq_scm3day( _
+             ByVal PI_sm3dayatm As Double, _
+             ByVal Plin_atma As Double, _
+             ByVal fw_perc As Double, _
+    Optional ByVal Pres_atma = 250, _
+    Optional ByVal Pcas_atma As Double = 10, _
+    Optional ByVal wellStr As String = WELL_DEFAULT, _
+    Optional ByVal PVTstr As String = PVT_DEFAULT, _
+    Optional ByVal ESPStr As String = ESP_DEFAULT, _
+    Optional ByVal HydrCorr As H_CORRELATION = 0, _
+    Optional ByVal Ksep_fr As Double = 0, _
+    Optional ByVal Kdegr_d As Double = 0, _
+    Optional ByVal param_num As Integer = 0)
+' исходные параметры
+' PI_sm3dayatm - коэффициент продуктивности пласта
+' Plin_atma - линейное давление
+' fw_perc   - обводненность (объемная на поверхности)
+' ----------- опциональные параметры
+' Pres_atma - пластовое давление
+' Pcas_atma - затрубное давление (для определения Ндин)
+' wellStr   - закодированные параметры конструкции скважины
+' PVTstr    - закодированные параметры флюидов
+' ESPStr    - закодированные параметры УЭЦН
+' HydrCorr  - гидравлическая корреляция, H_CORRELATION
+'                   BeggsBriilCor = 0
+'                   AnsariCor = 1
+'                   UnifiedCor = 2
+'                   Gray = 3
+'                   HagedornBrown = 4
+'                   SakharovMokhov = 5
+' Ksep_fr   - коэффициент сепарации.
+'           если задан - то используется вместо расчетного
+'           явное задание коэффициента серации ускоряет расчет
+' Kdegr_d   - коэффициент деградации УЭЦН
+' param_num - параметры для вывода в качестве результата
+'             если не задан выводятся все в виде массива
+' ----------- результаты расчета
+' массив параметры работы системы "пласт - скважина - УЭЦН"
+'description_end
     Dim PS As New CProdSys
     Dim well As CWellESP
-    Dim Res As New CReservoirVogel
-    
+    Dim res As New CReservoirVogel
+    Dim ar
+    ' init all data
     Set well = well_InitData(0, fw_perc, Pcas_atma, _
-                             wellStr, PVTstr, ESPStr, AnsariCor, Ksep_fr, Kdegr_d)
-    Res.InitProp Pres_atma, well.Fluid.Pb_atma, fw_perc
-    Res.PI_m3dayatm = PI_m3dayatm
+                             wellStr, PVTstr, ESPStr, HydrCorr, Ksep_fr, Kdegr_d)
+    res.InitProp Pres_atma, well.Fluid.Pb_atma, fw_perc
+    res.PI_sm3dayatm = PI_sm3dayatm
     
     Set PS.well = well
-    Set PS.Reservoir = Res
+    Set PS.Reservoir = res
     
-    PS.Nodal_Qliq_scm3day Plin_atma
+    Call PS.nodal_Qliq_scm3day(Plin_atma)
         
-    Call well.Calc_Plin_Pwf_atma(PS.Pwfsol_atma)          ' проведем расчет
+    Call well.calc_Plin_Pwf_atma(PS.Pwfsol_atma)          ' проведем расчет
     ' в качестве результата выведем ряд расчитанных значений давления
-    Dim ar
-    ar = Well_out_arr(well, 0)
-    If param_num > 0 Then
-        Nodal_Qliq_scm3day = Array(ar(0)(param_num), ar(1)(param_num))
-    Else
-        Nodal_Qliq_scm3day = Well_out_arr(well, 2)
-    End If
+    
+    nodal_Qliq_scm3day = Well_out_arr(well, param_num)
+    
 End Function

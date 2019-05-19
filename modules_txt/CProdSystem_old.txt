@@ -218,19 +218,19 @@ End Property
         ' 2. Расчет забойного давления
         If (Pint_atma >= 0 And Tint_C >= 0) Then
           ' 2.1 Если задано давление на приеме насоса Pin то оно используется для расчета забойного давления скважины
-          p_PwfSol_atma = p_well.Calc_Pwf_PIn_atma(Pint_atma, Tint_C)
+          p_PwfSol_atma = p_well.calc_Pwf_Pintake_atma(Pint_atma)
           
           RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_Qtest: Нашли забойное по давлению на приеме. Pint_atma =" & Pint_atma & " Pwf = " & p_PwfSol_atma)
         
         ElseIf (Hd_m >= 0 And Pan_atma >= 0 And Tbh_C >= 0) Then
           ' 2.2 Если давление на приеме не задано или равно нулю, но заданы динамический уровень Hdyn и затрубное давление Pcas - то они используются для расчета забойного давления
-          p_PwfSol_atma = p_well.Calc_Pwf_PanHd_atma(Pan_atma, Hd_m, Tbh_C).P_atma
+          p_PwfSol_atma = p_well.calc_Pwf_PanHd_atma(Pan_atma, Hd_m, Tbh_C).P_atma
           
           RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_Qtest: Нашли забойное по динамическому уровню. Hd_m =" & Hd_m & " Pwf = " & p_PwfSol_atma)
         
         ElseIf (Plin_atma >= 0 And Tbh_C >= 0) Then
           ' 2.3 Если задано только линейное давление - то оно используется для расчета забойного давления
-          p_PwfSol_atma = p_well.Calc_Pwf_Plin_atma(Plin_atma, Tbh_C)
+          p_PwfSol_atma = p_well.calc_Pwf_Plin_atma(Plin_atma, Tbh_C)
           
           RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_Qtest: Нашли забойное по линейному давлению. Plin_atma =" & Plin_atma & " Pwf = " & p_PwfSol_atma)
         
@@ -245,7 +245,7 @@ End Property
   End If
   ' 3. PI=PI(Qliq,Pwf) по найденным значениям забойного давления и дебита ищется коэффициент продуктивности скважины
  
-  p_PISol_m3dayatm = P_Reservoir.Calc_PI_m3DayAtm(Qliq_m3day, p_PwfSol_atma)
+  p_PISol_m3dayatm = P_Reservoir.Calc_PI_sm3dayatm(Qliq_m3day, p_PwfSol_atma)
   Calc_PI_testPoint = p_PISol_m3dayatm
           
   RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_Qtest: Определили продуктивность p_PISol_m3dayatm = " & p_PISol_m3dayatm)
@@ -259,7 +259,7 @@ End Property
   Dim numsol As Integer
   Dim qs
   On Error GoTo err1:
-   RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_PI: Запуск поиска решения задачи узлового анализа PI " & Format(P_Reservoir.PI_m3dayatm, "##0.00"))
+   RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_PI: Запуск поиска решения задачи узлового анализа PI " & Format(P_Reservoir.PI_sm3dayatm, "##0.00"))
    ' 1. Начало расчета. Анализируем входные данные, записываем их в свойства класса
   '''' p_well.Pline_atma = Pline_atma
   
@@ -269,7 +269,7 @@ End Property
    RaiseEvent ReportProgress("CProdSystem_old.Calc_Solution_PI: Построили индикаторную кривую ")
    
    ' 3. Рассчитываем кривую притока для пласта
-   Set c_VLP_curve = p_well.Build_VLPcurve(Pline_atma, Tbh_C, P_Reservoir.Calc_Q_m3Day(0))
+   Set c_VLP_curve = p_well.Build_VLPcurve(Pline_atma, Tbh_C, P_Reservoir.calc_Qliq_sm3Day(0))
    
    ' 4. Находим решение задачи узлового анализа
    ' 4.1 для нахождения решения строим системную кривую - вычитая из индикаторной кривой кривую оттока
@@ -351,8 +351,8 @@ err1:
     numPoints = 20
     MinPwf = 10 ' Well.PLine_atma
     MaxPwf = P_Reservoir.Pres_atma * 0.99  ' для максимальной границы расчета берем 0.99 от пластового чтобы не натыкаться на нулевой дебит
-    minQ = P_Reservoir.Calc_Q_m3Day(MaxPwf)  ' начнем строить графики с минимального дебита
-    maxQres = P_Reservoir.Calc_Q_m3Day(MinPwf)
+    minQ = P_Reservoir.calc_Qliq_sm3Day(MaxPwf)  ' начнем строить графики с минимального дебита
+    maxQres = P_Reservoir.calc_Qliq_sm3Day(MinPwf)
     maxQ = maxQres * 1.2   ' строить будем немного дальше конца пласта (некоторые графики)
     stepQ = (maxQ - minQ) / numPoints
     stepQ2 = stepQ
@@ -374,7 +374,7 @@ setQ:
         WellSelfFlow.Qliq_scm3day = Q
         WellDesign.Qliq_scm3day = Q
         
-        Call WellSelfFlow.Calc_Pwf_Plin_atma(Pbuf_atma, Tbh_C)   ' тут надо бы разобраться с линейным и буферным давлением
+        Call WellSelfFlow.calc_Pwf_Plin_atma(Pbuf_atma, Tbh_C)   ' тут надо бы разобраться с линейным и буферным давлением
         
         If Q < maxQres Then
             
@@ -420,7 +420,7 @@ End If
     p_Pwfdesign_atma = PwfTarg_atma
     Pwf = p_Pwfdesign_atma
     
-    Q = P_Reservoir.Calc_Q_m3Day(Pwf)
+    Q = P_Reservoir.calc_Qliq_sm3Day(Pwf)
     WellDesign.Qliq_scm3day = Q
     p_Qldesign_m3day = Q
         
@@ -466,7 +466,7 @@ End If
  
  End Sub
  
- Public Sub Calc_Analysis(ByVal Qliqtest_m3day As Double, ByVal wc_perc As Double, ByVal Plin_atma As Double, ByVal Pbuf_atma As Double, _
+ Public Sub Calc_Analysis(ByVal QliQtest_sm3day As Double, ByVal wc_perc As Double, ByVal Plin_atma As Double, ByVal Pbuf_atma As Double, _
                          Optional ByVal Pwf_atma As Double = -1, Optional ByVal Tbh_C As Double = -1, _
                          Optional Pint_atma As Double = -1, Optional Tint_C As Double = -1, Optional Hdyn_m As Double = -1, Optional Pan_atma As Double = -1, _
                          Optional CalcForecast As Boolean = False, Optional calcFast As Boolean = False)
@@ -489,9 +489,9 @@ End If
     
     If Not CalcForecast Then
     
-        Q = Qliqtest_m3day
+        Q = QliQtest_sm3day
         
-        Call Calc_PI_testPoint(Qliqtest_m3day, wc_perc, Fluid.Rp_m3m3, Pint_atma, Tint_C, Tbh_C, Hdyn_m, Pan_atma, Plin_atma, Pwf_atma)
+        Call Calc_PI_testPoint(QliQtest_sm3day, wc_perc, Fluid.Rp_m3m3, Pint_atma, Tint_C, Tbh_C, Hdyn_m, Pan_atma, Plin_atma, Pwf_atma)
         Pwf_atma = p_PwfSol_atma   ' если при поиске продуктивности пришлось вычислить забойное - то далее учитываем найденное решение
             
         RaiseEvent ReportProgress("CProdSystem_old: Запуск расчета скважины с заданными параметрами | Plin_atma = " & Format(Plin_atma, "#0.0") _
@@ -552,7 +552,7 @@ End If
 '    AddS stor, 2, 0, "Pwf atma               ", Me.well.Pwf_atma
 '    AddS stor, 3, 0, "Qliq                  ", well.Qliq_scm3day
 '    AddS stor, 4, 0, "Pres                  ", Reservoir.Pres_atma
-'    AddS stor, 5, 0, "PI                    ", Reservoir.PI_m3dayatm
+'    AddS stor, 5, 0, "PI                    ", Reservoir.PI_sm3dayatm
 '    AddS stor, 6, 0, "--                    ", ""
 '    AddS stor, 7, 0, "p_Pwfdesign_atma       ", p_Pwfdesign_atma
 '    AddS stor, 8, 0, "p_Qldesign_m3day      ", p_Qldesign_m3day
@@ -674,7 +674,7 @@ End If
     With p_well
         Call .Build_HdPwfcurve(Pan_atma, Tbh_C, Pwf_atma)
         RaiseEvent ReportProgress("CProdSystem_old: -------- Зависимость динамического уровня от забойного давления построена")
-        Call .Build_PwhPwfcurve(Tbh_C, , Pwf_atma)
+        Call .Build_PwhPwfcurve(, Pwf_atma)
         RaiseEvent ReportProgress("CProdSystem_old: -------- Зависимость устьевого давления от забойного давления построена")
     '    Call .Build_SeparCurve
         RaiseEvent ReportProgress("CProdSystem_old: -------- Зависимость сепарации от дебита построена")
@@ -722,10 +722,10 @@ End If
     Pwf = MaxPwf
     Curve("c_PlinQl_curve").ClearPoints
     Pwfstep = (MaxPwf - MinPwf) / NumIntervals
-    Q = Reservoir.Calc_Q_m3Day(Pwf)
+    Q = Reservoir.calc_Qliq_sm3Day(Pwf)
     Me.Qliq_scm3day = Q
     well.isCalcCasing = False
-    Pwh_atma = well.Calc_Plin_Pwf_atma(Pwf)
+    Pwh_atma = well.calc_Plin_Pwf_atma(Pwf)
     Pintake = well.Pint_atma          ' вытаскиваем значение из скважины
     Curve("c_PlinQl_curve").AddPoint Me.Qliq_scm3day, Pwh_atma
     Pwf_0 = Pwf
@@ -736,10 +736,10 @@ End If
          If Pintake = 1 And i > 0 Then Exit Do
          Pwf = Pwf - Pwfstep
          If Pwf < 1 Then Pwf = 1
-         Q = Reservoir.Calc_Q_m3Day(Pwf)                         ' нашли точку по индикаторной кривой
+         Q = Reservoir.calc_Qliq_sm3Day(Pwf)                         ' нашли точку по индикаторной кривой
          Me.Qliq_scm3day = Q                                       ' установили дебит для расчета
          well.isCalcCasing = False
-         Pwh_atma = well.Calc_Plin_Pwf_atma(Pwf)
+         Pwh_atma = well.calc_Plin_Pwf_atma(Pwf)
          If Pwh_atma > 1 Then FirstPointDone = True
          If Pwh_atma > Pwh_targ_atma And Pwf = 1 Then
          ' значит даже при атмосферном давлении устьевое будет выше необходимого
@@ -759,9 +759,9 @@ End If
              Do
                  j = j + 1
                  Pwf = (Pwf_0 + Pwf_1) / 2
-                 Me.Qliq_scm3day = Reservoir.Calc_Q_m3Day(Pwf)
+                 Me.Qliq_scm3day = Reservoir.calc_Qliq_sm3Day(Pwf)
                  well.isCalcCasing = False
-                 Pwh_atma = well.Calc_Plin_Pwf_atma(Pwf)
+                 Pwh_atma = well.calc_Plin_Pwf_atma(Pwf)
                  Curve("c_PlinQl_curve").AddPoint Me.Qliq_scm3day, Pwh_atma
                  
                  RaiseEvent ReportProgress("BuildNodalWHCurve_PI: Ищем пересечение. Точка i = " & i & " j = " & j & ":  Pwf = " & s(Pwf) & ":  Pwh_atma =" & s(Pwh_atma))
@@ -832,14 +832,14 @@ err1:
     numPoints = 10
     MinPwf = 1 ' Well.PLine_atma
     MaxPwf = P_Reservoir.Pres_atma * 0.99  ' для максимальной границы расчета берем 0.99 от пластового чтобы не натыкаться на нулевой дебит
-    minQ = P_Reservoir.Calc_Q_m3Day(MaxPwf)  ' начнем строить графики с минимального дебита
+    minQ = P_Reservoir.calc_Qliq_sm3Day(MaxPwf)  ' начнем строить графики с минимального дебита
     If minQ < 1 Then minQ = 1
     
-    maxQres = P_Reservoir.Calc_Q_m3Day(MinPwf)
+    maxQres = P_Reservoir.calc_Qliq_sm3Day(MinPwf)
      
     maxQ = maxQres * 1.2   ' строить будем немного дальше конца пласта (некоторые графики)
     If maxQ < 2 Then
-        addLogMsg "CProdSystem_old.BuildSysCurves: Не удается построить системные графики  - слишком низкая продуктивность = " & Format(Reservoir.PI_m3dayatm)
+        addLogMsg "CProdSystem_old.BuildSysCurves: Не удается построить системные графики  - слишком низкая продуктивность = " & Format(Reservoir.PI_sm3dayatm)
     End If
     
     stepQ = (maxQ - minQ) / numPoints
@@ -869,13 +869,13 @@ setQ:
         
         'Debug.Assert i < 17
         If Not calcFast Then
-            Call WellAnalyseTopDown.Calc_Pwf_Plin_atma(Plin_atma, Tbh_C)
-            Call WellSelfFlow.Calc_Pwf_Plin_atma(Plin_atma, Tbh_C)   ' тут надо бы разобраться с линейным и буферным давлением
+            Call WellAnalyseTopDown.calc_Pwf_Plin_atma(Plin_atma, Tbh_C)
+            Call WellSelfFlow.calc_Pwf_Plin_atma(Plin_atma, Tbh_C)   ' тут надо бы разобраться с линейным и буферным давлением
         End If
         
         If Q < maxQres Then
             well.isCalcCasing = False
-            Call WellAnalyse.Calc_Plin_Pwf_atma(Pwf)
+            Call WellAnalyse.calc_Plin_Pwf_atma(Pwf)
             
             WellAnalyseESPdP = WellAnalyse.Pdis_atma - WellAnalyse.Pint_atma  ' нашли перепад давления при текущем дебите и забойном по пласту
             If (Abs(WellAnalyseESPdP) > 1) Then             ' здесь 1 это допустимая погрешность расчета
@@ -939,7 +939,7 @@ Loop Until Q >= maxQ
      RaiseEvent ReportProgress("начинаем расчет параметров дизайна на текущее давление")
     Pwf = p_PwfSol_atma
     
-    Q = P_Reservoir.Calc_Q_m3Day(Pwf)
+    Q = P_Reservoir.calc_Qliq_sm3Day(Pwf)
     WellDesign.Qliq_scm3day = Q
         
   ''''  Call WellDesign.Calc_Well(Plin_atma, 0, Pwf, Tbh_C, CalcChoke:=False)
