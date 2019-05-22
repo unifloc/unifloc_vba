@@ -749,18 +749,24 @@ On Error GoTo err1:
        ESP.cfHead_fr = 0   ' возвращаем насос в исходное состояние
        Exit Function
    End If
-   ESP.cfHead_fr = FindDegradation(1 - ESP.cfHead_fr, PlinTemp_atma, Plin_atma, Pwf_atma, Tbh_C)
+   ESP.cfHead_fr = FindDegradation(Plin_atma, Pwf_atma)
    ' перерасчитываем распределения давления в скважине с учетом деградации
    isCalcCasing = True
    PlinTemp_atma = calc_Plin_Pwf_atma(Pwf_atma)
    ' после этого расчета определили все параметры по скважине которые нас могут интересовать
    Exit Function
 err1:
-    Dim errMsg As String
-    errMsg = "CWellESP.calc_Well: ошибка" & sDELIM & Err.Description
-    addLogMsg errMsg
-    RaiseEvent ReportProgress(errMsg)
-    Err.Raise kErrInitCalc, Err.Source, errMsg
+    If Err.Number = kErrDegradationNotFound Then
+        calc_Well = False     ' расчет провести не удалось
+        ESP.cfHead_fr = 0   ' возвращаем насос в исходное состояние
+        Exit Function
+    Else
+        Dim errMsg As String
+        errMsg = "CWellESP.calc_Well: ошибка" & sDELIM & Err.Description
+        addLogMsg errMsg
+        RaiseEvent ReportProgress(errMsg)
+        Err.Raise kErrInitCalc, Err.Source, errMsg
+    End If
  
 End Function
 ' =============================================================================
@@ -845,13 +851,12 @@ End Sub
  
  
  
-Private Function FindDegradation(ByVal kESP As Double, _
-                                 ByVal Plin As Double, _
-                                 Plin_targ As Double, _
-                                 Pwf_atma As Double, _
-                                 Tbh_C As Double)
+Private Function FindDegradation(ByVal Plin_targ As Double, _
+                                 ByVal Pwf_atma As Double)
 ' функция для поиска значения деградации УЭЦН
-' получает в качестве аргументов первое приближение для поиска и целевое значение линейного давления
+' Plin_targ  - целевое значение линейного давления
+' Pwf_atma   - забойное давление
+'
 ' kESP = 1 - degr  поправочный коэффициент на насос
    Dim kESP1 As Double ', degr2 As Double
    Dim Plin1 As Double ', Plin2 As Double
@@ -861,30 +866,44 @@ Private Function FindDegradation(ByVal kESP As Double, _
    Dim Plin_Down As Double
    Dim found_solution As Double
    Dim i As Integer
+    Dim errMsg As String
    
 On Error GoTo err1:
    i = 0
-   If Plin > Plin_targ Then
-       ' поправку на насос надо уменьшать
-       kESP1 = 0
-       Plin1 = 0
-       kESP_Up = kESP
-       Plin_Up = Plin
-       kESP_Down = kESP1
-       Plin_Down = -1 ' unknown flag
-   Else
-       ' поправку надо увеличивать
-       kESP1 = 10    '
-       Plin1 = 0
-       kESP_Up = kESP1
-       Plin_Up = -1 ' unknown flag
-       kESP_Down = kESP
-       Plin_Down = Plin
-   End If
+   ' first guess of cf cf=0
    Curve(str_PdisKdegr_curve).ClearPoints
+   isCalcCasing = False
+   kESP1 = 1
+   ' max cf
+   kESP_Up = 10
+   ESP.cfHead_fr = 1 - kESP_Up
+   Plin1 = calc_Plin_Pwf_atma(Pwf_atma)
+   Curve(str_PdisKdegr_curve).AddPoint Plin1, 1 - kESP_Up
+   ' check if high limit is ok
+   If Plin1 > Plin_targ Then
+       Plin_Up = Plin1
+   Else
+        errMsg = " CWellESP.FindDegradation: cf must be too high (more that 10 times) " & sDELIM & Err.Description
+        GoTo err2:
+        Exit Function
+   End If
+   
+   kESP_Down = -10
+   
+   ESP.cfHead_fr = 1 - kESP_Down
+   Plin1 = calc_Plin_Pwf_atma(Pwf_atma)
+   Curve(str_PdisKdegr_curve).AddPoint Plin1, 1 - kESP_Up
+   ' check if low limit is ok
+   If Plin1 < Plin_targ Then
+       Plin_Down = Plin1
+   Else
+       errMsg = " CWellESP.FindDegradation: can't find correction. flow without pump" & sDELIM & Err.Description
+       GoTo err2:
+       Exit Function
+   End If
+   
    Do
        ESP.cfHead_fr = 1 - kESP1
-       isCalcCasing = False
        Plin1 = calc_Plin_Pwf_atma(Pwf_atma)
        Curve(str_PdisKdegr_curve).AddPoint Plin1, 1 - kESP1
        ' посмотрим если вдруг нашли решение то запомним его и завершим расчет
@@ -898,7 +917,7 @@ On Error GoTo err1:
                ' если новое лин давление больше целевого - значит нашли нижнюю границу деградации - искомое значение должно быть больше
               kESP_Up = kESP1
               Plin_Up = Plin1
-              If (Plin_Down > 0) And (Plin_Down < Plin_targ) Then
+              If (Plin_Down >= 0) And (Plin_Down < Plin_targ) Then
                   kESP1 = (kESP_Up + kESP_Down) / 2 'kESP1 + (kESP_Up - kESP_Down) * (Plin_targ - Plin_Down) / (Plin_Up - Plin_Down) '
               Else
                   kESP1 = kESP1 - 1
@@ -918,11 +937,16 @@ On Error GoTo err1:
    
    Exit Function
 err1:
-    Dim errMsg As String
-    errMsg = "CWellESP.FindDegradation: ошибка" & sDELIM & Err.Description
+    errMsg = " CWellESP.FindDegradation: ошибка" & sDELIM & Err.Description
     addLogMsg errMsg
     RaiseEvent ReportProgress(errMsg)
-    Err.Raise kErrInitCalc, Err.Source, errMsg
+    Err.Raise kErrDegradationError, Err.Source, errMsg
+   Exit Function
+err2:
+    On Error GoTo 0
+    addLogMsg errMsg
+    RaiseEvent ReportProgress(errMsg)
+    Err.Raise kErrDegradationNotFound, Err.Source, errMsg
 End Function
  
 Private Sub CasingCalc()
@@ -1806,7 +1830,7 @@ Private Property Get IWell_cfBettaGrav() As Double
     IWell_cfBettaGrav = betta_grav
 End Property
 Private Property Get IWell_cfChoke() As Double
-    IWell_cfChoke = Choke.cfChoke
+    IWell_cfChoke = Choke.cfChoke_fr
 End Property
 Private Property Get IWell_cfESP() As Double
     IWell_cfESP = ESP.cfHead_fr
