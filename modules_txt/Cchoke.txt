@@ -90,11 +90,12 @@ End Property
 Public Property Get PdownCrit_atma()
     PdownCrit_atma = p_dcr
 End Property
-Public Function Calc_Choke_Calibration(ByVal Pin_atma As Double, ByVal Pout_atma As Double, ByVal Ql_m3day As Double) As Double
+Public Function Calc_Choke_Calibration(ByVal Pin_atma As Double, ByVal Pout_atma As Double, t_C As Double) As Double
     Dim qtest As Double
+    Tchoke_C = t_C
     If (Pin_atma > Pout_atma) And Dchoke_m > 0 Then
         qtest = Choke_liquid_rate(Pin_atma, Pout_atma, Tchoke_C)
-        p_kCalibration = Ql_m3day / qtest
+        p_kCalibration = Fluid.Qliq_scm3day / qtest
     Else
         p_kCalibration = 1
     End If
@@ -120,7 +121,7 @@ On Error GoTo ErrorHandler
 ErrorHandler:
     Calc_Choke_Pbuf = SetPT(0, 0)
     addLogMsg ("Cchoke.Calc_Choke_Pbuf: error. set Calc_Choke_Pbuf = 0 : Pline_atma  = " _
-                 & PTline.P_atma & "  TChoke_C = " & PTline.T_C)
+                 & PTline.P_atma & "  TChoke_C = " & PTline.t_C)
 End Function
 Public Function Calc_Choke_Plin(PTbuf As PTtype) As PTtype
     ' если расчет не возможен (решение не существует), возвращает 0, так как
@@ -143,12 +144,12 @@ On Error GoTo ErrorHandler
 ErrorHandler:
     Calc_Choke_Plin = SetPT(0, 0)
     addLogMsg ("Cchoke.Calc_Choke_Plin_atma: error. set Calc_Choke_Plin_atma = 0 : Pbuf_atma  = " _
-                 & PTbuf.P_atma & "  TChoke_C = " & PTbuf.T_C)
+                 & PTbuf.P_atma & "  TChoke_C = " & PTbuf.t_C)
 End Function
 Private Function wi_calc(P_r As Double, p_u As Double, t_u As Double, rho_gu As Double, f_o As Double, f_g As Double, f_w As Double, _
                            alpha As Double, Optional ByRef wi_deriv As Double, Optional ByRef n As Double)
     'Auxilary properties
-    Dim T_C As Double
+    Dim t_C As Double
     Dim p_av As Double
     Dim t_av As Double
     'PVT properties
@@ -172,11 +173,11 @@ Private Function wi_calc(P_r As Double, p_u As Double, t_u As Double, rho_gu As 
     'Calculate polytropic exponent
     n = (f_g * f * c_vg + f_o * c_vo + f_w * C_vw) / (f_g * c_vg + f_o * c_vo + f_w * C_vw)
     'Calculate choke throat temperature
-    T_C = (t_u + 273) * P_r ^ (1 - 1 / n) - 273
-    p_TchokeThroat_C = T_C
+    t_C = (t_u + 273) * P_r ^ (1 - 1 / n) - 273
+    p_TchokeThroat_C = t_C
     'Calculate average pressure and temperature
     p_av = (p_u + P_r * p_u) / 2
-    t_av = (t_u + T_C) / 2
+    t_av = (t_u + t_C) / 2
     p_TchokeAv_C = t_av
     Call Fluid.Calc_PVT(p_av, t_av)
     rs_m3m3 = min(Fluid.Rp_m3m3, rs_m3m3)
@@ -299,7 +300,7 @@ Public Function Calc_Choke_P(PT As PTtype, Optional Calc_p_down As Integer = 0) 
     Dim i As Integer
 On Error GoTo err1:
     p_sn = PT.P_atma
-    t_u = PT.T_C
+    t_u = PT.t_C
     counter = 0
     eps = Fluid.Qliq_scm3day * 0.001 'set precision equal to 0.1%
     If (Calc_p_down = 0) Then 'Calculate upstream pressure given downstream
@@ -379,7 +380,7 @@ On Error GoTo err1:
         End If
     End If
     Calc_Choke_P.P_atma = P_en
-    Calc_Choke_P.T_C = t_u    ' пока предполагаем для штуцера температура не меняется
+    Calc_Choke_P.t_C = t_u    ' пока предполагаем для штуцера температура не меняется
     
     Exit Function
 err1:
@@ -415,7 +416,7 @@ Public Function Choke_liquid_rate(ByVal p_u As Double, ByVal P_d As Double, ByVa
     Dim rho_ou As Double
     Dim rho_wu As Double
     Dim rho_gu As Double
-    Dim v_gu As Double
+    'Dim v_gu As Double
     Dim alpha As Double
     Dim p_co As Double
     Dim min_p_d As Double
@@ -430,29 +431,41 @@ Public Function Choke_liquid_rate(ByVal p_u As Double, ByVal P_d As Double, ByVa
     Dim eps As Double
     Dim p_ri As Double
     Dim v_si As Double
+    Dim p_dcr As Double
+    Dim p_c As Double
+    Dim p_ra As Double
+    Dim W As Double
     Const p_r_inc As Double = 0.001
 On Error GoTo err1:
+    ' calc areas
     Call init_params
+    ' calc PVT with upstream pressure and temperature
     Call Fluid.Calc_PVT(p_u, t_u)
     
-    r_su = Fluid.rs_m3m3
-    b_ou = Fluid.Bo_m3m3
-    Z_u = Fluid.z
-    b_gu = Fluid.Bg_m3m3
-    b_wu = Fluid.Bw_m3m3
+    ' get nesesary PVT props at specific conditions to internal variables
+    r_su = Fluid.rs_m3m3   ' gas solution ration
+    b_ou = Fluid.Bo_m3m3   ' oil FVF
+    Z_u = Fluid.z          ' z factor
+    b_gu = Fluid.Bg_m3m3   ' gas FVF
+    b_wu = Fluid.Bw_m3m3   ' water FVF
     
     'Calculate mass fractions of flowing phases
+    ' correction for gas solution ratio (obsolete?)
     r_su = min(Fluid.Rp_m3m3, r_su)
+    ' mass for 1 liquid rate at surface
     m_s = (1 - WCT_frac) * (Fluid.RhoOil_sckgm3 + Fluid.Rp_m3m3 * Fluid.rhoGas_sckgm3) + WCT_frac * Fluid.rhoWat_sckgm3
+    ' mass oil fraction at specific condition (acounts for gas in oil)
     f_o = (1 - WCT_frac) * (Fluid.RhoOil_sckgm3 + r_su * Fluid.rhoGas_sckgm3) / m_s
+    ' mass gas fraction
     f_g = (1 - WCT_frac) * (Fluid.Rp_m3m3 - r_su) * Fluid.rhoGas_sckgm3 / m_s
+    ' mass water fraction
     f_w = (WCT_frac) * Fluid.rhoWat_sckgm3 / m_s
     'Densities at upstream conditions
     'Gas specific volume
     rho_ou = (Fluid.RhoOil_sckgm3 + r_su * Fluid.rhoGas_sckgm3) / b_ou
     rho_wu = Fluid.rhoWat_sckgm3 / b_wu
     rho_gu = Fluid.rhoGas_sckgm3 / b_gu
-    v_gu = 1 / rho_gu
+    'v_gu = 1 / rho_gu
     alpha = rho_gu * (f_o / rho_ou + f_w / rho_wu)
     'Calculate trial output choke pressure
     p_co = p_u - (p_u - P_d) / (1 - (Dchoke_m / Ddown_m) ^ 1.85)
@@ -486,22 +499,24 @@ On Error GoTo err1:
         v_si = 5000
     End If
     
+    ' calc PVT with upstream pressure and temperature
+    Call Fluid.Calc_PVT(p_u, t_u)
+    
     p_Qlmax_m3day = k * w_i * f_o / Fluid.RhoOil_sckgm3 + k * w_i * f_w / Fluid.rhoWat_sckgm3
+    p_Qlmax_m3day = p_Qlmax_m3day * p_kCalibration
     
     'Calculate recovered downstream pressure at critical pressure ratio
-    Dim p_dcr As Double
     p_dcr = p_u * (p_ri * (1 - (Dchoke_m / Ddown_m) ^ 1.85) + (Dchoke_m / Ddown_m) ^ 1.85)
     'Compare trial pressure ratio with critical and assign actual pressure ratio
     'Auxilary properties
-    Dim p_c As Double
-    Dim p_ra As Double
     p_c = p_ri * p_u
     p_ra = max(p_ri, p_co / p_u)
     w_i = wi_calc(p_ra, p_u, t_u, rho_gu, f_o, f_g, f_w, alpha, wi_der1, n)
     'Calculate isentropic mass flow rate
-    Dim W As Double
     W = k * w_i * p_kCalibration
-    'Choke_liquid_rate = w * f_o / rho_osc / c_ql(Units) + w * f_w / rho_wsc / c_ql(Units)
+    ' calc PVT with upstream pressure and temperature
+    Call Fluid.Calc_PVT(p_u, t_u)
+    
     Choke_liquid_rate = W * f_o / Fluid.RhoOil_sckgm3 + W * f_w / Fluid.rhoWat_sckgm3
     'Asign mass flow rate
     q_m = W / 86400 '/ c_m(Units)
