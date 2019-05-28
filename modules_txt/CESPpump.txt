@@ -67,6 +67,13 @@ Private esp_HousingPressureLimit_atma As Double ' максимальное давление на корпу
 Private p_cfHead_fr As Double         ' деградаци€ характеристики ”Ё÷Ќ по напору
 Private p_cfRate_fr As Double         ' деградаци€ характеристики ”Ё÷Ќ по дебиту
 Private p_cfPower_fr As Double        ' деградаци€ по мощности (она же по  ѕƒ системы)
+Private p_GasDegrType As Integer          ' тип дл€ коррекции по газу
+                                        ' GasDegtType       - тип насоса по работе с газом
+                                        '      GasDegtType = 0 нет коррекции
+                                        '      GasDegtType = 1 стандартный Ё÷Ќ (предел 25%)
+                                        '      GasDegtType = 2 Ё÷Ќ с газостабилизирующим модулем (предел 50%)
+                                        '      GasDegtType = 3 Ё÷Ќ с осевым модулем (предел 75%)
+                                        '      GasDegtType = 4 Ё÷Ќ с модифицированным ступен€ми (предел 40%)
 'Private p_GasFraction As Double             ' дол€ газа на входе в насос
 Private p_HCorrVisc As Double               ' поправочный коэффициень дл€ напорной характеристики на в€зкость дл€ текущего дебита и текущего расчета
 Private p_QCorrVisc As Double               ' дл€ дебита
@@ -373,6 +380,14 @@ Public Property Get Reda_Special_Rate() As Double
 End Property
 Public Property Get Nomfreq_Hz() As Double
     Nomfreq_Hz = esp_freq_Hz
+End Property
+Public Property Get GasDegtType()
+    GasDegtType = p_GasDegrType
+End Property
+Public Property Let GasDegrType(val As Integer)
+    If val >= 0 And val < 5 Then
+        p_GasDegrType = val
+    End If
 End Property
 Public Function HeadKoefficients()
     HeadKoefficients = esp_HeadKoefficients
@@ -715,7 +730,7 @@ End Function
 'End Function
 Sub ESP_dPIntegration(ByVal P_atma, ByVal Tin_C, Optional Tdis_C As Double = 0, _
                            Optional calc_from_dis As Boolean = False, _
-                           Optional saveCurve As Boolean = False, Optional ESPtype As Integer = 0)
+                           Optional saveCurve As Boolean = False)
     ' ‘ункци€ расчете распределени€ давлени€ в ”Ё÷Ќ - расчет снизу вверх от входного давлени€ до выходного
     ' заодно считает и потребл€емую мощность и  ѕƒ установки
     ' p_atma         pressure at pump intake
@@ -807,7 +822,7 @@ On Error GoTo err1:
             End If
             Call .Calc_PVT(Pst_atma + dPav, Tst_C + dTav)  ' делаем поправку на давление и температуру
             If i = 0 Then
-                gascorr = GasCorrection_d(.GasFraction_d, ESPtype)
+                gascorr = GasCorrection_d(.GasFraction_d, p_GasDegrType)
             End If
             qmix = .Qmix_m3day
             qmix_degr = qmix * (1 + p_cfRate_fr)
@@ -914,9 +929,9 @@ Public Function Calc_ESP_NumStages(Qmix_m3day As Double, Head_m As Double) As In
 End Function
 ' метод расчета работы насоса
 Public Sub Calc_ESP(P_atma As Double, Tin_C As Double, Optional Tdis_C As Double = 0, _
-                        Optional calc_from_intake As Boolean = True, Optional ESPtype As Integer = 0)
+                        Optional calc_from_intake As Boolean = True)
     
-    Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake, , ESPtype)
+    Call ESP_dPIntegration(P_atma, Tin_C, Tdis_C, Not calc_from_intake)
 ' можно потом включить заглушку, может станет лучше в некоторых услови€х
 '    If Not calc_from_intake And Abs(Pint_estimation - p_Pint_atma) > 10 Then
 '        ' добавим вторую итерацию, чтобы улучшить приближение по деградации
@@ -1078,6 +1093,8 @@ Private Sub Class_Initialize()
     p_QCorrVisc = 1               ' дл€ дебита
     p_PowCorrVisc = 1             ' дл€ мощности
     p_EffCorrVisc = 1             ' дл€  ѕƒ
+    
+    p_GasDegrType = 0
 End Sub
 ' метод дл€ построени€ кривых характеристик ”Ё÷Ќ
 Public Sub BuildCurves(Optional ByVal Qliq As Double = -1)

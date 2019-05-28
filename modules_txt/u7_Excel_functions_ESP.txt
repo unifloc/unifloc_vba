@@ -240,10 +240,11 @@ On Error GoTo er1:
     ESP.freq_Hz = freq_Hz
     ESP.StageNum = NumStages
     ESP.cfHead_fr = Kdegr
+    ESP.GasDegrType = GasDegtType
     If CalcFromIntake Then
-        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
+        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake)
     Else
-        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake, GasDegtType)
+        Call ESP.Calc_ESP(P_atma, Tin_C, Tdis_C, CalcFromIntake)
     End If
     
     ESP_dP_atm = Array(ESP.Pdis_atma - ESP.Pint_atma, ESP.Tdis_C - ESP.Tint_C, ESP.PowerESP_Wt, ESP.PowerFluid_Wt, ESP.EffiencyESP_d)
@@ -259,54 +260,21 @@ Public Function ESP_system_calc( _
                  ByVal Qliq_sm3day As Double, _
                  ByVal fw_perc As Double, _
                  ByVal P_atma As Double, _
-        Optional ByVal NumStages As Integer = 1, _
-        Optional ByVal freq_Hz As Double = 50, _
-        Optional ByVal PumpID = 674, _
         Optional ByVal PVTstr As String, _
-        Optional ByVal Tin_C As Double = 50, _
-        Optional ByVal Tdis_C As Double = 50, _
-        Optional ByVal CalcFromIntake As Boolean = 1, _
-        Optional ByVal GasDegtType As Integer = 0, _
-        Optional ByVal Kdegr As Double = 0, _
-        Optional ByVal ESP_Power_fact_W As Double = 20, _
-        Optional ByVal ESP_U_V As Double = 1000, _
-        Optional ByVal ESP_Motor_power_nom_kW = 20, _
-        Optional ByVal ESP_cable_type As Integer = 1, _
-        Optional ByVal ESP_Hmes_m As Double = 1000)
+        Optional ByVal ESPstr As String, _
+        Optional ByVal CalcFromIntake As Boolean = 1 _
+        )
 ' Qliq_sm3day       - дебит жидкости на поверхности
 ' fw_perc           - обводненность
 ' P_atma            - давление дл€ которого делаетс€ расчет
 '                     либо давление на приеме насоса
 '                     либо давление на выкиде насоса
 '                     определ€етс€ параметром CalcFromIntake
-' NumStages         - количество ступеней
-' freq_Hz           - частота, √ц
-' PumpID            - идентификатор насоса
 ' PVTstr            - набор данных PVT
-' Tin_C             - температура на приеме насоа
-' Tdis_C            - температура на выкиде насоса.
-'                     если = 0 и CalcFromIntake = 1 то рассчитываетс€
+' ESPstr            - набор данных Ё÷Ќ
 ' CalcFromIntake    - режим расчета снизу вверх или сверху вниз
 '                 CalcFromIntake = True => P_atma давление на приеме
 '                 CalcFromIntake = False => P_atma давление на выкиде
-' GasDegtType       - тип насоса по работе с газом
-'      GasDegtType = 0 нет коррекции
-'      GasDegtType = 1 стандартный Ё÷Ќ (предел 25%)
-'      GasDegtType = 2 Ё÷Ќ с газостабилизирующим модулем (предел 50%)
-'      GasDegtType = 3 Ё÷Ќ с осевым модулем (предел 75%)
-'      GasDegtType = 4 Ё÷Ќ с модифицированным ступен€ми (предел 40%)
-'                 предел по доле газа на входе в насос после сепарации
-'                 на основе статьи SPE 117414 (с корректировкой)
-'                 поправка дополнительна€ к деградации (суммируетс€)
-' Kdegr             - коэффициент деградации напора
-' ESP_Power_fact_W  - фактическое потребление мощности Ё÷Ќ
-' ESP_U_V           - напр€жение на высокой стороне на трансформаторе
-' ESP_Motor_power_nom_kW - номинальна€ мощность двигател€
-' ESP_cable_type    - тип кабельной линии
-'                   тип 1: cable_R_Omkm = 1.18
-'                          cable_name = " ѕпјпЅѕ-120 3x16"
-'                          cable_Tmax_C = 120
-' ESP_Hmes_m        - длина кабельной линии
 ' результат   - массив значений включающий
 '                   перепад давлени€
 '                   перепад температур
@@ -317,28 +285,16 @@ Public Function ESP_system_calc( _
 'description_end
     Dim ESP As CESPpump
     Dim ESPsys As New CESPsystemSimple
-    If Not checkID_ESP(PumpID) Then
-        ESP_system_calc = 0
-        Exit Function
-    Else
-        Set ESP = getESP(PumpID)
-        ESP.freq_Hz = freq_Hz
-        ESP.StageNum = NumStages
-        
-        Set ESPsys.ESPpump = ESP
-    End If
-    ESPsys.Power_nom_W = ESP_Motor_power_nom_kW
-    ESPsys.U_V = ESP_U_V
-    ESPsys.Power_motor_fact_W = ESP_Power_fact_W
-    ESPsys.SetCable ESP_cable_type
-    
     Dim Fluid As CPVT
+    
+    Set ESPsys = ESP_Decode_string(ESPstr)
     Set Fluid = PVT_Decode_string(PVTstr)
+    
     Set ESPsys.Fluid = Fluid
     Set ESPsys.ESPpump.Fluid = Fluid
     Fluid.Qliq_scm3day = Qliq_sm3day
     Fluid.wc_perc = fw_perc
-    Call ESPsys.calc_ESPsys(P_atma, Tin_C, Tdis_C, CalcFromIntake)
+    Call ESPsys.calc_ESPsys(P_atma, CalcFromIntake)
     
     ' на выходе будет много данных
     ' надо подготовить их дл€ удобного отображени€

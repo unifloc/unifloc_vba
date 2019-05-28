@@ -227,6 +227,9 @@ er1:
     Err.Raise vbObjectError + 1, , "well_Decode_string. error reading well str"
     
 End Function
+'description_to_manual      - дл€ автогенерации описани€ - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функци€ кодировани€ значений Ё÷Ќ в строку,
+' которую можно потом использовать дл€ задани€ Ё÷Ќ в прикладных функци€х
 Public Function ESP_Encode_string( _
                     Optional ByVal esp_ID As Double = 1005, _
                     Optional ByVal HeadNom_m As Double = 2000, _
@@ -234,9 +237,42 @@ Public Function ESP_Encode_string( _
                     Optional ByVal ESP_U_V As Double = 1000, _
                     Optional ByVal MotorPowerNom_kW As Double = 30, _
                     Optional ByVal Tint_C As Double = 85, _
-                    Optional ByVal Tdis_C As Double = 25, _
-                    Optional ByVal KsepGS_fr As Double = 0)
-' функци€ кодировани€ значений PVT в строку, которую можно потом использовать
+                    Optional ByVal Tdis_C As Double = 85, _
+                    Optional ByVal KsepGS_fr As Double = 0, _
+                    Optional ByVal ESP_Power_fact_W As Double = 0, _
+                    Optional ByVal ESP_cable_type As Double = 0, _
+                    Optional ByVal ESP_Hmes_m As Double = 0, _
+                    Optional ByVal GasDegtType As Integer = 0, _
+                    Optional ByVal Kdegr As Double = 0 _
+                    )
+' PumpID            - идентификатор насоса
+' HeadNom_m         - номинальный напор системы ”Ё÷Ќ
+'                   - соответствует напора в записи Ё÷Ќ 50-2000
+' ESPfreq_Hz           - частота, √ц
+' ESP_U_V           - напр€жение на высокой стороне на трансформаторе
+' ESP_Motor_power_nom_kW - номинальна€ мощность двигател€
+' Tin_C             - температура на приеме насоа
+' Tdis_C            - температура на выкиде насоса.
+'                     если = 0 и CalcFromIntake = 1 то рассчитываетс€
+' KsepGS_fr         - коэффициент сепарации газосепаратора ”Ё÷Ќ
+' ESP_Power_fact_W  - фактическое потребление мощности Ё÷Ќ
+' ESP_cable_type    - тип кабельной линии
+'                   тип 1: cable_R_Omkm = 1.18
+'                          cable_name = " ѕпјпЅѕ-120 3x16"
+'                          cable_Tmax_C = 120
+' ESP_Hmes_m        - длина кабельной линии
+' GasDegtType       - тип насоса по работе с газом
+'      GasDegtType = 0 нет коррекции
+'      GasDegtType = 1 стандартный Ё÷Ќ (предел 25%)
+'      GasDegtType = 2 Ё÷Ќ с газостабилизирующим модулем (предел 50%)
+'      GasDegtType = 3 Ё÷Ќ с осевым модулем (предел 75%)
+'      GasDegtType = 4 Ё÷Ќ с модифицированным ступен€ми (предел 40%)
+'                 предел по доле газа на входе в насос после сепарации
+'                 на основе статьи SPE 117414 (с корректировкой)
+'                 поправка дополнительна€ к деградации (суммируетс€)
+' Kdegr             - коэффициент деградации напора
+' результат         - строка с параметрами ”Ё÷Ќ
+'description_end
     Dim str As String
     Dim frmt As String
     Dim frmt_int As String
@@ -251,13 +287,19 @@ Public Function ESP_Encode_string( _
     str = str & "Tint_C:" & Format(Tint_C, frmt) & ";"
     str = str & "Tdis_C:" & Format(Tdis_C, frmt) & ";"
     str = str & "KsepGS_fr:" & Format(KsepGS_fr, frmt) & ";"
+    str = str & "ESP_Power_fact_W:" & Format(ESP_Power_fact_W, frmt) & ";"
+    str = str & "ESP_cable_type:" & Format(ESP_cable_type, frmt_int) & ";"
+    str = str & "ESP_Hmes_m:" & Format(ESP_Hmes_m, frmt) & ";"
+    str = str & "GasDegtType:" & Format(GasDegtType, frmt_int) & ";"
+    str = str & "Kdegr:" & Format(Kdegr, frmt) & ";"
     ESP_Encode_string = str
     
 End Function
-Public Function ESP_Decode_string(ESPStr As String, Optional ByVal getStr As Boolean = False)
+Public Function ESP_Decode_string(ByVal ESPstr As String, _
+                         Optional ByVal getStr As Boolean = False)
 ' функци€ расшифровки значений PVT свойств
     Dim a
-    Dim s As String
+   ' Dim s As String
     Dim i As Integer
     Dim b
     Dim P_atma As Double
@@ -271,35 +313,42 @@ Public Function ESP_Decode_string(ESPStr As String, Optional ByVal getStr As Boo
     Dim KsepGS_fr As Double
     Dim ESPsys As CESPsystemSimple
     Dim pmp As CESPpump
+    Dim dict As Dictionary
+    
+    Dim ESP_Power_fact_W As Double
+    Dim ESP_cable_type As Double
+    Dim ESP_Hmes_m As Double
+    Dim GasDegtType As Integer
+    Dim Kdegr As Double
+    
 On Error GoTo er1:
 ' ловим все ошибки, все должно пройти идеально при дешифровке
-'
+On Error Resume Next
+    a = Split(ESPstr, ";")
+    For i = 0 To Len(a)
+        b = Split(a(i), ":")
+        Call dict.Add(Key:=b(0), item:=b(1))
+    Next i
+    esp_ID = dict.item("ESP_ID")
+    HeadNom_m = dict.item("HeadNom_m")
+    ESPfreq_Hz = dict.item("ESPfreq_Hz")
+    ESP_U_V = dict.item("ESP_U_V")
+    MotorPowerNom_kW = dict.item("MotorPowerNom_kW")
+    Tint_C = dict.item("Tint_C")
+    Tdis_C = dict.item("Tdis_C")
+    KsepGS_fr = dict.item("KsepGS_fr")
+    ESP_Power_fact_W = dict.item("ESP_Power_fact_W")
+    ESP_cable_type = dict.item("ESP_cable_type")
+    ESP_Hmes_m = dict.item("ESP_Hmes_m")
+    GasDegtType = dict.item("GasDegtType")
+    Kdegr = dict.item("Kdegr")
     
-    s = ESPStr '.Cells(1, 1).Value2
-On Error GoTo er2:
-    a = Split(s, ";")
-    i = 0
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "ESP_ID" And b(1) <> "" Then esp_ID = Cdbl_(b(1))
-    b = Split(a(i), ":"):    i = i + 1
-    If b(0) = "HeadNom_m" And b(1) <> "" Then HeadNom_m = Cdbl_(b(1))
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "ESPfreq_Hz" And b(1) <> "" Then ESPfreq_Hz = Cdbl_(b(1))
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "ESP_U_V" And b(1) <> "" Then ESP_U_V = Cdbl_(b(1))
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "MotorPowerNom_kW" And b(1) <> "" Then MotorPowerNom_kW = Cdbl_(b(1))
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "Tint_C" And b(1) <> "" Then Tint_C = Cdbl_(b(1))
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "Tdis_C" And b(1) <> "" Then Tdis_C = Cdbl_(b(1))
-    b = Split(a(i), ":"): i = i + 1
-    If b(0) = "KsepGS_fr" And b(1) <> "" Then KsepGS_fr = Cdbl_(b(1))
-    
-    On Error GoTo er1:
+On Error GoTo er1:
     If getStr Then
          ESP_Decode_string = ESP_Encode_string(esp_ID, HeadNom_m, ESPfreq_Hz, _
-                                                    ESP_U_V, MotorPowerNom_kW, Tint_C, Tdis_C)
+                                               ESP_U_V, MotorPowerNom_kW, Tint_C, Tdis_C, _
+                                               ESP_Power_fact_W, ESP_cable_type, _
+                                               ESP_Hmes_m, GasDegtType, Kdegr)
     Else
         If esp_ID > 0 Then
             If checkID_ESP(esp_ID) Then
@@ -313,6 +362,14 @@ On Error GoTo er2:
                 ESPsys.KSepGasSep_fr = KsepGS_fr
                 ESPsys.Tint_C = Tint_C
                 ESPsys.Tdis_C = Tdis_C
+                
+                ESPsys.Power_motor_fact_W = ESP_Power_fact_W
+                ESPsys.SetCable ESP_cable_type
+                ESPsys.HmesTop_m = ESP_Hmes_m
+                ESPsys.ESPpump.cfHead_fr = Kdegr
+                ESPsys.ESPpump.GasDegrType = GasDegtType
+                
+                
             End If
         End If
         Set ESP_Decode_string = ESPsys
@@ -320,7 +377,7 @@ On Error GoTo er2:
     Exit Function
 er1:
     On Error Resume Next
-    addLogMsg_debug "ESP_Decode_string. error reading well str:", ESPStr
+    addLogMsg_debug "ESP_Decode_string. error reading well str:", ESPstr
     Err.Raise vbObjectError + 1, , "esp_Decode_string. error reading esp str"
     Exit Function
 er2:
