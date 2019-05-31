@@ -2,10 +2,11 @@ Option Explicit
 Sub Set_Descriptions()
 On Error Resume Next
     Call Description_IPR
-    Call Description
+    Call Description_PVT
+    Call Description_MF
     Call Description_ESP_dP_atma
 End Sub
-Sub Description()
+Sub Description_PVT()
 ' функция определения описания функций и аргументо для интерфейса Excel
 ' достаточно вызвать один раз для того, чтобы поменять описание
 ' лучше вызывать функцию u7_descriptions.Задать_описания если надо поменять описания
@@ -153,14 +154,123 @@ Sub Description()
             Macro:="PVT_pb_atma", _
             Description:="Расчет давления насыщения, атма", _
             Category:="u7", _
-            ArgumentDescriptions:=a
+            ArgumentDescriptions:=Array(t_C, gamma_gas, gamma_oil, _
+              gamma_wat, rsb_m3m3, rp_m3m3, _
+              pb_atma, tres_C, bob_m3m3, muob_cP, PVTcorr, ksep_fr, pksep_atma, _
+              tksep_C, PVTstr)
      
     Application.MacroOptions _
             Macro:="PVT_Sal_ppm", _
             Description:="Расчет солености воды, ppm", _
             Category:="u7", _
             ArgumentDescriptions:=a
+End Sub
      
+Sub Description_MF()
+' функция определения описания функций и аргументо для интерфейса Excel
+' достаточно вызвать один раз для того, чтобы поменять описание
+' лучше вызывать функцию u7_descriptions.Задать_описания если надо поменять описания
+              
+    Dim P_atma, t_C, gamma_gas, gamma_oil, _
+               gamma_wat, rsb_m3m3, rp_m3m3, _
+              pb_atma, tres_C, bob_m3m3, muob_cP, PVTcorr, ksep_fr, pksep_atma, _
+              tksep_C, Qliq_m3day, wc_perc, PVTstr, dPipe_mm, dchoke_mm, Pup_atma, Pdown_atma, fw_perc, _
+                        Tchoke_C, Pin_atma, dIntake_mm, dcas_mm, Tin_C, P0_atma, P1_atma, Calc_from_P0
+    Dim a, MF1, MF2, MFsep, MFchoke, MFchoke2
+    
+    P_atma = "Давление расчета, атма"
+    t_C = "Температура расчета, С"
+    gamma_gas = "Относительная плотность газа, по воздуху (плотность воздуха 1.2217 кг/м3)"
+    gamma_oil = "Относительная плотность нефти, по воде"
+    gamma_wat = "Относительная плотность воды"
+    rsb_m3m3 = "Газосодержание в нефти при давлении насыщения (в пластовых условиях), м3/м3"
+    rp_m3m3 = "Газовый фактор добычной (на устье скважины), м3/м3. имеет приоритет перед газосодержанием. Если Rp < Rsb то используется Rp"
+    pb_atma = "Давление насыщения при заданной температуре tres_C, атма. Опциональный калибровочный параметр, если не задан или равен 0 то рассчитается по корреляции"
+    tres_C = "Температура пластовая (соответствует давлению насыщения), С"
+    bob_m3m3 = "Объемный коэффициент нефти при давлении насыщения, м3/м3. Опциональный калибровочный параметр, если не задан или равен 0 то рассчитается по корреляции"
+    muob_cP = "Вязкость нефти при давлении насыщения, сП. Опциональный калибровочный параметр, если не задан или равен 0 то рассчитается по корреляции"
+    PVTcorr = "Набор PVT корреляций. 0 - на основе Стендинга, 1 - на основе Валко Маккейна"
+    ksep_fr = "Значение коэффициента сепарации. Модифицирует свойства флюида учитывая сепарацию части свободного газа. Опциональный настроечный параметр."
+    pksep_atma = "Давление при котором произошла сепарация части свободного газа, атма"
+    tksep_C = "Температура при которой произошла сепарация части свободного газа, С"
+    PVTstr = "Закодированная строка с PVT параметрами. Должна быть закодирована функцией PVT_encode_string"
+    Qliq_m3day = "Дебит жидкости на поверхности, м3/сут"
+    wc_perc = "Обводненность объемная на поверхности, %"
+    dPipe_mm = "Диаметр трубы в которой установлен штуцер, мм"
+    dchoke_mm = "Диаметр штуцера, мм"
+    Pup_atma = "Давление вверх по потоку в штуцере. Давление на входе в штуцер, атма"
+    Pdown_atma = "Давление вниз по потоку в штуцере. Давление на выходе из штуцера, атма"
+    fw_perc = wc_perc
+    Tchoke_C = "Температура потока в штуцере (на входе в штуцер)"
+    Pin_atma = "Давление на приеме насоса. Давление сепарации"
+    dIntake_mm = "Диаметр приемной сетки насоса"
+    dcas_mm = "Диаметр эксплуатационной колонны"
+    Tin_C = "Температура на приеме насоса"
+    P0_atma = "Давление на входе в штуцер, аtma. Используется только при Calc_from_P0 = 1 "
+    P1_atma = "Давление на выходе из штуцера, atma. Используется только при Calc_from_P0 = 0"
+    Calc_from_P0 = "Направление расчета давления. " & _
+                   "  Если 1 то исходя из давления на входе P0_atma рассчитывается давления на выходе. " & _
+                   " При этом значение P1_atma игнорируется. И наоборот" ' & _
+'                   " Если равно 0 то исходя из давления на выходе P1_atma рассчитывается давления на входе. " & _
+'                   " При этом значение P0_atma игнорируется."
+    Dim Pcalc
+    Pcalc = "Давление на границе гидравлического элемента. Граничное условие для расчета"
+    Dim calc_along_flow
+    calc_along_flow = "Флаг направления расчета относительно потока. если = 1 то расчет по потоку, ищется линейное давление по известному буферному , если = 0 то расчет против потока "
+    Dim cfChoke
+    cfChoke = "поправочный коэффициент на штуцер"
+    
+    MFchoke = Array(Qliq_m3day, fw_perc, _
+                    dchoke_mm, _
+                    Pcalc, _
+                    calc_along_flow, _
+                    dPipe_mm, _
+                    Tchoke_C, _
+                    cfChoke, _
+                    PVTstr)
+    
+    Application.MacroOptions _
+            Macro:="MF_PChoke_atma", _
+            Description:="Расчет давления на границе штуцера при заданных условиях, атма", _
+            Category:="u7", _
+            ArgumentDescriptions:=MFchoke
+            
+    
+    Application.MacroOptions _
+            Macro:="MF_dPChoke_atm", _
+            Description:="Расчет перепада давления в штуцере штуцера при заданных условиях, атма", _
+            Category:="u7", _
+            ArgumentDescriptions:=MFchoke
+    
+    MFchoke2 = Array(Qliq_m3day, fw_perc, _
+                    dchoke_mm, _
+                    Pcalc, _
+                    calc_along_flow, _
+                    dPipe_mm, _
+                    Tchoke_C, _
+                    cfChoke, _
+                    PVTstr)
+    
+    Application.MacroOptions _
+            Macro:="MF_QliqChoke_sm3day", _
+            Description:="Расчет расхода флюида через штуцер при заданных термобарических условиях, м3/сут", _
+            Category:="u7", _
+            ArgumentDescriptions:=MFchoke2
+            
+    Application.MacroOptions _
+            Macro:="MF_SeparNat_d", _
+            Description:="Расчет естественной сепарации газа в потоке на приеме насоса при заданных термобарических условиях, м3/сут", _
+            Category:="u7", _
+            ArgumentDescriptions:=MFsep
+    
+    
+    
+              
+    MF1 = Array(Qliq_m3day, wc_perc, P_atma, t_C, gamma_gas, gamma_oil, _
+              gamma_wat, rsb_m3m3, rp_m3m3, _
+              pb_atma, tres_C, bob_m3m3, muob_cP, PVTcorr, ksep_fr, pksep_atma, _
+              tksep_C, PVTstr)
+              
     Application.MacroOptions _
             Macro:="MF_Mumix_cP", _
             Description:="Расчет вязкости газожидкостной смеси при заданных термобарических условиях, сП", _
@@ -216,44 +326,6 @@ Sub Description()
                         pksep_atma, _
                         tksep_C _
     )
-    
-    MFchoke = Array(dPipe_mm, dchoke_mm, _
-            P0_atma, P1_atma, _
-            Qliq_m3day, fw_perc, _
-            Tchoke_C, _
-            Calc_from_P0, _
-            gamma_gas, _
-            gamma_oil, _
-            gamma_wat, _
-            rsb_m3m3, _
-            rp_m3m3, _
-            pb_atma, _
-            tres_C, _
-            bob_m3m3, _
-            muob_cP, _
-            PVTcorr, _
-            ksep_fr, _
-            pksep_atma, _
-            tksep_C)
-    
-    
-    Application.MacroOptions _
-            Macro:="MF_QChoke_m3day", _
-            Description:="Расчет расхода флюида через штуцер при заданных термобарических условиях, м3/сут", _
-            Category:="u7", _
-            ArgumentDescriptions:=MF2
-            
-    Application.MacroOptions _
-            Macro:="MF_SeparNat_d", _
-            Description:="Расчет естественной сепарации газа в потоке на приеме насоса при заданных термобарических условиях, м3/сут", _
-            Category:="u7", _
-            ArgumentDescriptions:=MFsep
-    
-    Application.MacroOptions _
-            Macro:="MF_dPChoke_atm", _
-            Description:="Расчет перепада давление в штуцере при заданных термобарических условиях, м3/сут", _
-            Category:="u7", _
-            ArgumentDescriptions:=MFchoke
     
      
 End Sub

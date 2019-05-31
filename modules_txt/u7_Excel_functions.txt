@@ -1619,9 +1619,9 @@ On Error GoTo err1:
     ' initialize geometry
     Call pipe.InitPipe(d_mm / 1000, Hmes0_m, Hmes1_m, theta_deg, roughness_m)
     If Hmes0_m < Hmes1_m Then
-        pipe.Param = ParamCalcFromTop(HydrCorr, TempMeth:=StartEndTemp)
+        pipe.param = ParamCalcFromTop(HydrCorr, TempMeth:=StartEndTemp)
     Else
-        pipe.Param = ParamCalcFromBottom(HydrCorr, TempMeth:=StartEndTemp)
+        pipe.param = ParamCalcFromBottom(HydrCorr, TempMeth:=StartEndTemp)
     End If
     pipe.InitTlinear Tcalc_C, Tother_C
     pipe.betta_grav = betta_grav
@@ -1721,9 +1721,9 @@ On Error GoTo err1:
     ' initialize geometry
     Call pipe.InitPipe(d_mm / 1000, Hmes0_m, Hmes1_m, theta_deg, roughness_m)
     If Hmes0_m < Hmes1_m Then
-        pipe.Param = ParamCalcFromTop(HydrCorr, TempMeth:=StartEndTemp)
+        pipe.param = ParamCalcFromTop(HydrCorr, TempMeth:=StartEndTemp)
     Else
-        pipe.Param = ParamCalcFromBottom(HydrCorr, TempMeth:=StartEndTemp)
+        pipe.param = ParamCalcFromBottom(HydrCorr, TempMeth:=StartEndTemp)
     End If
     pipe.InitTlinear Tcalc_C, Tother_C
     pipe.betta_grav = betta_grav
@@ -1744,8 +1744,8 @@ Public Function MF_dPChoke_atm( _
             ByVal Qliq_sm3day As Double, _
             ByVal fw_perc As Double, _
             ByVal dchoke_mm As Double, _
-            Optional ByVal Pin_atma As Double = -1, _
-            Optional ByVal Pout_atma As Double = -1, _
+            Optional ByVal Pcalc_atma As Double = -1, _
+            Optional ByVal calc_along_flow As Boolean = True, _
             Optional ByVal dPipe_mm As Double = 70, _
             Optional ByVal Tchoke_C As Double = 20, _
             Optional ByVal cfChoke As Double = 0, _
@@ -1755,40 +1755,47 @@ Public Function MF_dPChoke_atm( _
 ' fw_perc       - обводненность
 ' dchoke_mm     - диаметр штуцера (эффективный)
 ' опциональные аргументы функции
-' Pin_atma      - давление на входе (высокой стороне)
-' Pout_atma     - давление на выходе (низкой стороне)
-'                 в расчете учитывается только одно значение,
+' Pcalc_atma    - давление с которого начинается расчет, атм
+'                 граничное значение для проведения расчета
 '                 либо давление на входе, либое на выходе
-'                 в зависимости от того, что задано
-'                 если заданы оба параметра, то
-'                 будет проведен расчет поправки для штуцера
-'                 (адаптация модели штуцера под замеры)
-' dPipe_mm      - диаметр трубы до и после штуцера
-' Tchoke_C      - температура, С.
-' cfChoke       - поправочный коэффициент на штуцер
+'calc_along_flow - флаг направления расчета относительно потока
+'     если = True то расчет по потоку
+'     ищется давление на выкиде по известному давлению на входе,
+'     ищется линейное давление по известному буферному
+'     если = False то расчет против потока
+'     ищется давление на входе по известному давлению на выходе,
+'     ищется буферное давление по известному линейному
+' dPipe_mm    - диаметр трубы до и после штуцера
+' Tchoke_C    - температура, С.
+' cfChoke     - поправочный коэффициент на штуцер
 '                 0 - отсутсвие поправки
 '                 dPchoke_real = (1-cfChoke)*dPchoke_model
-' PVTstr        - закодированная строка с параметрами PVT.
-'                 если задана - перекрывает другие значения
-' результат     - число - давления на штуцере на расчетной стороне.
+' PVTstr      - закодированная строка с параметрами PVT.
+'               если задана - перекрывает другие значения
+' результат   - число - давления на штуцере на расчетной стороне.
+'             двухмерный массив с расширенным наборов параметров
+'               и подписей к параметрам
 'description_end
 On Error GoTo err1:
     Dim PT
+    Dim Pin_atma As Double
+    Dim Pout_atma As Double
     
     PT = MF_PChoke_atma( _
             Qliq_sm3day, fw_perc, _
             dchoke_mm, _
-            Pin_atma, _
-            Pout_atma, _
+            Pcalc_atma, _
+            calc_along_flow, _
             dPipe_mm, _
             Tchoke_C, _
             cfChoke, _
             PVTstr)
+            
     Pout_atma = PT(0)(2)
     Pin_atma = PT(0)(1)
     cfChoke = PT(0)(4)
     
-    MF_dPChoke_atm = Array(Array(Pout_atma - Pin_atma, Tchoke_C, cfChoke), _
+    MF_dPChoke_atm = Array(Array(Pin_atma - Pout_atma, Tchoke_C, cfChoke), _
                            Array("dP_atm", "Tchoke_C", "cfChoke"))
     
     Exit Function
@@ -1802,8 +1809,8 @@ Public Function MF_PChoke_atma( _
             ByVal Qliq_sm3day As Double, _
             ByVal fw_perc As Double, _
             ByVal dchoke_mm As Double, _
-            Optional ByVal Pin_atma As Double = -1, _
-            Optional ByVal Pout_atma As Double = -1, _
+            Optional ByVal Pcalc_atma As Double = -1, _
+            Optional ByVal calc_along_flow As Boolean = True, _
             Optional ByVal dPipe_mm As Double = 70, _
             Optional ByVal Tchoke_C As Double = 20, _
             Optional ByVal cfChoke As Double = 0, _
@@ -1813,19 +1820,83 @@ Public Function MF_PChoke_atma( _
 ' fw_perc       - обводненность
 ' dchoke_mm     - диаметр штуцера (эффективный)
 ' опциональные аргументы функции
-' Pin_atma      - давление на входе (высокой стороне)
-' Pout_atma     - давление на выходе (низкой стороне)
-'                 в расчете учитывается только одно значение,
+' Pcalc_atma    - давление с которого начинается расчет, атм
+'                 граничное значение для проведения расчета
 '                 либо давление на входе, либое на выходе
-'                 в зависимости от того, что задано
-'                 если заданы оба параметра, то
-'                 будет проведен расчет поправки для штуцера
-'                 (адаптация модели штуцера под замеры)
+'calc_along_flow - флаг направления расчета относительно потока
+'     если = True то расчет по потоку
+'     ищется давление на выкиде по известному давлению на входе,
+'     ищется линейное давление по известному буферному
+'     если = False то расчет против потока
+'     ищется давление на входе по известному давлению на выходе,
+'     ищется буферное давление по известному линейному
 ' dPipe_mm      - диаметр трубы до и после штуцера
 ' Tchoke_C      - температура, С.
 ' cfChoke       - поправочный коэффициент на штуцер
 '                 0 - отсутсвие поправки
 '                 dPchoke_real = (1-cfChoke)*dPchoke_model
+' PVTstr        - закодированная строка с параметрами PVT.
+'                 если задана - перекрывает другие значения
+' результат     - число - давления на штуцере на расчетной стороне.
+'description_end
+On Error GoTo err1:
+    Dim Choke As New Cchoke
+    Dim PT As PTtype
+    Dim PVT As CPVT
+    Dim out, out_desc
+    Dim Pin_atma As Double
+    Dim Pout_atma As Double
+    
+    
+    Set PVT = PVT_decode_string(PVTstr)
+    Set Choke.Fluid = PVT
+    Choke.Fluid.Qliq_scm3day = Qliq_sm3day
+    Choke.Fluid.wc_perc = fw_perc
+    Choke.Ddown_m = dPipe_mm / 1000
+    Choke.Dup_m = dPipe_mm / 1000
+    Choke.Dchoke_m = dchoke_mm / 1000
+    Choke.cfChoke_fr = cfChoke
+    
+    If calc_along_flow Then
+        Pin_atma = Pcalc_atma
+        PT = Choke.Calc_Choke_Plin(SetPT(Pin_atma, Tchoke_C))
+        out = PT.P_atma
+        Pout_atma = out
+        out_desc = "Pout, atma"
+    Else
+        Pout_atma = Pcalc_atma
+        PT = Choke.Calc_Choke_Pbuf(SetPT(Pout_atma, Tchoke_C))
+        out = PT.P_atma
+        Pin_atma = out
+        out_desc = "Pin, atma"
+    End If
+    MF_PChoke_atma = Array(Array(out, Pin_atma, Pout_atma, Tchoke_C, Choke.cfChoke_fr), _
+                           Array(out_desc, "Pin_atma", "Pout_atma", "Tchoke_C", "cfChoke_fr"))  ' на выходе выдаем массив
+    Exit Function
+err1:
+    MF_PChoke_atma = "error"
+    addLogMsg "error in function : MF_PChoke_atm"
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет корректирующего фактора модели штуцера под замеры
+Public Function MF_cfChoke_atma( _
+            ByVal Qliq_sm3day As Double, _
+            ByVal fw_perc As Double, _
+            ByVal dchoke_mm As Double, _
+            Optional ByVal Pin_atma As Double = -1, _
+            Optional ByVal Pout_atma As Double = -1, _
+            Optional ByVal dPipe_mm As Double = 70, _
+            Optional ByVal Tchoke_C As Double = 20, _
+            Optional ByVal PVTstr As String = PVT_DEFAULT _
+            )
+' Qliq_sm3day    - дебит жидкости в пов условиях
+' fw_perc       - обводненность
+' dchoke_mm     - диаметр штуцера (эффективный)
+' опциональные аргументы функции
+' Pin_atma      - давление на входе (высокой стороне)
+' Pout_atma     - давление на выходе (низкой стороне)
+' dPipe_mm      - диаметр трубы до и после штуцера
+' Tchoke_C      - температура, С.
 ' PVTstr        - закодированная строка с параметрами PVT.
 '                 если задана - перекрывает другие значения
 ' результат     - число - давления на штуцере на расчетной стороне.
@@ -1843,32 +1914,22 @@ On Error GoTo err1:
     Choke.Ddown_m = dPipe_mm / 1000
     Choke.Dup_m = dPipe_mm / 1000
     Choke.Dchoke_m = dchoke_mm / 1000
-    Choke.cfChoke_fr = cfChoke
     
-    If Pin_atma > 1 And Pout_atma <= 1 Then
-        PT = Choke.Calc_Choke_Plin(SetPT(Pin_atma, Tchoke_C))
-        out = PT.P_atma
-        Pout_atma = out
-        out_desc = "Pout, atma"
-    ElseIf Pin_atma < 1 And Pout_atma > 1 Then
-        PT = Choke.Calc_Choke_Pbuf(SetPT(Pout_atma, Tchoke_C))
-        out = PT.P_atma
-        Pin_atma = out
-        out_desc = "Pin, atma"
-    ElseIf Pin_atma > Pout_atma And Pout_atma > 1 Then
+    If Pin_atma > Pout_atma And Pout_atma >= 1 Then
         Call Choke.Calc_Choke_Calibration(Pin_atma, Pout_atma, Tchoke_C)
         out = Choke.cfChoke_fr
         out_desc = "cor fact"
     End If
-    MF_PChoke_atma = Array(Array(out, Pin_atma, Pout_atma, Tchoke_C, Choke.cfChoke_fr), _
-                           Array(out_desc, "Pin_atma", "Pout_atma", "Tchoke_C", "cfChoke_fr"))  ' на выходе выдаем массив
+    MF_cfChoke_atma = Array(Array(out, Pin_atma, Pout_atma, Tchoke_C, Choke.cfChoke_fr), _
+                            Array(out_desc, "Pin_atma", "Pout_atma", "Tchoke_C", "cfChoke_fr"))  ' на выходе выдаем массив
     Exit Function
 err1:
-    MF_PChoke_atma = "error"
+    MF_cfChoke_atma = "error"
     addLogMsg "error in function : MF_PChoke_atm"
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
  ' функция расчета дебита жидкости через штуцер
+ ' при заданном входном и выходном давлениях
 Public Function MF_QliqChoke_sm3day( _
         ByVal fw_perc As Double, _
         ByVal dchoke_mm As Double, _
@@ -1877,7 +1938,7 @@ Public Function MF_QliqChoke_sm3day( _
         Optional ByVal dPipe_mm As Double = 70, _
         Optional ByVal Tchoke_C = 20, _
         Optional ByVal cfChoke As Double = 0, _
-        Optional ByVal PVTstr As String = "")
+        Optional ByVal PVTstr As String = PVT_DEFAULT)
 ' fw_perc      - обводненность
 ' dchoke_mm    - диаметр штуцера (эффективный)
 ' Pin_atma     - давление на входе (высокой стороне)
@@ -1885,12 +1946,17 @@ Public Function MF_QliqChoke_sm3day( _
 ' опциональные аргументы функции
 ' dPipe_mm      - диаметр трубы до и после штуцера
 ' Tchoke_C      - температура, С.
+' cfChoke       - поправочный коэффициент на штуцер
+'                 0 - отсутсвие поправки
+'                 dPchoke_real = (1-cfChoke)*dPchoke_model
 ' PVTstr        - закодированная строка с параметрами PVT.
 '                 если задана - перекрывает другие значения
 'description_end
 On Error GoTo err1:
     Dim Choke As New Cchoke
     Dim PVT As CPVT
+    Dim Qliq As Double
+    
     Set PVT = PVT_decode_string(PVTstr)
     Set Choke.Fluid = PVT
     Choke.Ddown_m = dPipe_mm / 1000
@@ -1898,7 +1964,10 @@ On Error GoTo err1:
     Choke.Dchoke_m = dchoke_mm / 1000
     Choke.Fluid.wc_perc = fw_perc
     Choke.cfChoke_fr = cfChoke
-    MF_QliqChoke_sm3day = Choke.Choke_liquid_rate(Pin_atma, Pout_atma, Tchoke_C)
+    Qliq = Choke.Choke_liquid_rate(Pin_atma, Pout_atma, Tchoke_C)
+    
+    MF_QliqChoke_sm3day = Array(Array(Qliq, Pin_atma, Pout_atma, Tchoke_C, cfChoke), _
+                           Array("Qliq", "Pin_atma", "Pout_atma", "Tchoke_C", "cfChoke"))
     Exit Function
 err1:
     addLogMsg "MF_QliqChoke_sm3day: Расчет дебита через штуцер завершился с ошибкой Pin_atma=" & Pin_atma & " Pout_atma =" & Pout_atma

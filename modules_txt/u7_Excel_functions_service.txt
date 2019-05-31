@@ -68,6 +68,7 @@ Public Function PVT_encode_string( _
     frmt = "#0.##0"
     frmt_int = "0"
     str = ""
+    ' безхитростно кодируем все параметры один за другим
     str = str & "gamma_gas:" & Format(gamma_gas, frmt) & ";"
     str = str & "gamma_oil:" & Format(gamma_oil, frmt) & ";"
     str = str & "gamma_wat:" & Format(gamma_wat, frmt) & ";"
@@ -82,11 +83,12 @@ Public Function PVT_encode_string( _
     str = str & "pksep_atma:" & Format(pksep_atma, frmt) & ";"
     str = str & "tksep_C:" & Format(tksep_C, frmt) & ";"
     PVT_encode_string = str
-    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расшифровки параметров PVT закодированных в строке
-Public Function PVT_decode_string(PVTstr As String, Optional ByVal getStr As Boolean = False)
+Public Function PVT_decode_string( _
+                    Optional ByVal PVTstr As String = PVT_DEFAULT, _
+                    Optional ByVal getStr As Boolean = False)
 ' PVTstr  - строка с параметрами PVT
 ' getStr  - флаг проверки работы функции
 '    по умолчанию False (0) - функция выдает объект CPVT
@@ -98,46 +100,69 @@ Public Function PVT_decode_string(PVTstr As String, Optional ByVal getStr As Boo
     Dim i As Integer
     Dim b
     Dim P_atma As Double
-    Dim t_C, gamma_gas As Double, gamma_oil As Double, _
-               gamma_wat As Double, rsb_m3m3 As Double, rp_m3m3 As Double, _
-              pb_atma As Double, tres_C As Double, bob_m3m3 As Double, muob_cP As Double _
-              , PVTcorr, ksep_fr As Double, pksep_atma As Double, tksep_C As Double
-    
+    Dim t_C
+    Dim gamma_gas As Double
+    Dim gamma_oil As Double
+    Dim gamma_wat As Double
+    Dim rsb_m3m3 As Double
+    Dim rp_m3m3 As Double
+    Dim pb_atma As Double
+    Dim tres_C As Double
+    Dim bob_m3m3 As Double
+    Dim muob_cP As Double
+    Dim PVTcorr As Integer
+    Dim ksep_fr As Double
+    Dim pksep_atma As Double
+    Dim tksep_C As Double
+    Dim key As String
+    Dim item As String
     Dim PVT As New CPVT
-    Dim dict As Dictionary
+    Dim dict As New Dictionary
+' при разбиении строки на части ошибки недопустимы
+On Error GoTo er1:
+    ' пытаемся разбить строку разделителями
+    a = Split(PVTstr, ";")
+    ' перебираем и сохраняем все параметры
+    For i = LBound(a) To UBound(a)
+        ' только для непустых разбиений
+        If a(i) <> "" Then
+           b = Split(a(i), ":")
+           'только там где есть значение
+           If UBound(b) = 1 Then
+               dict.item(b(0)) = b(1)
+           End If
+        End If
+    Next i
 ' при считывании параметров со строки пытаемся выполнить чтение всех параметров
 ' с использование словаря - включаем режим после ошибки двигаться далее
 On Error GoTo er2:
-    a = Split(PVTstr, ";")
-    For i = 0 To Len(a)
-        b = Split(a(i), ":")
-        Call dict.Add(Key:=b(0), item:=b(1))
-    Next i
-    gamma_oil = dict.item("gamma_oil")
-    gamma_wat = dict.item("gamma_wat")
-    gamma_gas = dict.item("gamma_gas")
-    rsb_m3m3 = dict.item("rsb_m3m3")
-    pb_atma = dict.item("pb_atma")
-    bob_m3m3 = dict.item("bob_m3m3")
-    muob_cP = dict.item("muob_cP")
-    PVTcorr = dict.item("PVTcorr")
-    ksep_fr = dict.item("ksep_fr")
-    pksep_atma = dict.item("pksep_atma")
-    tksep_C = dict.item("tksep_C")
+    ' при чтении параметров используем промежуточную переменную key
+    ' чтобы иметь возможность более информативно отреагировать на ошибку
+    key = "gamma_oil": gamma_oil = Cdbl_(dict.item(key))
+    key = "gamma_wat": gamma_wat = Cdbl_(dict.item(key))
+    key = "gamma_gas": gamma_gas = Cdbl_(dict.item(key))
+    key = "rsb_m3m3": rsb_m3m3 = Cdbl_(dict.item(key))
+    key = "rp_m3m3": rp_m3m3 = Cdbl_(dict.item(key))
+    ' для опциональных параметров делаем доп проверку
+    key = "pb_atma": item = dict.item(key): If item = "" Then item = "-1": pb_atma = Cdbl_(item)
+    key = "bob_m3m3": item = dict.item(key): If item = "" Then item = "-1": bob_m3m3 = Cdbl_(item)
+    key = "muob_cP": item = dict.item(key): If item = "" Then item = "-1": muob_cP = Cdbl_(item)
+    
+    key = "PVTcorr": item = dict.item(key): If item = "" Then item = "0": PVTcorr = Cdbl_(item)
+    key = "ksep_fr": item = dict.item(key): If item = "" Then item = "-1": ksep_fr = Cdbl_(item)
+    key = "pksep_atma": item = dict.item(key): If item = "" Then item = "-1": pksep_atma = Cdbl_(item)
+    key = "tksep_C": item = dict.item(key): If item = "" Then item = "-1": tksep_C = Cdbl_(item)
 ' ловим все ошибки, все должно пройти идеально при дешифровке
 On Error GoTo er1:
     ' калибровочный параметр проверяем специально и не даем сохраниться значению по умолчанию
     ' если он неправильно указан (дублируется инициализацией в конструкторе, но все же)
-    If pb_atma = "" Then pb_atma = -1
-    If bob_m3m3 = "" Then bob_m3m3 = -1
-    If muob_cP = "" Then muob_cP = -1
     PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, tres_C, rp_m3m3, muob_cP
     If ksep_fr > 0 And ksep_fr <= 1 And pksep_atma > 0 And tksep_C > 0 Then
         Call PVT.ModAfterSeparation(pksep_atma, tksep_C, ksep_fr, GasGoesIntoSolution)
     End If
     If getStr Then
         PVT_decode_string = PVT_encode_string(gamma_gas, gamma_oil, _
-               gamma_wat, rsb_m3m3, rp_m3m3, _
+              gamma_wat, rsb_m3m3, rp_m3m3, _
               pb_atma, tres_C, bob_m3m3, muob_cP, PVTcorr, ksep_fr, pksep_atma, _
               tksep_C)
     Else
@@ -145,12 +170,14 @@ On Error GoTo er1:
     End If
     Exit Function
 er1:
-    addLogMsg_debug "PVT_decode_string. error reading PVT str:", PVTstr
-    Err.Raise vbObjectError + 1, , "PVT_decode_string. error reading PVT str"
+    Dim errmsg As String
+    errmsg = "PVT_decode_string. error:" & Err.Description
+    addLogMsg_debug errmsg
+    Err.Raise kErrPVTinput, Err.Source, errmsg
     Exit Function
 er2:
-    On Error Resume Next
-    addLogMsg "PVT_decode_string: error readin PVT string param ", PVTstr
+ '   On Error Resume Next
+    addLogMsg "PVT_decode_string: error reading PVT key: " & key & ":" & Err.Description
     Resume Next
     
 End Function
@@ -231,27 +258,42 @@ Public Function well_decode_string(ByVal wellStr As String, _
     Dim twh_C As Double
     Dim well As CWellESP
     
+    Dim key As String
     Dim dict As Dictionary
     
-On Error GoTo er2:
-    a = Split(wellStr, ";")
-    For i = 0 To Len(a)
-        b = Split(a(i), ":")
-        Call dict.Add(Key:=b(0), item:=b(1))
-    Next i
-    hperf_m = dict.item("hperf_m")
-    hpump_m = dict.item("hpump_m")
-    udl_m = dict.item("udl_m")
-    dcas_mm = dict.item("dcas_mm")
-    dtub_mm = dict.item("dtub_mm")
-    dchoke_mm = dict.item("dchoke_mm")
-    roughness_m = dict.item("roughness_m")
-    tbh_C = dict.item("tbh_C")
-    twh_C = dict.item("twh_C")
     
+' при разбиении строки на части ошибки недопустимы
+On Error GoTo er1:
+    ' пытаемся разбить строку разделителями
+    a = Split(wellStr, ";")
+    ' перебираем и сохраняем все параметры
+    For i = LBound(a) To UBound(a)
+        ' только для непустых разбиений
+        If a(i) <> "" Then
+           b = Split(a(i), ":")
+           'только там где есть значение
+           If UBound(b) = 1 Then
+               dict.item(b(0)) = b(1)
+           End If
+        End If
+    Next i
+' при считывании параметров со строки пытаемся выполнить чтение всех параметров
+' с использование словаря - включаем режим после ошибки двигаться далее
+On Error GoTo er2:
+    ' при чтении параметров используем промежуточную переменную key
+    ' чтобы иметь возможность более информативно отреагировать на ошибку
+    key = "hperf_m": hperf_m = Cdbl_(dict.item(key))
+    key = "hpump_m": hpump_m = Cdbl_(dict.item(key))
+    key = "udl_m": udl_m = Cdbl_(dict.item(key))
+    key = "dcas_mm": dcas_mm = Cdbl_(dict.item(key))
+    key = "dtub_mm": dtub_mm = Cdbl_(dict.item(key))
+    key = "dchoke_mm": dchoke_mm = Cdbl_(dict.item(key))
+    key = "roughness_m": roughness_m = Cdbl_(dict.item(key))
+    key = "tbh_C": tbh_C = Cdbl_(dict.item(key))
+    key = "twh_C": twh_C = Cdbl_(dict.item(key))
     
 On Error GoTo er1:
-' ловим все ошибки, все должно пройти идеально при дешифровке
+' ловим все ошибки, все должно пройти идеально
         
     If getStr Then
          well_decode_string = well_encode_string(hperf_m, hpump_m, udl_m, _
@@ -269,12 +311,14 @@ On Error GoTo er1:
     End If
     Exit Function
 er1:
-    addLogMsg_debug "well_decode_string. error reading well str:", wellStr
-    Err.Raise vbObjectError + 1, , "well_decode_string. error reading well str"
+    Dim errmsg As String
+    errmsg = "well_decode_string. error:" & Err.Description
+    addLogMsg_debug errmsg
+    Err.Raise kErrPVTinput, Err.Source, errmsg
     Exit Function
 er2:
-    On Error Resume Next
-    addLogMsg "well_decode_string: error readin PVT string param ", wellStr
+ '   On Error Resume Next
+    addLogMsg "well_decode_string: error reading PVT key: " & key & ":" & Err.Description
     Resume Next
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
@@ -390,30 +434,44 @@ Public Function ESP_decode_string(ByVal ESPstr As String, _
     
     Dim PKV_work_min As Double
     Dim PKV_stop_min As Double
+    Dim key As String
     
+    
+' при разбиении строки на части ошибки недопустимы
+On Error GoTo er1:
+    ' пытаемся разбить строку разделителями
+    a = Split(ESPstr, ";")
+    ' перебираем и сохраняем все параметры
+    For i = LBound(a) To UBound(a)
+        ' только для непустых разбиений
+        If a(i) <> "" Then
+           b = Split(a(i), ":")
+           'только там где есть значение
+           If UBound(b) = 1 Then
+               dict.item(b(0)) = b(1)
+           End If
+        End If
+    Next i
 ' при считывании параметров со строки пытаемся выполнить чтение всех параметров
 ' с использование словаря - включаем режим после ошибки двигаться далее
 On Error GoTo er2:
-    a = Split(ESPstr, ";")
-    For i = 0 To Len(a)
-        b = Split(a(i), ":")
-        Call dict.Add(Key:=b(0), item:=b(1))
-    Next i
-    esp_ID = dict.item("ESP_ID")
-    HeadNom_m = dict.item("HeadNom_m")
-    ESPfreq_Hz = dict.item("ESPfreq_Hz")
-    ESP_U_V = dict.item("ESP_U_V")
-    MotorPowerNom_kW = dict.item("MotorPowerNom_kW")
-    Tintake_C = dict.item("Tintake_C")
-    Tdis_C = dict.item("Tdis_C")
-    KsepGS_fr = dict.item("KsepGS_fr")
-    ESP_energy_fact_Whday = dict.item("ESP_energy_fact_Whday")
-    ESP_cable_type = dict.item("ESP_cable_type")
-    ESP_Hmes_m = dict.item("ESP_Hmes_m")
-    GasDegtType = dict.item("GasDegtType")
-    Kdegr = dict.item("Kdegr")
-    PKV_work_min = dict.item("PKV_work_min")
-    PKV_stop_min = dict.item("PKV_stop_min")
+    ' при чтении параметров используем промежуточную переменную key
+    ' чтобы иметь возможность более информативно отреагировать на ошибку
+    key = "esp_ID": esp_ID = Cdbl_(dict.item(key))
+    key = "HeadNom_m": HeadNom_m = Cdbl_(dict.item(key))
+    key = "ESPfreq_Hz": ESPfreq_Hz = Cdbl_(dict.item(key))
+    key = "ESP_U_V": ESP_U_V = Cdbl_(dict.item(key))
+    key = "MotorPowerNom_kW": MotorPowerNom_kW = Cdbl_(dict.item(key))
+    key = "Tintake_C": Tintake_C = Cdbl_(dict.item(key))
+    key = "Tdis_C": Tdis_C = Cdbl_(dict.item(key))
+    key = "KsepGS_fr": KsepGS_fr = Cdbl_(dict.item(key))
+    key = "ESP_energy_fact_Whday": ESP_energy_fact_Whday = Cdbl_(dict.item(key))
+    key = "ESP_cable_type": ESP_cable_type = Cdbl_(dict.item(key))
+    key = "ESP_Hmes_m": ESP_Hmes_m = Cdbl_(dict.item(key))
+    key = "GasDegtType": GasDegtType = Cdbl_(dict.item(key))
+    key = "Kdegr": Kdegr = Cdbl_(dict.item(key))
+    key = "PKV_work_min": PKV_work_min = Cdbl_(dict.item(key))
+    key = "PKV_stop_min": PKV_stop_min = Cdbl_(dict.item(key))
 ' при создании объекта все должно пройти идеально
 ' переключаем режим реакции на ошибку
 On Error GoTo er1:
@@ -449,20 +507,21 @@ On Error GoTo er1:
     End If
     Exit Function
 er1:
-    On Error Resume Next
-    addLogMsg_debug "ESP_decode_string. error reading well str:", ESPstr
-    Err.Raise vbObjectError + 1, , "esp_decode_string. error reading esp str"
+    Dim errmsg As String
+    errmsg = "ESP_decode_string. error:" & Err.Description
+    addLogMsg_debug errmsg
+    Err.Raise kErrPVTinput, Err.Source, errmsg
     Exit Function
 er2:
-    On Error Resume Next
-    addLogMsg "ESP_decode_string: error readin ESP string param" & CStr(i) & ": "
+ '   On Error Resume Next
+    addLogMsg "well_decESP_decode_stringode_string: error reading PVT key: " & key & ":" & Err.Description
     Resume Next
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расшифровки параметров работы
 ' газлифтной скважины закодированных в строке
-Public Function WellGL_decode_string(well_GL_str As String, Optional ByVal getStr As Boolean = False)
+Public Function wellGL_decode_string(well_GL_str As String, Optional ByVal getStr As Boolean = False)
 ' well_GL_str  - строка с параметрами газлифтной скважины
 ' getStr  - флаг проверки работы функции
 '    по умолчанию False (0) - функция выдает объект CESPsystemSimple
@@ -486,24 +545,37 @@ Public Function WellGL_decode_string(well_GL_str As String, Optional ByVal getSt
     Dim GLV As Integer
     
     Dim dict As Dictionary
-    
-On Error GoTo er2:
+    Dim key As String
+' при разбиении строки на части ошибки недопустимы
+On Error GoTo er1:
+    ' пытаемся разбить строку разделителями
     a = Split(well_GL_str, ";")
-    For i = 0 To Len(a)
-        b = Split(a(i), ":")
-        
-        Call dict.Add(Key:=b(0), item:=b(1))
+    ' перебираем и сохраняем все параметры
+    For i = LBound(a) To UBound(a)
+        ' только для непустых разбиений
+        If a(i) <> "" Then
+           b = Split(a(i), ":")
+           'только там где есть значение
+           If UBound(b) = 1 Then
+               dict.item(b(0)) = b(1)
+           End If
+        End If
     Next i
-    hperf_m = dict.item("hperf_m")
-    htub_m = dict.item("htub_m")
-    udl_m = dict.item("udl_m")
-    dcas_mm = dict.item("dcas_mm")
-    dtub_mm = dict.item("dtub_mm")
-    dchoke_mm = dict.item("dchoke_mm")
-    roughness_m = dict.item("roughness_m")
-    tbh_C = dict.item("tbh_C")
-    twh_C = dict.item("twh_C")
-    GLV = dict.item("GLV") ' количество клапанов
+' при считывании параметров со строки пытаемся выполнить чтение всех параметров
+' с использование словаря - включаем режим после ошибки двигаться далее
+On Error GoTo er2:
+    ' при чтении параметров используем промежуточную переменную key
+    ' чтобы иметь возможность более информативно отреагировать на ошибку
+    key = "hperf_m": hperf_m = Cdbl_(dict.item(key))
+    key = "htub_m": htub_m = Cdbl_(dict.item(key))
+    key = "udl_m": udl_m = Cdbl_(dict.item(key))
+    key = "dcas_mm": dcas_mm = Cdbl_(dict.item(key))
+    key = "dtub_mm": dtub_mm = Cdbl_(dict.item(key))
+    key = "dchoke_mm": dchoke_mm = Cdbl_(dict.item(key))
+    key = "roughness_m": roughness_m = Cdbl_(dict.item(key))
+    key = "tbh_C": tbh_C = Cdbl_(dict.item(key))
+    key = "twh_C": twh_C = Cdbl_(dict.item(key))
+    key = "GLV": GLV = Cdbl_(dict.item(key)) ' количество клапанов
     
     Dim H_glv_m() As Double
     Dim d_glv_mm() As Double
@@ -513,9 +585,9 @@ On Error GoTo er2:
     ReDim p_glv_atma(1 To GLV)
     
     For i = 1 To GLV
-        H_glv_m(i) = dict.item("H_glv_m" & FormatInteger(i))
-        d_glv_mm(i) = dict.item("d_glv_mm" & FormatInteger(i))
-        p_glv_atma(i) = dict.item("p_glv_atma" & FormatInteger(i))
+            key = "H_glv_m" & FormatInteger(i): H_glv_m(i) = Cdbl_(dict.item(key))
+            key = "d_glv_mm" & FormatInteger(i): d_glv_mm(i) = Cdbl_(dict.item(key))
+            key = "p_glv_atma" & FormatInteger(i): p_glv_atma(i) = Cdbl_(dict.item(key))
     Next i
     
 On Error GoTo er1:
@@ -523,7 +595,7 @@ On Error GoTo er1:
     
     
     If getStr Then
-        WellGL_decode_string = WellGL_encode_string( _
+        wellGL_decode_string = wellGL_encode_string( _
                     hperf_m, _
                     htub_m, _
                     udl_m, _
@@ -542,20 +614,24 @@ On Error GoTo er1:
       '  Call well.InitWell(hperf_m, htub_m, udl_m, dcas_mm, dtub_mm, tbh_C, twh_C)
         well.Choke.Dchoke_m = dchoke_mm
         well.HFlowCorrelation = BeggsBriilCor
-        Set WellGL_decode_string = well
+        Set wellGL_decode_string = well
     End If
+    
     Exit Function
 er1:
-    WellGL_decode_string = "error"
+    Dim errmsg As String
+    errmsg = "wellGL_decode_string. error:" & Err.Description
+    addLogMsg_debug errmsg
+    Err.Raise kErrPVTinput, Err.Source, errmsg
     Exit Function
 er2:
-    On Error Resume Next
-    addLogMsg "WellGL_decode_string: error readin ESP string param", well_GL_str
+ '   On Error Resume Next
+    addLogMsg "wellGL_decode_string: error reading PVT key: " & key & ":" & Err.Description
     Resume Next
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы скважины с газлифтом
-Public Function WellGL_encode_string( _
+Public Function wellGL_encode_string( _
                     Optional ByVal hperf_m As Double = 2000, _
                     Optional ByVal htub_m As Double = 1800, _
                     Optional ByVal udl_m As Double = 0, _
@@ -623,7 +699,7 @@ Public Function WellGL_encode_string( _
         str = str & "GVL:0;error" & ";"
     End If
     
-    WellGL_encode_string = str
+    wellGL_encode_string = str
     
 End Function
 Private Function readRange(rr)
