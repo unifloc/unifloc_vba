@@ -851,6 +851,10 @@ On Error GoTo err1:
          p_Mug_cP = 0.0000000001
          p_fact = 1         'Set to default. b_rb should be specified by user!
          p_offs = 0
+         If Pb_calbr_MPa <= 0 Then
+            ' can not be estimated without calibration properties
+            Err.Raise kErrPVTinput, "CPVT.Calc_PVT", "PVT correlation = 2 without Pb input not allowed"
+         End If
          p_bi = Pb_calbr_MPa
          If P_MPa > (p_bi) Then 'undersaturated oil
             r_si = rsb_calbr_m3m3
@@ -859,7 +863,8 @@ On Error GoTo err1:
          End If
          'if bob_m3m3 is not specified by the user then
          'set bob_m3m3 so, that oil density, recalculated with Rs_m3m3 would be equal to dead oil density
-         If (Bo_calbr_m3m3 < 0) Then
+         If (Bo_calbr_m3m3 <= 0) Then
+            addLogMsg ("warning:CPVT.Calc_PVT, PVT correlation = 2 without Bob input")
             p_Bo_m3m3 = (1 + r_si * (p_gamma_g * const_rho_air) / (p_gamma_o * const_rho_ref))
          Else
             If P_MPa > (p_bi) Then 'undersaturated oil
@@ -868,9 +873,10 @@ On Error GoTo err1:
                 p_Bo_m3m3 = 1 + (Bo_calbr_m3m3 - 1) * ((P_MPa - const_convert_atma_MPa) / (p_bi - const_convert_atma_MPa))
             End If
          End If
-         If muo_calibr_cP > 0 Then
+         If muo_calibr_cP >= 0 Then
              p_Muo_cP = muo_calibr_cP
          Else
+            addLogMsg ("warning:CPVT.Calc_PVT, PVT correlation = 2 without Muob input")
             p_Muo_cP = 1
          End If
     End If
@@ -901,8 +907,10 @@ On Error GoTo err1:
 '    timePVTtotal = timePVTtotal + timeStamp
     Exit Sub
 err1:
-    addLogMsg ("CPVT.Calc_PVT: ошибка какая то")
-    Err.Raise Err.Number, Err.Source, Err.Description
+    Dim errmsg As String
+    errmsg = "Error:CPVT.Calc_PVT:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kErrPVTcalc, "CPVT.Calc_PVT", errmsg
 End Sub
 Private Sub calc_ST(ByVal p_atma As Double, ByVal t_C As Double)
 ' calculate surface tension according Baker Sverdloff correlation

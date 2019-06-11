@@ -1,0 +1,1352 @@
+''
+''  МОДУЛЬ РАСЧЕТА КОЭФФИЦИЕНТА СЕПАРАЦИИ
+''
+'**************************************************************************************************************************
+'' ДОСТУПНЫЕ ФУНКЦИИ
+' MY_SEPFACTOR  - Вычисление коэффициента сепрации в точке
+' MY_INAREA     - Определяет принадлежность точки к измеренной области
+' MY_GMIN       - Минимальные замеренные газосодержания для каждого из сепараторов
+' MY_GMAX       - Максимальные замеренные газосодержания для каждого из сепараторов
+' MY_QMIN       - Минимальные замеренные дебиты для каждого из сепараторов
+' MY_QMAX       - Максимальные замеренные дебиты для каждого из сепараторов
+' MY_FMIN       - Минимальные замеренные частоты для каждого из сепараторов
+' MY_FMAX       - Максимальные замеренные частоты для каждого из сепараторов
+'**************************************************************************************************************************
+'' ОБЪЯВЛЕНИЯ ДОСТУПНЫХ ФУНКЦИЙ
+' Public Function my_sepfactor(SEP_TYPE As Integer, G As Double, Q As Double, F As Double) As Double
+' Public Function my_inarea(SEP_TYPE As Integer, G As Double, Q As Double, F As Double, Optional PARAM = "GQF") As Boolean
+' Public Function my_gmin(SEP_TYPE As Integer) As Double
+' Public Function my_gmax(SEP_TYPE As Integer) As Double
+' Public Function my_qmin(SEP_TYPE As Integer) As Double
+' Public Function my_qmax(SEP_TYPE As Integer) As Double
+' Public Function my_fmin(SEP_TYPE As Integer) As Double
+' Public Function my_fmax(SEP_TYPE As Integer) As Double
+' Public Function my_theta(SEP_TYPE As Integer, NUM_PAR As Integer) As Double
+'**************************************************************************************************************************
+'' ПРИМЕЧАНИЕ К АРГУМЕНТАМ ДОСТУПНЫХ ФУНКЦИЙ
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+'   G       - входное газосодержание
+'
+'   Q       - дебит
+'
+'   F       - частота
+'
+'   PARAM   - параметры области проверки (default = "GQF")
+'
+'    "GQF"  - проверка по ГАЗУ, дебитУ, ЧАСТОТЕ
+'    "GQ"  - проверка по ГАЗУ, дебитУ
+'    "GF"  - проверка по ГАЗУ, ЧАСТОТЕ
+'    "QF"  - проверка по дебитУ, ЧАСТОТЕ
+'    "G"  - проверка по ГАЗУ
+'    "Q"  - проверка по дебитУ
+'    "F"  - проверка по ЧАСТОТЕ
+'
+'**************************************************************************************************************************
+Public Function my_sepfactor(SEP_TYPE As Integer, G As Double, Q As Double, F As Double) As Double
+'
+' MY_SEPFACTOR - Вычисление коэффициента сепрации в точке
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+'   G       - входное газосодержание
+'
+'   Q       - дебит
+'
+'   F       - частота
+'
+' Переменные для сшивок
+Dim mX  As Double
+Dim func, dfunc As Double
+Dim kA, kB, kC As Double
+Dim mX2, r As Double
+Dim mD As Double
+' Множитель (подобранная константа) для сшивки по дебиту в области максимума
+Dim mult As Double
+mult = 1.3
+'
+' ВАЖНО!!!
+' Далее: Проверка области идет только по ГАЗОСОДЕРЖАНИЮ и дебитУ
+'        Проверки области по ЧАСТОТЕ вообще нет
+'
+' Если точка лежит в замеренной области, используем аппроксимацию
+If (my_inarea(SEP_TYPE, G, Q, F, "GQ")) Then
+    my_sepfactor = my_sepfactor_approx(SEP_TYPE, G, Q, F)
+    
+End If
+' Если точка лежит вне замеренной области, используем сшивки
+' (1) Сшивка с параболическим цилиндром только по дебиту в области нуля
+If (Q < my_qmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, Q, F, "G")) Then
+    mX = my_qmin(SEP_TYPE)
+            
+    func = my_sepfactor_approx(SEP_TYPE, G, mX, F)
+    dfunc = my_sepfactor_approx(SEP_TYPE, G, mX, F, "dQ")
+            
+    kA = dfunc / mX
+    kB = -dfunc
+    kC = func
+            
+    my_sepfactor = kA * Q ^ 2 + kB * Q + kC
+End If
+' (2) Сшивка с параболическим цилиндром только по дебиту в области максимума
+If (Q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, Q, F, "G")) Then
+    mX = my_qmax(SEP_TYPE)
+            
+    ' mQ2
+    mX2 = mult * mX
+          
+    If (Q > mX2) Then
+        my_sepfactor = 0
+            
+    Else
+        func = my_sepfactor_approx(SEP_TYPE, G, mX, F)
+        dfunc = my_sepfactor_approx(SEP_TYPE, G, mX, F, "dQ")
+                
+        r = mX - mX2
+        kA = (dfunc * r - func) / r / r
+        kB = dfunc - 2 * kA * mX
+        kC = -kA * mX2 ^ 2 - kB * mX2
+                   
+        my_sepfactor = kA * Q ^ 2 + kB * Q + kC
+    
+    End If
+End If
+' (3) Сшивка с параболическим цилиндром только по газу в области нуля
+If (G < my_gmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, Q, F, "Q")) Then
+    mX = my_gmin(SEP_TYPE)
+            
+    func = my_sepfactor_approx(SEP_TYPE, mX, Q, F)
+    dfunc = my_sepfactor_approx(SEP_TYPE, mX, Q, F, "dG")
+            
+    kA = (mX * dfunc - func) / mX / mX
+    kB = dfunc - 2 * mX * kA
+            
+    my_sepfactor = kA * G ^ 2 + kB * G
+    
+End If
+   
+' (4) Сшивка с параболическим цилиндром только по газу в области максимума
+If (G > my_gmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, Q, F, "Q")) Then
+    mX = my_gmax(SEP_TYPE)
+            
+    ' mG2
+    mX2 = 100
+            
+    If (G > mX2) Then
+        my_sepfactor = 0
+            
+    Else
+        func = my_sepfactor_approx(SEP_TYPE, mX, Q, F)
+        dfunc = my_sepfactor_approx(SEP_TYPE, mX, Q, F, "dG")
+                
+        r = mX - mX2
+        kA = (dfunc * r - func) / r / r
+        kB = dfunc - 2 * kA * mX
+        kC = -kA * mX2 ^ 2 - kB * mX2
+                   
+        my_sepfactor = kA * G ^ 2 + kB * G + kC
+    
+    End If
+End If
+' (5) Сшивка с параболоидом вращения по газу в области нуля и по дебиту в области нуля
+If (G < my_gmin(SEP_TYPE)) And (Q < my_qmin(SEP_TYPE)) Then
+    mX = my_qmin(SEP_TYPE)
+    mD = my_gmin(SEP_TYPE)
+            
+    func = my_sepfactor_approx(SEP_TYPE, mD, mX, F)
+    dfunc = my_sepfactor_approx(SEP_TYPE, mD, mX, F, "dQ")
+            
+    kA = dfunc / mX
+    kB = -dfunc
+    kC = func
+            
+    func = kA * Q ^ 2 + kB * Q + kC
+    mX = my_gmin(SEP_TYPE)
+    mD = my_qmin(SEP_TYPE)
+    
+    dfunc = my_sepfactor_approx(SEP_TYPE, mX, mD, F, "dG")
+            
+    kA = (mX * dfunc - func) / mX / mX
+    kB = dfunc - 2 * mX * kA
+            
+    my_sepfactor = kA * G ^ 2 + kB * G
+    
+End If
+' (6) Сшивка с параболоидом вращения по газу в области нуля и по дебиту в области максимума
+If (G < my_gmin(SEP_TYPE)) And (Q > my_qmax(SEP_TYPE)) Then
+    mX = my_qmax(SEP_TYPE)
+            
+    ' mQ2
+    mX2 = mult * mX
+          
+    If (Q > mX2) Then
+        my_sepfactor = 0
+            
+    Else
+        mD = my_gmin(SEP_TYPE)
+        
+        func = my_sepfactor_approx(SEP_TYPE, mD, mX, F)
+        dfunc = my_sepfactor_approx(SEP_TYPE, mD, mX, F, "dQ")
+                
+        r = mX - mX2
+        kA = (dfunc * r - func) / r / r
+        kB = dfunc - 2 * kA * mX
+        kC = -kA * mX2 ^ 2 - kB * mX2
+                   
+        func = kA * Q ^ 2 + kB * Q + kC
+    
+        mX = my_gmin(SEP_TYPE)
+        mD = my_qmax(SEP_TYPE)
+    
+        dfunc = my_sepfactor_approx(SEP_TYPE, mX, mD, F, "dG")
+            
+        kA = (mX * dfunc - func) / mX / mX
+        kB = dfunc - 2 * mX * kA
+            
+        my_sepfactor = kA * G ^ 2 + kB * G
+    
+    End If
+End If
+' (7) Сшивка с параболоидом вращения по газу в области максимума и по дебиту в области нуля
+If (G > my_gmax(SEP_TYPE)) And (Q < my_qmin(SEP_TYPE)) Then
+    mX = my_qmin(SEP_TYPE)
+    mD = my_gmax(SEP_TYPE)
+            
+    func = my_sepfactor_approx(SEP_TYPE, mD, mX, F)
+    dfunc = my_sepfactor_approx(SEP_TYPE, mD, mX, F, "dQ")
+            
+    kA = dfunc / mX
+    kB = -dfunc
+    kC = func
+            
+    func = kA * Q ^ 2 + kB * Q + kC
+    
+    mX = my_gmax(SEP_TYPE)
+    mD = my_qmin(SEP_TYPE)
+            
+    ' mG2
+    mX2 = 100
+            
+    If (G > mX2) Then
+        my_sepfactor = 0
+            
+    Else
+        dfunc = my_sepfactor_approx(SEP_TYPE, mX, mD, F, "dG")
+                
+        r = mX - mX2
+        kA = (dfunc * r - func) / r / r
+        kB = dfunc - 2 * kA * mX
+        kC = -kA * mX2 ^ 2 - kB * mX2
+                   
+        my_sepfactor = kA * G ^ 2 + kB * G + kC
+    
+    End If
+End If
+' (8) Сшивка с параболоидом вращения по газу в области максимума и по дебиту в области максимума
+If (G > my_gmax(SEP_TYPE)) And (Q > my_qmax(SEP_TYPE)) Then
+    mX = my_qmax(SEP_TYPE)
+            
+    ' mQ2
+    mX2 = mult * mX
+          
+    If (Q > mX2) Then
+        my_sepfactor = 0
+            
+    Else
+        mD = my_gmax(SEP_TYPE)
+        
+        func = my_sepfactor_approx(SEP_TYPE, mD, mX, F)
+        dfunc = my_sepfactor_approx(SEP_TYPE, mD, mX, F, "dQ")
+                
+        r = mX - mX2
+        kA = (dfunc * r - func) / r / r
+        kB = dfunc - 2 * kA * mX
+        kC = -kA * mX2 ^ 2 - kB * mX2
+                   
+        func = kA * Q ^ 2 + kB * Q + kC
+    
+        mX = my_gmax(SEP_TYPE)
+        mD = my_qmax(SEP_TYPE)
+            
+        ' mG2
+        mX2 = 100
+            
+        If (G > mX2) Then
+            my_sepfactor = 0
+            
+        Else
+            dfunc = my_sepfactor_approx(SEP_TYPE, mX, mD, F, "dG")
+                
+            r = mX - mX2
+            kA = (dfunc * r - func) / r / r
+            kB = dfunc - 2 * kA * mX
+            kC = -kA * mX2 ^ 2 - kB * mX2
+                   
+            my_sepfactor = kA * G ^ 2 + kB * G + kC
+    
+        End If
+    
+    End If
+End If
+' Обрезка по значению
+If (my_sepfactor < 0) Then
+    my_sepfactor = 0
+    
+End If
+If (my_sepfactor > 100) Then
+    my_sepfactor = 100
+    
+End If
+End Function
+'**************************************************************************************************************************
+Public Function my_inarea(SEP_TYPE As Integer, G As Double, Q As Double, F As Double, Optional PARAM = "GQF") As Boolean
+'
+' MY_INAREA - Определяет принадлежность точки к измеренной области
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+'   G       - входное газосодержание
+'
+'   Q       - дебит
+'
+'   F       - частота
+'
+'   PARAM   - параметры области проверки (default = "GQF")
+'
+'    "GQF"  - проверка по ГАЗУ, дебитУ, ЧАСТОТЕ
+'    "GQ"  - проверка по ГАЗУ, дебитУ
+'    "GF"  - проверка по ГАЗУ, ЧАСТОТЕ
+'    "QF"  - проверка по дебитУ, ЧАСТОТЕ
+'    "G"  - проверка по ГАЗУ
+'    "Q"  - проверка по дебитУ
+'    "F"  - проверка по ЧАСТОТЕ
+'
+my_inarea = True
+If (PARAM = "GQF") Or (PARAM = "G") Or (PARAM = "GQ") Or (PARAM = "GF") Then
+    If (G < my_gmin(SEP_TYPE)) Or (G > my_gmax(SEP_TYPE)) Then
+        my_inarea = False
+    End If
+End If
+If (PARAM = "GQF") Or (PARAM = "Q") Or (PARAM = "GQ") Or (PARAM = "QF") Then
+    If (Q < my_qmin(SEP_TYPE)) Or (Q > my_qmax(SEP_TYPE)) Then
+        my_inarea = False
+    End If
+End If
+If (PARAM = "GQF") Or (PARAM = "F") Or (PARAM = "GF") Or (PARAM = "QF") Then
+    If (F < my_fmin(SEP_TYPE)) Or (F > my_fmax(SEP_TYPE)) Then
+        my_inarea = False
+    End If
+End If
+End Function
+'**************************************************************************************************************************
+Public Function my_gmin(SEP_TYPE As Integer) As Double
+'
+' MY_GMIN - Минимальные замеренные газосодержания для каждого из сепараторов
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+Dim gmin(1 To 29) As Double
+gmin(1) = 6
+gmin(2) = 5
+gmin(3) = 9
+gmin(4) = 8
+gmin(5) = 6
+gmin(6) = 7
+gmin(7) = 10
+gmin(8) = 11
+gmin(9) = 5
+gmin(10) = 6
+gmin(11) = 11
+gmin(12) = 9
+gmin(13) = 11
+gmin(14) = 10
+gmin(15) = 11
+gmin(16) = 11
+gmin(17) = 10
+gmin(18) = 11
+gmin(19) = 5
+gmin(20) = 13
+gmin(21) = 2
+gmin(22) = 2
+gmin(23) = 2
+gmin(24) = 2
+gmin(25) = 2
+gmin(26) = 2
+gmin(27) = 2
+gmin(28) = 2
+gmin(29) = 2
+my_gmin = gmin(SEP_TYPE)
+End Function
+'**************************************************************************************************************************
+Public Function my_gmax(SEP_TYPE As Integer) As Double
+'
+' MY_GMAX - Максимальные замеренные газосодержания для каждого из сепараторов
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+Dim gmax(1 To 29) As Double
+gmax(1) = 81
+gmax(2) = 75
+gmax(3) = 72
+gmax(4) = 64
+gmax(5) = 66
+gmax(6) = 73
+gmax(7) = 73
+gmax(8) = 73
+gmax(9) = 61
+gmax(10) = 73
+gmax(11) = 69
+gmax(12) = 69
+gmax(13) = 58
+gmax(14) = 62
+gmax(15) = 67
+gmax(16) = 74
+gmax(17) = 73
+gmax(18) = 66
+gmax(19) = 62
+gmax(20) = 74
+gmax(21) = 75
+gmax(22) = 80
+gmax(23) = 80
+gmax(24) = 80
+gmax(25) = 80
+gmax(26) = 90
+gmax(27) = 93
+gmax(28) = 97
+gmax(29) = 99.5
+my_gmax = gmax(SEP_TYPE)
+End Function
+'**************************************************************************************************************************
+Public Function my_qmin(SEP_TYPE As Integer) As Double
+'
+' MY_QMIN - Минимальные замеренные дебиты для каждого из сепараторов
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+Dim qmin(1 To 29) As Double
+qmin(1) = 50
+qmin(2) = 50
+qmin(3) = 80
+qmin(4) = 50
+qmin(5) = 50
+qmin(6) = 50
+qmin(7) = 80
+qmin(8) = 65
+qmin(9) = 50
+qmin(10) = 50
+qmin(11) = 70
+qmin(12) = 50
+qmin(13) = 80
+qmin(14) = 80
+qmin(15) = 80
+qmin(16) = 50
+qmin(17) = 50
+qmin(18) = 50
+qmin(19) = 50
+qmin(20) = 80
+qmin(21) = 10
+qmin(22) = 10
+qmin(23) = 10
+qmin(24) = 10
+qmin(25) = 10
+qmin(26) = 10
+qmin(27) = 10
+qmin(28) = 10
+qmin(29) = 10
+my_qmin = qmin(SEP_TYPE)
+End Function
+'**************************************************************************************************************************
+Public Function my_qmax(SEP_TYPE As Integer) As Double
+'
+' MY_QMAX - Максимальные замеренные дебиты для каждого из сепараторов
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+Dim qmax(1 To 29) As Double
+qmax(1) = 200
+qmax(2) = 300
+qmax(3) = 350
+qmax(4) = 200
+qmax(5) = 80
+qmax(6) = 200
+qmax(7) = 350
+qmax(8) = 350
+qmax(9) = 200
+qmax(10) = 200
+qmax(11) = 350
+qmax(12) = 200
+qmax(13) = 350
+qmax(14) = 350
+qmax(15) = 350
+qmax(16) = 200
+qmax(17) = 200
+qmax(18) = 200
+qmax(19) = 200
+qmax(20) = 350
+qmax(21) = 250
+qmax(22) = 360
+qmax(23) = 405
+qmax(24) = 650
+qmax(25) = 830
+qmax(26) = 1300
+qmax(27) = 360
+qmax(28) = 680
+qmax(29) = 2100
+my_qmax = qmax(SEP_TYPE)
+End Function
+'**************************************************************************************************************************
+Public Function my_fmin(SEP_TYPE As Integer) As Double
+'
+' MY_FMIN - Минимальные замеренные частоты для каждого из сепараторов
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+Dim fmin(1 To 29) As Double
+fmin(1) = 2037
+fmin(2) = 2037
+fmin(3) = 2037
+fmin(4) = 2037
+fmin(5) = 2037
+fmin(6) = 2037
+fmin(7) = 2037
+fmin(8) = 2037
+fmin(9) = 2037
+fmin(10) = 2037
+fmin(11) = 2037
+fmin(12) = 2037
+fmin(13) = 2037
+fmin(14) = 2037
+fmin(15) = 2037
+fmin(16) = 2037
+fmin(17) = 2037
+fmin(18) = 2037
+fmin(19) = 2037
+fmin(20) = 2037
+fmin(21) = 2037
+fmin(22) = 2037
+fmin(23) = 2037
+fmin(24) = 2037
+fmin(25) = 2037
+fmin(26) = 2037
+fmin(27) = 2037
+fmin(28) = 2037
+fmin(29) = 2037
+my_fmin = fmin(SEP_TYPE)
+End Function
+'**************************************************************************************************************************
+Public Function my_fmax(SEP_TYPE As Integer) As Double
+'
+' MY_FMAX - Максимальные замеренные частоты для каждого из сепараторов
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+Dim fmax(1 To 29) As Double
+fmax(1) = 4074
+fmax(2) = 4074
+fmax(3) = 4074
+fmax(4) = 4074
+fmax(5) = 4074
+fmax(6) = 4074
+fmax(7) = 4074
+fmax(8) = 4074
+fmax(9) = 4074
+fmax(10) = 4074
+fmax(11) = 4074
+fmax(12) = 4074
+fmax(13) = 4074
+fmax(14) = 4074
+fmax(15) = 4074
+fmax(16) = 4074
+fmax(17) = 4074
+fmax(18) = 4074
+fmax(19) = 4074
+fmax(20) = 4074
+fmax(21) = 4074
+fmax(22) = 4074
+fmax(23) = 4074
+fmax(24) = 4074
+fmax(25) = 4074
+fmax(26) = 4074
+fmax(27) = 4074
+fmax(28) = 4074
+fmax(29) = 4074
+my_fmax = fmax(SEP_TYPE)
+End Function
+'**************************************************************************************************************************
+Private Function my_sepfactor_approx(SEP_TYPE As Integer, G As Double, Q As Double, F As Double, Optional DIFF = "0") As Double
+'
+' MY_SEPFACTOR_APPROX - Вычисление коэффициента сепарации по аппроксимированной зависимости
+'
+'   SEP_TYPE    - тип сепаратора (номер от 1 до 29)
+'
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+'   G       - входное газосодержание
+'
+'   Q       - дебит
+'
+'   F       - частота
+'
+'   DIFF    - параметр отвечающий за тип возвращаемой функции (default = "0")
+'
+'    "0"    - сама функция
+'    "dG"   - частная производная функции по ГАЗОСОДЕРЖАНИЮ
+'    "dQ"   - частная производная функции по дебитУ
+'    "dF"   - частная производная функции по ЧАСТОТЕ
+'
+'
+' Коэффициенты theta для каждого из сепараторов
+'
+Dim theta(29, 12) As Double
+' Separator 1
+theta(1, 1) = 0.0000087993
+theta(1, 2) = -0.0014178073
+theta(1, 3) = -0.0000397231
+theta(1, 4) = 0.0529674339
+theta(1, 5) = 0.0028493727
+theta(1, 6) = -0.0001228876
+theta(1, 7) = -0.0003862197
+theta(1, 8) = 0.0000106863
+theta(1, 9) = 0.5323060089
+theta(1, 10) = -0.1045923688
+theta(1, 11) = 0.0042861775
+theta(1, 12) = 53.8027001706
+' Separator 2
+theta(2, 1) = -0.0000033628
+theta(2, 2) = -0.000113117
+theta(2, 3) = -0.0000184548
+theta(2, 4) = 0.0379809715
+theta(2, 5) = 0.0002438456
+theta(2, 6) = -0.000187424
+theta(2, 7) = 0.0000051195
+theta(2, 8) = -0.0000281111
+theta(2, 9) = 0.3766056508
+theta(2, 10) = 0.0181773837
+theta(2, 11) = 0.0142218617
+theta(2, 12) = -15.4481969434
+' Seperator 3
+theta(3, 1) = 0.0000193145
+theta(3, 2) = -0.0032176704
+theta(3, 3) = -0.0000268557
+theta(3, 4) = 0.1586937256
+theta(3, 5) = 0.001828688
+theta(3, 6) = 0.0000708432
+theta(3, 7) = 0.0000909372
+theta(3, 8) = 0.000002863
+theta(3, 9) = -2.2448483948
+theta(3, 10) = -0.1327032137
+theta(3, 11) = -0.0030459177
+theta(3, 12) = 83.023509036
+' Separator 4
+theta(4, 1) = -0.0000121897
+theta(4, 2) = 0.0025164879
+theta(4, 3) = -0.0000028248
+theta(4, 4) = -0.1863706573
+theta(4, 5) = -0.0007591736
+theta(4, 6) = 0.0002146303
+theta(4, 7) = 0.0001319112
+theta(4, 8) = 0.0000187202
+theta(4, 9) = 4.7766561554
+theta(4, 10) = -0.248984867
+theta(4, 11) = -0.0078065695
+theta(4, 12) = 26.2222417751
+' Separator 5
+theta(5, 1) = 0.000010823
+theta(5, 2) = -0.0009684032
+theta(5, 3) = 0.0000130572
+theta(5, 4) = -0.0108147984
+theta(5, 5) = -0.0014076182
+theta(5, 6) = -0.00016922
+theta(5, 7) = 0.0007632356
+theta(5, 8) = 0.0000450615
+theta(5, 9) = 2.4191921328
+theta(5, 10) = -0.5524742079
+theta(5, 11) = 0.0039670382
+theta(5, 12) = 36.3660078595
+' Separator 6
+theta(6, 1) = 0.0000058748
+theta(6, 2) = -0.0010769325
+theta(6, 3) = -0.0001222593
+theta(6, 4) = 0.0440466354
+theta(6, 5) = 0.0059103956
+theta(6, 6) = -0.0000181232
+theta(6, 7) = -0.0001555878
+theta(6, 8) = -0.0000124109
+theta(6, 9) = 0.7733866636
+theta(6, 10) = -0.118996349
+theta(6, 11) = 0.0028025138
+theta(6, 12) = 37.2251716889
+'Separator 7
+theta(7, 1) = 0.000012022
+theta(7, 2) = -0.0017563374
+theta(7, 3) = -0.000064176
+theta(7, 4) = 0.0516750115
+theta(7, 5) = 0.0036795894
+theta(7, 6) = -0.0001779426
+theta(7, 7) = 0.0001613525
+theta(7, 8) = 0.0000084679
+theta(7, 9) = 1.6141781555
+theta(7, 10) = -0.2709599353
+theta(7, 11) = 0.0053775602
+theta(7, 12) = 49.926744881
+'Separator 8
+theta(8, 1) = 0.0000116489
+theta(8, 2) = -0.0017284962
+theta(8, 3) = -0.0000885852
+theta(8, 4) = 0.0748456716
+theta(8, 5) = 0.003782259
+theta(8, 6) = 0.0000198235
+theta(8, 7) = 0.00019585
+theta(8, 8) = 0.0000094082
+theta(8, 9) = -0.1554049804
+theta(8, 10) = -0.2084908311
+theta(8, 11) = 0.0000103522
+theta(8, 12) = 55.7924480363
+' Separator 9
+theta(9, 1) = -0.0000175932
+theta(9, 2) = 0.0019442256
+theta(9, 3) = 0.000046518
+theta(9, 4) = -0.0915221068
+theta(9, 5) = -0.0045489642
+theta(9, 6) = 0.0001682606
+theta(9, 7) = 0.000113029
+theta(9, 8) = 0.0000093349
+theta(9, 9) = 2.3354157928
+theta(9, 10) = -0.138238023
+theta(9, 11) = -0.0032357402
+theta(9, 12) = 25.9629556167
+' Separator 10
+theta(10, 1) = 0.000002168
+theta(10, 2) = -0.000580099
+theta(10, 3) = -0.000029187
+theta(10, 4) = 0.0295065279
+theta(10, 5) = 0.0021737201
+theta(10, 6) = -0.0001052936
+theta(10, 7) = 0.0005934199
+theta(10, 8) = -0.0000239206
+theta(10, 9) = 0.7706293953
+theta(10, 10) = -0.2349725504
+theta(10, 11) = 0.0077944851
+theta(10, 12) = 22.0384189232
+' Separator 11
+theta(11, 1) = 0.0000116564
+theta(11, 2) = -0.0020258339
+theta(11, 3) = -0.0000132657
+theta(11, 4) = 0.0995299309
+theta(11, 5) = -0.0007598466
+theta(11, 6) = -0.0000548158
+theta(11, 7) = -0.0000563956
+theta(11, 8) = -0.000010392
+theta(11, 9) = -0.2427459027
+theta(11, 10) = 0.0202310281
+theta(11, 11) = 0.0075101346
+theta(11, 12) = 4.27422002
+' Separator 12
+theta(12, 1) = 0.0000056722
+theta(12, 2) = -0.0009737803
+theta(12, 3) = 0.0000005938
+theta(12, 4) = 0.0385538944
+theta(12, 5) = -0.0007528789
+theta(12, 6) = 0.0000842402
+theta(12, 7) = 0.000261956
+theta(12, 8) = -0.0000111876
+theta(12, 9) = 0.6643632145
+theta(12, 10) = -0.1234937687
+theta(12, 11) = -0.0035724804
+theta(12, 12) = 40.793213002
+' Separator 13
+theta(13, 1) = 0.0000417791
+theta(13, 2) = -0.0056881068
+theta(13, 3) = 0.0000136645
+theta(13, 4) = 0.2398766601
+theta(13, 5) = -0.0015630531
+theta(13, 6) = -0.0000285158
+theta(13, 7) = -0.0000045129
+theta(13, 8) = -0.0000097042
+theta(13, 9) = -2.1483675056
+theta(13, 10) = 0.0024168463
+theta(13, 11) = 0.002841826
+theta(13, 12) = 15.9686497148
+' Separator 14
+theta(14, 1) = 0.0000124079
+theta(14, 2) = -0.0018989305
+theta(14, 3) = -0.0000685307
+theta(14, 4) = 0.0923074028
+theta(14, 5) = 0.0028970542
+theta(14, 6) = 0.0000901038
+theta(14, 7) = -0.0000619527
+theta(14, 8) = 0.000007167
+theta(14, 9) = -1.0808076124
+theta(14, 10) = -0.0810091369
+theta(14, 11) = -0.0071249283
+theta(14, 12) = 67.7249657484
+' Separator 15
+theta(15, 1) = 0.0000019904
+theta(15, 2) = -0.0005274256
+theta(15, 3) = -0.0000001321
+theta(15, 4) = 0.0134467294
+theta(15, 5) = -0.0001740387
+theta(15, 6) = 0.0001078648
+theta(15, 7) = 0.000037294
+theta(15, 8) = -0.0000022572
+theta(15, 9) = 1.1347218547
+theta(15, 10) = -0.0796020472
+theta(15, 11) = -0.0092552662
+theta(15, 12) = 58.1899663666
+' Separator 16
+theta(16, 1) = -0.0000025266
+theta(16, 2) = 0.00047723
+theta(16, 3) = -0.0000944762
+theta(16, 4) = -0.0398647861
+theta(16, 5) = 0.0041625028
+theta(16, 6) = -0.000070289
+theta(16, 7) = 0.0009218642
+theta(16, 8) = 0.0000009868
+theta(16, 9) = 2.3891544407
+theta(16, 10) = -0.4062646547
+theta(16, 11) = -0.001223861
+theta(16, 12) = 46.3205673503
+' Separator 17
+theta(17, 1) = 0.0000070011
+theta(17, 2) = -0.0011447747
+theta(17, 3) = -0.0000773086
+theta(17, 4) = 0.0451625345
+theta(17, 5) = 0.0050233714
+theta(17, 6) = 0.0001828168
+theta(17, 7) = 0.0001230263
+theta(17, 8) = 0.000026509
+theta(17, 9) = 0.2681015918
+theta(17, 10) = -0.2887132557
+theta(17, 11) = -0.0155483915
+theta(17, 12) = 82.5608915421
+' Separator 18
+theta(18, 1) = 0.0000131145
+theta(18, 2) = -0.0020218787
+theta(18, 3) = -0.0000752502
+theta(18, 4) = 0.0889028466
+theta(18, 5) = 0.002430388
+theta(18, 6) = 0.0000726508
+theta(18, 7) = 0.0006097805
+theta(18, 8) = 0.0000283123
+theta(18, 9) = -0.9279795475
+theta(18, 10) = -0.4347461705
+theta(18, 11) = -0.0039938935
+theta(18, 12) = 93.9145436659
+' Separator 19
+theta(19, 1) = 0.0000085993
+theta(19, 2) = -0.0012006374
+theta(19, 3) = 0.0000199194
+theta(19, 4) = 0.0153486403
+theta(19, 5) = -0.0011703937
+theta(19, 6) = 0.0001431831
+theta(19, 7) = -0.0001461161
+theta(19, 8) = 0.000014851
+theta(19, 9) = 1.6030972398
+theta(19, 10) = -0.1368893957
+theta(19, 11) = -0.0037610015
+theta(19, 12) = 37.8893186113
+' Separator 20
+theta(20, 1) = 0.0000052149
+theta(20, 2) = -0.0008542311
+theta(20, 3) = 0.0000188589
+theta(20, 4) = 0.0270391744
+theta(20, 5) = -0.0018547051
+theta(20, 6) = -0.0000847238
+theta(20, 7) = -0.0001708993
+theta(20, 8) = 0.0000330029
+theta(20, 9) = 1.0747595188
+theta(20, 10) = -0.2605626409
+theta(20, 11) = -0.004685222
+theta(20, 12) = 78.1426121405
+' Separator 21
+theta(21, 1) = -0.0000057686
+theta(21, 2) = 0.0017841804
+theta(21, 3) = 0.0001483174
+theta(21, 4) = -0.2064464015
+theta(21, 5) = -0.0219079147
+theta(21, 6) = -0.0000000207
+theta(21, 7) = -0.0000164214
+theta(21, 8) = -0.0000000065
+theta(21, 9) = 8.8977452453
+theta(21, 10) = 0.2993764227
+theta(21, 11) = 0.0000023453
+theta(21, 12) = 26.5902172049
+' Separator 22
+theta(22, 1) = -0.0000148823
+theta(22, 2) = 0.0031307273
+theta(22, 3) = 0.0001281999
+theta(22, 4) = -0.2532762045
+theta(22, 5) = -0.0165203227
+theta(22, 6) = 0.0000000001
+theta(22, 7) = 0.0000364149
+theta(22, 8) = 0.0000000001
+theta(22, 9) = 8.6246826085
+theta(22, 10) = 0.2111779388
+theta(22, 11) = -0.000000021
+theta(22, 12) = 29.5491379611
+' Separator 23
+theta(23, 1) = -0.0000104298
+theta(23, 2) = 0.002208906
+theta(23, 3) = 0.00011223
+theta(23, 4) = -0.1895447082
+theta(23, 5) = -0.0146300899
+theta(23, 6) = -0.0000000012
+theta(23, 7) = 0.0001615412
+theta(23, 8) = -0.0000000002
+theta(23, 9) = 7.0218835769
+theta(23, 10) = 0.1291558283
+theta(23, 11) = 0.0000001235
+theta(23, 12) = 43.5724349818
+' Separator 24
+theta(24, 1) = -0.0000112867
+theta(24, 2) = 0.0028143661
+theta(24, 3) = 0.0000373215
+theta(24, 4) = -0.2574502614
+theta(24, 5) = -0.0058632671
+theta(24, 6) = 0.0000000005
+theta(24, 7) = -0.0000035432
+theta(24, 8) = 0.0000000002
+theta(24, 9) = 9.0898405078
+theta(24, 10) = 0.0944206556
+theta(24, 11) = -0.0000001149
+theta(24, 12) = 28.8052225675
+' Separator 25
+theta(25, 1) = -0.0000047317
+theta(25, 2) = 0.0014358247
+theta(25, 3) = 0.0000360452
+theta(25, 4) = -0.1647687447
+theta(25, 5) = -0.0052902961
+theta(25, 6) = 0.0000000002
+theta(25, 7) = -0.000023142
+theta(25, 8) = 0
+theta(25, 9) = 6.9898540248
+theta(25, 10) = 0.0937383503
+theta(25, 11) = -0.0000000372
+theta(25, 12) = 38.5321169147
+' Separator 26
+theta(26, 1) = -0.0000066665
+theta(26, 2) = 0.0016477688
+theta(26, 3) = 0.0000234341
+theta(26, 4) = -0.1609884272
+theta(26, 5) = -0.0034313902
+theta(26, 6) = -0.0000000017
+theta(26, 7) = 0.0000039671
+theta(26, 8) = -0.0000000001
+theta(26, 9) = 6.2720389162
+theta(26, 10) = 0.043843296
+theta(26, 11) = 0.0000001602
+theta(26, 12) = 48.4084469733
+' Separator 27
+theta(27, 1) = -0.0000133811
+theta(27, 2) = 0.003036567
+theta(27, 3) = 0.000086037
+theta(27, 4) = -0.2611712442
+theta(27, 5) = -0.0125172084
+theta(27, 6) = -0.0000000021
+theta(27, 7) = 0.0000545221
+theta(27, 8) = -0.0000000003
+theta(27, 9) = 9.0760388084
+theta(27, 10) = 0.1543012733
+theta(27, 11) = 0.0000002117
+theta(27, 12) = 32.0977307469
+' Separator 28
+theta(28, 1) = -0.0000125759
+theta(28, 2) = 0.0028445982
+theta(28, 3) = 0.0000370209
+theta(28, 4) = -0.2395693671
+theta(28, 5) = -0.0056313278
+theta(28, 6) = 0.0000000003
+theta(28, 7) = 0.0000484194
+theta(28, 8) = 0
+theta(28, 9) = 8.0537813544
+theta(28, 10) = 0.0446873619
+theta(28, 11) = -0.0000000348
+theta(28, 12) = 45.0662007633
+' Separator 29
+theta(29, 1) = -0.0000019919
+theta(29, 2) = 0.0006438949
+theta(29, 3) = 0.0000134658
+theta(29, 4) = -0.0903471166
+theta(29, 5) = -0.0020142629
+theta(29, 6) = -0.0000000004
+theta(29, 7) = 0.0000019207
+theta(29, 8) = 0
+theta(29, 9) = 4.5220839775
+theta(29, 10) = 0.0248272635
+theta(29, 11) = 0.0000000365
+theta(29, 12) = 58.3191138042
+' Вычисление функции по аппроксимации
+If (DIFF = "0") Then
+    my_sepfactor_approx = theta(SEP_TYPE, 1) * G ^ 4 + theta(SEP_TYPE, 2) * G ^ 3 + theta(SEP_TYPE, 3) * G ^ 2 * Q + theta(SEP_TYPE, 4) * G ^ 2 + theta(SEP_TYPE, 5) * G * Q + theta(SEP_TYPE, 6) * G * F + theta(SEP_TYPE, 7) * Q ^ 2 + theta(SEP_TYPE, 8) * Q * F + theta(SEP_TYPE, 9) * G + theta(SEP_TYPE, 10) * Q + theta(SEP_TYPE, 11) * F + theta(SEP_TYPE, 12)
+    
+End If
+' Вычисление производной функции по ГАЗОСОДЕРЖАНИЮ
+If (DIFF = "dG") Then
+    my_sepfactor_approx = 4 * theta(SEP_TYPE, 1) * G ^ 3 + 3 * theta(SEP_TYPE, 2) * G ^ 2 + 2 * theta(SEP_TYPE, 3) * G * Q + 2 * theta(SEP_TYPE, 4) * G + theta(SEP_TYPE, 5) * Q + theta(SEP_TYPE, 6) * F + theta(SEP_TYPE, 9)
+    
+End If
+' Вычисление производной функции по дебитУ
+If (DIFF = "dQ") Then
+    my_sepfactor_approx = theta(SEP_TYPE, 3) * G ^ 2 + theta(SEP_TYPE, 5) * G + 2 * theta(SEP_TYPE, 7) * Q + theta(SEP_TYPE, 8) * F + theta(SEP_TYPE, 10)
+    
+End If
+' Вычисление производной функции по ЧАСТОТЕ
+If (DIFF = "dF") Then
+    my_sepfactor_approx = theta(SEP_TYPE, 6) * G + theta(SEP_TYPE, 8) * Q + theta(SEP_TYPE, 11)
+    
+End If
+End Function
+'**************************************************************************************************************************
+''[EOF]
+Public Function Separator_Name(Code As Integer) As String
+Select Case Code
+Case 1
+Separator_Name = "GDNK5"
+Case 2
+Separator_Name = "VGSA (VORTEX)"
+Case 3
+Separator_Name = "GDNK5A"
+Case 4
+Separator_Name = "GSA5-1"
+Case 5
+Separator_Name = "GSA5-3"
+Case 6
+Separator_Name = "GSA5-4"
+Case 7
+Separator_Name = "GSAN-5A"
+Case 8
+Separator_Name = "GSD-5A"
+Case 9
+Separator_Name = "GSD5"
+Case 10
+Separator_Name = "3MNGB5"
+Case 11
+Separator_Name = "3MNGB5A"
+Case 12
+Separator_Name = "3MNGDB5"
+Case 13
+Separator_Name = "3MNGDB5A"
+Case 14
+Separator_Name = "MNGSL5A-M"
+Case 15
+Separator_Name = "MNGSL5A-TM"
+Case 16
+Separator_Name = "MNGSL5-M"
+Case 17
+Separator_Name = "MNGSL5-TM"
+Case 18
+Separator_Name = "MNGSLM 5"
+Case 19
+Separator_Name = "MNGD 5"
+Case 20
+Separator_Name = "GSIK 5A"
+Case 21
+Separator_Name = "338DSR"
+Case 22
+Separator_Name = "400GSR"
+Case 23
+Separator_Name = "400GSV"
+Case 24
+Separator_Name = "400GSVHV"
+Case 25
+Separator_Name = "538 GSR"
+Case 26
+Separator_Name = "538 GSVHV"
+Case 27
+Separator_Name = "400FSR(OLD)"
+Case 28
+Separator_Name = "513GRS(OLD)"
+Case 29
+Separator_Name = "675HRS"
+Case Else
+Separator_Name = "Н/Д"
+End Select
+End Function

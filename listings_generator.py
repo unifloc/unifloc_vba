@@ -11,6 +11,8 @@ Read automitically saved VBA code file and prepares code listings for manual
 """
 
 import re
+import glob
+import os
 
 file_name = ["u7_Excel_functions.txt",
              "u7_Excel_functions_ESP.txt",
@@ -84,6 +86,34 @@ def process_code_file(code_file_name):
                     
     for func in func_list:
         func.save_lines_to_file(path_listings_out)
-    
+   
+"""
+listing generation start
+extract function with description markers
+"""    
 for code_file in file_name:
     process_code_file(path_vba_txt + code_file)
+
+"""
+tex chapter generation start
+"""
+path_func_files = "docs/u7_vba/listings/"
+files = glob.glob(path_func_files+"*.lst")
+print(files)
+
+ls = []
+
+for file in files:
+    f = open(file,"r", encoding='UTF-8')
+    l = f.readlines()
+    f.close()
+    fname_ext = os.path.basename(file)
+    fname = os.path.splitext(fname_ext)[0]
+    ls.append(r"\section{"+fname.replace('_','\_')+"}"+'\n')
+    ls.append(r"\putlisting{listings/"+fname_ext+"}"+'\n')
+    
+print(ls)
+
+f = open("docs/u7_vba/text/auto.tex","w", encoding='UTF-8')
+f.writelines(ls)
+f.close()
