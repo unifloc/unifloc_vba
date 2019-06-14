@@ -46,6 +46,7 @@
 
 Для компиляции документа необходимо использовать LuaLaTex. 
 Команда компиляции для может выглядеть следующим образом
+
 `C:\Anaconda3\Scripts\activate.bat   tex && lualatex.exe -synctex=1 -interaction=nonstopmode -shell-escape %.tex`
 
 команда состоит из нескольких команд выполняемых последовательно.  
