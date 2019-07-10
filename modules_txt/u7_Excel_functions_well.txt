@@ -65,17 +65,23 @@ Private Function well_InitData(q_m3day, _
     ' set temperature model with temperature gradient
     well.TempCorrelation = GeoGradTemp
     ' read ESP object from encoded string
-    Set ESPsystem = ESP_decode_string(ESPstr)
-    ' link well with ESP object
-    Set well.ESP = ESPsystem
-    ' set correction factor for ESP
-    well.ESP.cfHead_fr = Kdegr_d
-    ' set separation coefficient if given
-    If ksep_fr > 0 And ksep_fr <= 1 Then
-        Call well.SetKseptotal_d(valueManual, ksep_fr, 0)
+    If ESPstr = -1 Then
+        Set well_InitData = well
     Else
-        Call well.SetKseptotal_d(byCorrealation, ksep_fr)
+        Set ESPsystem = ESP_decode_string(ESPstr)
+        ' link well with ESP object
+        Set well.ESP = ESPsystem
+        ' set correction factor for ESP
+        well.ESP.cfHead_fr = Kdegr_d
+        ' set separation coefficient if given
+        If ksep_fr > 0 And ksep_fr <= 1 Then
+            Call well.SetKseptotal_d(valueManual, ksep_fr, 0)
+        Else
+            Call well.SetKseptotal_d(byCorrealation, ksep_fr)
+        End If
     End If
+    
+    
     ' return result well object
     Set well_InitData = well
 End Function
@@ -246,7 +252,8 @@ Public Function well_pwf_plin_atma( _
         Optional ByVal Psep_atma As Double = 40, _
         Optional ByVal Tsep_C As Double = 40, _
         Optional ByVal Kdegr_d As Double = 0, _
-        Optional ByVal param_num As Integer = 5)
+        Optional ByVal param_num As Integer = 5, _
+        Optional ByVal calc_self_flow_well = False)
 ' функция расчета забойного давления скважины по линейному
 ' на основе устьевых параметров работы скважины
 ' исходные параметры
@@ -282,16 +289,28 @@ Public Function well_pwf_plin_atma( _
 'description_end
     Dim well As CWellESP
     Dim ar
+    If calc_self_flow_well = 1 Then
+        ESPstr = -1
+    End If
+    
     ' read all data to well object
     Set well = well_InitData(q_m3day, fw_perc, Pcas_atma, _
                              wellStr, PVTstr, ESPstr, HydrCorr, ksep_fr, Kdegr_d)
     ' при расчете сверху вниз задаем какие то значения сепарации наугад
-    Call well.SetKseptotal_d(fullyManual, ksep_fr, 0, Psep_atma, Tsep_C)
-    well.isCalcCasing = True
+    If calc_self_flow_well <> 1 Then
+        Call well.SetKseptotal_d(fullyManual, ksep_fr, 0, Psep_atma, Tsep_C)
+        well.isCalcCasing = True
+    End If
+    
     ' проведем расчет
     Call well.calc_pwf_plin_atma(plin_atma, well.tbh_C, fast:=True)
+    If calc_self_flow_well = 1 Then
+        well_pwf_plin_atma = well.pwf_atma
+    Else
     ' в качестве результата выведем ряд расчитанных значений давления
-    well_pwf_plin_atma = well_out_arr(well, param_num)
+        well_pwf_plin_atma = well_out_arr(well, param_num)
+    End If
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция адаптации модели скважины по данным эксплуатации
