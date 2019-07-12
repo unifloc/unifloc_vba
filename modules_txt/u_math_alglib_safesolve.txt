@@ -1,0 +1,629 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This file is a part of ALGLIB project.
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Real implementation of CMatrixScaledTRSafeSolve
+'
+'  -- ALGLIB routine --
+'     21.01.2010
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixScaledTRSafeSolve(ByRef A() As Double, _
+         ByVal SA As Double, _
+         ByVal N As Long, _
+         ByRef X() As Double, _
+         ByVal IsUpper As Boolean, _
+         ByVal Trans As Long, _
+         ByVal IsUnit As Boolean, _
+         ByVal MaxGrowth As Double) As Boolean
+    Dim Result As Boolean
+    Dim LnMax As Double
+    Dim NrmB As Double
+    Dim NrmX As Double
+    Dim I As Long
+    Dim Alpha As Complex
+    Dim Beta As Complex
+    Dim VR As Double
+    Dim CX As Complex
+    Dim Tmp() As Double
+    Dim i_ As Long
+    Result = True
+    LnMax = Log(MaxRealNumber)
+    
+    '
+    ' Quick return if possible
+    '
+    If N <= 0# Then
+        RMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    
+    '
+    ' Load norms: right part and X
+    '
+    NrmB = 0#
+    For I = 0# To N - 1# Step 1
+        NrmB = MaxReal(NrmB, Abs(X(I)))
+    Next I
+    NrmX = 0#
+    
+    '
+    ' Solve
+    '
+    ReDim Tmp(0 To N - 1)
+    Result = True
+    If IsUpper And Trans = 0# Then
+        
+        '
+        ' U*x = b
+        '
+        For I = N - 1# To 0# Step -1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_Complex(A(I, I) * SA)
+            End If
+            If I < N - 1# Then
+                For i_ = I + 1# To N - 1# Step 1
+                    Tmp(i_) = SA * A(I, i_)
+                Next i_
+                VR = 0#
+                For i_ = I + 1# To N - 1# Step 1
+                    VR = VR + Tmp(i_) * X(i_)
+                Next i_
+                Beta = C_Complex(X(I) - VR)
+            Else
+                Beta = C_Complex(X(I))
+            End If
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, CX)
+            If Not Result Then
+                RMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = CX.X
+        Next I
+        RMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If Not IsUpper And Trans = 0# Then
+        
+        '
+        ' L*x = b
+        '
+        For I = 0# To N - 1# Step 1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_Complex(A(I, I) * SA)
+            End If
+            If I > 0# Then
+                For i_ = 0# To I - 1# Step 1
+                    Tmp(i_) = SA * A(I, i_)
+                Next i_
+                VR = 0#
+                For i_ = 0# To I - 1# Step 1
+                    VR = VR + Tmp(i_) * X(i_)
+                Next i_
+                Beta = C_Complex(X(I) - VR)
+            Else
+                Beta = C_Complex(X(I))
+            End If
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, CX)
+            If Not Result Then
+                RMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = CX.X
+        Next I
+        RMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If IsUpper And Trans = 1# Then
+        
+        '
+        ' U^T*x = b
+        '
+        For I = 0# To N - 1# Step 1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_Complex(A(I, I) * SA)
+            End If
+            Beta = C_Complex(X(I))
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, CX)
+            If Not Result Then
+                RMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = CX.X
+            
+            '
+            ' update the rest of right part
+            '
+            If I < N - 1# Then
+                VR = CX.X
+                For i_ = I + 1# To N - 1# Step 1
+                    Tmp(i_) = SA * A(I, i_)
+                Next i_
+                For i_ = I + 1# To N - 1# Step 1
+                    X(i_) = X(i_) - VR * Tmp(i_)
+                Next i_
+            End If
+        Next I
+        RMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If Not IsUpper And Trans = 1# Then
+        
+        '
+        ' L^T*x = b
+        '
+        For I = N - 1# To 0# Step -1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_Complex(A(I, I) * SA)
+            End If
+            Beta = C_Complex(X(I))
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, CX)
+            If Not Result Then
+                RMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = CX.X
+            
+            '
+            ' update the rest of right part
+            '
+            If I > 0# Then
+                VR = CX.X
+                For i_ = 0# To I - 1# Step 1
+                    Tmp(i_) = SA * A(I, i_)
+                Next i_
+                For i_ = 0# To I - 1# Step 1
+                    X(i_) = X(i_) - VR * Tmp(i_)
+                Next i_
+            End If
+        Next I
+        RMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    Result = False
+    RMatrixScaledTRSafeSolve = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for safe solution of
+'
+'    SA*op(A)=b
+'
+'where  A  is  NxN  upper/lower  triangular/unitriangular  matrix, op(A) is
+'either identity transform, transposition or Hermitian transposition, SA is
+'a scaling factor such that max(|SA*A[i,j]|) is close to 1.0 in magnutude.
+'
+'This subroutine  limits  relative  growth  of  solution  (in inf-norm)  by
+'MaxGrowth,  returning  False  if  growth  exceeds MaxGrowth. Degenerate or
+'near-degenerate matrices are handled correctly (False is returned) as long
+'as MaxGrowth is significantly less than MaxRealNumber/norm(b).
+'
+'  -- ALGLIB routine --
+'     21.01.2010
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixScaledTRSafeSolve(ByRef A() As Complex, _
+         ByVal SA As Double, _
+         ByVal N As Long, _
+         ByRef X() As Complex, _
+         ByVal IsUpper As Boolean, _
+         ByVal Trans As Long, _
+         ByVal IsUnit As Boolean, _
+         ByVal MaxGrowth As Double) As Boolean
+    Dim Result As Boolean
+    Dim LnMax As Double
+    Dim NrmB As Double
+    Dim NrmX As Double
+    Dim I As Long
+    Dim Alpha As Complex
+    Dim Beta As Complex
+    Dim VC As Complex
+    Dim Tmp() As Complex
+    Dim i_ As Long
+    Result = True
+    LnMax = Log(MaxRealNumber)
+    
+    '
+    ' Quick return if possible
+    '
+    If N <= 0# Then
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    
+    '
+    ' Load norms: right part and X
+    '
+    NrmB = 0#
+    For I = 0# To N - 1# Step 1
+        NrmB = MaxReal(NrmB, AbsComplex(X(I)))
+    Next I
+    NrmX = 0#
+    
+    '
+    ' Solve
+    '
+    ReDim Tmp(0 To N - 1)
+    Result = True
+    If IsUpper And Trans = 0# Then
+        
+        '
+        ' U*x = b
+        '
+        For I = N - 1# To 0# Step -1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_MulR(A(I, I), SA)
+            End If
+            If I < N - 1# Then
+                For i_ = I + 1# To N - 1# Step 1
+                    Tmp(i_) = C_MulR(A(I, i_), SA)
+                Next i_
+                VC = C_Complex(0#)
+                For i_ = I + 1# To N - 1# Step 1
+                    VC = C_Add(VC, C_Mul(Tmp(i_), X(i_)))
+                Next i_
+                Beta = C_Sub(X(I), VC)
+            Else
+                Beta = X(I)
+            End If
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, VC)
+            If Not Result Then
+                CMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = VC
+        Next I
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If Not IsUpper And Trans = 0# Then
+        
+        '
+        ' L*x = b
+        '
+        For I = 0# To N - 1# Step 1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_MulR(A(I, I), SA)
+            End If
+            If I > 0# Then
+                For i_ = 0# To I - 1# Step 1
+                    Tmp(i_) = C_MulR(A(I, i_), SA)
+                Next i_
+                VC = C_Complex(0#)
+                For i_ = 0# To I - 1# Step 1
+                    VC = C_Add(VC, C_Mul(Tmp(i_), X(i_)))
+                Next i_
+                Beta = C_Sub(X(I), VC)
+            Else
+                Beta = X(I)
+            End If
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, VC)
+            If Not Result Then
+                CMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = VC
+        Next I
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If IsUpper And Trans = 1# Then
+        
+        '
+        ' U^T*x = b
+        '
+        For I = 0# To N - 1# Step 1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_MulR(A(I, I), SA)
+            End If
+            Beta = X(I)
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, VC)
+            If Not Result Then
+                CMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = VC
+            
+            '
+            ' update the rest of right part
+            '
+            If I < N - 1# Then
+                For i_ = I + 1# To N - 1# Step 1
+                    Tmp(i_) = C_MulR(A(I, i_), SA)
+                Next i_
+                For i_ = I + 1# To N - 1# Step 1
+                    X(i_) = C_Sub(X(i_), C_Mul(VC, Tmp(i_)))
+                Next i_
+            End If
+        Next I
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If Not IsUpper And Trans = 1# Then
+        
+        '
+        ' L^T*x = b
+        '
+        For I = N - 1# To 0# Step -1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_MulR(A(I, I), SA)
+            End If
+            Beta = X(I)
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, VC)
+            If Not Result Then
+                CMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = VC
+            
+            '
+            ' update the rest of right part
+            '
+            If I > 0# Then
+                For i_ = 0# To I - 1# Step 1
+                    Tmp(i_) = C_MulR(A(I, i_), SA)
+                Next i_
+                For i_ = 0# To I - 1# Step 1
+                    X(i_) = C_Sub(X(i_), C_Mul(VC, Tmp(i_)))
+                Next i_
+            End If
+        Next I
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If IsUpper And Trans = 2# Then
+        
+        '
+        ' U^H*x = b
+        '
+        For I = 0# To N - 1# Step 1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_MulR(Conj(A(I, I)), SA)
+            End If
+            Beta = X(I)
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, VC)
+            If Not Result Then
+                CMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = VC
+            
+            '
+            ' update the rest of right part
+            '
+            If I < N - 1# Then
+                For i_ = I + 1# To N - 1# Step 1
+                    Tmp(i_) = C_MulR(Conj(A(I, i_)), SA)
+                Next i_
+                For i_ = I + 1# To N - 1# Step 1
+                    X(i_) = C_Sub(X(i_), C_Mul(VC, Tmp(i_)))
+                Next i_
+            End If
+        Next I
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    If Not IsUpper And Trans = 2# Then
+        
+        '
+        ' L^T*x = b
+        '
+        For I = N - 1# To 0# Step -1
+            
+            '
+            ' Task is reduced to alpha*x[i] = beta
+            '
+            If IsUnit Then
+                Alpha = C_Complex(SA)
+            Else
+                Alpha = C_MulR(Conj(A(I, I)), SA)
+            End If
+            Beta = X(I)
+            
+            '
+            ' solve alpha*x[i] = beta
+            '
+            Result = CBasicSolveAndUpdate(Alpha, Beta, LnMax, NrmB, MaxGrowth, NrmX, VC)
+            If Not Result Then
+                CMatrixScaledTRSafeSolve = Result
+                Exit Function
+            End If
+            X(I) = VC
+            
+            '
+            ' update the rest of right part
+            '
+            If I > 0# Then
+                For i_ = 0# To I - 1# Step 1
+                    Tmp(i_) = C_MulR(Conj(A(I, i_)), SA)
+                Next i_
+                For i_ = 0# To I - 1# Step 1
+                    X(i_) = C_Sub(X(i_), C_Mul(VC, Tmp(i_)))
+                Next i_
+            End If
+        Next I
+        CMatrixScaledTRSafeSolve = Result
+        Exit Function
+    End If
+    Result = False
+    CMatrixScaledTRSafeSolve = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'complex basic solver-updater for reduced linear system
+'
+'    alpha*x[i] = beta
+'
+'solves this equation and updates it in overlfow-safe manner (keeping track
+'of relative growth of solution).
+'
+'Parameters:
+'    Alpha   -   alpha
+'    Beta    -   beta
+'    LnMax   -   precomputed Ln(MaxRealNumber)
+'    BNorm   -   inf-norm of b (right part of original system)
+'    MaxGrowth-  maximum growth of norm(x) relative to norm(b)
+'    XNorm   -   inf-norm of other components of X (which are already processed)
+'                it is updated by CBasicSolveAndUpdate.
+'    X       -   solution
+'
+'  -- ALGLIB routine --
+'     26.01.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function CBasicSolveAndUpdate(ByRef Alpha_ As Complex, _
+         ByRef Beta_ As Complex, _
+         ByVal LnMax As Double, _
+         ByVal BNorm As Double, _
+         ByVal MaxGrowth As Double, _
+         ByRef XNorm As Double, _
+         ByRef X As Complex) As Boolean
+    Dim Result As Boolean
+    Dim Alpha As Complex
+    Dim Beta As Complex
+    Dim V As Double
+    Alpha = Alpha_
+    Beta = Beta_
+    Result = False
+    If C_EqualR(Alpha, 0#) Then
+        CBasicSolveAndUpdate = Result
+        Exit Function
+    End If
+    If C_NotEqualR(Beta, 0#) Then
+        
+        '
+        ' alpha*x[i]=beta
+        '
+        V = Log(AbsComplex(Beta)) - Log(AbsComplex(Alpha))
+        If V > LnMax Then
+            CBasicSolveAndUpdate = Result
+            Exit Function
+        End If
+        X = C_Div(Beta, Alpha)
+    Else
+        
+        '
+        ' alpha*x[i]=0
+        '
+        X = C_Complex(0#)
+    End If
+    
+    '
+    ' update NrmX, test growth limit
+    '
+    XNorm = MaxReal(XNorm, AbsComplex(X))
+    If XNorm > MaxGrowth * BNorm Then
+        CBasicSolveAndUpdate = Result
+        Exit Function
+    End If
+    Result = True
+    CBasicSolveAndUpdate = Result
+End Function
