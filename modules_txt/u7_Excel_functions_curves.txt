@@ -1,0 +1,232 @@
+'=======================================================================================
+'Unifloc 7.8  Vulpes zerda                                      khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
+'
+'=======================================================================================
+' функции для работы с кривыми из интерфейса Excel
+Option Explicit
+Option Base 1
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция поиска значения функции по заданным табличным данным (интерполяция)
+Public Function crv_interpolation(x_points, y_points, x_val, _
+                        Optional ByVal type_interpolation As Integer = 0)
+' x_points  - табличные значения аргумента функции
+' y_points  - табличные значения значения функции
+' x_val - аргумент для которого надо найти значение
+' type_interpolation - тип интерполяции
+'                    0 - линейна интерполяция
+'                    1 - кубическая интерполяция
+'                    2 - интерполяция Акима (выбросы)
+'
+' результат
+'   значение функции для заданного x_val
+'description_end
+    Dim x_arr(), y_arr(), x_val_arr(), y_out()
+    Dim y_val_temp
+    Dim x_range As Range
+    Dim y_range As Range
+    Dim i As Integer
+    Dim crv As New TInterpolation
+    Dim interp_type As String
+    
+On Error GoTo err1:
+        
+    ' прочитаем все исходные вектора с листа и подготовим выходной массив
+    Call read_xy_vectors(x_points, y_points, x_val, x_arr, y_arr, x_val_arr, y_out)
+    ' формируем объект функции для работы с ним
+    For i = 1 To UBound(x_arr)
+        crv.AddPoint x_arr(i), y_arr(i)
+    Next i
+    
+    ' готовим интерполяцию
+    Select Case type_interpolation
+        Case 0
+            interp_type = "Linear"
+        Case 1
+            interp_type = "Cubic"
+        Case 2
+            interp_type = "Akima"
+        Case 3
+            interp_type = "CatmullRom"
+    End Select
+           
+    crv.init_interpolation interp_type
+    
+    ' интерполируем требуемые данные и готовим для вывода массива значений
+    For i = LBound(x_val_arr) To UBound(x_val_arr)
+        y_val_temp = crv.get_interpolation_point(x_val_arr(i))
+        If UBound(y_out, 1) > 1 Then
+            y_out(i, LBound(y_out)) = y_val_temp
+        Else
+            y_out(LBound(y_out), i) = y_val_temp
+        End If
+    Next i
+    crv_interpolation = y_out
+    
+    Exit Function
+err1:
+    crv_interpolation = "error"
+    addLogMsg "Error:crv_interpolation:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция решения уравнения в табличном виде
+' ищется значение аргумента соответствующее заданному значению
+' используется линейная интерполяция
+' возможно несколько решений
+Public Function crv_solve(x_points, y_points, ByVal y_val As Double)
+'description_end
+    Dim x_arr(), y_arr(), y_val_arr(), x_out()
+    Dim n_y_val As Integer
+    Dim i As Integer
+    Dim crv As New TInterpolation
+On Error GoTo err1:
+        
+    ' прочитаем все исходные вектора с листа и подготовим выходной массив
+    Call read_xy_vectors(x_points, y_points, 0, x_arr, y_arr, y_val_arr, x_out)
+    ' формируем объект функции для работы с ним
+    For i = 1 To UBound(x_arr)
+        crv.AddPoint x_arr(i), y_arr(i)
+    Next i
+            
+    ' только для первого элемента ищем
+    
+    n_y_val = crv.FindSolutions(y_val)
+    ReDim x_out(1 To n_y_val)
+    
+    For i = 1 To n_y_val
+        x_out(i) = crv.SolutionPointX(i)
+    Next i
+    
+    crv_solve = x_out
+    
+    Exit Function
+err1:
+    crv_solve = "error"
+    addLogMsg "Error:crv_solve:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция решения уравнения в табличном виде
+' ищется значение аргумента соответствующее заданному значению
+' используется линейная интерполяция
+' возможно несколько решений
+Public Function crv_intersection(x1_points, y1_points, x2_points, y2_points)
+'description_end
+    Dim x1_arr(), y1_arr(), y_val_arr(), x_out()
+    Dim x2_arr(), y2_arr()
+    Dim n_y_val As Integer
+    Dim i As Integer
+    Dim crv1 As New TInterpolation
+    Dim crv2 As New TInterpolation
+    Dim crv As TInterpolation
+On Error GoTo err1:
+        
+    ' прочитаем все исходные вектора с листа и подготовим выходной массив
+    Call read_xy_vectors(x1_points, y1_points, 0, x1_arr, y1_arr, y_val_arr, x_out)
+    ' формируем объект функции для работы с ним
+    For i = 1 To UBound(x1_arr)
+        crv1.AddPoint x1_arr(i), y1_arr(i)
+    Next i
+            
+    ' прочитаем все исходные вектора с листа и подготовим выходной массив
+    Call read_xy_vectors(x2_points, y2_points, 0, x2_arr, y2_arr, y_val_arr, x_out)
+    ' формируем объект функции для работы с ним
+    For i = 1 To UBound(x2_arr)
+        crv2.AddPoint x2_arr(i), y2_arr(i)
+    Next i
+            
+    Set crv = crv1.SubtractCurve(crv2)
+    ' только для первого элемента ищем
+    
+    n_y_val = crv.FindSolutions(0)
+    ReDim x_out(1 To n_y_val)
+    
+    For i = 1 To n_y_val
+        x_out(i) = crv.SolutionPointX(i)
+    Next i
+    
+    crv_intersection = x_out
+    
+    Exit Function
+err1:
+    crv_intersection = "error"
+    addLogMsg "Error:crv_intersection:" & Err.Description
+End Function
+' рабочая функция для чтения данных кривых из range
+Private Sub read_xy_vectors(x_points, y_points, x_val, _
+                                ByRef x_arr(), _
+                                ByRef y_arr(), _
+                                ByRef x_val_arr(), _
+                                ByRef y_val_arr())
+                               
+Dim x_range As Range
+Dim y_range As Range
+Dim x_val_range As Range
+Dim check_x As Boolean
+Dim check_y As Boolean
+On Error GoTo err1:
+    ' проверим что на входе range объекты
+    If (IsObject(x_points)) And (IsObject(y_points)) Then
+        Set x_range = x_points
+        Set y_range = y_points
+        
+        ' проверим что данные заданы в строке для вектора аргументов
+        If x_range.Rows.Count = 1 And x_range.Columns.Count > 1 Then
+            x_arr = Application.Transpose(Application.Transpose(x_range))
+        ' если не в строке, то проверим столбец
+        ElseIf x_range.Rows.Count > 1 And x_range.Columns.Count = 1 Then
+            x_arr = Application.Transpose(x_range)
+        ' если не удалось найти или один столбец или одну строку то плохо
+        Else
+            GoTo err1:
+        End If
+        
+        ' проверим что данные заданы в строке для вектора аргументов
+        If y_range.Rows.Count = 1 And y_range.Columns.Count > 1 Then
+            y_arr = Application.Transpose(Application.Transpose(y_range))
+        ' если не в строке, то проверим столбец
+        ElseIf y_range.Rows.Count > 1 And y_range.Columns.Count = 1 Then
+            y_arr = Application.Transpose(y_range)
+        ' если не удалось найти или один столбец или одну строку то плохо
+        Else
+            GoTo err1:
+        End If
+        
+    Else
+        If IsArray(x_points) And IsArray(y_points) Then
+            check_x = (UBound(x_points, 1) > 1 And UBound(x_points, 2) = 0)
+            check_y = (UBound(y_points, 1) > 1 And UBound(y_points, 2) = 0)
+            If Not (check_x And check_y) Then GoTo err1:
+        End If
+    End If
+    ' Ожидаем, что веркторы одинаковой размерности
+    If Not (UBound(x_arr) = UBound(y_arr)) Then GoTo err1:
+    
+    
+    ' проверим искомое значение
+    If (IsObject(x_val)) Then
+        Set x_val_range = x_val
+        ' проверим что данные заданы в строке для вектора аргументов
+        If x_val_range.Rows.Count = 1 And x_val_range.Columns.Count > 1 Then
+            x_val_arr = Application.Transpose(Application.Transpose(x_val_range))
+            ReDim y_val_arr(1, UBound(x_val_arr))
+        ' если не в строке, то проверим столбец
+        ElseIf x_val_range.Rows.Count > 1 And x_val_range.Columns.Count = 1 Then
+            x_val_arr = Application.Transpose(x_val_range)
+            ReDim y_val_arr(UBound(x_val_arr), 1)
+        ' если не удалось найти или один столбец или одну строку то плохо
+        ElseIf x_val_range.Rows.Count = 1 And x_val_range.Columns.Count = 1 Then
+            ReDim x_val_arr(1)
+            x_val_arr(1) = x_val_range.Value2
+            ReDim y_val_arr(1, 1)
+        End If
+    End If
+    Exit Sub
+err1:
+    ' унифицированная реакция на ошибочный ввод ключевых параметров класса
+    Dim msg As String, fname As String
+    fname = "read_xy_vectors"
+    msg = fname & ": input - wrong "
+    addLogMsg msg
+    Err.Raise kreadRangeError, fname, msg
+End Sub
