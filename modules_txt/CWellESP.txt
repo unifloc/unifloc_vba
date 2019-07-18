@@ -34,8 +34,8 @@ Private p_Tintake_C As Double
 Private p_tres_C As Double
 Private p_Param As PARAMCALC                 ' параметры расчета по трубе
  ' поправочные коэффициенты для расчета распределения давления
-Private p_betta_grav As Double
-Private p_betta_fric As Double
+Private p_c_calibr_grav As Double
+Private p_c_calibr_fric As Double
 Public curve As New CCurves           ' коллекция кривых с результатами расчетов
 Public Event ReportProgress(msg As String)
 ' ============ESP well objects =======================================
@@ -62,8 +62,8 @@ Private Sub Class_Initialize()
     End With
     PARAM = p_Param                         ' здесь распространим все настройки на трубы
     p_ESP_on = False                        ' по умолчанию УЭЦН отключен
-    p_betta_grav = 1
-    p_betta_fric = 1
+    p_c_calibr_grav = 1
+    p_c_calibr_fric = 1
     isCalcCasing = True
     isCalcESPtemp = False
     InitWellConstruction 2500, 2000     ' init with some dummy data
@@ -117,39 +117,39 @@ End Property
 ' ---------------------------------------------------------------
 ' flow correlations tuning methods
 ' ---------------------------------------------------------------
-Public Property Get betta_grav() As Double
-   betta_grav = p_betta_grav
+Public Property Get c_calibr_grav() As Double
+   c_calibr_grav = p_c_calibr_grav
 End Property
-Public Property Get betta_fric() As Double
-   betta_fric = p_betta_fric
+Public Property Get c_calibr_fric() As Double
+   c_calibr_fric = p_c_calibr_fric
 End Property
-Public Property Let betta_grav(Val As Double)
+Public Property Let c_calibr_grav(Val As Double)
    If Val > 0 And Val < 2 Then
    ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
-       p_Pipe_HspHvd.betta_grav = Val
-       p_Pipe_WHeadHsp_Casing.betta_grav = Val
-       p_Pipe_WHeadHsp_Casing_Gas.betta_grav = Val
-       p_Pipe_WHeadHsp_Tubing.betta_grav = Val
-'       p_Pipe_WHeadHspFact_Tubing.betta_grav = val
-       p_betta_grav = Val
-       If Val <> 1 Then addLogMsg_debug "CWellESP.betta_grav = " & str(Val) & " warning. correction to multiphase flow correlation active!"
+       p_Pipe_HspHvd.c_calibr_grav = Val
+       p_Pipe_WHeadHsp_Casing.c_calibr_grav = Val
+       p_Pipe_WHeadHsp_Casing_Gas.c_calibr_grav = Val
+       p_Pipe_WHeadHsp_Tubing.c_calibr_grav = Val
+'       p_Pipe_WHeadHspFact_Tubing.c_calibr_grav = val
+       p_c_calibr_grav = Val
+       If Val <> 1 Then addLogMsg_debug "CWellESP.c_calibr_grav = " & str(Val) & " warning. correction to multiphase flow correlation active!"
    Else
-       addLogMsg_debug "CWellESP.betta_grav: value " & str(Val) & " not set. Out of range"
+       addLogMsg_debug "CWellESP.c_calibr_grav: value " & str(Val) & " not set. Out of range"
    End If
 End Property
  
-Public Property Let betta_fric(Val As Double)
+Public Property Let c_calibr_fric(Val As Double)
    If Val > 0 And Val < 2 Then
    ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
-       p_Pipe_HspHvd.betta_fric = Val
-       p_Pipe_WHeadHsp_Casing.betta_fric = Val
-       p_Pipe_WHeadHsp_Casing_Gas.betta_fric = Val
-       p_Pipe_WHeadHsp_Tubing.betta_fric = Val
-'       p_Pipe_WHeadHspFact_Tubing.betta_fric = val
-       p_betta_fric = Val
-       If Val <> 1 Then addLogMsg_debug "CWellESP.betta_fric = " & str(Val) & " warning. correction to multiphase flow correlation friction active!"
+       p_Pipe_HspHvd.c_calibr_fric = Val
+       p_Pipe_WHeadHsp_Casing.c_calibr_fric = Val
+       p_Pipe_WHeadHsp_Casing_Gas.c_calibr_fric = Val
+       p_Pipe_WHeadHsp_Tubing.c_calibr_fric = Val
+'       p_Pipe_WHeadHspFact_Tubing.c_calibr_fric = val
+       p_c_calibr_fric = Val
+       If Val <> 1 Then addLogMsg_debug "CWellESP.c_calibr_fric = " & str(Val) & " warning. correction to multiphase flow correlation friction active!"
    Else
-       addLogMsg_debug "CWellESP.betta_fric: value " & str(Val) & " not set. Out of range"
+       addLogMsg_debug "CWellESP.c_calibr_fric: value " & str(Val) & " not set. Out of range"
    End If
 End Property
  
@@ -574,7 +574,7 @@ On Error GoTo err1:
     p_PTwf.t_C = tbh_C
     ' 2. Рассчитывается давление на приеме насоса PIn и температура в потоке перед насосом TbIт
     ' p_Pipe_HspHvd - труба от забоя до приема, задаем расчет параметров снизу-вверх
-    p_Pipe_HspHvd.PARAM = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
+    p_Pipe_HspHvd.PARAM = ParamCalcAgainstFlow(HFlowCorrelation, TempCorrelation)
     ' Расчитываем давление на приеме (pwf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
     p_PTintake = p_Pipe_HspHvd.calc_dPipe(p_PTwf)
     calc_Pintake_pwf_atma = p_PTintake.p_atma
@@ -596,7 +596,7 @@ On Error GoTo err1:
     '    температуру на приеме явно задавать не надо - она определится из температурной модели
     '                                           сработают только простые температурные модели
     p_PTintake.p_atma = Pintake_atma
-    p_Pipe_HspHvd.PARAM = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
+    p_Pipe_HspHvd.PARAM = ParamCalcAlongFlow(HFlowCorrelation, TempCorrelation)
     ' Расчитываем давление на приеме (pwf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
     p_PTintake = p_Pipe_HspHvd.calc_dPipe(p_PTwf)
     calc_pwf_Pintake_atma = p_PTintake.p_atma
@@ -629,12 +629,12 @@ On Error GoTo err1:
     p_PTwf.t_C = tbh_C
     ' 2. Рассчитывается давление на приеме насоса PIn и температура в потоке перед насосом TbIт
     ' p_Pipe_HspHvd - труба от забоя до приема, задаем расчет параметров снизу-вверх
-    p_Pipe_HspHvd.PARAM = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
+    p_Pipe_HspHvd.PARAM = ParamCalcAgainstFlow(HFlowCorrelation, TempCorrelation)
     ' Расчитываем давление на приеме (pwf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
     p_PTintake = p_Pipe_HspHvd.calc_dPipe(p_PTwf, saveCurve)
     ' еслт давление на приеме меньше 1 значит поток не доходит до насоса, значит надо поправить расчеты
     If p_PTintake.p_atma < 1 Then
-'        p_Pipe_HspHvd.Param = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
+'        p_Pipe_HspHvd.Param = ParamCalcAlongFlow(HFlowCorrelation, TempCorrelation)
 '        p_PTintake.p_atma = 1
 '        p_PTwf = p_Pipe_HspHvd.calc_dPipe(p_PTintake, SaveCurve)              ' стрельнем назад и определим новое давление на приеме
         calc_plin_pwf_atma = 0
@@ -658,7 +658,7 @@ On Error GoTo err1:
         Call CasingCalc
     End If
     ' 7. Расчет распределения давления в НКТ и расчет буферного давления c учетом движения в НКТ нефти после сепарации PVTtub
-    p_Pipe_WHeadHsp_Tubing.PARAM = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
+    p_Pipe_WHeadHsp_Tubing.PARAM = ParamCalcAgainstFlow(HFlowCorrelation, TempCorrelation)
     p_PTbuf = p_Pipe_WHeadHsp_Tubing.calc_dPipe(p_PTdis, saveCurve)   'calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
     
     ' 8. Расчет линейного давления по штуцеру
@@ -957,10 +957,10 @@ Private Sub CasingCalc()
 On Error GoTo err_casing:
         ' 1. Расчет расхода свободного газа двигающегося через затрубное пространство после сепарации
         ' для затруба считаем снизу вверх
-        p_Pipe_WHeadHsp_Casing.PARAM = ParamCalcFromBottom(HFlowCorrelation, TempCorrelation)
+        p_Pipe_WHeadHsp_Casing.PARAM = ParamCalcAgainstFlow(HFlowCorrelation, TempCorrelation)
         p_PTcas_temp = p_Pipe_WHeadHsp_Casing.calc_dPipeZNLF(p_PTintake, mainCurves)
         ' 2. для затруба считаем распределение давления в газовом столбе сверху вниз
-        p_Pipe_WHeadHsp_Casing_Gas.PARAM = ParamCalcFromTop(Gas, GeoGradTemp)
+        p_Pipe_WHeadHsp_Casing_Gas.PARAM = ParamCalcAlongFlow(Gas, GeoGradTemp)
         p_PTintgas_temp = p_Pipe_WHeadHsp_Casing_Gas.calc_dPipe(p_PTcas, mainCurves)
         ' 3. найдем пересечение  распределений газа и жидкости в затрубе по давлению
         Set cas_crv = p_Pipe_WHeadHsp_Casing.PCurve.SubtractCurve(p_Pipe_WHeadHsp_Casing_Gas.PCurve)
@@ -1090,7 +1090,7 @@ On Error GoTo err1:
     End If
     
     ' 4. Расчет давления на выкиде по буферному
-    p_Pipe_WHeadHsp_Tubing.PARAM = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
+    p_Pipe_WHeadHsp_Tubing.PARAM = ParamCalcAlongFlow(HFlowCorrelation, TempCorrelation)
     p_PTdis = p_Pipe_WHeadHsp_Tubing.calc_dPipe(p_PTbuf, saveCurve)
     
     ' 5. если есть ЭЦН то считаем давление на приеме по давлению на выкиде сверху вниз
@@ -1102,7 +1102,7 @@ On Error GoTo err1:
         p_PTintake = p_PTdis
     End If
     ' 6. По давлению на приеме считаем забойное давление
-    p_Pipe_HspHvd.PARAM = ParamCalcFromTop(HFlowCorrelation, TempCorrelation)
+    p_Pipe_HspHvd.PARAM = ParamCalcAlongFlow(HFlowCorrelation, TempCorrelation)
     p_PTwf = p_Pipe_HspHvd.calc_dPipe(p_PTintake, saveCurve)
     fast_pwf_plin_atma = p_PTwf.p_atma
     ' 7. если надо считаем затруб
@@ -1819,13 +1819,13 @@ End Function
 Private Function IWell_CalcWell(pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
 End Function
 Private Property Get IWell_cfBettaFric() As Double
-    IWell_cfBettaFric = betta_fric
+    IWell_cfBettaFric = c_calibr_fric
 End Property
 Private Property Get IWell_cfBettaGrav() As Double
-    IWell_cfBettaGrav = betta_grav
+    IWell_cfBettaGrav = c_calibr_grav
 End Property
-Private Property Get IWell_cfChoke() As Double
-    IWell_cfChoke = choke.cfChoke_fr
+Private Property Get IWell_cDegradChoke() As Double
+    IWell_cDegradChoke = choke.c_degrad_fr
 End Property
 Private Property Get IWell_cfESP() As Double
     IWell_cfESP = ESP.cfHead_fr

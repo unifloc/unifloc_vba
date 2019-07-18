@@ -73,8 +73,8 @@ Option Base 0
  Private p_HmCurve As New TInterpolation                ' кривая для хранения набора точек, для которых должны строится все другие кривые
  
  ' поправочные коэффициенты для расчета распределения давления
- Private p_betta_grav As Double
- Private p_betta_fric As Double
+ Private p_c_calibr_grav As Double
+ Private p_c_calibr_fric As Double
  
  Public GLVin As CGLvalve  ' link to gas lift valve in pipe
  
@@ -103,8 +103,8 @@ Option Base 0
     Call p_Hmes_insert_m.AddPoint(0, 0)
     Call p_Hmes_insert_m.AddPoint(LengthMes_m, 0)
     StepHmCurve = 1000    ' по умолчанию шаг 100 м для сохранения кривых
-    p_betta_grav = 1
-    p_betta_fric = 1
+    p_c_calibr_grav = 1
+    p_c_calibr_fric = 1
  End Sub
  
  Public Property Get PARAM() As PARAMCALC
@@ -113,26 +113,26 @@ Option Base 0
  Public Property Let PARAM(Val As PARAMCALC)
     p_Param = Val
  End Property
- Public Property Get betta_grav() As Double
-    betta_grav = p_betta_grav
+ Public Property Get c_calibr_grav() As Double
+    c_calibr_grav = p_c_calibr_grav
  End Property
  
- Public Property Let betta_grav(Val As Double)
+ Public Property Let c_calibr_grav(Val As Double)
     If Val >= 0 And Val < 2 Then
     ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
-        p_betta_grav = Val
+        p_c_calibr_grav = Val
     End If
  End Property
  
- Public Property Let betta_fric(Val As Double)
+ Public Property Let c_calibr_fric(Val As Double)
     If Val >= 0 And Val < 2 Then
     ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
-        p_betta_fric = Val
+        p_c_calibr_fric = Val
     End If
  End Property
  
- Public Property Get betta_fric() As Double
-    betta_fric = p_betta_fric
+ Public Property Get c_calibr_fric() As Double
+    c_calibr_fric = p_c_calibr_fric
  End Property
   
  Public Property Get Hmes_insert_m(ByVal i As Integer) As Double
@@ -416,10 +416,10 @@ Public Sub SetHmes_insert(Optional pointX As Double = 0)
     End If
 End Sub
 Public Function InitPipe(ByVal d_m, _
-                         ByVal Hmes0_m, _
-                         ByVal Hmes1_m, _
+                         ByVal Length_m, _
                          ByVal theta_deg, _
-                         Optional ByVal roughness_m = 0.00001)
+                         Optional ByVal roughness_m = 0.00001, _
+                         Optional Hmes0_m As Double = 0)
 ' простой метод инициализации трубы по двум точкам
 ' используется для учебных примеров в функциях Excel
     Dim arr_d_m(0) As Double
@@ -433,7 +433,7 @@ Public Function InitPipe(ByVal d_m, _
         arr_roughness_m(i) = roughness_m
     Next i
     
-    arr_length_m(0) = Hmes1_m - Hmes0_m
+    arr_length_m(0) = Length_m
     ZeroCoordMes_m = Hmes0_m
     ZeroCoordVert_m = 0
     
@@ -493,7 +493,7 @@ With fluid
   
     If PARAM.correlation = BeggsBrill Then
             dp_dl_arr = unf_BegsBrillGradient(d_m, theta_deg, rough_m, .q_liq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
-                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, 0, 1, betta_grav, betta_fric)
+                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, 0, 1, c_calibr_grav, c_calibr_fric)
             dp_dl = dp_dl_arr(0)
             dpdlg_out = dp_dl_arr(1)
             dpdlf_out = dp_dl_arr(2)
@@ -505,7 +505,7 @@ With fluid
     ElseIf PARAM.correlation = Ansari Then
             If p_atma > Pcas_atma Then
                 dp_dl_arr = unf_AnsariGradient(d_m, theta_deg, rough_m, .q_liq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
-                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, , betta_grav, betta_fric)
+                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, , c_calibr_grav, c_calibr_fric)
             Else
                 ReDim dp_dl_arr(7) As Double
                 dp_dl_arr(0) = 0
@@ -529,7 +529,7 @@ With fluid
     ElseIf PARAM.correlation = Gas Then
             If p_atma > Pcas_atma Then
                 dp_dl_arr = unf_GasGradient(d_m, theta_deg, rough_m, .q_gas_rc_m3day, .mu_gas_cP, _
-                                           .rho_gas_rc_kgm3, p_atma, betta_grav, betta_fric)
+                                           .rho_gas_rc_kgm3, p_atma, c_calibr_grav, c_calibr_fric)
             Else
                 ReDim dp_dl_arr(7) As Double
                 dp_dl_arr(0) = 0
@@ -551,7 +551,7 @@ With fluid
             fpat_out = dp_dl_arr(7)
     ElseIf PARAM.correlation = Unified Then
             dp_dl_arr = unf_UnifiedTUFFPGradient(d_m, theta_deg, rough_m, .q_liq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
-                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, , betta_grav, betta_fric)
+                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, , c_calibr_grav, c_calibr_fric)
                                       
             dp_dl = dp_dl_arr(0)
             dpdlg_out = dp_dl_arr(1)
@@ -563,7 +563,7 @@ With fluid
             fpat_out = dp_dl_arr(7)
     ElseIf PARAM.correlation = Gray Then
             dp_dl_arr = unf_GrayModifiedGradient(d_m, theta_deg, rough_m, .q_liq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
-                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, 0, 1, , betta_grav, betta_fric)
+                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, 0, 1, , c_calibr_grav, c_calibr_fric)
             dp_dl = dp_dl_arr(0)
             dpdlg_out = dp_dl_arr(1)
             dpdlf_out = dp_dl_arr(2)
@@ -574,7 +574,7 @@ With fluid
             fpat_out = dp_dl_arr(7)
     ElseIf PARAM.correlation = HagedornBrown Then
             dp_dl_arr = unf_HagedornandBrawnmodified(d_m, theta_deg, rough_m, .q_liq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
-                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, 0, 1, , betta_grav, betta_fric)
+                                  .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, 0, 1, , c_calibr_grav, c_calibr_fric)
             dp_dl = dp_dl_arr(0)
             dpdlg_out = dp_dl_arr(1)
             dpdlf_out = dp_dl_arr(2)
@@ -586,7 +586,7 @@ With fluid
     ElseIf PARAM.correlation = SakharovMokhov Then
             dp_dl_arr = unf_Saharov_Mokhov_Gradient(d_m, theta_deg, rough_m, p_atma, .q_oil_sm3day, .q_wat_sm3day, .q_gas_sm3day, .bo_m3m3, _
                                       .bw_m3m3, .bg_m3m3, .rs_m3m3, .mu_oil_cP, .mu_wat_cP, .mu_gas_cP, .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_wat_sckgm3, .rho_gas_sckgm3, _
-                                      , , , betta_grav, betta_fric)
+                                      , , , c_calibr_grav, c_calibr_fric)
             dp_dl = dp_dl_arr(0)
             dpdlg_out = dp_dl_arr(1)
             dpdlf_out = dp_dl_arr(2)

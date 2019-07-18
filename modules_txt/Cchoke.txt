@@ -18,11 +18,11 @@ Option Base 0
 Public Dup_m As Double
 Public Ddown_m As Double
 Public Dchoke_m As Double
-Public Tchoke_C As Double
+Public tchoke_C As Double
 ' флюид протекающий через штуцер
 Public fluid As New CPVT
-Private p_kCalibration As Double
-Private p_cfChoke As Double                             ' choke correction factor
+Private p_c_calibration As Double
+Private p_c_degrad_choke As Double                             ' choke correction factor
 ' кривые для текущих характеристик штуцера
 ' строятся для текущих параметров штуцера
 Public curve As New CCurves
@@ -48,23 +48,26 @@ Private Sub Class_Initialize()
  K = 0.826
  F = 1.25
  C_vw = 4176
- p_kCalibration = 1
- p_cfChoke = 0
+ p_c_calibration = 1
+ p_c_degrad_choke = 0
  
  'параметры по умолчанию
  Dup_m = 0.1
  Ddown_m = 0.1
  Dchoke_m = 0.01
- Tchoke_C = 30
+ tchoke_C = 30
 End Sub
-Public Property Get KCalibr() As Double
-    KCalibr = p_kCalibration
+Public Property Get c_calibr_fr() As Double
+    c_calibr_fr = p_c_calibration
 End Property
-Public Property Get cfChoke_fr() As Double
-    cfChoke_fr = 1 - p_kCalibration
+Public Property Get c_degrad_fr() As Double
+    c_degrad_fr = 1 - p_c_calibration
 End Property
-Public Property Let cfChoke_fr(Val As Double)
-    p_kCalibration = 1 - Val
+Public Property Let c_degrad_fr(Val As Double)
+    p_c_calibration = 1 - Val
+End Property
+Public Property Let c_calibr_fr(Val As Double)
+    p_c_calibration = c_calibr_fr
 End Property
 Public Property Get fw_fr() As Double
     fw_fr = fluid.fw_fr ' fw_perc / 100
@@ -103,12 +106,12 @@ Public Function calc_choke_calibration( _
 ' давлений и дебитов (если можно определить)
 ' рассчитывается напрямую как отношение расчетного дебита к фактическому
     Dim qtest As Double
-    Tchoke_C = t_C
+    tchoke_C = t_C
     If (p_intake_atma > p_out_atma) And Dchoke_m > 0 Then
-        qtest = choke_liquid_rate(p_intake_atma, p_out_atma, Tchoke_C)
-        p_kCalibration = fluid.qliq_sm3day / qtest
+        qtest = choke_liquid_rate(p_intake_atma, p_out_atma, tchoke_C)
+        p_c_calibration = fluid.qliq_sm3day / qtest
     Else
-        p_kCalibration = 1
+        p_c_calibration = 1
     End If
 End Function
 'Function calculates upstream node pressure for choke
@@ -517,7 +520,7 @@ On Error GoTo err1:
     Call fluid.calc_PVT(p_u, t_u)
     
     p_Qlmax_m3day = K * w_i * f_o / fluid.rho_oil_sckgm3 + K * w_i * f_w / fluid.rho_wat_sckgm3
-    p_Qlmax_m3day = p_Qlmax_m3day * p_kCalibration
+    p_Qlmax_m3day = p_Qlmax_m3day * p_c_calibration
     
     'Calculate recovered downstream pressure at critical pressure ratio
     p_dcr = p_u * (p_ri * (1 - (Dchoke_m / Ddown_m) ^ 1.85) + (Dchoke_m / Ddown_m) ^ 1.85)
@@ -527,7 +530,7 @@ On Error GoTo err1:
     p_ra = MaxReal(p_ri, p_co / p_u)
     w_i = wi_calc(p_ra, p_u, t_u, rho_gu, f_o, f_g, f_w, Alpha, wi_der1, N)
     'Calculate isentropic mass flow rate
-    W = K * w_i * p_kCalibration
+    W = K * w_i * p_c_calibration
     ' calc PVT with upstream pressure and temperature
     Call fluid.calc_PVT(p_u, t_u)
     
@@ -575,7 +578,7 @@ Public Sub BuildCurves()
     Dim p_pbuf_atma As Double
     p_plin_atma = 10
     p_pbuf_atma = 10
-    kCal_temp = p_kCalibration
+    kCal_temp = p_c_calibration
     Ql_Min = 0
     Ql_Max = MaxReal(fluid.qliq_sm3day * 2, 100)
     Rp_Min = 50
@@ -596,18 +599,18 @@ Public Sub BuildCurves()
         ' первый график
         fluid.qliq_sm3day = i * (Ql_Max - Ql_Min) / numPoints + Ql_Min
         If Plin1 > 0 Then
-            p_kCalibration = 1
-            pbuf_work = calc_choke_pbuf(SetPT(Plin1, Tchoke_C)).p_atma
+            p_c_calibration = 1
+            pbuf_work = calc_choke_pbuf(SetPT(Plin1, tchoke_C)).p_atma
             curve("pbuf_vs_Ql_nominal_curve").AddPoint fluid.qliq_sm3day, pbuf_work
-            p_kCalibration = kCal_temp
-            pbuf_work = calc_choke_pbuf(SetPT(Plin1, Tchoke_C)).p_atma
+            p_c_calibration = kCal_temp
+            pbuf_work = calc_choke_pbuf(SetPT(Plin1, tchoke_C)).p_atma
             curve("pbuf_vs_Ql_curve").AddPoint fluid.qliq_sm3day, pbuf_work
         End If
-        p_kCalibration = 1
-        plin_work = calc_choke_plin(SetPT(Pbuf1, Tchoke_C)).p_atma
+        p_c_calibration = 1
+        plin_work = calc_choke_plin(SetPT(Pbuf1, tchoke_C)).p_atma
         curve("plin_vs_Ql_nominal_curve").AddPoint fluid.qliq_sm3day, plin_work
-        p_kCalibration = kCal_temp
-        plin_work = calc_choke_plin(SetPT(Pbuf1, Tchoke_C)).p_atma
+        p_c_calibration = kCal_temp
+        plin_work = calc_choke_plin(SetPT(Pbuf1, tchoke_C)).p_atma
         curve("plin_vs_Ql_curve").AddPoint fluid.qliq_sm3day, plin_work
     Next i
     Dim Rptemp As Double, Rsbtemp As Double
@@ -619,18 +622,18 @@ Public Sub BuildCurves()
         fluid.rp_m3m3 = i * (Rp_Max - Rp_Min) / numPoints + Rp_Min
         fluid.rsb_m3m3 = Rsbtemp   ' пытаемся восстановить rsb
         If Plin1 > 0 Then
-            p_kCalibration = 1
-            pbuf_work = calc_choke_pbuf(SetPT(Plin1, Tchoke_C)).p_atma
+            p_c_calibration = 1
+            pbuf_work = calc_choke_pbuf(SetPT(Plin1, tchoke_C)).p_atma
             curve("pbuf_vs_Rp_nominal_curve").AddPoint fluid.rp_m3m3, pbuf_work
-            p_kCalibration = kCal_temp
-            pbuf_work = calc_choke_pbuf(SetPT(Plin1, Tchoke_C)).p_atma
+            p_c_calibration = kCal_temp
+            pbuf_work = calc_choke_pbuf(SetPT(Plin1, tchoke_C)).p_atma
             curve("pbuf_vs_Rp_curve").AddPoint fluid.rp_m3m3, pbuf_work
         End If
-        p_kCalibration = 1
-        plin_work = calc_choke_plin(SetPT(Pbuf1, Tchoke_C)).p_atma
+        p_c_calibration = 1
+        plin_work = calc_choke_plin(SetPT(Pbuf1, tchoke_C)).p_atma
         curve("plin_vs_Rp_nominal_curve").AddPoint fluid.rp_m3m3, plin_work
-        p_kCalibration = kCal_temp
-        plin_work = calc_choke_plin(SetPT(Pbuf1, Tchoke_C)).p_atma
+        p_c_calibration = kCal_temp
+        plin_work = calc_choke_plin(SetPT(Pbuf1, tchoke_C)).p_atma
         curve("plin_vs_Rp_curve").AddPoint fluid.rp_m3m3, plin_work
     Next i
     fluid.rp_m3m3 = Rptemp
@@ -644,7 +647,7 @@ Public Sub BuildCurves()
     fluid.qliq_sm3day = Ql1
     For i = 0 To numPoints - 1
         plin_work = i * (plin_Max - plin_Min) / numPoints + plin_Min
-        pbuf_work = calc_choke_pbuf(SetPT(plin_work, Tchoke_C)).p_atma
+        pbuf_work = calc_choke_pbuf(SetPT(plin_work, tchoke_C)).p_atma
         curve("pbuf_vs_plin_curve").AddPoint plin_work, pbuf_work
     Next i
     p_plin_atma = Plin1
@@ -655,6 +658,6 @@ End Sub
     Ddown_m = chk.Ddown_m
     Dchoke_m = chk.Dchoke_m
     Call fluid.Copy(chk.fluid)
-    Tchoke_C = chk.Tchoke_C
-    p_kCalibration = chk.KCalibr
+    tchoke_C = chk.tchoke_C
+    p_c_calibration = chk.c_calibr_fr
  End Function
