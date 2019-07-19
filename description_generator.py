@@ -22,8 +22,14 @@ file_name = ["u7_Excel_functions.txt",
              "u7_Excel_functions_curves.txt"]
 
 path_vba_txt = 'modules_txt/'
-path_listings_out = 'try_doc/'
+path_listings_out = 'try_doc2/'
 
+file_name_for_report_str = "report"
+file_name_for_all_stuff = "all_stuff"
+
+"""
+string for specific VBA format of description
+"""
 start_string = "    Application.MacroOptions _\n"
 almost_end_string =", _\n"
 connect_to_next_string = " & _\n"
@@ -32,6 +38,7 @@ description_string = "      Description:="
 category_string = "     Category:=\"u7\",_\n"
 argument_descriptions_string ="     ArgumentDescriptions:=Array("
 connect_to_next_string_in_array = ",  _\n"
+
 
 
 class VBA_Func_Header:
@@ -46,15 +53,34 @@ class VBA_Func_Header:
         self.lines = []
 
     def save_lines_to_file(self, path):
+        """
+        create .txt files with one functions descriptions and all_stuff.txt with all functions descriptions
+        :param path:
+        :return: None
+        """
         fname = path + '/' + self.func_name + ".txt"
-        fname2 = path + '/' + "all_stuff" + ".txt"
+        fname2 = path + '/' + file_name_for_all_stuff + ".txt"
         print(fname)
         f = open(fname, "w", encoding='UTF-8')
         result_lines = self.lines
+
+        """
+        start addition in report file
+        """
+        report = "Отчет по функции " + self.func_name + " \n "
+        """
+        addition of start string - 1 line
+        """
         result_lines.insert(0,start_string)
 
+        """
+        addition of 2th string - 2 line - with function name
+        """
         result_lines.insert(1, macro_string + "\""  + self.func_name + "\"" + almost_end_string)
 
+        """
+        preparing and editing of short function description above declaration of function
+        """
         string_contain_function = False
         string_number = 2
         description_string_lines = description_string
@@ -74,16 +100,39 @@ class VBA_Func_Header:
                 last_addition_with_end = current_addition
                 last_addition_with_end = last_addition_with_end.replace(connect_to_next_string, almost_end_string)
                 description_string_lines = description_string_lines.replace(current_addition,last_addition_with_end)
+
+        """
+        addition of function description in 3th line
+        """
         result_lines.insert(2, description_string_lines)
+
+        """
+        deleting of unedited short description
+        """
         string_to_del = string_number - 2
         for i in range(string_to_del):
             result_lines.pop(3)
 
+        """
+        addition of category string in 4th line
+        """
         result_lines.insert(3, category_string)
 
+
+        """
+        beginning of work with description of argument for 5th line
+        """
+
+        """
+        creating of string, contained parametrs devided by decimal (,) delimetr
+        """
         string_contain_end_of_parametrs = False
         string_number = 4
         sting_with_parametrs_and_delimetr = ""
+
+        """
+        list of pattern, that will be deleted in sting
+        """
         not_nedeed_in_string = [self.func_name, "ByVal","-1", "const", "Optional", "Double", "Integer",
                                 "String", "Public", " As ", "Function", " _ ", " ", "=",  "\n", "\' ", "(_",
                                 "PVT_DEFAULT", "H_CORRELATION "]
@@ -127,8 +176,22 @@ class VBA_Func_Header:
         sting_with_parametrs_and_delimetr = sting_with_parametrs_and_delimetr.replace(",_",",")
         sting_with_parametrs_and_delimetr = sting_with_parametrs_and_delimetr.replace("(","")
         sting_with_parametrs_and_delimetr = sting_with_parametrs_and_delimetr.replace(")", "")
+
+        """
+        extract names of parametrs from string to list
+        """
         list_of_names_parametr = sting_with_parametrs_and_delimetr.split(",")
 
+        """
+        write number of parametrs in report
+        """
+        report += "Количество параметров в функции = " + str(len(list_of_names_parametr)) + " \n "
+        parametrs_in_report = sting_with_parametrs_and_delimetr.replace(",", ", ")
+        report += "Строка параметров:" + parametrs_in_report + " \n "
+
+        """
+        preparing and editing description of parametrs for 5th lines
+        """
         argument_descriptions_string_with_stuff = argument_descriptions_string
         for i in list_of_names_parametr:
             parametr_writed = False
@@ -153,23 +216,51 @@ class VBA_Func_Header:
 
         last_addition_with_end = current_addition
         last_addition_with_end = last_addition_with_end.replace(connect_to_next_string_in_array, ") \n")
+
         argument_descriptions_string_with_stuff = argument_descriptions_string_with_stuff.replace(current_addition, last_addition_with_end +"\n")
 
+        """
+        insert finished 5th line 
+        """
         result_lines.insert(4, argument_descriptions_string_with_stuff)
+
+
+        """
+        deleting of last lines
+        """
         for i in range(5,last_number+2):
             result_lines.pop(5)
 
-
+        """
+        deleting last symbols, that are not needed 
+        """
         k = 0
         for i in result_lines:
             result_lines[k] = i.replace("\' ","")
             k +=1
+
+        """
+        addition function in needed format in overall file by append
+        """
         f2 = open(fname2, "a", encoding='UTF-8')
         f2.writelines(result_lines)
         f2.close()
 
-        #f.writelines(result_lines)
-        #f.close()
+        """
+        addition in report file
+        """
+        report += " \n "
+        fname_report = path_listings_out + '/' + file_name_for_report_str + ".txt"
+        f3_report = open(fname_report, "a", encoding='UTF-8')
+        f3_report.writelines([report])
+        f3_report.close()
+
+
+        """
+        create file with one function in needed format
+        """
+        f.writelines(result_lines)
+        f.close()
 
 
 def process_code_file(code_file_name):
@@ -216,39 +307,26 @@ def process_code_file(code_file_name):
         func.save_lines_to_file(path_listings_out)
 
 
-
-
-fname2 = path_listings_out + '/' + "all_stuff" + ".txt"
+"""
+create file for future edited text and clear it
+"""
+fname2 = path_listings_out + '/' + file_name_for_all_stuff + ".txt"
 f2 = open(fname2, "w", encoding='UTF-8')
 f2.writelines([""])
 f2.close()
+
+"""
+crealte file for reports and clear it
+"""
+fname_report = path_listings_out + '/' + file_name_for_report_str + ".txt"
+f3_report = open(fname_report, "w", encoding='UTF-8')
+f3_report.writelines([""])
+f3_report.close()
+
 """
 listing generation start
 extract function with description markers
+and edited it by format
 """
 for code_file in file_name:
     process_code_file(path_vba_txt + code_file)
-
-"""
-tex chapter generation start
-"""
-path_func_files = "docs/u7_vba/listings/"
-files = glob.glob(path_func_files + "*.lst")
-print(files)
-
-ls = []
-
-for file in files:
-    f = open(file, "r", encoding='UTF-8')
-    l = f.readlines()
-    f.close()
-    fname_ext = os.path.basename(file)
-    fname = os.path.splitext(fname_ext)[0]
-    ls.append(r"\section{" + fname.replace('_', '\_') + "}" + '\n')
-    ls.append(r"\putlisting{listings/" + fname_ext + "}" + '\n')
-
-print(ls)
-
-f = open("docs/u7_vba/text/auto.tex", "w", encoding='UTF-8')
-f.writelines(ls)
-f.close()
