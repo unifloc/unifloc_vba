@@ -35,7 +35,7 @@ almost_end_string = ", _\n"
 connect_to_next_string = " & _\n"
 macro_string = "        Macro:="
 description_string = "      Description:="
-category_string = "     Category:=\"u7\",_\n"
+category_string = "     Category:=\"u7\", _\n"
 argument_descriptions_string ="     ArgumentDescriptions:=Array("
 connect_to_next_string_in_array = ", _\n"
 
@@ -218,7 +218,9 @@ class VBA_Func_Header:
                     """this symbol T_C is not understandable, change it"""
                     if current_string.find("Т_C") != -1:
                         current_string = current_string.replace("Т_C", "t_c")
-
+                    # this super puper method especially for bubble pressure
+                    if current_string.find("tres_C,") != -1:
+                        current_string = current_string.replace("tres_C,", "пласта,")
                     lower_current_string = current_string.lower()
                     position_equal = lower_current_string.find(lower_name)
                     if position_equal != (-1):
@@ -235,7 +237,9 @@ class VBA_Func_Header:
                             """this symbol T_C is not understandable, change it"""
                             if current_string_plus.find("Т_C") != -1:
                                 current_string_plus = current_string_plus.replace("Т_C", "t_c")
-
+                            #this super puper method especially for bubble pressure
+                            if current_string_plus.find("tres_C,") != -1:
+                                current_string_plus = current_string_plus.replace("tres_C,", "пласта.")
                             current_string_plus_lower = current_string_plus.lower()
                             string_not_contain_new_parametr = True
                             is_not_empty_string = True
@@ -251,6 +255,9 @@ class VBA_Func_Header:
                                 if current_string_plus.find("Т_C") != -1:
                                     current_string_plus = current_string_plus.replace("Т_C", "t_c")
 
+                                #this super puper methon especially for bubble pressure
+                                if current_string_plus.find("tres_c,") != -1:
+                                    current_string_plus = current_string_plus.replace("tres_c,", "пласта,")
                                 current_string_plus_lower = current_string_plus.lower()
 
                                 """
