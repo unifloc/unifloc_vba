@@ -239,7 +239,10 @@ class VBA_Func_Header:
                             current_string_plus_lower = current_string_plus.lower()
                             string_not_contain_new_parametr = True
                             is_not_empty_string = True
-
+                            is_not_included_result = True #TODO check, can result be used in description?
+                            """
+                            searching additional lines
+                            """
                             while string_not_contain_new_parametr and current_string_number_plus <= last_number:
 
                                 current_string_plus = result_lines[current_string_number_plus]
@@ -250,14 +253,21 @@ class VBA_Func_Header:
 
                                 current_string_plus_lower = current_string_plus.lower()
 
+                                """
+                                cheking line on new parametr name
+                                """
                                 for k in range(k_iter_for_search_plus + 1, number_of_parametrs):
                                     name_of_next_parametr = list_of_names_parametr[k]
                                     name_of_next_parametr_lower = name_of_next_parametr.lower()
                                     if current_string_plus_lower.find(name_of_next_parametr_lower) != -1:
                                         string_not_contain_new_parametr = False
+
                                 if current_string_plus_lower.find("\'\n") != -1:
                                     is_not_empty_string = False
-                                if string_not_contain_new_parametr and is_not_empty_string:
+
+                                if current_string_plus_lower.find("езультат") != -1:
+                                    is_not_included_result = False
+                                if string_not_contain_new_parametr and is_not_empty_string and is_not_included_result:
                                     current_string_plus_lower = current_string_plus_lower.replace("\n"," ")
                                     current_string_plus_lower = current_string_plus_lower.replace(" _", " ")
                                     current_string_plus_lower = current_string_plus_lower.replace("    ", " ")
