@@ -16,7 +16,10 @@ Public Function ESP_head_m( _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
-        Optional ByVal mu_cSt As Double = -1) As Double
+        Optional ByVal mu_cSt As Double = -1, _
+        Optional ByVal c_calibr_head As Double = 1, _
+        Optional ByVal c_calibr_rate As Double = 1, _
+        Optional ByVal c_calibr_power As Double = 1) As Double
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' num_stages  - количество ступеней
 ' freq_Hz    - частота вращения насоса
@@ -31,8 +34,9 @@ On Error GoTo err1:
     
     ESP.freq_Hz = freq_Hz
     ESP.StageNum = num_stages
+    qliq_m3day = qliq_m3day / c_calibr_rate
     ESP_head_m = ESP.get_ESP_head_m(qliq_m3day, num_stages, mu_cSt)
-    
+    ESP_head_m = ESP_head_m * c_calibr_head
     Exit Function
 err1:
     ESP_head_m = -1
@@ -46,7 +50,9 @@ Public Function ESP_power_W( _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
-        Optional ByVal mu_cSt As Double = -1) As Double
+        Optional ByVal mu_cSt As Double = -1, _
+        Optional ByVal c_calibr_rate As Double = 1, _
+        Optional ByVal c_calibr_power As Double = 1) As Double
 ' мощность УЭЦН номинальная потребляемая
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' num_stages  - количество ступеней
@@ -63,7 +69,9 @@ On Error GoTo err1:
     
     ESP.freq_Hz = freq_Hz
     ESP.StageNum = num_stages
+    qliq_m3day = qliq_m3day / c_calibr_rate
     ESP_power_W = ESP.get_ESP_power_W(qliq_m3day, num_stages, mu_cSt)
+    ESP_power_W = ESP_power_W * c_calibr_power
     Exit Function
 err1:
     ESP_power_W = -1
@@ -77,7 +85,10 @@ Public Function ESP_eff_fr( _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
-        Optional ByVal mu_cSt As Double = -1) As Double
+        Optional ByVal mu_cSt As Double = -1, _
+        Optional ByVal c_calibr_head As Double = 1, _
+        Optional ByVal c_calibr_rate As Double = 1, _
+        Optional ByVal c_calibr_power As Double = 1) As Double
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' num_stages  - количество ступеней
 ' freq_Hz       - частота вращения насоса
@@ -94,8 +105,9 @@ On Error GoTo err1:
     
     ESP.freq_Hz = freq_Hz
     ESP.StageNum = num_stages
+    qliq_m3day = qliq_m3day / c_calibr_rate
     ESP_eff_fr = ESP.get_ESP_effeciency_fr(qliq_m3day, mu_cSt)
-    
+    ESP_eff_fr = ESP_eff_fr * c_calibr_head * c_calibr_rate / c_calibr_power
     Exit Function
 err1:
     ESP_eff_fr = -1
@@ -184,11 +196,101 @@ Public Function ESP_id_by_rate(Q As Double)
 End Function
 'description_end
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'функция расчета давления на выходе/входе ЭЦН в рабочих условиях
+Public Function ESP_p_atma( _
+                 ByVal qliq_sm3day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal pcalc_atma As Double, _
+        Optional ByVal num_stages As Integer = 1, _
+        Optional ByVal freq_Hz As Double = 50, _
+        Optional ByVal pump_id = 674, _
+        Optional ByVal PVTstr As String = PVT_DEFAULT, _
+        Optional ByVal t_intake_C As Double = 50, _
+        Optional ByVal t_dis_C As Double = 50, _
+        Optional ByVal calc_along_flow As Boolean = 1, _
+        Optional ByVal ESP_gas_degradation_type As Integer = 0, _
+        Optional ByVal c_calibr_head As Double = 1, _
+        Optional ByVal c_calibr_rate As Double = 1, _
+        Optional ByVal c_calibr_power As Double = 1)
+' qliq_sm3day       - дебит жидкости на поверхности
+' fw_perc           - обводненность
+' p_atma            - давление для которого делается расчет
+'                     либо давление на приеме насоса
+'                     либо давление на выкиде насоса
+'                     определяется параметром calc_along_flow
+' num_stages        - количество ступеней
+' freq_Hz           - частота вращения вала ЭЦН, Гц
+' pump_id           - идентификатор насоса
+' PVTstr            - набор данных PVT
+' t_intake_C        - температура на приеме насоа
+' t_dis_C            - температура на выкиде насоса.
+'                     если = 0 и calc_along_flow = 1 то рассчитывается
+' calc_along_flow    - режим расчета снизу вверх или сверху вниз
+'                 calc_along_flow = True => p_atma давление на приеме
+'                 calc_along_flow = False => p_atma давление на выкиде
+' ESP_gas_degradation_type  - тип насоса по работе с газом:
+'               0 нет коррекции;
+'               1 стандартный ЭЦН (предел 25%);
+'               2 ЭЦН с газостабилизирующим модулем (предел 50%);
+'               3 ЭЦН с осевым модулем (предел 75%);
+'               4 ЭЦН с модифицированным ступенями (предел 40%).
+'                 Предел по доле газа на входе в насос после сепарации
+'                 на основе статьи SPE 117414 (с корректировкой)
+'                 поправка дополнительная к деградации (суммируется).
+' c_calibr_head    - коэффициент поправки на напор (множитель)
+' c_calibr_rate    - коэффициент поправки на подачу (множитель)
+' c_calibr_power   - коэффициент поправки на мощность (множитель)
+' результат   - массив значений включающий
+'                   давления на входе/выходе
+'                   температура на входе/выходе
+'                   мощность потребляемая с вала, Вт
+'                   мощность гидравлическая по перекачке жидкости, Вт
+'                   КПД ЭЦН
+'description_end
+    Dim fluid As CPVT
+On Error GoTo er1:
+    ' check ESP loaded and ready
+    If Not checkID_ESP(pump_id) Then
+        ESP_p_atma = "ESP load error"
+        addLogMsg "ESP_dp_atm: ESP id = " & CInt(pump_id) & " load error"
+        Exit Function
+    End If
+    
+    If PVTstr <> "" Then
+        Set fluid = PVT_decode_string(PVTstr)
+    End If
+    
+    fluid.qliq_sm3day = qliq_sm3day
+    fluid.fw_perc = fw_perc
+    
+    Set ESP.fluid = fluid
+    
+    ESP.freq_Hz = freq_Hz
+    ESP.StageNum = num_stages
+    ESP.c_calibr_head = c_calibr_head
+    ESP.c_calibr_rate = c_calibr_rate
+    ESP.c_calibr_power = c_calibr_power
+    ESP.GasDegrType = ESP_gas_degradation_type
+    If calc_along_flow Then
+        Call ESP.calc_ESP(pcalc_atma, t_intake_C, t_dis_C, calc_along_flow)
+        ESP_p_atma = Array(ESP.Pdis_atma, ESP.t_dis_C, ESP.PowerESP_Wt, ESP.Powerfluid_Wt, ESP.EffiencyESP_d)
+    Else
+        Call ESP.calc_ESP(pcalc_atma, t_intake_C, t_dis_C, calc_along_flow)
+        ESP_p_atma = Array(ESP.Pint_atma, ESP.Tintake_C, ESP.PowerESP_Wt, ESP.Powerfluid_Wt, ESP.EffiencyESP_d)
+    End If
+    
+    Exit Function
+er1:
+    ESP_p_atma = "error"
+    addLogMsg "Error:ESP_dp_atm:" & Err.Description
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета перепада давления ЭЦН в рабочих условиях
 Public Function ESP_dp_atm( _
                  ByVal qliq_sm3day As Double, _
                  ByVal fw_perc As Double, _
-                 ByVal p_atma As Double, _
+                 ByVal pcalc_atma As Double, _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
@@ -260,17 +362,43 @@ On Error GoTo er1:
     ESP.c_calibr_power = c_calibr_power
     ESP.GasDegrType = ESP_gas_degradation_type
     If calc_along_flow Then
-        Call ESP.calc_ESP(p_atma, t_intake_C, t_dis_C, calc_along_flow)
+        Call ESP.calc_ESP(pcalc_atma, t_intake_C, t_dis_C, calc_along_flow)
     Else
-        Call ESP.calc_ESP(p_atma, t_intake_C, t_dis_C, calc_along_flow)
+        Call ESP.calc_ESP(pcalc_atma, t_intake_C, t_dis_C, calc_along_flow)
     End If
     
     ESP_dp_atm = Array(ESP.Pdis_atma - ESP.Pint_atma, ESP.t_dis_C - ESP.Tintake_C, ESP.PowerESP_Wt, ESP.Powerfluid_Wt, ESP.EffiencyESP_d)
     Exit Function
 er1:
-    ESP_dp_atm = -1
+    ESP_dp_atm = "error"
     addLogMsg "Error:ESP_dp_atm:" & Err.Description
     
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет подстроечных параметров системы УЭЦН
+Public Function ESP_calibr_calc( _
+                 ByVal qliq_sm3day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal p_intake_atma As Double, _
+                 ByVal p_discharge_atma As Double, _
+        Optional ByVal PVTstr As String, _
+        Optional ByVal ESPstr As String _
+        )
+' qliq_sm3day       - дебит жидкости на поверхности
+' fw_perc           - обводненность
+' p_intake_atma     - давление на приеме
+' p_discharge_atma  - давление на выкиде насоса
+' PVTstr            - набор данных PVT
+' ESPstr            - набор данных ЭЦН
+' результат   - массив значений включающий
+'                   перепад давления
+'                   перепад температур
+'                   мощность потребляемая с вала, Вт
+'                   мощность гидравлическая по перекачке жидкости, Вт
+'                   КПД ЭЦН
+'                   список неполон
+'description_end
+    ESP_calibr_calc = "not implemented yet"
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет производительности системы УЭЦН
@@ -278,7 +406,7 @@ End Function
 Public Function ESP_system_calc( _
                  ByVal qliq_sm3day As Double, _
                  ByVal fw_perc As Double, _
-                 ByVal p_atma As Double, _
+                 ByVal pcalc_atma As Double, _
         Optional ByVal PVTstr As String, _
         Optional ByVal ESPstr As String, _
         Optional ByVal calc_along_flow As Boolean = 1 _
@@ -314,7 +442,7 @@ On Error GoTo er1:
     Set ESPsys.ESPpump.fluid = fluid
     fluid.qliq_sm3day = qliq_sm3day
     fluid.fw_perc = fw_perc
-    Call ESPsys.calc_ESPsys(p_atma, calc_along_flow)
+    Call ESPsys.calc_ESPsys(pcalc_atma, calc_along_flow)
     
     ' на выходе будет много данных
     ' надо подготовить их для удобного отображения
