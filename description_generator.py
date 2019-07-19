@@ -31,15 +31,16 @@ file_name_for_all_stuff = "all_stuff"
 string for specific VBA format of description
 """
 start_string = "    Application.MacroOptions _\n"
-almost_end_string =", _\n"
+almost_end_string = ", _\n"
 connect_to_next_string = " & _\n"
 macro_string = "        Macro:="
 description_string = "      Description:="
 category_string = "     Category:=\"u7\",_\n"
 argument_descriptions_string ="     ArgumentDescriptions:=Array("
-connect_to_next_string_in_array = ",  _\n"
+connect_to_next_string_in_array = ", _\n"
 
-
+flag = "flag"
+flag2 = "flag2"
 
 class VBA_Func_Header:
     """
@@ -196,6 +197,7 @@ class VBA_Func_Header:
         argument_descriptions_string_with_stuff = argument_descriptions_string
         number_of_writed_parametrs_in_description = 0
         string_of_not_writed_parametrs = ""
+        k_iter_for_search_plus = 0
         for i in list_of_names_parametr:
             parametr_writed = False
             start_string_number = string_number
@@ -220,12 +222,58 @@ class VBA_Func_Header:
                     lower_current_string = current_string.lower()
                     position_equal = lower_current_string.find(lower_name)
                     if position_equal != (-1):
+                        """
+                        in this place parametr are found and description will be search in next lines before new parametr
+                        """
                         current_addition = "\"" + lower_current_string
+                        current_addition = current_addition.replace(" _", "")
+
+                        if current_string_number != last_number:
+                            current_string_number_plus = current_string_number + 1
+                            current_string_plus = result_lines[current_string_number_plus]
+
+                            """this symbol T_C is not understandable, change it"""
+                            if current_string_plus.find("Т_C") != -1:
+                                current_string_plus = current_string_plus.replace("Т_C", "t_c")
+
+                            current_string_plus_lower = current_string_plus.lower()
+                            string_not_contain_new_parametr = True
+                            is_not_empty_string = True
+                            while string_not_contain_new_parametr and current_string_number_plus <= last_number:
+
+                                current_string_plus = result_lines[current_string_number_plus]
+
+                                """this symbol T_C is not understandable, change it"""
+                                if current_string_plus.find("Т_C") != -1:
+                                    current_string_plus = current_string_plus.replace("Т_C", "t_c")
+
+                                current_string_plus_lower = current_string_plus.lower()
+
+                                for k in range(k_iter_for_search_plus + 1, number_of_parametrs):
+                                    name_of_next_parametr = list_of_names_parametr[k]
+                                    name_of_next_parametr_lower = name_of_next_parametr.lower()
+                                    if current_string_plus_lower.find(name_of_next_parametr_lower) != -1:
+                                        string_not_contain_new_parametr = False
+                                if current_string_plus_lower.find("\'\n") != -1:
+                                    is_not_empty_string = False
+                                if string_not_contain_new_parametr and is_not_empty_string:
+                                    current_string_plus_lower = current_string_plus_lower.replace("\n"," ")
+                                    current_string_plus_lower = current_string_plus_lower.replace(" _", " ")
+                                    current_string_plus_lower = current_string_plus_lower.replace("    ", " ")
+                                    current_string_plus_lower = current_string_plus_lower.replace("   ", " ")
+                                    current_string_plus_lower = current_string_plus_lower.replace("  ", " ")
+                                    current_addition += connect_to_next_string + "    \""+ current_string_plus_lower +"\""
+                                current_string_number_plus += 1
+                            current_addition += "\n"
+
+
                         current_addition = current_addition.replace("\n", "\"" + connect_to_next_string_in_array)
                         argument_descriptions_string_with_stuff += current_addition
                         parametr_writed = True
                         number_of_writed_parametrs_in_description += 1
                 current_string_number += 1
+            k_iter_for_search_plus += 1
+
         """
         creating report about parametrs description
         """
@@ -243,7 +291,7 @@ class VBA_Func_Header:
         """
         create finished 5th line 
         """
-        argument_descriptions_string_with_stuff = argument_descriptions_string_with_stuff.replace(current_addition, last_addition_with_end +"\n")
+        argument_descriptions_string_with_stuff = argument_descriptions_string_with_stuff.replace(current_addition, last_addition_with_end +"\n \n")
 
         """
         insert finished 5th line 
@@ -260,9 +308,15 @@ class VBA_Func_Header:
         """
         deleting last symbols, that are not needed 
         """
+        double_end = ("\"" + connect_to_next_string_in_array)*2
         k = 0
         for i in result_lines:
-            result_lines[k] = i.replace("\' ","")
+
+            #result_lines[k] = i.replace(flag2 + flag, connect_to_next_string + "   ")
+            #result_lines[k] = i.replace(double_end, "\"" + connect_to_next_string_in_array)
+            #result_lines[k] = i.replace(connect_to_next_string_in_array + " & _" +"\"" +
+            #                            connect_to_next_string_in_array, connect_to_next_string)
+            #result_lines[k] = i.replace("\"\'", "\"")
             k +=1
 
         """
