@@ -646,7 +646,7 @@ On Error GoTo err1:
         Call ESP.calc_separation(p_PTintake.p_atma, p_PTintake.t_C)
         ESP.Tintake_C = p_PTintake.t_C
         Call ESP.calc_ESPsys(p_PTintake.p_atma, calc_temperature:=isCalcESPtemp)
-        p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.Tdis_C)
+        p_PTdis = SetPT(ESP.ESPpump.Pdis_atma, ESP.ESPpump.t_dis_C)
         Set p_Pipe_WHeadHsp_Tubing.fluid = ESP.fluidTub       ' учитываем что выше насоса пойдет модифицированный флюид
         Set p_Pipe_WHeadHsp_Casing.fluid = ESP.fluidCas
         Set p_Pipe_WHeadHsp_Casing_Gas.fluid = ESP.fluidCas
@@ -659,7 +659,7 @@ On Error GoTo err1:
     End If
     ' 7. Расчет распределения давления в НКТ и расчет буферного давления c учетом движения в НКТ нефти после сепарации PVTtub
     p_Pipe_WHeadHsp_Tubing.PARAM = ParamCalcAgainstFlow(HFlowCorrelation, TempCorrelation)
-    p_PTbuf = p_Pipe_WHeadHsp_Tubing.calc_dPipe(p_PTdis, saveCurve)   'calc_Pipe_PIncl_atma(p_Pdis_atma, p_Tdis_C)
+    p_PTbuf = p_Pipe_WHeadHsp_Tubing.calc_dPipe(p_PTdis, saveCurve)   'calc_Pipe_PIncl_atma(p_Pdis_atma, p_t_dis_C)
     
     ' 8. Расчет линейного давления по штуцеру
     On Error GoTo err_choke:
@@ -727,7 +727,7 @@ Public Function calc_well(ByVal plin_atma As Double, _
    Dim foundDegr As Boolean
 On Error GoTo err1:
    calc_well = True    ' по умолчанию ждем что все будет хорошо
-   ESP.cfHead_fr = 0   ' деградация УЭЦН = 0
+   ESP.c_calibr_head = 0   ' деградация УЭЦН = 0
    ' расчет параетров калибровки штуцера
    '     - проводится если только данные для штуцера коррекно заданы
    '     - если линейное давление и оно меньше буферного
@@ -741,10 +741,10 @@ On Error GoTo err1:
    ' получаем на выходе коэффициент сепарации и параметры флюида на участке выше насоса
    If isEqual(p_PTdis.p_atma, p_PTintake.p_atma) Then ' значит насос не развивает перепад давления и подобрать коэффициент деградации не удасться
        calc_well = False     ' расчет провести не удалось
-       ESP.cfHead_fr = 0   ' возвращаем насос в исходное состояние
+       ESP.c_calibr_head = 0   ' возвращаем насос в исходное состояние
        Exit Function
    End If
-   ESP.cfHead_fr = FindDegradation(plin_atma, pwf_atma)
+   ESP.c_calibr_head = FindDegradation(plin_atma, pwf_atma)
    ' перерасчитываем распределения давления в скважине с учетом деградации
    isCalcCasing = True
    PlinTemp_atma = calc_plin_pwf_atma(pwf_atma)
@@ -753,7 +753,7 @@ On Error GoTo err1:
 err1:
     If Err.Number = kErrDegradationNotFound Then
         calc_well = False     ' расчет провести не удалось
-        ESP.cfHead_fr = 0   ' возвращаем насос в исходное состояние
+        ESP.c_calibr_head = 0   ' возвращаем насос в исходное состояние
         Exit Function
     Else
         Dim errmsg As String
@@ -814,8 +814,8 @@ End Property
 Public Property Get Tintake_C() As Double
    Tintake_C = p_PTintake.t_C
 End Property
-Public Property Get Tdis_C() As Double
-   Tdis_C = p_PTdis.t_C
+Public Property Get t_dis_C() As Double
+   t_dis_C = p_PTdis.t_C
 End Property
 Public Property Get Hdyn_m() As Double
    Hdyn_m = p_Hd_m
@@ -866,14 +866,14 @@ Private Function FindDegradation(ByVal plin_targ As Double, _
 On Error GoTo err1:
    i = 0
    ' first guess of cf cf=0
-   curve(str_PdisKdegr_curve).ClearPoints
+   curve(str_Pdisc_calibr_head_curve).ClearPoints
    isCalcCasing = False
    kESP1 = 1
    ' max cf
    kESP_Up = 10
-   ESP.cfHead_fr = 1 - kESP_Up
+   ESP.c_calibr_head = 1 - kESP_Up
    Plin1 = calc_plin_pwf_atma(pwf_atma)
-   curve(str_PdisKdegr_curve).AddPoint Plin1, 1 - kESP_Up
+   curve(str_Pdisc_calibr_head_curve).AddPoint Plin1, 1 - kESP_Up
    ' check if high limit is ok
    If Plin1 > plin_targ Then
        plin_Up = Plin1
@@ -885,9 +885,9 @@ On Error GoTo err1:
    
    kESP_Down = -10
    
-   ESP.cfHead_fr = 1 - kESP_Down
+   ESP.c_calibr_head = 1 - kESP_Down
    Plin1 = calc_plin_pwf_atma(pwf_atma)
-   curve(str_PdisKdegr_curve).AddPoint Plin1, 1 - kESP_Up
+   curve(str_Pdisc_calibr_head_curve).AddPoint Plin1, 1 - kESP_Up
    ' check if low limit is ok
    If Plin1 < plin_targ Then
        plin_Down = Plin1
@@ -898,13 +898,13 @@ On Error GoTo err1:
    End If
    
    Do
-       ESP.cfHead_fr = 1 - kESP1
+       ESP.c_calibr_head = 1 - kESP1
        Plin1 = calc_plin_pwf_atma(pwf_atma)
-       curve(str_PdisKdegr_curve).AddPoint Plin1, 1 - kESP1
+       curve(str_Pdisc_calibr_head_curve).AddPoint Plin1, 1 - kESP1
        ' посмотрим если вдруг нашли решение то запомним его и завершим расчет
        If (Abs(Plin1 - plin_targ) < const_well_P_tolerance) Then
             found_solution = True
-            FindDegradation = ESP.cfHead_fr
+            FindDegradation = ESP.c_calibr_head
             Exit Function
        End If
        If Not found_solution Then
@@ -1096,7 +1096,7 @@ On Error GoTo err1:
     ' 5. если есть ЭЦН то считаем давление на приеме по давлению на выкиде сверху вниз
     If IsESP() Then                                                 ' Если есть насос
         ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
-        Call ESP.calc_ESPsys(p_PTdis.p_atma, CalcFromIntake:=False)
+        Call ESP.calc_ESPsys(p_PTdis.p_atma, calc_along_flow:=False)
         p_PTintake = SetPT(ESP.ESPpump.Pint_atma, ESP.ESPpump.Tintake_C)
     Else                                                            ' Если насоса нет, то совпадают
         p_PTintake = p_PTdis
@@ -1828,7 +1828,7 @@ Private Property Get IWell_cDegradChoke() As Double
     IWell_cDegradChoke = choke.c_degrad_fr
 End Property
 Private Property Get IWell_cfESP() As Double
-    IWell_cfESP = ESP.cfHead_fr
+    IWell_cfESP = ESP.c_calibr_head
     ' пока учитывается только по напору
     ' наверное потом надо будет добавить по дебиту и по мощности как то
 End Property

@@ -29,7 +29,7 @@ Public KsepNat_fr As Double
 Public Psep_atma As Double
 Public Tsep_C As Double
 Public Tintake_C As Double
-Public Tdis_C As Double
+Public t_dis_C As Double
 ' простой набор параметров дл€ описани€ ”Ё÷Ќ
 Public U_V As Double                ' напр€жение на ѕЁƒ фактическое
 Private p_U_trans_high_V As Double    ' напр€жение на трансформатере на высокой стороне, расчетное
@@ -96,7 +96,7 @@ Private p_PKV_stop_min As Double     ' врем€ ожидани€ в ѕ ¬ режиме
 '   - задает электрические показатели системы ”Ё÷Ќ и проводит расчет системы
 '   - тепературный режим регулируетс€ параметрами класса
 '           Tintake_C - температура на приеме насоса
-'           Tdis_C - температура на выкиде насоса. если =-1 то рассчитываетс€ при CalcFromIntake = True
+'           t_dis_C - температура на выкиде насоса. если =-1 то рассчитываетс€ при calc_along_flow = True
 Public Property Get freq_Hz() As Double
    freq_Hz = p_freq_Hz
 End Property
@@ -301,13 +301,13 @@ Public Property Get PKV_frac() As Double
     End If
 End Property
 Public Function calc_ESPsys(p_atma As Double, _
-                            Optional ByVal CalcFromIntake As Boolean = True, _
+                            Optional ByVal calc_along_flow As Boolean = True, _
                             Optional ByVal calc_cfPower = False, _
                             Optional ByVal calc_temperature = False) As PTtype
 ' функци€ расчета параметров работы ”Ё÷Ќ
 '
-' p_atma - давление начала расчета (давление на приеме если CalcFromIntake = True)
-' CalcFromIntake - флаг показывает ведетс€ ли расчет от давлени€ на приеме или от выкида
+' p_atma - давление начала расчета (давление на приеме если calc_along_flow = True)
+' calc_along_flow - флаг показывает ведетс€ ли расчет от давлени€ на приеме или от выкида
 '                  при расчете сверху вниз температура должна быть задана с двух сторон
 '                  и сепараци€ будет учитыватьс€ в соответствии с параметрами заданными вручную
 ' calc_cfPower - флаг режима расчета корректировочного фактора дл€ потреблени€ энергии
@@ -315,13 +315,13 @@ Public Function calc_ESPsys(p_atma As Double, _
     
     ' подготовим режима расчета температуры дл€ Ё÷Ќ
     If calc_temperature Then
-        Tdis_C = -1
-    ElseIf Tdis_C < 0 Then
-        Tdis_C = Tintake_C
+        t_dis_C = -1
+    ElseIf t_dis_C < 0 Then
+        t_dis_C = Tintake_C
     End If
   
     '1. расчет распределени€ давлени€ в Ё÷Ќ при работе ”Ё÷Ќ
-    Call p_ESPpump.calc_ESP(p_atma, Tintake_C, Tdis_C, CalcFromIntake)
+    Call p_ESPpump.calc_ESP(p_atma, Tintake_C, t_dis_C, calc_along_flow)
     '2. ќценим мощность на валу
     power_shaft_W = p_ESPpump.PowerESP_Wt + dPower_protector_W + dPower_GasSep_W
     '3. ќценим электрическую мощность потребл€емую ѕЁƒ
@@ -341,17 +341,17 @@ Public Function calc_ESPsys(p_atma As Double, _
     '9. оценим общую потребл€емую мощность ”Ё÷Ќ
     power_CS_teor_calc_W = cable_power_W + dPower_transform_W + dPower_CS_W
     If calc_cfPower Then
-        p_ESPpump.cfPower_fr = 1 - p_power_motor_fact_W / power_CS_teor_calc_W
+        p_ESPpump.c_calibr_power = 1 - p_power_motor_fact_W / power_CS_teor_calc_W
     End If
     '10. внесем в мощность поправку на деградацию по мощности
-    power_CS_calc_W = power_CS_teor_calc_W * (1 - cfPower_fr)
+    power_CS_calc_W = power_CS_teor_calc_W * (1 - c_calibr_power)
     ' 11 рассчитаем загрузку двигател€, дл€ этого получим номинальную мощность на данной частоте
     Dim PowNom_corr_W As Double
     PowNom_corr_W = power_motor_nom_W * freq_Hz / freq_nom_Hz   ' потом надо проверить что именно так считаетс€ номинальна€ мощность
     load_fr = p_power_motor_W / PowNom_corr_W
     
     
-    calc_ESPsys = SetPT(p_ESPpump.Pdis_atma, p_ESPpump.Tdis_C)
+    calc_ESPsys = SetPT(p_ESPpump.Pdis_atma, p_ESPpump.t_dis_C)
 End Function
  Public Property Get PTsep() As PTtype
     PTsep = SetPT(Psep_atma, Tsep_C)
@@ -419,7 +419,7 @@ End Function
  
  ' дебит газожидкостной смеси на выкиде насоса (на последних ступен€х)
  Public Property Get QmixPumpOutlet_m3day() As Double
-   fluidTub.calc_PVT ESP.Pdis_atma, ESP.Tdis_C
+   fluidTub.calc_PVT ESP.Pdis_atma, ESP.t_dis_C
    QmixPumpOutlet_m3day = fluidTub.q_mix_rc_m3day
  End Property
  
@@ -438,24 +438,24 @@ End Function
  End Property
  
  Public Property Get GasFraction_PumpOutlet_d() As Double
-    fluidTub.calc_PVT ESP.Pdis_atma, ESP.Tdis_C
+    fluidTub.calc_PVT ESP.Pdis_atma, ESP.t_dis_C
     GasFraction_PumpOutlet_d = fluidTub.gas_fraction_d(0)
  End Property
  
  
- Public Property Get cfHead_fr() As Double
-    cfHead_fr = p_ESPpump.cfHead_fr
+ Public Property Get c_calibr_head() As Double
+    c_calibr_head = p_ESPpump.c_calibr_head
  End Property
  
- Public Property Let cfHead_fr(Val As Double)
-    p_ESPpump.cfHead_fr = Val
+ Public Property Let c_calibr_head(Val As Double)
+    p_ESPpump.c_calibr_head = Val
  End Property
  
- Public Property Get cfPower_fr() As Double
-    cfPower_fr = p_ESPpump.cfPower_fr
+ Public Property Get c_calibr_power() As Double
+    c_calibr_power = p_ESPpump.c_calibr_power
  End Property
   
- Public Property Get cfRate_fr() As Double
-    cfRate_fr = p_ESPpump.cfRate_fr
+ Public Property Get c_calibr_rate() As Double
+    c_calibr_rate = p_ESPpump.c_calibr_rate
  End Property
  
