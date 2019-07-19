@@ -133,9 +133,9 @@ class VBA_Func_Header:
         """
         list of pattern, that will be deleted in sting
         """
-        not_nedeed_in_string = [self.func_name, "ByVal","-1", "const", "Optional", "Double", "Integer",
+        not_nedeed_in_string = [self.func_name, "ByVal","-1", "const", "Optional", "Double", "Integer", "Boolean",
                                 "String", "Public", " As ", "Function", " _ ", " ", "=",  "\n", "\' ", "(_",
-                                "PVT_DEFAULT", "H_CORRELATION "]
+                                "PVT_DEFAULT", "H_CORRELATION"]
         last_step = 0
         while string_contain_end_of_parametrs == False:
             math_object = re.search(r'\)', result_lines[string_number])
@@ -185,7 +185,8 @@ class VBA_Func_Header:
         """
         write number of parametrs in report
         """
-        report += "Количество параметров в функции = " + str(len(list_of_names_parametr)) + " \n "
+        number_of_parametrs = len(list_of_names_parametr)
+        report += "Количество параметров в функции = " + str(number_of_parametrs) + " \n "
         parametrs_in_report = sting_with_parametrs_and_delimetr.replace(",", ", ")
         report += "Строка параметров:" + parametrs_in_report + " \n "
 
@@ -193,30 +194,55 @@ class VBA_Func_Header:
         preparing and editing description of parametrs for 5th lines
         """
         argument_descriptions_string_with_stuff = argument_descriptions_string
+        number_of_writed_parametrs_in_description = 0
+        string_of_not_writed_parametrs = ""
         for i in list_of_names_parametr:
             parametr_writed = False
             start_string_number = string_number
             current_string_number = start_string_number
             last_number =  (len(result_lines) - 1)
-            while not parametr_writed and current_string_number <= last_number:
-                current_string = result_lines[current_string_number]
+            while not parametr_writed and current_string_number <= last_number + 1:
+
                 lower_name = i.lower()
-                lower_current_string = current_string.lower()
-                position_equal = lower_current_string.find(lower_name)
-                if current_string_number == last_number:
+
+                if current_string_number == last_number + 1:
                     current_addition = "\"" + lower_name +"\"" + connect_to_next_string_in_array
                     argument_descriptions_string_with_stuff += current_addition
                     parametr_writed = True
-                if position_equal != (-1):
-                    current_addition = "\"" + lower_current_string
-                    current_addition = current_addition.replace("\n", "\"" + connect_to_next_string_in_array)
-                    argument_descriptions_string_with_stuff += current_addition
-                    parametr_writed = True
-                current_string_number += 1
+                    string_of_not_writed_parametrs += lower_name + '  '
+                else:
+                    current_string = result_lines[current_string_number]
 
+                    """this symbol T_C is not understandable, change it"""
+                    if current_string.find("Т_C") != -1:
+                        current_string = current_string.replace("Т_C", "t_c")
+
+                    lower_current_string = current_string.lower()
+                    position_equal = lower_current_string.find(lower_name)
+                    if position_equal != (-1):
+                        current_addition = "\"" + lower_current_string
+                        current_addition = current_addition.replace("\n", "\"" + connect_to_next_string_in_array)
+                        argument_descriptions_string_with_stuff += current_addition
+                        parametr_writed = True
+                        number_of_writed_parametrs_in_description += 1
+                current_string_number += 1
+        """
+        creating report about parametrs description
+        """
+        report += "Параметров найдено и записано = " + str(number_of_writed_parametrs_in_description) + " \n "
+        if number_of_writed_parametrs_in_description != number_of_parametrs:
+            number_of_not_writed_parametrs = number_of_parametrs - number_of_writed_parametrs_in_description
+            report += "Ошибка! " + "Не найдены параметры! Количество: " + str(number_of_not_writed_parametrs) + " \n "
+            report += "Список параметров: " + string_of_not_writed_parametrs + " \n "
+        """
+        replace end in last addition - from & to )
+        """
         last_addition_with_end = current_addition
         last_addition_with_end = last_addition_with_end.replace(connect_to_next_string_in_array, ") \n")
 
+        """
+        create finished 5th line 
+        """
         argument_descriptions_string_with_stuff = argument_descriptions_string_with_stuff.replace(current_addition, last_addition_with_end +"\n")
 
         """
