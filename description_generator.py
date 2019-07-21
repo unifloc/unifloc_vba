@@ -84,23 +84,25 @@ class VBA_Func_Header:
         """
         string_contain_function = False
         string_number = 2
-        description_string_lines = description_string
+        description_string_lines = description_string + "\""
         while string_contain_function == False:
             math_object = re.search(r'Function',result_lines[string_number])
             if math_object != None:
                 string_contain_function = True
             if not string_contain_function:
                 current_addition = result_lines[string_number]
-                current_addition = "\"" + current_addition
-                current_addition = current_addition.replace("\n", "\"" + connect_to_next_string)
+                #current_addition += current_addition
+                #current_addition = current_addition.replace("\n", "\"" + connect_to_next_string)
+                current_addition = current_addition.replace("\n", "")
 
                 description_string_lines += current_addition
 
                 string_number += 1
             else:
-                last_addition_with_end = current_addition
-                last_addition_with_end = last_addition_with_end.replace(connect_to_next_string, almost_end_string)
-                description_string_lines = description_string_lines.replace(current_addition,last_addition_with_end)
+                #last_addition_with_end = current_addition
+                #last_addition_with_end = last_addition_with_end.replace(connect_to_next_string, almost_end_string)
+                #description_string_lines = description_string_lines.replace(current_addition,last_addition_with_end)
+                description_string_lines += "\"" + connect_to_next_string_in_array
 
         """
         addition of function description in 3th line
@@ -229,7 +231,7 @@ class VBA_Func_Header:
                         """
                         current_addition = "    \"" + lower_current_string
                         current_addition = current_addition.replace(" _", "")
-                        current_addition = current_addition.replace("\n", "\"")
+                        current_addition = current_addition.replace("\n", "")
                         if current_string_number != last_number:
                             current_string_number_plus = current_string_number + 1
                             current_string_plus = result_lines[current_string_number_plus]
@@ -281,9 +283,11 @@ class VBA_Func_Header:
                                     current_string_plus_lower = current_string_plus_lower.replace("   ", " ")
                                     current_string_plus_lower = current_string_plus_lower.replace("  ", " ")
                                     current_string_plus_lower = current_string_plus_lower.replace("  ", " ")
-                                    current_addition += connect_to_next_string + "          \""+ current_string_plus_lower +"\""
+                                    #current_addition += connect_to_next_string + "          \""+ current_string_plus_lower +"\""
+                                    current_addition += current_string_plus_lower
                                 current_string_number_plus += 1
 
+                        current_addition += "\""
                         current_addition += connect_to_next_string_in_array
                         argument_descriptions_string_with_stuff += current_addition
                         parametr_writed = True
@@ -417,7 +421,7 @@ f3_report.writelines([""])
 f3_report.close()
 
 """
-listing generation start
+description generation start
 extract function with description markers
 and edited it by format
 """
