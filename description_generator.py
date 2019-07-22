@@ -22,7 +22,7 @@ file_name = ["u7_Excel_functions.txt",
              "u7_Excel_functions_curves.txt"]
 
 path_vba_txt = 'modules_txt/'
-path_listings_out = 'try_doc2/'
+path_listings_out = 'description_generated/'
 
 file_name_for_report_str = "report"
 file_name_for_all_stuff = "all_stuff"
@@ -62,7 +62,6 @@ class VBA_Func_Header:
         fname = path + '/' + self.func_name + ".txt"
         fname2 = path + '/' + file_name_for_all_stuff + ".txt"
         print(fname)
-        f = open(fname, "w", encoding='UTF-8')
         result_lines = self.lines
 
         """
@@ -356,8 +355,10 @@ class VBA_Func_Header:
         """
         create file with one function in needed format
         """
-        f.writelines(result_lines)
-        f.close()
+        
+        # f = open(fname, "w", encoding='UTF-8')
+        # f.writelines(result_lines)
+        # f.close()
 
 
 def process_code_file(code_file_name):
