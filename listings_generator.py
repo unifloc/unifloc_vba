@@ -22,7 +22,7 @@ file_name = ["u7_Excel_functions.txt",
 			 "u7_Excel_functions_curves.txt"]
 
 path_vba_txt = 'modules_txt/'
-path_listings_out = 'docs/u7_vba/listings/'
+path_listings_out = 'try_doc/'
 
 class VBA_Func_Header:
     """
