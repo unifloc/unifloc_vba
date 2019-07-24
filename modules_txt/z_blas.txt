@@ -1,0 +1,505 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2005-2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+Public Function VectorNorm2(ByRef X() As Double, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long) As Double
+    Dim Result As Double
+    Dim N As Long
+    Dim IX As Long
+    Dim ABSXI As Double
+    Dim SCL As Double
+    Dim SSQ As Double
+    N = I2 - I1 + 1#
+    If N < 1# Then
+        Result = 0#
+        VectorNorm2 = Result
+        Exit Function
+    End If
+    If N = 1# Then
+        Result = Abs(X(I1))
+        VectorNorm2 = Result
+        Exit Function
+    End If
+    SCL = 0#
+    SSQ = 1#
+    For IX = I1 To I2 Step 1
+        If X(IX) <> 0# Then
+            ABSXI = Abs(X(IX))
+            If SCL < ABSXI Then
+                SSQ = 1# + SSQ * Square(SCL / ABSXI)
+                SCL = ABSXI
+            Else
+                SSQ = SSQ + Square(ABSXI / SCL)
+            End If
+        End If
+    Next IX
+    Result = SCL * Sqr(SSQ)
+    VectorNorm2 = Result
+End Function
+Public Function VectorIdxAbsMax(ByRef X() As Double, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long) As Long
+    Dim Result As Long
+    Dim i As Long
+    Dim A As Double
+    Result = I1
+    A = Abs(X(Result))
+    For i = I1 + 1# To I2 Step 1
+        If Abs(X(i)) > Abs(X(Result)) Then
+            Result = i
+        End If
+    Next i
+    VectorIdxAbsMax = Result
+End Function
+Public Function ColumnIdxAbsMax(ByRef X() As Double, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByVal J As Long) As Long
+    Dim Result As Long
+    Dim i As Long
+    Dim A As Double
+    Result = I1
+    A = Abs(X(Result, J))
+    For i = I1 + 1# To I2 Step 1
+        If Abs(X(i, J)) > Abs(X(Result, J)) Then
+            Result = i
+        End If
+    Next i
+    ColumnIdxAbsMax = Result
+End Function
+Public Function RowIdxAbsMax(ByRef X() As Double, _
+         ByVal J1 As Long, _
+         ByVal J2 As Long, _
+         ByVal i As Long) As Long
+    Dim Result As Long
+    Dim J As Long
+    Dim A As Double
+    Result = J1
+    A = Abs(X(i, Result))
+    For J = J1 + 1# To J2 Step 1
+        If Abs(X(i, J)) > Abs(X(i, Result)) Then
+            Result = J
+        End If
+    Next J
+    RowIdxAbsMax = Result
+End Function
+Public Function UpperHessenberg1Norm(ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByVal J1 As Long, _
+         ByVal J2 As Long, _
+         ByRef WORK() As Double) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    For J = J1 To J2 Step 1
+        WORK(J) = 0#
+    Next J
+    For i = I1 To I2 Step 1
+        For J = MaxInt(J1, J1 + i - I1 - 1#) To J2 Step 1
+            WORK(J) = WORK(J) + Abs(A(i, J))
+        Next J
+    Next i
+    Result = 0#
+    For J = J1 To J2 Step 1
+        Result = MaxReal(Result, WORK(J))
+    Next J
+    UpperHessenberg1Norm = Result
+End Function
+Public Sub CopyMatrix(ByRef A() As Double, _
+         ByVal IS1 As Long, _
+         ByVal IS2 As Long, _
+         ByVal JS1 As Long, _
+         ByVal JS2 As Long, _
+         ByRef B() As Double, _
+         ByVal ID1 As Long, _
+         ByVal ID2 As Long, _
+         ByVal JD1 As Long, _
+         ByVal JD2 As Long)
+    Dim ISRC As Long
+    Dim IDST As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    If IS1 > IS2 Or JS1 > JS2 Then
+        Exit Sub
+    End If
+    For ISRC = IS1 To IS2 Step 1
+        IDST = ISRC - IS1 + ID1
+        i1_ = (JS1) - (JD1)
+        For i_ = JD1 To JD2 Step 1
+            B(IDST, i_) = A(ISRC, i_ + i1_)
+        Next i_
+    Next ISRC
+End Sub
+Public Sub InplaceTranspose(ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByVal J1 As Long, _
+         ByVal J2 As Long, _
+         ByRef WORK() As Double)
+    Dim i As Long
+    Dim J As Long
+    Dim IPS As Long
+    Dim JPS As Long
+    Dim L As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    If I1 > I2 Or J1 > J2 Then
+        Exit Sub
+    End If
+    For i = I1 To I2 - 1# Step 1
+        J = J1 + i - I1
+        IPS = i + 1#
+        JPS = J1 + IPS - I1
+        L = I2 - i
+        i1_ = (IPS) - (1#)
+        For i_ = 1# To L Step 1
+            WORK(i_) = A(i_ + i1_, J)
+        Next i_
+        i1_ = (JPS) - (IPS)
+        For i_ = IPS To I2 Step 1
+            A(i_, J) = A(i, i_ + i1_)
+        Next i_
+        i1_ = (1#) - (JPS)
+        For i_ = JPS To J2 Step 1
+            A(i, i_) = WORK(i_ + i1_)
+        Next i_
+    Next i
+End Sub
+Public Sub CopyAndTranspose(ByRef A() As Double, _
+         ByVal IS1 As Long, _
+         ByVal IS2 As Long, _
+         ByVal JS1 As Long, _
+         ByVal JS2 As Long, _
+         ByRef B() As Double, _
+         ByVal ID1 As Long, _
+         ByVal ID2 As Long, _
+         ByVal JD1 As Long, _
+         ByVal JD2 As Long)
+    Dim ISRC As Long
+    Dim JDST As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    If IS1 > IS2 Or JS1 > JS2 Then
+        Exit Sub
+    End If
+    For ISRC = IS1 To IS2 Step 1
+        JDST = ISRC - IS1 + JD1
+        i1_ = (JS1) - (ID1)
+        For i_ = ID1 To ID2 Step 1
+            B(i_, JDST) = A(ISRC, i_ + i1_)
+        Next i_
+    Next ISRC
+End Sub
+Public Sub MatrixVectorMultiply(ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByVal J1 As Long, _
+         ByVal J2 As Long, _
+         ByVal Trans As Boolean, _
+         ByRef X() As Double, _
+         ByVal IX1 As Long, _
+         ByVal IX2 As Long, _
+         ByVal Alpha As Double, _
+         ByRef Y() As Double, _
+         ByVal IY1 As Long, _
+         ByVal IY2 As Long, _
+         ByVal Beta As Double)
+    Dim i As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    If Not Trans Then
+        
+        '
+        ' y := alpha*A*x + beta*y;
+        '
+        If I1 > I2 Or J1 > J2 Then
+            Exit Sub
+        End If
+        
+        '
+        ' beta*y
+        '
+        If Beta = 0# Then
+            For i = IY1 To IY2 Step 1
+                Y(i) = 0#
+            Next i
+        Else
+            For i_ = IY1 To IY2 Step 1
+                Y(i_) = Beta * Y(i_)
+            Next i_
+        End If
+        
+        '
+        ' alpha*A*x
+        '
+        For i = I1 To I2 Step 1
+            i1_ = (IX1) - (J1)
+            V = 0#
+            For i_ = J1 To J2 Step 1
+                V = V + A(i, i_) * X(i_ + i1_)
+            Next i_
+            Y(IY1 + i - I1) = Y(IY1 + i - I1) + Alpha * V
+        Next i
+    Else
+        
+        '
+        ' y := alpha*A'*x + beta*y;
+        '
+        If I1 > I2 Or J1 > J2 Then
+            Exit Sub
+        End If
+        
+        '
+        ' beta*y
+        '
+        If Beta = 0# Then
+            For i = IY1 To IY2 Step 1
+                Y(i) = 0#
+            Next i
+        Else
+            For i_ = IY1 To IY2 Step 1
+                Y(i_) = Beta * Y(i_)
+            Next i_
+        End If
+        
+        '
+        ' alpha*A'*x
+        '
+        For i = I1 To I2 Step 1
+            V = Alpha * X(IX1 + i - I1)
+            i1_ = (J1) - (IY1)
+            For i_ = IY1 To IY2 Step 1
+                Y(i_) = Y(i_) + V * A(i, i_ + i1_)
+            Next i_
+        Next i
+    End If
+End Sub
+Public Function Pythag2(ByVal X As Double, ByVal Y As Double) As Double
+    Dim Result As Double
+    Dim W As Double
+    Dim XABS As Double
+    Dim YABS As Double
+    Dim z As Double
+    XABS = Abs(X)
+    YABS = Abs(Y)
+    W = MaxReal(XABS, YABS)
+    z = MinReal(XABS, YABS)
+    If z = 0# Then
+        Result = W
+    Else
+        Result = W * Sqr(1# + Square(z / W))
+    End If
+    Pythag2 = Result
+End Function
+Public Sub MatrixMatrixMultiply(ByRef A() As Double, _
+         ByVal AI1 As Long, _
+         ByVal AI2 As Long, _
+         ByVal AJ1 As Long, _
+         ByVal AJ2 As Long, _
+         ByVal TransA As Boolean, _
+         ByRef B() As Double, _
+         ByVal BI1 As Long, _
+         ByVal BI2 As Long, _
+         ByVal BJ1 As Long, _
+         ByVal BJ2 As Long, _
+         ByVal TransB As Boolean, _
+         ByVal Alpha As Double, _
+         ByRef C() As Double, _
+         ByVal CI1 As Long, _
+         ByVal CI2 As Long, _
+         ByVal CJ1 As Long, _
+         ByVal CJ2 As Long, _
+         ByVal Beta As Double, _
+         ByRef WORK() As Double)
+    Dim ARows As Long
+    Dim ACols As Long
+    Dim BRows As Long
+    Dim BCols As Long
+    Dim CRows As Long
+    Dim CCols As Long
+    Dim i As Long
+    Dim J As Long
+    Dim K As Long
+    Dim L As Long
+    Dim R As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Setup
+    '
+    If Not TransA Then
+        ARows = AI2 - AI1 + 1#
+        ACols = AJ2 - AJ1 + 1#
+    Else
+        ARows = AJ2 - AJ1 + 1#
+        ACols = AI2 - AI1 + 1#
+    End If
+    If Not TransB Then
+        BRows = BI2 - BI1 + 1#
+        BCols = BJ2 - BJ1 + 1#
+    Else
+        BRows = BJ2 - BJ1 + 1#
+        BCols = BI2 - BI1 + 1#
+    End If
+    If ARows <= 0# Or ACols <= 0# Or BRows <= 0# Or BCols <= 0# Then
+        Exit Sub
+    End If
+    CRows = ARows
+    CCols = BCols
+    
+    '
+    ' Test WORK
+    '
+    i = MaxInt(ARows, ACols)
+    i = MaxInt(BRows, i)
+    i = MaxInt(i, BCols)
+    WORK(1#) = 0#
+    WORK(i) = 0#
+    
+    '
+    ' Prepare C
+    '
+    If Beta = 0# Then
+        For i = CI1 To CI2 Step 1
+            For J = CJ1 To CJ2 Step 1
+                C(i, J) = 0#
+            Next J
+        Next i
+    Else
+        For i = CI1 To CI2 Step 1
+            For i_ = CJ1 To CJ2 Step 1
+                C(i, i_) = Beta * C(i, i_)
+            Next i_
+        Next i
+    End If
+    
+    '
+    ' A*B
+    '
+    If Not TransA And Not TransB Then
+        For L = AI1 To AI2 Step 1
+            For R = BI1 To BI2 Step 1
+                V = Alpha * A(L, AJ1 + R - BI1)
+                K = CI1 + L - AI1
+                i1_ = (BJ1) - (CJ1)
+                For i_ = CJ1 To CJ2 Step 1
+                    C(K, i_) = C(K, i_) + V * B(R, i_ + i1_)
+                Next i_
+            Next R
+        Next L
+        Exit Sub
+    End If
+    
+    '
+    ' A*B'
+    '
+    If Not TransA And TransB Then
+        If ARows * ACols < BRows * BCols Then
+            For R = BI1 To BI2 Step 1
+                For L = AI1 To AI2 Step 1
+                    i1_ = (BJ1) - (AJ1)
+                    V = 0#
+                    For i_ = AJ1 To AJ2 Step 1
+                        V = V + A(L, i_) * B(R, i_ + i1_)
+                    Next i_
+                    C(CI1 + L - AI1, CJ1 + R - BI1) = C(CI1 + L - AI1, CJ1 + R - BI1) + Alpha * V
+                Next L
+            Next R
+            Exit Sub
+        Else
+            For L = AI1 To AI2 Step 1
+                For R = BI1 To BI2 Step 1
+                    i1_ = (BJ1) - (AJ1)
+                    V = 0#
+                    For i_ = AJ1 To AJ2 Step 1
+                        V = V + A(L, i_) * B(R, i_ + i1_)
+                    Next i_
+                    C(CI1 + L - AI1, CJ1 + R - BI1) = C(CI1 + L - AI1, CJ1 + R - BI1) + Alpha * V
+                Next R
+            Next L
+            Exit Sub
+        End If
+    End If
+    
+    '
+    ' A'*B
+    '
+    If TransA And Not TransB Then
+        For L = AJ1 To AJ2 Step 1
+            For R = BI1 To BI2 Step 1
+                V = Alpha * A(AI1 + R - BI1, L)
+                K = CI1 + L - AJ1
+                i1_ = (BJ1) - (CJ1)
+                For i_ = CJ1 To CJ2 Step 1
+                    C(K, i_) = C(K, i_) + V * B(R, i_ + i1_)
+                Next i_
+            Next R
+        Next L
+        Exit Sub
+    End If
+    
+    '
+    ' A'*B'
+    '
+    If TransA And TransB Then
+        If ARows * ACols < BRows * BCols Then
+            For R = BI1 To BI2 Step 1
+                For i = 1# To CRows Step 1
+                    WORK(i) = 0#
+                Next i
+                For L = AI1 To AI2 Step 1
+                    V = Alpha * B(R, BJ1 + L - AI1)
+                    K = CJ1 + R - BI1
+                    i1_ = (AJ1) - (1#)
+                    For i_ = 1# To CRows Step 1
+                        WORK(i_) = WORK(i_) + V * A(L, i_ + i1_)
+                    Next i_
+                Next L
+                i1_ = (1#) - (CI1)
+                For i_ = CI1 To CI2 Step 1
+                    C(i_, K) = C(i_, K) + WORK(i_ + i1_)
+                Next i_
+            Next R
+            Exit Sub
+        Else
+            For L = AJ1 To AJ2 Step 1
+                K = AI2 - AI1 + 1#
+                i1_ = (AI1) - (1#)
+                For i_ = 1# To K Step 1
+                    WORK(i_) = A(i_ + i1_, L)
+                Next i_
+                For R = BI1 To BI2 Step 1
+                    i1_ = (BJ1) - (1#)
+                    V = 0#
+                    For i_ = 1# To K Step 1
+                        V = V + WORK(i_) * B(R, i_ + i1_)
+                    Next i_
+                    C(CI1 + L - AJ1, CJ1 + R - BI1) = C(CI1 + L - AJ1, CJ1 + R - BI1) + Alpha * V
+                Next R
+            Next L
+            Exit Sub
+        End If
+    End If
+End Sub

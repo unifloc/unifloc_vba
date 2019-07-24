@@ -1,0 +1,1093 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'2-dimensional spline inteprolant
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Type Spline2DInterpolant
+    K As Long
+    C() As Double
+End Type
+'Global constants
+Private Const Spline2DVNum As Long = 12#
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine builds bilinear spline coefficients table.
+'
+'Input parameters:
+'    X   -   spline abscissas, array[0..N-1]
+'    Y   -   spline ordinates, array[0..M-1]
+'    F   -   function values, array[0..M-1,0..N-1]
+'    M,N -   grid size, M>=2, N>=2
+'
+'Output parameters:
+'    C   -   spline interpolant
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 05.07.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DBuildBilinear(ByRef X_() As Double, _
+         ByRef y_() As Double, _
+         ByRef F_() As Double, _
+         ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef C As Spline2DInterpolant)
+    Dim X() As Double
+    Dim Y() As Double
+    Dim F() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim K As Long
+    Dim TblSize As Long
+    Dim Shift As Long
+    Dim T As Double
+    Dim DX() As Double
+    Dim DY() As Double
+    Dim DXY() As Double
+    X = X_
+    Y = y_
+    F = F_
+    
+    '
+    ' Sort points
+    '
+    For J = 0# To N - 1# Step 1
+        K = J
+        For i = J + 1# To N - 1# Step 1
+            If X(i) < X(K) Then
+                K = i
+            End If
+        Next i
+        If K <> J Then
+            For i = 0# To M - 1# Step 1
+                T = F(i, J)
+                F(i, J) = F(i, K)
+                F(i, K) = T
+            Next i
+            T = X(J)
+            X(J) = X(K)
+            X(K) = T
+        End If
+    Next J
+    For i = 0# To M - 1# Step 1
+        K = i
+        For J = i + 1# To M - 1# Step 1
+            If Y(J) < Y(K) Then
+                K = J
+            End If
+        Next J
+        If K <> i Then
+            For J = 0# To N - 1# Step 1
+                T = F(i, J)
+                F(i, J) = F(K, J)
+                F(K, J) = T
+            Next J
+            T = Y(i)
+            Y(i) = Y(K)
+            Y(K) = T
+        End If
+    Next i
+    
+    '
+    ' Fill C:
+    '  C[0]            -   length(C)
+    '  C[1]            -   type(C):
+    '                      -1 = bilinear interpolant
+    '                      -3 = general cubic spline
+    '                           (see BuildBicubicSpline)
+    '  C[2]:
+    '      N (x count)
+    '  C[3]:
+    '      M (y count)
+    '  C[4]...C[4+N-1]:
+    '      x[i], i = 0...N-1
+    '  C[4+N]...C[4+N+M-1]:
+    '      y[i], i = 0...M-1
+    '  C[4+N+M]...C[4+N+M+(N*M-1)]:
+    '      f(i,j) table. f(0,0), f(0, 1), f(0,2) and so on...
+    '
+    C.K = 1#
+    TblSize = 4# + N + M + N * M
+    ReDim C.C(0# To TblSize - 1#)
+    C.C(0#) = TblSize
+    C.C(1#) = -1#
+    C.C(2#) = N
+    C.C(3#) = M
+    For i = 0# To N - 1# Step 1
+        C.C(4# + i) = X(i)
+    Next i
+    For i = 0# To M - 1# Step 1
+        C.C(4# + N + i) = Y(i)
+    Next i
+    For i = 0# To M - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            Shift = i * N + J
+            C.C(4# + N + M + Shift) = F(i, J)
+        Next J
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine builds bicubic spline coefficients table.
+'
+'Input parameters:
+'    X   -   spline abscissas, array[0..N-1]
+'    Y   -   spline ordinates, array[0..M-1]
+'    F   -   function values, array[0..M-1,0..N-1]
+'    M,N -   grid size, M>=2, N>=2
+'
+'Output parameters:
+'    C   -   spline interpolant
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 05.07.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DBuildBicubic(ByRef X_() As Double, _
+         ByRef y_() As Double, _
+         ByRef F_() As Double, _
+         ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef C As Spline2DInterpolant)
+    Dim X() As Double
+    Dim Y() As Double
+    Dim F() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim K As Long
+    Dim TblSize As Long
+    Dim Shift As Long
+    Dim T As Double
+    Dim DX() As Double
+    Dim DY() As Double
+    Dim DXY() As Double
+    X = X_
+    Y = y_
+    F = F_
+    
+    '
+    ' Sort points
+    '
+    For J = 0# To N - 1# Step 1
+        K = J
+        For i = J + 1# To N - 1# Step 1
+            If X(i) < X(K) Then
+                K = i
+            End If
+        Next i
+        If K <> J Then
+            For i = 0# To M - 1# Step 1
+                T = F(i, J)
+                F(i, J) = F(i, K)
+                F(i, K) = T
+            Next i
+            T = X(J)
+            X(J) = X(K)
+            X(K) = T
+        End If
+    Next J
+    For i = 0# To M - 1# Step 1
+        K = i
+        For J = i + 1# To M - 1# Step 1
+            If Y(J) < Y(K) Then
+                K = J
+            End If
+        Next J
+        If K <> i Then
+            For J = 0# To N - 1# Step 1
+                T = F(i, J)
+                F(i, J) = F(K, J)
+                F(K, J) = T
+            Next J
+            T = Y(i)
+            Y(i) = Y(K)
+            Y(K) = T
+        End If
+    Next i
+    
+    '
+    ' Fill C:
+    '  C[0]            -   length(C)
+    '  C[1]            -   type(C):
+    '                      -1 = bilinear interpolant
+    '                           (see BuildBilinearInterpolant)
+    '                      -3 = general cubic spline
+    '  C[2]:
+    '      N (x count)
+    '  C[3]:
+    '      M (y count)
+    '  C[4]...C[4+N-1]:
+    '      x[i], i = 0...N-1
+    '  C[4+N]...C[4+N+M-1]:
+    '      y[i], i = 0...M-1
+    '  C[4+N+M]...C[4+N+M+(N*M-1)]:
+    '      f(i,j) table. f(0,0), f(0, 1), f(0,2) and so on...
+    '  C[4+N+M+N*M]...C[4+N+M+(2*N*M-1)]:
+    '      df(i,j)/dx table.
+    '  C[4+N+M+2*N*M]...C[4+N+M+(3*N*M-1)]:
+    '      df(i,j)/dy table.
+    '  C[4+N+M+3*N*M]...C[4+N+M+(4*N*M-1)]:
+    '      d2f(i,j)/dxdy table.
+    '
+    C.K = 3#
+    TblSize = 4# + N + M + 4# * N * M
+    ReDim C.C(0# To TblSize - 1#)
+    C.C(0#) = TblSize
+    C.C(1#) = -3#
+    C.C(2#) = N
+    C.C(3#) = M
+    For i = 0# To N - 1# Step 1
+        C.C(4# + i) = X(i)
+    Next i
+    For i = 0# To M - 1# Step 1
+        C.C(4# + N + i) = Y(i)
+    Next i
+    Call BicubicCalcDerivatives(F, X, Y, M, N, DX, DY, DXY)
+    For i = 0# To M - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            Shift = i * N + J
+            C.C(4# + N + M + Shift) = F(i, J)
+            C.C(4# + N + M + N * M + Shift) = DX(i, J)
+            C.C(4# + N + M + 2# * N * M + Shift) = DY(i, J)
+            C.C(4# + N + M + 3# * N * M + Shift) = DXY(i, J)
+        Next J
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine calculates the value of the bilinear or bicubic spline  at
+'the given point X.
+'
+'Input parameters:
+'    C   -   coefficients table.
+'            Built by BuildBilinearSpline or BuildBicubicSpline.
+'    X, Y-   point
+'
+'Result:
+'    S(x,y)
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 05.07.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function Spline2DCalc(ByRef C As Spline2DInterpolant, _
+         ByVal X As Double, _
+         ByVal Y As Double) As Double
+    Dim Result As Double
+    Dim V As Double
+    Dim VX As Double
+    Dim VY As Double
+    Dim VXY As Double
+    Call Spline2DDiff(C, X, Y, V, VX, VY, VXY)
+    Result = V
+    Spline2DCalc = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine calculates the value of the bilinear or bicubic spline  at
+'the given point X and its derivatives.
+'
+'Input parameters:
+'    C   -   spline interpolant.
+'    X, Y-   point
+'
+'Output parameters:
+'    F   -   S(x,y)
+'    FX  -   dS(x,y)/dX
+'    FY  -   dS(x,y)/dY
+'    FXY -   d2S(x,y)/dXdY
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 05.07.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DDiff(ByRef C As Spline2DInterpolant, _
+         ByVal X As Double, _
+         ByVal Y As Double, _
+         ByRef F As Double, _
+         ByRef FX As Double, _
+         ByRef FY As Double, _
+         ByRef FXY As Double)
+    Dim N As Long
+    Dim M As Long
+    Dim T As Double
+    Dim DT As Double
+    Dim U As Double
+    Dim DU As Double
+    Dim IX As Long
+    Dim IY As Long
+    Dim L As Long
+    Dim R As Long
+    Dim H As Long
+    Dim Shift1 As Long
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim S3 As Long
+    Dim S4 As Long
+    Dim SF As Long
+    Dim SFX As Long
+    Dim SFY As Long
+    Dim SFXY As Long
+    Dim Y1 As Double
+    Dim Y2 As Double
+    Dim Y3 As Double
+    Dim Y4 As Double
+    Dim V As Double
+    Dim T0 As Double
+    Dim T1 As Double
+    Dim T2 As Double
+    Dim T3 As Double
+    Dim U0 As Double
+    Dim U1 As Double
+    Dim U2 As Double
+    Dim U3 As Double
+    N = Round(C.C(2#))
+    M = Round(C.C(3#))
+    
+    '
+    ' Binary search in the [ x[0], ..., x[n-2] ] (x[n-1] is not included)
+    '
+    L = 4#
+    R = 4# + N - 2# + 1#
+    Do While L <> R - 1#
+        H = (L + R) \ 2#
+        If C.C(H) >= X Then
+            R = H
+        Else
+            L = H
+        End If
+    Loop
+    T = (X - C.C(L)) / (C.C(L + 1#) - C.C(L))
+    DT = 1# / (C.C(L + 1#) - C.C(L))
+    IX = L - 4#
+    
+    '
+    ' Binary search in the [ y[0], ..., y[m-2] ] (y[m-1] is not included)
+    '
+    L = 4# + N
+    R = 4# + N + (M - 2#) + 1#
+    Do While L <> R - 1#
+        H = (L + R) \ 2#
+        If C.C(H) >= Y Then
+            R = H
+        Else
+            L = H
+        End If
+    Loop
+    U = (Y - C.C(L)) / (C.C(L + 1#) - C.C(L))
+    DU = 1# / (C.C(L + 1#) - C.C(L))
+    IY = L - (4# + N)
+    
+    '
+    ' Prepare F, dF/dX, dF/dY, d2F/dXdY
+    '
+    F = 0#
+    FX = 0#
+    FY = 0#
+    FXY = 0#
+    
+    '
+    ' Bilinear interpolation
+    '
+    If Round(C.C(1#)) = -1# Then
+        Shift1 = 4# + N + M
+        Y1 = C.C(Shift1 + N * IY + IX)
+        Y2 = C.C(Shift1 + N * IY + (IX + 1#))
+        Y3 = C.C(Shift1 + N * (IY + 1#) + (IX + 1#))
+        Y4 = C.C(Shift1 + N * (IY + 1#) + IX)
+        F = (1# - T) * (1# - U) * Y1 + T * (1# - U) * Y2 + T * U * Y3 + (1# - T) * U * Y4
+        FX = (-((1# - U) * Y1) + (1# - U) * Y2 + U * Y3 - U * Y4) * DT
+        FY = (-((1# - T) * Y1) - T * Y2 + T * Y3 + (1# - T) * Y4) * DU
+        FXY = (Y1 - Y2 + Y3 - Y4) * DU * DT
+        Exit Sub
+    End If
+    
+    '
+    ' Bicubic interpolation
+    '
+    If Round(C.C(1#)) = -3# Then
+        
+        '
+        ' Prepare info
+        '
+        T0 = 1#
+        T1 = T
+        T2 = Square(T)
+        T3 = T * T2
+        U0 = 1#
+        U1 = U
+        U2 = Square(U)
+        U3 = U * U2
+        SF = 4# + N + M
+        SFX = 4# + N + M + N * M
+        SFY = 4# + N + M + 2# * N * M
+        SFXY = 4# + N + M + 3# * N * M
+        S1 = N * IY + IX
+        S2 = N * IY + (IX + 1#)
+        S3 = N * (IY + 1#) + (IX + 1#)
+        S4 = N * (IY + 1#) + IX
+        
+        '
+        ' Calculate
+        '
+        V = (1# * C.C(SF + S1))
+        F = F + V * T0 * U0
+        V = (1# * C.C(SFY + S1) / DU)
+        F = F + V * T0 * U1
+        FY = FY + 1# * V * T0 * U0 * DU
+        V = -(3# * C.C(SF + S1)) + 3# * C.C(SF + S4) - 2# * C.C(SFY + S1) / DU - 1# * C.C(SFY + S4) / DU
+        F = F + V * T0 * U2
+        FY = FY + 2# * V * T0 * U1 * DU
+        V = (2# * C.C(SF + S1)) - 2# * C.C(SF + S4) + 1# * C.C(SFY + S1) / DU + 1# * C.C(SFY + S4) / DU
+        F = F + V * T0 * U3
+        FY = FY + 3# * V * T0 * U2 * DU
+        V = (1# * C.C(SFX + S1) / DT)
+        F = F + V * T1 * U0
+        FX = FX + 1# * V * T0 * U0 * DT
+        V = (1# * C.C(SFXY + S1) / (DT * DU))
+        F = F + V * T1 * U1
+        FX = FX + 1# * V * T0 * U1 * DT
+        FY = FY + 1# * V * T1 * U0 * DU
+        FXY = FXY + 1# * V * T0 * U0 * DT * DU
+        V = -(3# * C.C(SFX + S1) / DT) + 3# * C.C(SFX + S4) / DT - 2# * C.C(SFXY + S1) / (DT * DU) - 1# * C.C(SFXY + S4) / (DT * DU)
+        F = F + V * T1 * U2
+        FX = FX + 1# * V * T0 * U2 * DT
+        FY = FY + 2# * V * T1 * U1 * DU
+        FXY = FXY + 2# * V * T0 * U1 * DT * DU
+        V = (2# * C.C(SFX + S1) / DT) - 2# * C.C(SFX + S4) / DT + 1# * C.C(SFXY + S1) / (DT * DU) + 1# * C.C(SFXY + S4) / (DT * DU)
+        F = F + V * T1 * U3
+        FX = FX + 1# * V * T0 * U3 * DT
+        FY = FY + 3# * V * T1 * U2 * DU
+        FXY = FXY + 3# * V * T0 * U2 * DT * DU
+        V = -(3# * C.C(SF + S1)) + 3# * C.C(SF + S2) - 2# * C.C(SFX + S1) / DT - 1# * C.C(SFX + S2) / DT
+        F = F + V * T2 * U0
+        FX = FX + 2# * V * T1 * U0 * DT
+        V = -(3# * C.C(SFY + S1) / DU) + 3# * C.C(SFY + S2) / DU - 2# * C.C(SFXY + S1) / (DT * DU) - 1# * C.C(SFXY + S2) / (DT * DU)
+        F = F + V * T2 * U1
+        FX = FX + 2# * V * T1 * U1 * DT
+        FY = FY + 1# * V * T2 * U0 * DU
+        FXY = FXY + 2# * V * T1 * U0 * DT * DU
+        V = (9# * C.C(SF + S1)) - 9# * C.C(SF + S2) + 9# * C.C(SF + S3) - 9# * C.C(SF + S4) + 6# * C.C(SFX + S1) / DT + 3# * C.C(SFX + S2) / DT - 3# * C.C(SFX + S3) / DT - 6# * C.C(SFX + S4) / DT + 6# * C.C(SFY + S1) / DU - 6# * C.C(SFY + S2) / DU - 3# * C.C(SFY + S3) / DU + 3# * C.C(SFY + S4) / DU + 4# * C.C(SFXY + S1) / (DT * DU) + 2# * C.C(SFXY + S2) / (DT * DU) + 1# * C.C(SFXY + S3) / (DT * DU) + 2# * C.C(SFXY + S4) / (DT * DU)
+        F = F + V * T2 * U2
+        FX = FX + 2# * V * T1 * U2 * DT
+        FY = FY + 2# * V * T2 * U1 * DU
+        FXY = FXY + 4# * V * T1 * U1 * DT * DU
+        V = -(6# * C.C(SF + S1)) + 6# * C.C(SF + S2) - 6# * C.C(SF + S3) + 6# * C.C(SF + S4) - 4# * C.C(SFX + S1) / DT - 2# * C.C(SFX + S2) / DT + 2# * C.C(SFX + S3) / DT + 4# * C.C(SFX + S4) / DT - 3# * C.C(SFY + S1) / DU + 3# * C.C(SFY + S2) / DU + 3# * C.C(SFY + S3) / DU - 3# * C.C(SFY + S4) / DU - 2# * C.C(SFXY + S1) / (DT * DU) - 1# * C.C(SFXY + S2) / (DT * DU) - 1# * C.C(SFXY + S3) / (DT * DU) - 2# * C.C(SFXY + S4) / (DT * DU)
+        F = F + V * T2 * U3
+        FX = FX + 2# * V * T1 * U3 * DT
+        FY = FY + 3# * V * T2 * U2 * DU
+        FXY = FXY + 6# * V * T1 * U2 * DT * DU
+        V = (2# * C.C(SF + S1)) - 2# * C.C(SF + S2) + 1# * C.C(SFX + S1) / DT + 1# * C.C(SFX + S2) / DT
+        F = F + V * T3 * U0
+        FX = FX + 3# * V * T2 * U0 * DT
+        V = (2# * C.C(SFY + S1) / DU) - 2# * C.C(SFY + S2) / DU + 1# * C.C(SFXY + S1) / (DT * DU) + 1# * C.C(SFXY + S2) / (DT * DU)
+        F = F + V * T3 * U1
+        FX = FX + 3# * V * T2 * U1 * DT
+        FY = FY + 1# * V * T3 * U0 * DU
+        FXY = FXY + 3# * V * T2 * U0 * DT * DU
+        V = -(6# * C.C(SF + S1)) + 6# * C.C(SF + S2) - 6# * C.C(SF + S3) + 6# * C.C(SF + S4) - 3# * C.C(SFX + S1) / DT - 3# * C.C(SFX + S2) / DT + 3# * C.C(SFX + S3) / DT + 3# * C.C(SFX + S4) / DT - 4# * C.C(SFY + S1) / DU + 4# * C.C(SFY + S2) / DU + 2# * C.C(SFY + S3) / DU - 2# * C.C(SFY + S4) / DU - 2# * C.C(SFXY + S1) / (DT * DU) - 2# * C.C(SFXY + S2) / (DT * DU) - 1# * C.C(SFXY + S3) / (DT * DU) - 1# * C.C(SFXY + S4) / (DT * DU)
+        F = F + V * T3 * U2
+        FX = FX + 3# * V * T2 * U2 * DT
+        FY = FY + 2# * V * T3 * U1 * DU
+        FXY = FXY + 6# * V * T2 * U1 * DT * DU
+        V = (4# * C.C(SF + S1)) - 4# * C.C(SF + S2) + 4# * C.C(SF + S3) - 4# * C.C(SF + S4) + 2# * C.C(SFX + S1) / DT + 2# * C.C(SFX + S2) / DT - 2# * C.C(SFX + S3) / DT - 2# * C.C(SFX + S4) / DT + 2# * C.C(SFY + S1) / DU - 2# * C.C(SFY + S2) / DU - 2# * C.C(SFY + S3) / DU + 2# * C.C(SFY + S4) / DU + 1# * C.C(SFXY + S1) / (DT * DU) + 1# * C.C(SFXY + S2) / (DT * DU) + 1# * C.C(SFXY + S3) / (DT * DU) + 1# * C.C(SFXY + S4) / (DT * DU)
+        F = F + V * T3 * U3
+        FX = FX + 3# * V * T2 * U3 * DT
+        FY = FY + 3# * V * T3 * U2 * DU
+        FXY = FXY + 9# * V * T2 * U2 * DT * DU
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine unpacks two-dimensional spline into the coefficients table
+'
+'Input parameters:
+'    C   -   spline interpolant.
+'
+'Result:
+'    M, N-   grid size (x-axis and y-axis)
+'    Tbl -   coefficients table, unpacked format,
+'            [0..(N-1)*(M-1)-1, 0..19].
+'            For I = 0...M-2, J=0..N-2:
+'                K =  I*(N-1)+J
+'                Tbl[K,0] = X[j]
+'                Tbl[K,1] = X[j+1]
+'                Tbl[K,2] = Y[i]
+'                Tbl[K,3] = Y[i+1]
+'                Tbl[K,4] = C00
+'                Tbl[K,5] = C01
+'                Tbl[K,6] = C02
+'                Tbl[K,7] = C03
+'                Tbl[K,8] = C10
+'                Tbl[K,9] = C11
+'                ...
+'                Tbl[K,19] = C33
+'            On each grid square spline is equals to:
+'                S(x) = SUM(c[i,j]*(x^i)*(y^j), i=0..3, j=0..3)
+'                t = x-x[j]
+'                u = y-y[i]
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 29.06.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DUnpack(ByRef C As Spline2DInterpolant, _
+         ByRef M As Long, _
+         ByRef N As Long, _
+         ByRef Tbl() As Double)
+    Dim i As Long
+    Dim J As Long
+    Dim CI As Long
+    Dim CJ As Long
+    Dim K As Long
+    Dim P As Long
+    Dim Shift As Long
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim S3 As Long
+    Dim S4 As Long
+    Dim SF As Long
+    Dim SFX As Long
+    Dim SFY As Long
+    Dim SFXY As Long
+    Dim Y1 As Double
+    Dim Y2 As Double
+    Dim Y3 As Double
+    Dim Y4 As Double
+    Dim DT As Double
+    Dim DU As Double
+    N = Round(C.C(2#))
+    M = Round(C.C(3#))
+    ReDim Tbl(0# To (N - 1#) * (M - 1#) - 1#, 0# To 19#)
+    
+    '
+    ' Fill
+    '
+    For i = 0# To M - 2# Step 1
+        For J = 0# To N - 2# Step 1
+            P = i * (N - 1#) + J
+            Tbl(P, 0#) = C.C(4# + J)
+            Tbl(P, 1#) = C.C(4# + J + 1#)
+            Tbl(P, 2#) = C.C(4# + N + i)
+            Tbl(P, 3#) = C.C(4# + N + i + 1#)
+            DT = 1# / (Tbl(P, 1#) - Tbl(P, 0#))
+            DU = 1# / (Tbl(P, 3#) - Tbl(P, 2#))
+            
+            '
+            ' Bilinear interpolation
+            '
+            If Round(C.C(1#)) = -1# Then
+                For K = 4# To 19# Step 1
+                    Tbl(P, K) = 0#
+                Next K
+                Shift = 4# + N + M
+                Y1 = C.C(Shift + N * i + J)
+                Y2 = C.C(Shift + N * i + (J + 1#))
+                Y3 = C.C(Shift + N * (i + 1#) + (J + 1#))
+                Y4 = C.C(Shift + N * (i + 1#) + J)
+                Tbl(P, 4#) = Y1
+                Tbl(P, 4# + 1# * 4# + 0#) = Y2 - Y1
+                Tbl(P, 4# + 0# * 4# + 1#) = Y4 - Y1
+                Tbl(P, 4# + 1# * 4# + 1#) = Y3 - Y2 - Y4 + Y1
+            End If
+            
+            '
+            ' Bicubic interpolation
+            '
+            If Round(C.C(1#)) = -3# Then
+                SF = 4# + N + M
+                SFX = 4# + N + M + N * M
+                SFY = 4# + N + M + 2# * N * M
+                SFXY = 4# + N + M + 3# * N * M
+                S1 = N * i + J
+                S2 = N * i + (J + 1#)
+                S3 = N * (i + 1#) + (J + 1#)
+                S4 = N * (i + 1#) + J
+                Tbl(P, 4# + 0# * 4# + 0#) = (1# * C.C(SF + S1))
+                Tbl(P, 4# + 0# * 4# + 1#) = (1# * C.C(SFY + S1) / DU)
+                Tbl(P, 4# + 0# * 4# + 2#) = -(3# * C.C(SF + S1)) + 3# * C.C(SF + S4) - 2# * C.C(SFY + S1) / DU - 1# * C.C(SFY + S4) / DU
+                Tbl(P, 4# + 0# * 4# + 3#) = (2# * C.C(SF + S1)) - 2# * C.C(SF + S4) + 1# * C.C(SFY + S1) / DU + 1# * C.C(SFY + S4) / DU
+                Tbl(P, 4# + 1# * 4# + 0#) = (1# * C.C(SFX + S1) / DT)
+                Tbl(P, 4# + 1# * 4# + 1#) = (1# * C.C(SFXY + S1) / (DT * DU))
+                Tbl(P, 4# + 1# * 4# + 2#) = -(3# * C.C(SFX + S1) / DT) + 3# * C.C(SFX + S4) / DT - 2# * C.C(SFXY + S1) / (DT * DU) - 1# * C.C(SFXY + S4) / (DT * DU)
+                Tbl(P, 4# + 1# * 4# + 3#) = (2# * C.C(SFX + S1) / DT) - 2# * C.C(SFX + S4) / DT + 1# * C.C(SFXY + S1) / (DT * DU) + 1# * C.C(SFXY + S4) / (DT * DU)
+                Tbl(P, 4# + 2# * 4# + 0#) = -(3# * C.C(SF + S1)) + 3# * C.C(SF + S2) - 2# * C.C(SFX + S1) / DT - 1# * C.C(SFX + S2) / DT
+                Tbl(P, 4# + 2# * 4# + 1#) = -(3# * C.C(SFY + S1) / DU) + 3# * C.C(SFY + S2) / DU - 2# * C.C(SFXY + S1) / (DT * DU) - 1# * C.C(SFXY + S2) / (DT * DU)
+                Tbl(P, 4# + 2# * 4# + 2#) = (9# * C.C(SF + S1)) - 9# * C.C(SF + S2) + 9# * C.C(SF + S3) - 9# * C.C(SF + S4) + 6# * C.C(SFX + S1) / DT + 3# * C.C(SFX + S2) / DT - 3# * C.C(SFX + S3) / DT - 6# * C.C(SFX + S4) / DT + 6# * C.C(SFY + S1) / DU - 6# * C.C(SFY + S2) / DU - 3# * C.C(SFY + S3) / DU + 3# * C.C(SFY + S4) / DU + 4# * C.C(SFXY + S1) / (DT * DU) + 2# * C.C(SFXY + S2) / (DT * DU) + 1# * C.C(SFXY + S3) / (DT * DU) + 2# * C.C(SFXY + S4) / (DT * DU)
+                Tbl(P, 4# + 2# * 4# + 3#) = -(6# * C.C(SF + S1)) + 6# * C.C(SF + S2) - 6# * C.C(SF + S3) + 6# * C.C(SF + S4) - 4# * C.C(SFX + S1) / DT - 2# * C.C(SFX + S2) / DT + 2# * C.C(SFX + S3) / DT + 4# * C.C(SFX + S4) / DT - 3# * C.C(SFY + S1) / DU + 3# * C.C(SFY + S2) / DU + 3# * C.C(SFY + S3) / DU - 3# * C.C(SFY + S4) / DU - 2# * C.C(SFXY + S1) / (DT * DU) - 1# * C.C(SFXY + S2) / (DT * DU) - 1# * C.C(SFXY + S3) / (DT * DU) - 2# * C.C(SFXY + S4) / (DT * DU)
+                Tbl(P, 4# + 3# * 4# + 0#) = (2# * C.C(SF + S1)) - 2# * C.C(SF + S2) + 1# * C.C(SFX + S1) / DT + 1# * C.C(SFX + S2) / DT
+                Tbl(P, 4# + 3# * 4# + 1#) = (2# * C.C(SFY + S1) / DU) - 2# * C.C(SFY + S2) / DU + 1# * C.C(SFXY + S1) / (DT * DU) + 1# * C.C(SFXY + S2) / (DT * DU)
+                Tbl(P, 4# + 3# * 4# + 2#) = -(6# * C.C(SF + S1)) + 6# * C.C(SF + S2) - 6# * C.C(SF + S3) + 6# * C.C(SF + S4) - 3# * C.C(SFX + S1) / DT - 3# * C.C(SFX + S2) / DT + 3# * C.C(SFX + S3) / DT + 3# * C.C(SFX + S4) / DT - 4# * C.C(SFY + S1) / DU + 4# * C.C(SFY + S2) / DU + 2# * C.C(SFY + S3) / DU - 2# * C.C(SFY + S4) / DU - 2# * C.C(SFXY + S1) / (DT * DU) - 2# * C.C(SFXY + S2) / (DT * DU) - 1# * C.C(SFXY + S3) / (DT * DU) - 1# * C.C(SFXY + S4) / (DT * DU)
+                Tbl(P, 4# + 3# * 4# + 3#) = (4# * C.C(SF + S1)) - 4# * C.C(SF + S2) + 4# * C.C(SF + S3) - 4# * C.C(SF + S4) + 2# * C.C(SFX + S1) / DT + 2# * C.C(SFX + S2) / DT - 2# * C.C(SFX + S3) / DT - 2# * C.C(SFX + S4) / DT + 2# * C.C(SFY + S1) / DU - 2# * C.C(SFY + S2) / DU - 2# * C.C(SFY + S3) / DU + 2# * C.C(SFY + S4) / DU + 1# * C.C(SFXY + S1) / (DT * DU) + 1# * C.C(SFXY + S2) / (DT * DU) + 1# * C.C(SFXY + S3) / (DT * DU) + 1# * C.C(SFXY + S4) / (DT * DU)
+            End If
+            
+            '
+            ' Rescale Cij
+            '
+            For CI = 0# To 3# Step 1
+                For CJ = 0# To 3# Step 1
+                    Tbl(P, 4# + CI * 4# + CJ) = Tbl(P, 4# + CI * 4# + CJ) * Power(DT, CI) * Power(DU, CJ)
+                Next CJ
+            Next CI
+        Next J
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine performs linear transformation of the spline argument.
+'
+'Input parameters:
+'    C       -   spline interpolant
+'    AX, BX  -   transformation coefficients: x = A*t + B
+'    AY, BY  -   transformation coefficients: y = A*u + B
+'Result:
+'    C   -   transformed spline
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 30.06.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DLinTransXY(ByRef C As Spline2DInterpolant, _
+         ByVal AX As Double, _
+         ByVal BX As Double, _
+         ByVal AY As Double, _
+         ByVal BY As Double)
+    Dim i As Long
+    Dim J As Long
+    Dim N As Long
+    Dim M As Long
+    Dim V As Double
+    Dim X() As Double
+    Dim Y() As Double
+    Dim F() As Double
+    Dim TypeC As Long
+    TypeC = Round(C.C(1#))
+    N = Round(C.C(2#))
+    M = Round(C.C(3#))
+    ReDim X(0# To N - 1#)
+    ReDim Y(0# To M - 1#)
+    ReDim F(0# To M - 1#, 0# To N - 1#)
+    For J = 0# To N - 1# Step 1
+        X(J) = C.C(4# + J)
+    Next J
+    For i = 0# To M - 1# Step 1
+        Y(i) = C.C(4# + N + i)
+    Next i
+    For i = 0# To M - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            F(i, J) = C.C(4# + N + M + i * N + J)
+        Next J
+    Next i
+    
+    '
+    ' Special case: AX=0 or AY=0
+    '
+    If AX = 0# Then
+        For i = 0# To M - 1# Step 1
+            V = Spline2DCalc(C, BX, Y(i))
+            For J = 0# To N - 1# Step 1
+                F(i, J) = V
+            Next J
+        Next i
+        If TypeC = -3# Then
+            Call Spline2DBuildBicubic(X, Y, F, M, N, C)
+        End If
+        If TypeC = -1# Then
+            Call Spline2DBuildBilinear(X, Y, F, M, N, C)
+        End If
+        AX = 1#
+        BX = 0#
+    End If
+    If AY = 0# Then
+        For J = 0# To N - 1# Step 1
+            V = Spline2DCalc(C, X(J), BY)
+            For i = 0# To M - 1# Step 1
+                F(i, J) = V
+            Next i
+        Next J
+        If TypeC = -3# Then
+            Call Spline2DBuildBicubic(X, Y, F, M, N, C)
+        End If
+        If TypeC = -1# Then
+            Call Spline2DBuildBilinear(X, Y, F, M, N, C)
+        End If
+        AY = 1#
+        BY = 0#
+    End If
+    
+    '
+    ' General case: AX<>0, AY<>0
+    ' Unpack, scale and pack again.
+    '
+    For J = 0# To N - 1# Step 1
+        X(J) = (X(J) - BX) / AX
+    Next J
+    For i = 0# To M - 1# Step 1
+        Y(i) = (Y(i) - BY) / AY
+    Next i
+    If TypeC = -3# Then
+        Call Spline2DBuildBicubic(X, Y, F, M, N, C)
+    End If
+    If TypeC = -1# Then
+        Call Spline2DBuildBilinear(X, Y, F, M, N, C)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine performs linear transformation of the spline.
+'
+'Input parameters:
+'    C   -   spline interpolant.
+'    A, B-   transformation coefficients: S2(x,y) = A*S(x,y) + B
+'
+'Output parameters:
+'    C   -   transformed spline
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 30.06.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DLinTransF(ByRef C As Spline2DInterpolant, _
+         ByVal A As Double, _
+         ByVal B As Double)
+    Dim i As Long
+    Dim J As Long
+    Dim N As Long
+    Dim M As Long
+    Dim X() As Double
+    Dim Y() As Double
+    Dim F() As Double
+    Dim TypeC As Long
+    TypeC = Round(C.C(1#))
+    N = Round(C.C(2#))
+    M = Round(C.C(3#))
+    ReDim X(0# To N - 1#)
+    ReDim Y(0# To M - 1#)
+    ReDim F(0# To M - 1#, 0# To N - 1#)
+    For J = 0# To N - 1# Step 1
+        X(J) = C.C(4# + J)
+    Next J
+    For i = 0# To M - 1# Step 1
+        Y(i) = C.C(4# + N + i)
+    Next i
+    For i = 0# To M - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            F(i, J) = A * C.C(4# + N + M + i * N + J) + B
+        Next J
+    Next i
+    If TypeC = -3# Then
+        Call Spline2DBuildBicubic(X, Y, F, M, N, C)
+    End If
+    If TypeC = -1# Then
+        Call Spline2DBuildBilinear(X, Y, F, M, N, C)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine makes the copy of the spline model.
+'
+'Input parameters:
+'    C   -   spline interpolant
+'
+'Output parameters:
+'    CC  -   spline copy
+'
+'  -- ALGLIB PROJECT --
+'     Copyright 29.06.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DCopy(ByRef C As Spline2DInterpolant, _
+         ByRef CC As Spline2DInterpolant)
+    Dim N As Long
+    Dim i_ As Long
+    CC.K = C.K
+    N = Round(C.C(0#))
+    ReDim CC.C(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        CC.C(i_) = C.C(i_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Serialization of the spline interpolant
+'
+'INPUT PARAMETERS:
+'    B   -   spline interpolant
+'
+'OUTPUT PARAMETERS:
+'    RA      -   array of real numbers which contains interpolant,
+'                array[0..RLen-1]
+'    RLen    -   RA lenght
+'
+'  -- ALGLIB --
+'     Copyright 17.08.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DSerialize(ByRef C As Spline2DInterpolant, _
+         ByRef RA() As Double, _
+         ByRef RALen As Long)
+    Dim CLen As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    CLen = Round(C.C(0#))
+    RALen = 3# + CLen
+    ReDim RA(0 To RALen - 1)
+    RA(0#) = RALen
+    RA(1#) = Spline2DVNum
+    RA(2#) = C.K
+    i1_ = (0#) - (3#)
+    For i_ = 3# To 3# + CLen - 1# Step 1
+        RA(i_) = C.C(i_ + i1_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Unserialization of the spline interpolant
+'
+'INPUT PARAMETERS:
+'    RA  -   array of real numbers which contains interpolant,
+'
+'OUTPUT PARAMETERS:
+'    B   -   spline interpolant
+'
+'  -- ALGLIB --
+'     Copyright 17.08.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DUnserialize(ByRef RA() As Double, _
+         ByRef C As Spline2DInterpolant)
+    Dim CLen As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    C.K = Round(RA(2#))
+    CLen = Round(RA(3#))
+    ReDim C.C(0 To CLen - 1)
+    i1_ = (3#) - (0#)
+    For i_ = 0# To CLen - 1# Step 1
+        C.C(i_) = RA(i_ + i1_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Bicubic spline resampling
+'
+'Input parameters:
+'    A           -   function values at the old grid,
+'                    array[0..OldHeight-1, 0..OldWidth-1]
+'    OldHeight   -   old grid height, OldHeight>1
+'    OldWidth    -   old grid width, OldWidth>1
+'    NewHeight   -   new grid height, NewHeight>1
+'    NewWidth    -   new grid width, NewWidth>1
+'
+'Output parameters:
+'    B           -   function values at the new grid,
+'                    array[0..NewHeight-1, 0..NewWidth-1]
+'
+'  -- ALGLIB routine --
+'     15 May, 2007
+'     Copyright by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DResampleBicubic(ByRef A() As Double, _
+         ByVal OldHeight As Long, _
+         ByVal OldWidth As Long, _
+         ByRef B() As Double, _
+         ByVal NewHeight As Long, _
+         ByVal NewWidth As Long)
+    Dim Buf() As Double
+    Dim X() As Double
+    Dim Y() As Double
+    Dim C As Spline1DInterpolant
+    Dim i As Long
+    Dim J As Long
+    Dim MW As Long
+    Dim MH As Long
+    
+    '
+    ' Prepare
+    '
+    MW = MaxInt(OldWidth, NewWidth)
+    MH = MaxInt(OldHeight, NewHeight)
+    ReDim B(0# To NewHeight - 1#, 0# To NewWidth - 1#)
+    ReDim Buf(0# To OldHeight - 1#, 0# To NewWidth - 1#)
+    ReDim X(0# To MaxInt(MW, MH) - 1#)
+    ReDim Y(0# To MaxInt(MW, MH) - 1#)
+    
+    '
+    ' Horizontal interpolation
+    '
+    For i = 0# To OldHeight - 1# Step 1
+        
+        '
+        ' Fill X, Y
+        '
+        For J = 0# To OldWidth - 1# Step 1
+            X(J) = J / (OldWidth - 1#)
+            Y(J) = A(i, J)
+        Next J
+        
+        '
+        ' Interpolate and place result into temporary matrix
+        '
+        Call Spline1DBuildCubic(X, Y, OldWidth, 0#, 0#, 0#, 0#, C)
+        For J = 0# To NewWidth - 1# Step 1
+            Buf(i, J) = Spline1DCalc(C, J / (NewWidth - 1#))
+        Next J
+    Next i
+    
+    '
+    ' Vertical interpolation
+    '
+    For J = 0# To NewWidth - 1# Step 1
+        
+        '
+        ' Fill X, Y
+        '
+        For i = 0# To OldHeight - 1# Step 1
+            X(i) = i / (OldHeight - 1#)
+            Y(i) = Buf(i, J)
+        Next i
+        
+        '
+        ' Interpolate and place result into B
+        '
+        Call Spline1DBuildCubic(X, Y, OldHeight, 0#, 0#, 0#, 0#, C)
+        For i = 0# To NewHeight - 1# Step 1
+            B(i, J) = Spline1DCalc(C, i / (NewHeight - 1#))
+        Next i
+    Next J
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Bilinear spline resampling
+'
+'Input parameters:
+'    A           -   function values at the old grid,
+'                    array[0..OldHeight-1, 0..OldWidth-1]
+'    OldHeight   -   old grid height, OldHeight>1
+'    OldWidth    -   old grid width, OldWidth>1
+'    NewHeight   -   new grid height, NewHeight>1
+'    NewWidth    -   new grid width, NewWidth>1
+'
+'Output parameters:
+'    B           -   function values at the new grid,
+'                    array[0..NewHeight-1, 0..NewWidth-1]
+'
+'  -- ALGLIB routine --
+'     09.07.2007
+'     Copyright by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub Spline2DResampleBilinear(ByRef A() As Double, _
+         ByVal OldHeight As Long, _
+         ByVal OldWidth As Long, _
+         ByRef B() As Double, _
+         ByVal NewHeight As Long, _
+         ByVal NewWidth As Long)
+    Dim i As Long
+    Dim J As Long
+    Dim L As Long
+    Dim C As Long
+    Dim T As Double
+    Dim U As Double
+    ReDim B(0# To NewHeight - 1#, 0# To NewWidth - 1#)
+    For i = 0# To NewHeight - 1# Step 1
+        For J = 0# To NewWidth - 1# Step 1
+            L = i * (OldHeight - 1#) \ (NewHeight - 1#)
+            If L = OldHeight - 1# Then
+                L = OldHeight - 2#
+            End If
+            U = i / (NewHeight - 1#) * (OldHeight - 1#) - L
+            C = J * (OldWidth - 1#) \ (NewWidth - 1#)
+            If C = OldWidth - 1# Then
+                C = OldWidth - 2#
+            End If
+            T = J * (OldWidth - 1#) / (NewWidth - 1#) - C
+            B(i, J) = (1# - T) * (1# - U) * A(L, C) + T * (1# - U) * A(L, C + 1#) + T * U * A(L + 1#, C + 1#) + (1# - T) * U * A(L + 1#, C)
+        Next J
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine.
+'Calculation of the first derivatives and the cross-derivative.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub BicubicCalcDerivatives(ByRef A() As Double, _
+         ByRef X() As Double, _
+         ByRef Y() As Double, _
+         ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef DX() As Double, _
+         ByRef DY() As Double, _
+         ByRef DXY() As Double)
+    Dim i As Long
+    Dim J As Long
+    Dim XT() As Double
+    Dim FT() As Double
+    Dim C() As Double
+    Dim S As Double
+    Dim DS As Double
+    Dim D2S As Double
+    ReDim DX(0# To M - 1#, 0# To N - 1#)
+    ReDim DY(0# To M - 1#, 0# To N - 1#)
+    ReDim DXY(0# To M - 1#, 0# To N - 1#)
+    
+    '
+    ' dF/dX
+    '
+    ReDim XT(0# To N - 1#)
+    ReDim FT(0# To N - 1#)
+    For i = 0# To M - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            XT(J) = X(J)
+            FT(J) = A(i, J)
+        Next J
+        Call BuildCubicSpline(XT, FT, N, 0#, 0#, 0#, 0#, C)
+        For J = 0# To N - 1# Step 1
+            Call SplineDifferentiation(C, X(J), S, DS, D2S)
+            DX(i, J) = DS
+        Next J
+    Next i
+    
+    '
+    ' dF/dY
+    '
+    ReDim XT(0# To M - 1#)
+    ReDim FT(0# To M - 1#)
+    For J = 0# To N - 1# Step 1
+        For i = 0# To M - 1# Step 1
+            XT(i) = Y(i)
+            FT(i) = A(i, J)
+        Next i
+        Call BuildCubicSpline(XT, FT, M, 0#, 0#, 0#, 0#, C)
+        For i = 0# To M - 1# Step 1
+            Call SplineDifferentiation(C, Y(i), S, DS, D2S)
+            DY(i, J) = DS
+        Next i
+    Next J
+    
+    '
+    ' d2F/dXdY
+    '
+    ReDim XT(0# To N - 1#)
+    ReDim FT(0# To N - 1#)
+    For i = 0# To M - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            XT(J) = X(J)
+            FT(J) = DY(i, J)
+        Next J
+        Call BuildCubicSpline(XT, FT, N, 0#, 0#, 0#, 0#, C)
+        For J = 0# To N - 1# Step 1
+            Call SplineDifferentiation(C, X(J), S, DS, D2S)
+            DXY(i, J) = DS
+        Next J
+    Next i
+End Sub

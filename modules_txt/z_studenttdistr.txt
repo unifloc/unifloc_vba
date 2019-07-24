@@ -1,0 +1,188 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Cephes Math Library Release 2.8:  June, 2000
+'Copyright 1984, 1987, 1995, 2000 by Stephen L. Moshier
+'
+'Contributors:
+'    * Sergey Bochkanov (ALGLIB project). Translation from C to
+'      pseudocode.
+'
+'See subroutines comments for additional copyrights.
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Student's t distribution
+'
+'Computes the integral from minus infinity to t of the Student
+'t distribution with integer k > 0 degrees of freedom:
+'
+'                                     t
+'                                     -
+'                                    | |
+'             -                      |         2   -(k+1)/2
+'            | ( (k+1)/2 )           |  (     x   )
+'      ----------------------        |  ( 1 + --- )        dx
+'                    -               |  (      k  )
+'      sqrt( k pi ) | ( k/2 )        |
+'                                  | |
+'                                   -
+'                                  -inf.
+'
+'Relation to incomplete beta integral:
+'
+'       1 - stdtr(k,t) = 0.5 * incbet( k/2, 1/2, z )
+'where
+'       z = k/(k + t**2).
+'
+'For t < -2, this is the method of computation.  For higher t,
+'a direct method is derived from integration by parts.
+'Since the function is symmetric about t=0, the area under the
+'right tail of the density is found by calling the function
+'with -t instead of t.
+'
+'ACCURACY:
+'
+'Tested at random 1 <= k <= 25.  The "domain" refers to t.
+'                     Relative error:
+'arithmetic   domain     # trials      peak         rms
+'   IEEE     -100,-2      50000       5.9e-15     1.4e-15
+'   IEEE     -2,100      500000       2.7e-15     4.9e-17
+'
+'Cephes Math Library Release 2.8:  June, 2000
+'Copyright 1984, 1987, 1995, 2000 by Stephen L. Moshier
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function StudentTDistribution(ByVal K As Long, _
+         ByVal T As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim rk As Double
+    Dim z As Double
+    Dim F As Double
+    Dim tz As Double
+    Dim P As Double
+    Dim xsqk As Double
+    Dim J As Long
+    If T = 0# Then
+        Result = 0.5
+        StudentTDistribution = Result
+        Exit Function
+    End If
+    If T < -2# Then
+        rk = K
+        z = rk / (rk + T * T)
+        Result = 0.5 * IncompleteBeta(0.5 * rk, 0.5, z)
+        StudentTDistribution = Result
+        Exit Function
+    End If
+    If T < 0# Then
+        X = -T
+    Else
+        X = T
+    End If
+    rk = K
+    z = 1# + X * X / rk
+    If K Mod 2# <> 0# Then
+        xsqk = X / Sqr(rk)
+        P = Atn(xsqk)
+        If K > 1# Then
+            F = 1#
+            tz = 1#
+            J = 3#
+            Do While J <= K - 2# And tz / F > MachineEpsilon
+                tz = tz * ((J - 1#) / (z * J))
+                F = F + tz
+                J = J + 2#
+            Loop
+            P = P + F * xsqk / z
+        End If
+        P = P * 2# / Pi()
+    Else
+        F = 1#
+        tz = 1#
+        J = 2#
+        Do While J <= K - 2# And tz / F > MachineEpsilon
+            tz = tz * ((J - 1#) / (z * J))
+            F = F + tz
+            J = J + 2#
+        Loop
+        P = F * X / Sqr(z * rk)
+    End If
+    If T < 0# Then
+        P = -P
+    End If
+    Result = 0.5 + 0.5 * P
+    StudentTDistribution = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Functional inverse of Student's t distribution
+'
+'Given probability p, finds the argument t such that stdtr(k,t)
+'is equal to p.
+'
+'ACCURACY:
+'
+'Tested at random 1 <= k <= 100.  The "domain" refers to p:
+'                     Relative error:
+'arithmetic   domain     # trials      peak         rms
+'   IEEE    .001,.999     25000       5.7e-15     8.0e-16
+'   IEEE    10^-6,.001    25000       2.0e-12     2.9e-14
+'
+'Cephes Math Library Release 2.8:  June, 2000
+'Copyright 1984, 1987, 1995, 2000 by Stephen L. Moshier
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function InvStudentTDistribution(ByVal K As Long, _
+         ByVal P As Double) As Double
+    Dim Result As Double
+    Dim T As Double
+    Dim rk As Double
+    Dim z As Double
+    Dim rflg As Long
+    rk = K
+    If P > 0.25 And P < 0.75 Then
+        If P = 0.5 Then
+            Result = 0#
+            InvStudentTDistribution = Result
+            Exit Function
+        End If
+        z = 1# - 2# * P
+        z = InvIncompleteBeta(0.5, 0.5 * rk, Abs(z))
+        T = Sqr(rk * z / (1# - z))
+        If P < 0.5 Then
+            T = -T
+        End If
+        Result = T
+        InvStudentTDistribution = Result
+        Exit Function
+    End If
+    rflg = -1#
+    If P >= 0.5 Then
+        P = 1# - P
+        rflg = 1#
+    End If
+    z = InvIncompleteBeta(0.5 * rk, 0.5, 2# * P)
+    If MaxRealNumber * z < rk Then
+        Result = rflg * MaxRealNumber
+        InvStudentTDistribution = Result
+        Exit Function
+    End If
+    T = Sqr(rk / z - rk)
+    Result = rflg * T
+    InvStudentTDistribution = Result
+End Function

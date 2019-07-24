@@ -1,0 +1,832 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2005-2009, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Computation of nodes and weights of a Gauss-Kronrod quadrature formula
+'
+'The algorithm generates the N-point Gauss-Kronrod quadrature formula  with
+'weight  function  given  by  coefficients  alpha  and beta of a recurrence
+'relation which generates a system of orthogonal polynomials:
+'
+'    P-1(x)   =  0
+'    P0(x)    =  1
+'    Pn+1(x)  =  (x-alpha(n))*Pn(x)  -  beta(n)*Pn-1(x)
+'
+'and zero moment Mu0
+'
+'    Mu0 = integral(W(x)dx,a,b)
+'
+'
+'INPUT PARAMETERS:
+'    Alpha       –   alpha coefficients, array[0..floor(3*K/2)].
+'    Beta        –   beta coefficients,  array[0..ceil(3*K/2)].
+'                    Beta[0] is not used and may be arbitrary.
+'                    Beta[I]>0.
+'    Mu0         –   zeroth moment of the weight function.
+'    N           –   number of nodes of the Gauss-Kronrod quadrature formula,
+'                    N >= 3,
+'                    N =  2*K+1.
+'
+'OUTPUT PARAMETERS:
+'    Info        -   error code:
+'                    * -5    no real and positive Gauss-Kronrod formula can
+'                            be created for such a weight function  with  a
+'                            given number of nodes.
+'                    * -4    N is too large, task may be ill  conditioned -
+'                            x[i]=x[i+1] found.
+'                    * -3    internal eigenproblem solver hasn't converged
+'                    * -2    Beta[i]<=0
+'                    * -1    incorrect N was passed
+'                    * +1    OK
+'    X           -   array[0..N-1] - array of quadrature nodes,
+'                    in ascending order.
+'    WKronrod    -   array[0..N-1] - Kronrod weights
+'    WGauss      -   array[0..N-1] - Gauss weights (interleaved with zeros
+'                    corresponding to extended Kronrod nodes).
+'
+'  -- ALGLIB --
+'     Copyright 08.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub GKQGenerateRec(ByRef Alpha_() As Double, _
+         ByRef Beta_() As Double, _
+         ByVal Mu0 As Double, _
+         ByVal N As Long, _
+         ByRef Info As Long, _
+         ByRef X() As Double, _
+         ByRef WKronrod() As Double, _
+         ByRef WGauss() As Double)
+    Dim Alpha() As Double
+    Dim Beta() As Double
+    Dim TA() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim T() As Double
+    Dim S() As Double
+    Dim WLen As Long
+    Dim WOffs As Long
+    Dim U As Double
+    Dim M As Long
+    Dim L As Long
+    Dim K As Long
+    Dim XGTmp() As Double
+    Dim WGTmp() As Double
+    Dim i_ As Long
+    Alpha = Alpha_
+    Beta = Beta_
+    If N Mod 2# <> 1# Or N < 3# Then
+        Info = -1#
+        Exit Sub
+    End If
+    For i = 0# To Ceil(3# * (N \ 2#) / 2#) Step 1
+        If Beta(i) <= 0# Then
+            Info = -2#
+            Exit Sub
+        End If
+    Next i
+    Info = 1#
+    
+    '
+    ' from external conventions about N/Beta/Mu0 to internal
+    '
+    N = N \ 2#
+    Beta(0#) = Mu0
+    
+    '
+    ' Calculate Gauss nodes/weights, save them for later processing
+    '
+    Call GQGenerateRec(Alpha, Beta, Mu0, N, Info, XGTmp, WGTmp)
+    If Info < 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Resize:
+    ' * A from 0..floor(3*n/2) to 0..2*n
+    ' * B from 0..ceil(3*n/2)  to 0..2*n
+    '
+    ReDim TA(0 To Int(3# * N / 2#) + 1# - 1)
+    For i_ = 0# To Int(3# * N / 2#) Step 1
+        TA(i_) = Alpha(i_)
+    Next i_
+    ReDim Alpha(0 To 2# * N + 1# - 1)
+    For i_ = 0# To Int(3# * N / 2#) Step 1
+        Alpha(i_) = TA(i_)
+    Next i_
+    For i = Int(3# * N / 2#) + 1# To 2# * N Step 1
+        Alpha(i) = 0#
+    Next i
+    ReDim TA(0 To Ceil(3# * N / 2#) + 1# - 1)
+    For i_ = 0# To Ceil(3# * N / 2#) Step 1
+        TA(i_) = Beta(i_)
+    Next i_
+    ReDim Beta(0 To 2# * N + 1# - 1)
+    For i_ = 0# To Ceil(3# * N / 2#) Step 1
+        Beta(i_) = TA(i_)
+    Next i_
+    For i = Ceil(3# * N / 2#) + 1# To 2# * N Step 1
+        Beta(i) = 0#
+    Next i
+    
+    '
+    ' Initialize T, S
+    '
+    WLen = 2# + N \ 2#
+    ReDim T(0 To WLen - 1)
+    ReDim S(0 To WLen - 1)
+    ReDim TA(0 To WLen - 1)
+    WOffs = 1#
+    For i = 0# To WLen - 1# Step 1
+        T(i) = 0#
+        S(i) = 0#
+    Next i
+    
+    '
+    ' Algorithm from Dirk P. Laurie, "Calculation of Gauss-Kronrod quadrature rules", 1997.
+    '
+    T(WOffs + 0#) = Beta(N + 1#)
+    For M = 0# To N - 2# Step 1
+        U = 0#
+        For K = (M + 1#) \ 2# To 0# Step -1
+            L = M - K
+            U = U + (Alpha(K + N + 1#) - Alpha(L)) * T(WOffs + K) + Beta(K + N + 1#) * S(WOffs + K - 1#) - Beta(L) * S(WOffs + K)
+            S(WOffs + K) = U
+        Next K
+        For i_ = 0# To WLen - 1# Step 1
+            TA(i_) = T(i_)
+        Next i_
+        For i_ = 0# To WLen - 1# Step 1
+            T(i_) = S(i_)
+        Next i_
+        For i_ = 0# To WLen - 1# Step 1
+            S(i_) = TA(i_)
+        Next i_
+    Next M
+    For J = N \ 2# To 0# Step -1
+        S(WOffs + J) = S(WOffs + J - 1#)
+    Next J
+    For M = N - 1# To 2# * N - 3# Step 1
+        U = 0#
+        For K = M + 1# - N To (M - 1#) \ 2# Step 1
+            L = M - K
+            J = N - 1# - L
+            U = U - (Alpha(K + N + 1#) - Alpha(L)) * T(WOffs + J) - Beta(K + N + 1#) * S(WOffs + J) + Beta(L) * S(WOffs + J + 1#)
+            S(WOffs + J) = U
+        Next K
+        If M Mod 2# = 0# Then
+            K = M \ 2#
+            Alpha(K + N + 1#) = Alpha(K) + (S(WOffs + J) - Beta(K + N + 1#) * S(WOffs + J + 1#)) / T(WOffs + J + 1#)
+        Else
+            K = (M + 1#) \ 2#
+            Beta(K + N + 1#) = S(WOffs + J) / S(WOffs + J + 1#)
+        End If
+        For i_ = 0# To WLen - 1# Step 1
+            TA(i_) = T(i_)
+        Next i_
+        For i_ = 0# To WLen - 1# Step 1
+            T(i_) = S(i_)
+        Next i_
+        For i_ = 0# To WLen - 1# Step 1
+            S(i_) = TA(i_)
+        Next i_
+    Next M
+    Alpha(2# * N) = Alpha(N - 1#) - Beta(2# * N) * S(WOffs + 0#) / T(WOffs + 0#)
+    
+    '
+    ' calculation of Kronrod nodes and weights, unpacking of Gauss weights
+    '
+    Call GQGenerateRec(Alpha, Beta, Mu0, 2# * N + 1#, Info, X, WKronrod)
+    If Info = -2# Then
+        Info = -5#
+    End If
+    If Info < 0# Then
+        Exit Sub
+    End If
+    For i = 0# To 2# * N - 1# Step 1
+        If X(i) >= X(i + 1#) Then
+            Info = -4#
+        End If
+    Next i
+    If Info < 0# Then
+        Exit Sub
+    End If
+    ReDim WGauss(0 To 2# * N + 1# - 1)
+    For i = 0# To 2# * N Step 1
+        WGauss(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        WGauss(2# * i + 1#) = WGTmp(i)
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns   Gauss   and   Gauss-Kronrod   nodes/weights  for  Gauss-Legendre
+'quadrature with N points.
+'
+'GKQLegendreCalc (calculation) or  GKQLegendreTbl  (precomputed  table)  is
+'used depending on machine precision and number of nodes.
+'
+'INPUT PARAMETERS:
+'    N           -   number of Kronrod nodes, must be odd number, >=3.
+'
+'OUTPUT PARAMETERS:
+'    Info        -   error code:
+'                    * -4    an  error   was   detected   when  calculating
+'                            weights/nodes.  N  is  too  large   to  obtain
+'                            weights/nodes  with  high   enough   accuracy.
+'                            Try  to   use   multiple   precision  version.
+'                    * -3    internal eigenproblem solver hasn't converged
+'                    * -1    incorrect N was passed
+'                    * +1    OK
+'    X           -   array[0..N-1] - array of quadrature nodes, ordered in
+'                    ascending order.
+'    WKronrod    -   array[0..N-1] - Kronrod weights
+'    WGauss      -   array[0..N-1] - Gauss weights (interleaved with zeros
+'                    corresponding to extended Kronrod nodes).
+'
+'
+'  -- ALGLIB --
+'     Copyright 12.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub GKQGenerateGaussLegendre(ByVal N As Long, _
+         ByRef Info As Long, _
+         ByRef X() As Double, _
+         ByRef WKronrod() As Double, _
+         ByRef WGauss() As Double)
+    Dim Eps As Double
+    If MachineEpsilon > 1E-32 And (N = 15# Or N = 21# Or N = 31# Or N = 41# Or N = 51# Or N = 61#) Then
+        Info = 1#
+        Call GKQLegendreTbl(N, X, WKronrod, WGauss, Eps)
+    Else
+        Call GKQLegendreCalc(N, Info, X, WKronrod, WGauss)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns   Gauss   and   Gauss-Kronrod   nodes/weights   for   Gauss-Jacobi
+'quadrature on [-1,1] with weight function
+'
+'    W(x)=Power(1-x,Alpha)*Power(1+x,Beta).
+'
+'INPUT PARAMETERS:
+'    N           -   number of Kronrod nodes, must be odd number, >=3.
+'    Alpha       -   power-law coefficient, Alpha>-1
+'    Beta        -   power-law coefficient, Beta>-1
+'
+'OUTPUT PARAMETERS:
+'    Info        -   error code:
+'                    * -5    no real and positive Gauss-Kronrod formula can
+'                            be created for such a weight function  with  a
+'                            given number of nodes.
+'                    * -4    an  error  was   detected   when   calculating
+'                            weights/nodes. Alpha or  Beta  are  too  close
+'                            to -1 to obtain weights/nodes with high enough
+'                            accuracy, or, may be, N is too large.  Try  to
+'                            use multiple precision version.
+'                    * -3    internal eigenproblem solver hasn't converged
+'                    * -1    incorrect N was passed
+'                    * +1    OK
+'                    * +2    OK, but quadrature rule have exterior  nodes,
+'                            x[0]<-1 or x[n-1]>+1
+'    X           -   array[0..N-1] - array of quadrature nodes, ordered in
+'                    ascending order.
+'    WKronrod    -   array[0..N-1] - Kronrod weights
+'    WGauss      -   array[0..N-1] - Gauss weights (interleaved with zeros
+'                    corresponding to extended Kronrod nodes).
+'
+'
+'  -- ALGLIB --
+'     Copyright 12.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub GKQGenerateGaussJacobi(ByVal N As Long, _
+         ByVal Alpha As Double, _
+         ByVal Beta As Double, _
+         ByRef Info As Long, _
+         ByRef X() As Double, _
+         ByRef WKronrod() As Double, _
+         ByRef WGauss() As Double)
+    Dim CLen As Long
+    Dim A() As Double
+    Dim B() As Double
+    Dim Alpha2 As Double
+    Dim Beta2 As Double
+    Dim APB As Double
+    Dim T As Double
+    Dim i As Long
+    Dim S As Double
+    If N Mod 2# <> 1# Or N < 3# Then
+        Info = -1#
+        Exit Sub
+    End If
+    If Alpha <= -1# Or Beta <= -1# Then
+        Info = -1#
+        Exit Sub
+    End If
+    CLen = Ceil(3# * (N \ 2#) / 2#) + 1#
+    ReDim A(0 To CLen - 1)
+    ReDim B(0 To CLen - 1)
+    For i = 0# To CLen - 1# Step 1
+        A(i) = 0#
+    Next i
+    APB = Alpha + Beta
+    A(0#) = (Beta - Alpha) / (APB + 2#)
+    T = (APB + 1#) * Log(2#) + LnGamma(Alpha + 1#, S) + LnGamma(Beta + 1#, S) - LnGamma(APB + 2#, S)
+    If T > Log(MaxRealNumber) Then
+        Info = -4#
+        Exit Sub
+    End If
+    B(0#) = Exp(T)
+    If CLen > 1# Then
+        Alpha2 = Square(Alpha)
+        Beta2 = Square(Beta)
+        A(1#) = (Beta2 - Alpha2) / ((APB + 2#) * (APB + 4#))
+        B(1#) = 4# * (Alpha + 1#) * (Beta + 1#) / ((APB + 3#) * Square(APB + 2#))
+        For i = 2# To CLen - 1# Step 1
+            A(i) = 0.25 * (Beta2 - Alpha2) / (i * i * (1# + 0.5 * APB / i) * (1# + 0.5 * (APB + 2#) / i))
+            B(i) = 0.25 * (1# + Alpha / i) * (1# + Beta / i) * (1# + APB / i) / ((1# + 0.5 * (APB + 1#) / i) * (1# + 0.5 * (APB - 1#) / i) * Square(1# + 0.5 * APB / i))
+        Next i
+    End If
+    Call GKQGenerateRec(A, B, B(0#), N, Info, X, WKronrod, WGauss)
+    
+    '
+    ' test basic properties to detect errors
+    '
+    If Info > 0# Then
+        If X(0#) < -1# Or X(N - 1#) > 1# Then
+            Info = 2#
+        End If
+        For i = 0# To N - 2# Step 1
+            If X(i) >= X(i + 1#) Then
+                Info = -4#
+            End If
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns Gauss and Gauss-Kronrod nodes for quadrature with N points.
+'
+'Reduction to tridiagonal eigenproblem is used.
+'
+'INPUT PARAMETERS:
+'    N           -   number of Kronrod nodes, must be odd number, >=3.
+'
+'OUTPUT PARAMETERS:
+'    Info        -   error code:
+'                    * -4    an  error   was   detected   when  calculating
+'                            weights/nodes.  N  is  too  large   to  obtain
+'                            weights/nodes  with  high   enough   accuracy.
+'                            Try  to   use   multiple   precision  version.
+'                    * -3    internal eigenproblem solver hasn't converged
+'                    * -1    incorrect N was passed
+'                    * +1    OK
+'    X           -   array[0..N-1] - array of quadrature nodes, ordered in
+'                    ascending order.
+'    WKronrod    -   array[0..N-1] - Kronrod weights
+'    WGauss      -   array[0..N-1] - Gauss weights (interleaved with zeros
+'                    corresponding to extended Kronrod nodes).
+'
+'  -- ALGLIB --
+'     Copyright 12.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub GKQLegendreCalc(ByVal N As Long, _
+         ByRef Info As Long, _
+         ByRef X() As Double, _
+         ByRef WKronrod() As Double, _
+         ByRef WGauss() As Double)
+    Dim Alpha() As Double
+    Dim Beta() As Double
+    Dim ALen As Long
+    Dim BLen As Long
+    Dim Mu0 As Double
+    Dim K As Long
+    Dim i As Long
+    If N Mod 2# <> 1# Or N < 3# Then
+        Info = -1#
+        Exit Sub
+    End If
+    Mu0 = 2#
+    ALen = Int(3# * (N \ 2#) / 2#) + 1#
+    BLen = Ceil(3# * (N \ 2#) / 2#) + 1#
+    ReDim Alpha(0 To ALen - 1)
+    ReDim Beta(0 To BLen - 1)
+    For K = 0# To ALen - 1# Step 1
+        Alpha(K) = 0#
+    Next K
+    Beta(0#) = 2#
+    For K = 1# To BLen - 1# Step 1
+        Beta(K) = 1# / (4# - 1# / Square(K))
+    Next K
+    Call GKQGenerateRec(Alpha, Beta, Mu0, N, Info, X, WKronrod, WGauss)
+    
+    '
+    ' test basic properties to detect errors
+    '
+    If Info > 0# Then
+        If X(0#) < -1# Or X(N - 1#) > 1# Then
+            Info = -4#
+        End If
+        For i = 0# To N - 2# Step 1
+            If X(i) >= X(i + 1#) Then
+                Info = -4#
+            End If
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns Gauss and Gauss-Kronrod nodes for quadrature with N  points  using
+'pre-calculated table. Nodes/weights were  computed  with  accuracy  up  to
+'1.0E-32 (if MPFR version of ALGLIB is used). In standard double  precision
+'accuracy reduces to something about 2.0E-16 (depending  on your compiler's
+'handling of long floating point constants).
+'
+'INPUT PARAMETERS:
+'    N           -   number of Kronrod nodes.
+'                    N can be 15, 21, 31, 41, 51, 61.
+'
+'OUTPUT PARAMETERS:
+'    X           -   array[0..N-1] - array of quadrature nodes, ordered in
+'                    ascending order.
+'    WKronrod    -   array[0..N-1] - Kronrod weights
+'    WGauss      -   array[0..N-1] - Gauss weights (interleaved with zeros
+'                    corresponding to extended Kronrod nodes).
+'
+'
+'  -- ALGLIB --
+'     Copyright 12.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub GKQLegendreTbl(ByVal N As Long, _
+         ByRef X() As Double, _
+         ByRef WKronrod() As Double, _
+         ByRef WGauss() As Double, _
+         ByRef Eps As Double)
+    Dim i As Long
+    Dim NG As Long
+    Dim P1() As Long
+    Dim P2() As Long
+    Dim Tmp As Double
+    ReDim X(0# To N - 1#)
+    ReDim WKronrod(0# To N - 1#)
+    ReDim WGauss(0# To N - 1#)
+    For i = 0# To N - 1# Step 1
+        X(i) = 0#
+        WKronrod(i) = 0#
+        WGauss(i) = 0#
+    Next i
+    Eps = MaxReal(MachineEpsilon, 1E-32)
+    If N = 15# Then
+        NG = 4#
+        WGauss(0#) = 0.12948496616887
+        WGauss(1#) = 0.279705391489277
+        WGauss(2#) = 0.381830050505119
+        WGauss(3#) = 0.417959183673469
+        X(0#) = 0.991455371120813
+        X(1#) = 0.949107912342758
+        X(2#) = 0.864864423359769
+        X(3#) = 0.741531185599394
+        X(4#) = 0.586087235467691
+        X(5#) = 0.405845151377397
+        X(6#) = 0.207784955007898
+        X(7#) = 0#
+        WKronrod(0#) = 2.29353220105292E-02
+        WKronrod(1#) = 6.30920926299786E-02
+        WKronrod(2#) = 0.10479001032225
+        WKronrod(3#) = 0.140653259715526
+        WKronrod(4#) = 0.169004726639268
+        WKronrod(5#) = 0.190350578064785
+        WKronrod(6#) = 0.204432940075299
+        WKronrod(7#) = 0.209482141084728
+    End If
+    If N = 21# Then
+        NG = 5#
+        WGauss(0#) = 6.66713443086881E-02
+        WGauss(1#) = 0.149451349150581
+        WGauss(2#) = 0.219086362515982
+        WGauss(3#) = 0.269266719309996
+        WGauss(4#) = 0.295524224714753
+        X(0#) = 0.995657163025808
+        X(1#) = 0.973906528517172
+        X(2#) = 0.930157491355708
+        X(3#) = 0.865063366688985
+        X(4#) = 0.780817726586417
+        X(5#) = 0.679409568299024
+        X(6#) = 0.562757134668605
+        X(7#) = 0.433395394129247
+        X(8#) = 0.29439286270146
+        X(9#) = 0.148874338981631
+        X(10#) = 0#
+        WKronrod(0#) = 1.16946388673719E-02
+        WKronrod(1#) = 3.25581623079647E-02
+        WKronrod(2#) = 0.054755896574352
+        WKronrod(3#) = 0.07503967481092
+        WKronrod(4#) = 9.31254545836976E-02
+        WKronrod(5#) = 0.109387158802298
+        WKronrod(6#) = 0.123491976262066
+        WKronrod(7#) = 0.134709217311473
+        WKronrod(8#) = 0.14277593857706
+        WKronrod(9#) = 0.147739104901338
+        WKronrod(10#) = 0.149445554002917
+    End If
+    If N = 31# Then
+        NG = 8#
+        WGauss(0#) = 3.07532419961173E-02
+        WGauss(1#) = 7.03660474881081E-02
+        WGauss(2#) = 0.107159220467172
+        WGauss(3#) = 0.139570677926154
+        WGauss(4#) = 0.166269205816994
+        WGauss(5#) = 0.186161000015562
+        WGauss(6#) = 0.198431485327112
+        WGauss(7#) = 0.202578241925561
+        X(0#) = 0.998002298693397
+        X(1#) = 0.987992518020485
+        X(2#) = 0.967739075679139
+        X(3#) = 0.937273392400706
+        X(4#) = 0.897264532344082
+        X(5#) = 0.848206583410427
+        X(6#) = 0.790418501442466
+        X(7#) = 0.72441773136017
+        X(8#) = 0.650996741297417
+        X(9#) = 0.570972172608539
+        X(10#) = 0.48508186364024
+        X(11#) = 0.394151347077563
+        X(12#) = 0.299180007153169
+        X(13#) = 0.201194093997435
+        X(14#) = 0.101142066918717
+        X(15#) = 0#
+        WKronrod(0#) = 5.37747987292335E-03
+        WKronrod(1#) = 1.50079473293161E-02
+        WKronrod(2#) = 2.54608473267153E-02
+        WKronrod(3#) = 3.53463607913758E-02
+        WKronrod(4#) = 4.45897513247649E-02
+        WKronrod(5#) = 5.34815246909281E-02
+        WKronrod(6#) = 6.20095678006706E-02
+        WKronrod(7#) = 6.98541213187283E-02
+        WKronrod(8#) = 7.68496807577204E-02
+        WKronrod(9#) = 0.083080502823133
+        WKronrod(10#) = 8.85644430562118E-02
+        WKronrod(11#) = 9.31265981708253E-02
+        WKronrod(12#) = 9.66427269836237E-02
+        WKronrod(13#) = 0.099173598721792
+        WKronrod(14#) = 0.100769845523876
+        WKronrod(15#) = 0.101330007014792
+    End If
+    If N = 41# Then
+        NG = 10#
+        WGauss(0#) = 1.76140071391521E-02
+        WGauss(1#) = 4.06014298003869E-02
+        WGauss(2#) = 6.26720483341091E-02
+        WGauss(3#) = 8.32767415767048E-02
+        WGauss(4#) = 0.10193011981724
+        WGauss(5#) = 0.118194531961518
+        WGauss(6#) = 0.131688638449177
+        WGauss(7#) = 0.142096109318382
+        WGauss(8#) = 0.149172986472604
+        WGauss(9#) = 0.152753387130726
+        X(0#) = 0.998859031588278
+        X(1#) = 0.993128599185095
+        X(2#) = 0.98150787745025
+        X(3#) = 0.963971927277914
+        X(4#) = 0.940822633831755
+        X(5#) = 0.912234428251326
+        X(6#) = 0.878276811252282
+        X(7#) = 0.839116971822219
+        X(8#) = 0.795041428837551
+        X(9#) = 0.746331906460151
+        X(10#) = 0.693237656334751
+        X(11#) = 0.636053680726515
+        X(12#) = 0.57514044681971
+        X(13#) = 0.510867001950827
+        X(14#) = 0.443593175238725
+        X(15#) = 0.37370608871542
+        X(16#) = 0.301627868114913
+        X(17#) = 0.227785851141645
+        X(18#) = 0.152605465240923
+        X(19#) = 7.65265211334973E-02
+        X(20#) = 0#
+        WKronrod(0#) = 3.07358371852053E-03
+        WKronrod(1#) = 8.60026985564294E-03
+        WKronrod(2#) = 1.46261692569713E-02
+        WKronrod(3#) = 2.03883734612665E-02
+        WKronrod(4#) = 2.58821336049512E-02
+        WKronrod(5#) = 3.12873067770328E-02
+        WKronrod(6#) = 3.66001697582008E-02
+        WKronrod(7#) = 4.16688733279737E-02
+        WKronrod(8#) = 4.64348218674977E-02
+        WKronrod(9#) = 5.09445739237287E-02
+        WKronrod(10#) = 0.055195105348286
+        WKronrod(11#) = 5.91114008806396E-02
+        WKronrod(12#) = 6.26532375547812E-02
+        WKronrod(13#) = 6.58345971336184E-02
+        WKronrod(14#) = 6.86486729285216E-02
+        WKronrod(15#) = 7.10544235534441E-02
+        WKronrod(16#) = 7.30306903327867E-02
+        WKronrod(17#) = 7.45828754004992E-02
+        WKronrod(18#) = 7.57044976845567E-02
+        WKronrod(19#) = 7.63778676720807E-02
+        WKronrod(20#) = 7.66007119179997E-02
+    End If
+    If N = 51# Then
+        NG = 13#
+        WGauss(0#) = 1.13937985010263E-02
+        WGauss(1#) = 2.63549866150321E-02
+        WGauss(2#) = 4.09391567013063E-02
+        WGauss(3#) = 5.49046959758352E-02
+        WGauss(4#) = 6.80383338123569E-02
+        WGauss(5#) = 0.080140700335001
+        WGauss(6#) = 9.10282619829637E-02
+        WGauss(7#) = 0.100535949067051
+        WGauss(8#) = 0.108519624474264
+        WGauss(9#) = 0.114858259145712
+        WGauss(10#) = 0.119455763535785
+        WGauss(11#) = 0.12224244299031
+        WGauss(12#) = 0.123176053726715
+        X(0#) = 0.99926210499261
+        X(1#) = 0.995556969790498
+        X(2#) = 0.988035794534077
+        X(3#) = 0.976663921459518
+        X(4#) = 0.961614986425843
+        X(5#) = 0.942974571228974
+        X(6#) = 0.920747115281702
+        X(7#) = 0.894991997878275
+        X(8#) = 0.865847065293276
+        X(9#) = 0.833442628760834
+        X(10#) = 0.7978737979985
+        X(11#) = 0.759259263037358
+        X(12#) = 0.717766406813084
+        X(13#) = 0.673566368473468
+        X(14#) = 0.626810099010317
+        X(15#) = 0.577662930241223
+        X(16#) = 0.526325284334719
+        X(17#) = 0.473002731445715
+        X(18#) = 0.417885382193038
+        X(19#) = 0.361172305809388
+        X(20#) = 0.303089538931108
+        X(21#) = 0.243866883720988
+        X(22#) = 0.183718939421049
+        X(23#) = 0.12286469261071
+        X(24#) = 6.15444830056851E-02
+        X(25#) = 0#
+        WKronrod(0#) = 1.98738389233032E-03
+        WKronrod(1#) = 5.56193213535671E-03
+        WKronrod(2#) = 9.47397338617415E-03
+        WKronrod(3#) = 1.32362291955717E-02
+        WKronrod(4#) = 1.68478177091283E-02
+        WKronrod(5#) = 2.04353711458828E-02
+        WKronrod(6#) = 2.40099456069532E-02
+        WKronrod(7#) = 2.74753175878517E-02
+        WKronrod(8#) = 3.07923001673875E-02
+        WKronrod(9#) = 3.40021302743293E-02
+        WKronrod(10#) = 3.71162714834155E-02
+        WKronrod(11#) = 4.00838255040324E-02
+        WKronrod(12#) = 4.28728450201701E-02
+        WKronrod(13#) = 4.55029130499218E-02
+        WKronrod(14#) = 4.79825371388367E-02
+        WKronrod(15#) = 5.02776790807157E-02
+        WKronrod(16#) = 5.23628858064075E-02
+        WKronrod(17#) = 5.42511298885455E-02
+        WKronrod(18#) = 5.59508112204123E-02
+        WKronrod(19#) = 5.74371163615678E-02
+        WKronrod(20#) = 5.86896800223942E-02
+        WKronrod(21#) = 5.97203403241741E-02
+        WKronrod(22#) = 6.05394553760459E-02
+        WKronrod(23#) = 0.061128509717053
+        WKronrod(24#) = 6.14711898714253E-02
+        WKronrod(25#) = 6.15808180678329E-02
+    End If
+    If N = 61# Then
+        NG = 15#
+        WGauss(0#) = 7.96819249616661E-03
+        WGauss(1#) = 0.018466468311091
+        WGauss(2#) = 2.87847078833234E-02
+        WGauss(3#) = 3.87991925696271E-02
+        WGauss(4#) = 4.84026728305941E-02
+        WGauss(5#) = 5.74931562176191E-02
+        WGauss(6#) = 6.59742298821805E-02
+        WGauss(7#) = 7.37559747377052E-02
+        WGauss(8#) = 8.07558952294202E-02
+        WGauss(9#) = 0.086899787201083
+        WGauss(10#) = 9.21225222377861E-02
+        WGauss(11#) = 9.63687371746443E-02
+        WGauss(12#) = 9.95934205867953E-02
+        WGauss(13#) = 0.101762389748405
+        WGauss(14#) = 0.102852652893559
+        X(0#) = 0.999484410050491
+        X(1#) = 0.99689348407465
+        X(2#) = 0.991630996870405
+        X(3#) = 0.983668123279747
+        X(4#) = 0.973116322501126
+        X(5#) = 0.960021864968308
+        X(6#) = 0.94437444474856
+        X(7#) = 0.926200047429274
+        X(8#) = 0.905573307699908
+        X(9#) = 0.882560535792053
+        X(10#) = 0.857205233546061
+        X(11#) = 0.829565762382768
+        X(12#) = 0.799727835821839
+        X(13#) = 0.767777432104826
+        X(14#) = 0.733790062453227
+        X(15#) = 0.697850494793316
+        X(16#) = 0.660061064126627
+        X(17#) = 0.620526182989243
+        X(18#) = 0.579345235826362
+        X(19#) = 0.53662414814202
+        X(20#) = 0.492480467861779
+        X(21#) = 0.447033769538089
+        X(22#) = 0.400401254830394
+        X(23#) = 0.352704725530878
+        X(24#) = 0.304073202273625
+        X(25#) = 0.25463692616789
+        X(26#) = 0.20452511668231
+        X(27#) = 0.153869913608584
+        X(28#) = 0.102806937966737
+        X(29#) = 5.14718425553177E-02
+        X(30#) = 0#
+        WKronrod(0#) = 1.38901369867701E-03
+        WKronrod(1#) = 3.89046112709988E-03
+        WKronrod(2#) = 6.63070391593129E-03
+        WKronrod(3#) = 9.27327965951776E-03
+        WKronrod(4#) = 1.18230152534963E-02
+        WKronrod(5#) = 1.43697295070458E-02
+        WKronrod(6#) = 1.69208891890533E-02
+        WKronrod(7#) = 1.94141411939424E-02
+        WKronrod(8#) = 2.18280358216092E-02
+        WKronrod(9#) = 2.41911620780806E-02
+        WKronrod(10#) = 2.65099548823331E-02
+        WKronrod(11#) = 2.87540487650413E-02
+        WKronrod(12#) = 3.09072575623878E-02
+        WKronrod(13#) = 3.29814470574837E-02
+        WKronrod(14#) = 0.03497933802806
+        WKronrod(15#) = 3.68823646518212E-02
+        WKronrod(16#) = 3.86789456247276E-02
+        WKronrod(17#) = 0.040374538951536
+        WKronrod(18#) = 4.19698102151642E-02
+        WKronrod(19#) = 4.34525397013561E-02
+        WKronrod(20#) = 4.48148001331627E-02
+        WKronrod(21#) = 0.046059238271007
+        WKronrod(22#) = 4.71855465692992E-02
+        WKronrod(23#) = 4.81858617570871E-02
+        WKronrod(24#) = 4.90554345550298E-02
+        WKronrod(25#) = 4.97956834270742E-02
+        WKronrod(26#) = 5.04059214027823E-02
+        WKronrod(27#) = 5.08817958987496E-02
+        WKronrod(28#) = 5.12215478492588E-02
+        WKronrod(29#) = 0.051426128537459
+        WKronrod(30#) = 5.14947294294516E-02
+    End If
+    
+    '
+    ' copy nodes
+    '
+    For i = N - 1# To N \ 2# Step -1
+        X(i) = -X(N - 1# - i)
+    Next i
+    
+    '
+    ' copy Kronrod weights
+    '
+    For i = N - 1# To N \ 2# Step -1
+        WKronrod(i) = WKronrod(N - 1# - i)
+    Next i
+    
+    '
+    ' copy Gauss weights
+    '
+    For i = NG - 1# To 0# Step -1
+        WGauss(N - 2# - 2# * i) = WGauss(i)
+        WGauss(1# + 2# * i) = WGauss(i)
+    Next i
+    For i = 0# To N \ 2# Step 1
+        WGauss(2# * i) = 0#
+    Next i
+    
+    '
+    ' reorder
+    '
+    Call TagSort(X, N, P1, P2)
+    For i = 0# To N - 1# Step 1
+        Tmp = WKronrod(i)
+        WKronrod(i) = WKronrod(P2(i))
+        WKronrod(P2(i)) = Tmp
+        Tmp = WGauss(i)
+        WGauss(i) = WGauss(P2(i))
+        WGauss(P2(i)) = Tmp
+    Next i
+End Sub

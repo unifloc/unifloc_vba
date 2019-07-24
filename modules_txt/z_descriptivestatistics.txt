@@ -1,0 +1,356 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Calculation of the distribution moments: mean, variance, slewness, kurtosis.
+'
+'Input parameters:
+'    X       -   sample. Array with whose indexes range within [0..N-1]
+'    N       -   sample size.
+'
+'Output parameters:
+'    Mean    -   mean.
+'    Variance-   variance.
+'    Skewness-   skewness (if variance<>0; zero otherwise).
+'    Kurtosis-   kurtosis (if variance<>0; zero otherwise).
+'
+'  -- ALGLIB --
+'     Copyright 06.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CalculateMoments(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByRef Mean As Double, _
+         ByRef Variance As Double, _
+         ByRef Skewness As Double, _
+         ByRef Kurtosis As Double)
+    Dim i As Long
+    Dim V As Double
+    Dim V1 As Double
+    Dim V2 As Double
+    Dim StdDev As Double
+    Mean = 0#
+    Variance = 0#
+    Skewness = 0#
+    Kurtosis = 0#
+    StdDev = 0#
+    If N <= 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    For i = 0# To N - 1# Step 1
+        Mean = Mean + X(i)
+    Next i
+    Mean = Mean / N
+    
+    '
+    ' Variance (using corrected two-pass algorithm)
+    '
+    If N <> 1# Then
+        V1 = 0#
+        For i = 0# To N - 1# Step 1
+            V1 = V1 + Square(X(i) - Mean)
+        Next i
+        V2 = 0#
+        For i = 0# To N - 1# Step 1
+            V2 = V2 + (X(i) - Mean)
+        Next i
+        V2 = Square(V2) / N
+        Variance = (V1 - V2) / (N - 1#)
+        If Variance < 0# Then
+            Variance = 0#
+        End If
+        StdDev = Sqr(Variance)
+    End If
+    
+    '
+    ' Skewness and kurtosis
+    '
+    If StdDev <> 0# Then
+        For i = 0# To N - 1# Step 1
+            V = (X(i) - Mean) / StdDev
+            V2 = Square(V)
+            Skewness = Skewness + V2 * V
+            Kurtosis = Kurtosis + Square(V2)
+        Next i
+        Skewness = Skewness / N
+        Kurtosis = Kurtosis / N - 3#
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'ADev
+'
+'Input parameters:
+'    X   -   sample (array indexes: [0..N-1])
+'    N   -   sample size
+'
+'Output parameters:
+'    ADev-   ADev
+'
+'  -- ALGLIB --
+'     Copyright 06.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CalculateADev(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByRef ADev As Double)
+    Dim i As Long
+    Dim Mean As Double
+    Mean = 0#
+    ADev = 0#
+    If N <= 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    For i = 0# To N - 1# Step 1
+        Mean = Mean + X(i)
+    Next i
+    Mean = Mean / N
+    
+    '
+    ' ADev
+    '
+    For i = 0# To N - 1# Step 1
+        ADev = ADev + Abs(X(i) - Mean)
+    Next i
+    ADev = ADev / N
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Median calculation.
+'
+'Input parameters:
+'    X   -   sample (array indexes: [0..N-1])
+'    N   -   sample size
+'
+'Output parameters:
+'    Median
+'
+'  -- ALGLIB --
+'     Copyright 06.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CalculateMedian(ByRef X_() As Double, _
+         ByVal N As Long, _
+         ByRef Median As Double)
+    Dim X() As Double
+    Dim i As Long
+    Dim ir As Long
+    Dim J As Long
+    Dim L As Long
+    Dim midp As Long
+    Dim K As Long
+    Dim A As Double
+    Dim tval As Double
+    X = X_
+    
+    '
+    ' Some degenerate cases
+    '
+    Median = 0#
+    If N <= 0# Then
+        Exit Sub
+    End If
+    If N = 1# Then
+        Median = X(0#)
+        Exit Sub
+    End If
+    If N = 2# Then
+        Median = 0.5 * (X(0#) + X(1#))
+        Exit Sub
+    End If
+    
+    '
+    ' Common case, N>=3.
+    ' Choose X[(N-1)/2]
+    '
+    L = 0#
+    ir = N - 1#
+    K = (N - 1#) \ 2#
+    Do While True
+        If ir <= L + 1# Then
+            
+            '
+            ' 1 or 2 elements in partition
+            '
+            If ir = L + 1# And X(ir) < X(L) Then
+                tval = X(L)
+                X(L) = X(ir)
+                X(ir) = tval
+            End If
+            Exit Do
+        Else
+            midp = (L + ir) \ 2#
+            tval = X(midp)
+            X(midp) = X(L + 1#)
+            X(L + 1#) = tval
+            If X(L) > X(ir) Then
+                tval = X(L)
+                X(L) = X(ir)
+                X(ir) = tval
+            End If
+            If X(L + 1#) > X(ir) Then
+                tval = X(L + 1#)
+                X(L + 1#) = X(ir)
+                X(ir) = tval
+            End If
+            If X(L) > X(L + 1#) Then
+                tval = X(L)
+                X(L) = X(L + 1#)
+                X(L + 1#) = tval
+            End If
+            i = L + 1#
+            J = ir
+            A = X(L + 1#)
+            Do While True
+                Do
+                    i = i + 1#
+                Loop Until X(i) >= A
+                Do
+                    J = J - 1#
+                Loop Until X(J) <= A
+                If J < i Then
+                    Exit Do
+                End If
+                tval = X(i)
+                X(i) = X(J)
+                X(J) = tval
+            Loop
+            X(L + 1#) = X(J)
+            X(J) = A
+            If J >= K Then
+                ir = J - 1#
+            End If
+            If J <= K Then
+                L = i
+            End If
+        End If
+    Loop
+    
+    '
+    ' If N is odd, return result
+    '
+    If N Mod 2# = 1# Then
+        Median = X(K)
+        Exit Sub
+    End If
+    A = X(N - 1#)
+    For i = K + 1# To N - 1# Step 1
+        If X(i) < A Then
+            A = X(i)
+        End If
+    Next i
+    Median = 0.5 * (X(K) + A)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Percentile calculation.
+'
+'Input parameters:
+'    X   -   sample (array indexes: [0..N-1])
+'    N   -   sample size, N>1
+'    P   -   percentile (0<=P<=1)
+'
+'Output parameters:
+'    V   -   percentile
+'
+'  -- ALGLIB --
+'     Copyright 01.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CalculatePercentile(ByRef X_() As Double, _
+         ByVal N As Long, _
+         ByVal P As Double, _
+         ByRef V As Double)
+    Dim X() As Double
+    Dim I1 As Long
+    Dim T As Double
+    X = X_
+    Call InternalStatHeapSort(X, N)
+    If P = 0# Then
+        V = X(0#)
+        Exit Sub
+    End If
+    If P = 1# Then
+        V = X(N - 1#)
+        Exit Sub
+    End If
+    T = P * (N - 1#)
+    I1 = Int(T)
+    T = T - Int(T)
+    V = X(I1) * (1# - T) + X(I1 + 1#) * T
+End Sub
+Private Sub InternalStatHeapSort(ByRef Arr() As Double, ByVal N As Long)
+    Dim i As Long
+    Dim K As Long
+    Dim T As Long
+    Dim Tmp As Double
+    If N = 1# Then
+        Exit Sub
+    End If
+    i = 2#
+    Do
+        T = i
+        Do While T <> 1#
+            K = T \ 2#
+            If Arr(K - 1#) >= Arr(T - 1#) Then
+                T = 1#
+            Else
+                Tmp = Arr(K - 1#)
+                Arr(K - 1#) = Arr(T - 1#)
+                Arr(T - 1#) = Tmp
+                T = K
+            End If
+        Loop
+        i = i + 1#
+    Loop Until Not i <= N
+    i = N - 1#
+    Do
+        Tmp = Arr(i)
+        Arr(i) = Arr(0#)
+        Arr(0#) = Tmp
+        T = 1#
+        Do While T <> 0#
+            K = 2# * T
+            If K > i Then
+                T = 0#
+            Else
+                If K < i Then
+                    If Arr(K) > Arr(K - 1#) Then
+                        K = K + 1#
+                    End If
+                End If
+                If Arr(T - 1#) >= Arr(K - 1#) Then
+                    T = 0#
+                Else
+                    Tmp = Arr(K - 1#)
+                    Arr(K - 1#) = Arr(T - 1#)
+                    Arr(T - 1#) = Tmp
+                    T = K
+                End If
+            End If
+        Loop
+        i = i - 1#
+    Loop Until Not i >= 1#
+End Sub

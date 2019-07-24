@@ -1,0 +1,209 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Two-sample F-test
+'
+'This test checks three hypotheses about dispersions of the given  samples.
+'The following tests are performed:
+'    * two-tailed test (null hypothesis - the dispersions are equal)
+'    * left-tailed test (null hypothesis  -  the  dispersion  of  the first
+'      sample is greater than or equal to  the  dispersion  of  the  second
+'      sample).
+'    * right-tailed test (null hypothesis - the  dispersion  of  the  first
+'      sample is less than or equal to the dispersion of the second sample)
+'
+'The test is based on the following assumptions:
+'    * the given samples have normal distributions
+'    * the samples are independent.
+'
+'Input parameters:
+'    X   -   sample 1. Array whose index goes from 0 to N-1.
+'    N   -   sample size.
+'    Y   -   sample 2. Array whose index goes from 0 to M-1.
+'    M   -   sample size.
+'
+'Output parameters:
+'    BothTails   -   p-value for two-tailed test.
+'                    If BothTails is less than the given significance level
+'                    the null hypothesis is rejected.
+'    LeftTail    -   p-value for left-tailed test.
+'                    If LeftTail is less than the given significance level,
+'                    the null hypothesis is rejected.
+'    RightTail   -   p-value for right-tailed test.
+'                    If RightTail is less than the given significance level
+'                    the null hypothesis is rejected.
+'
+'  -- ALGLIB --
+'     Copyright 19.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTest(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByRef Y() As Double, _
+         ByVal M As Long, _
+         ByRef BothTails As Double, _
+         ByRef LeftTail As Double, _
+         ByRef RightTail As Double)
+    Dim i As Long
+    Dim XMean As Double
+    Dim YMean As Double
+    Dim XVar As Double
+    Dim YVar As Double
+    Dim DF1 As Long
+    Dim DF2 As Long
+    Dim Stat As Double
+    If N <= 2# Or M <= 2# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    XMean = 0#
+    For i = 0# To N - 1# Step 1
+        XMean = XMean + X(i)
+    Next i
+    XMean = XMean / N
+    YMean = 0#
+    For i = 0# To M - 1# Step 1
+        YMean = YMean + Y(i)
+    Next i
+    YMean = YMean / M
+    
+    '
+    ' Variance (using corrected two-pass algorithm)
+    '
+    XVar = 0#
+    For i = 0# To N - 1# Step 1
+        XVar = XVar + Square(X(i) - XMean)
+    Next i
+    XVar = XVar / (N - 1#)
+    YVar = 0#
+    For i = 0# To M - 1# Step 1
+        YVar = YVar + Square(Y(i) - YMean)
+    Next i
+    YVar = YVar / (M - 1#)
+    If XVar = 0# Or YVar = 0# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Statistic
+    '
+    DF1 = N - 1#
+    DF2 = M - 1#
+    Stat = MinReal(XVar / YVar, YVar / XVar)
+    BothTails = 1# - (FDistribution(DF1, DF2, 1# / Stat) - FDistribution(DF1, DF2, Stat))
+    LeftTail = FDistribution(DF1, DF2, XVar / YVar)
+    RightTail = 1# - LeftTail
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'One-sample chi-square test
+'
+'This test checks three hypotheses about the dispersion of the given sample
+'The following tests are performed:
+'    * two-tailed test (null hypothesis - the dispersion equals  the  given
+'      number)
+'    * left-tailed test (null hypothesis - the dispersion is  greater  than
+'      or equal to the given number)
+'    * right-tailed test (null hypothesis  -  dispersion is  less  than  or
+'      equal to the given number).
+'
+'Test is based on the following assumptions:
+'    * the given sample has a normal distribution.
+'
+'Input parameters:
+'    X           -   sample 1. Array whose index goes from 0 to N-1.
+'    N           -   size of the sample.
+'    Variance    -   dispersion value to compare with.
+'
+'Output parameters:
+'    BothTails   -   p-value for two-tailed test.
+'                    If BothTails is less than the given significance level
+'                    the null hypothesis is rejected.
+'    LeftTail    -   p-value for left-tailed test.
+'                    If LeftTail is less than the given significance level,
+'                    the null hypothesis is rejected.
+'    RightTail   -   p-value for right-tailed test.
+'                    If RightTail is less than the given significance level
+'                    the null hypothesis is rejected.
+'
+'  -- ALGLIB --
+'     Copyright 19.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub OneSampleVarianceTest(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByVal Variance As Double, _
+         ByRef BothTails As Double, _
+         ByRef LeftTail As Double, _
+         ByRef RightTail As Double)
+    Dim i As Long
+    Dim XMean As Double
+    Dim XVar As Double
+    Dim S As Double
+    Dim Stat As Double
+    If N <= 1# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    XMean = 0#
+    For i = 0# To N - 1# Step 1
+        XMean = XMean + X(i)
+    Next i
+    XMean = XMean / N
+    
+    '
+    ' Variance
+    '
+    XVar = 0#
+    For i = 0# To N - 1# Step 1
+        XVar = XVar + Square(X(i) - XMean)
+    Next i
+    XVar = XVar / (N - 1#)
+    If XVar = 0# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Statistic
+    '
+    Stat = (N - 1#) * XVar / Variance
+    S = ChiSquareDistribution(N - 1#, Stat)
+    BothTails = 2# * MinReal(S, 1# - S)
+    LeftTail = S
+    RightTail = 1# - LeftTail
+End Sub

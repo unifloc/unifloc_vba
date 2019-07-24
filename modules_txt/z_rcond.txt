@@ -1,0 +1,2448 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 1992-2007 The University of Tennessee.  All rights reserved.
+'
+'Contributors:
+'    * Sergey Bochkanov (ALGLIB project). Translation from FORTRAN to
+'      pseudocode.
+'
+'See subroutines comments for additional copyrights.
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of a matrix condition number (1-norm)
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A   -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N   -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixRCond1(ByRef A_() As Double, ByVal N As Long) As Double
+    Dim Result As Double
+    Dim A() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    Dim T() As Double
+    A = A_
+    ReDim T(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        T(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            T(J) = T(J) + Abs(A(i, J))
+        Next J
+    Next i
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        Nrm = MaxReal(Nrm, T(i))
+    Next i
+    Call RMatrixLU(A, N, N, Pivots)
+    Call RMatrixRCondLUInternal(A, N, True, True, Nrm, V)
+    Result = V
+    RMatrixRCond1 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of a matrix condition number (infinity-norm).
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A   -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N   -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixRCondInf(ByRef A_() As Double, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim A() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    A = A_
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        V = 0#
+        For J = 0# To N - 1# Step 1
+            V = V + Abs(A(i, J))
+        Next J
+        Nrm = MaxReal(Nrm, V)
+    Next i
+    Call RMatrixLU(A, N, N, Pivots)
+    Call RMatrixRCondLUInternal(A, N, False, True, Nrm, V)
+    Result = V
+    RMatrixRCondInf = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimate of a symmetric positive definite matrix.
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'It should be noted that 1-norm and inf-norm of condition numbers of symmetric
+'matrices are equal, so the algorithm doesn't take into account the
+'differences between these types of norms.
+'
+'Input parameters:
+'    A       -   symmetric positive definite matrix which is given by its
+'                upper or lower triangle depending on the value of
+'                IsUpper. Array with elements [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    IsUpper -   storage format.
+'
+'Result:
+'    1/LowerBound(cond(A)), if matrix A is positive definite,
+'   -1, if matrix A is not positive definite, and its condition number
+'    could not be found by this algorithm.
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SPDMatrixRCond(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim A() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim T() As Double
+    A = A_
+    ReDim T(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        T(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For J = J1 To J2 Step 1
+            If i = J Then
+                T(i) = T(i) + Abs(A(i, i))
+            Else
+                T(i) = T(i) + Abs(A(i, J))
+                T(J) = T(J) + Abs(A(i, J))
+            End If
+        Next J
+    Next i
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        Nrm = MaxReal(Nrm, T(i))
+    Next i
+    If SPDMatrixCholesky(A, N, IsUpper) Then
+        Call SPDMatrixRCondCholeskyInternal(A, N, IsUpper, True, Nrm, V)
+        Result = V
+    Else
+        Result = -1#
+    End If
+    SPDMatrixRCond = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Triangular matrix: estimate of a condition number (1-norm)
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A       -   matrix. Array[0..N-1, 0..N-1].
+'    N       -   size of A.
+'    IsUpper -   True, if the matrix is upper triangular.
+'    IsUnit  -   True, if the matrix has a unit diagonal.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixTRRCond1(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    Dim T() As Double
+    Dim J1 As Long
+    Dim J2 As Long
+    ReDim T(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        T(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i + 1#
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i - 1#
+        End If
+        For J = J1 To J2 Step 1
+            T(J) = T(J) + Abs(A(i, J))
+        Next J
+        If Isunit Then
+            T(i) = T(i) + 1#
+        Else
+            T(i) = T(i) + Abs(A(i, i))
+        End If
+    Next i
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        Nrm = MaxReal(Nrm, T(i))
+    Next i
+    Call RMatrixRCondTRInternal(A, N, IsUpper, Isunit, True, Nrm, V)
+    Result = V
+    RMatrixTRRCond1 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Triangular matrix: estimate of a matrix condition number (infinity-norm).
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A   -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N   -   size of matrix A.
+'    IsUpper -   True, if the matrix is upper triangular.
+'    IsUnit  -   True, if the matrix has a unit diagonal.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixTRRCondInf(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i + 1#
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i - 1#
+        End If
+        V = 0#
+        For J = J1 To J2 Step 1
+            V = V + Abs(A(i, J))
+        Next J
+        If Isunit Then
+            V = V + 1#
+        Else
+            V = V + Abs(A(i, i))
+        End If
+        Nrm = MaxReal(Nrm, V)
+    Next i
+    Call RMatrixRCondTRInternal(A, N, IsUpper, Isunit, False, Nrm, V)
+    Result = V
+    RMatrixTRRCondInf = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimate of a Hermitian positive definite matrix.
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'It should be noted that 1-norm and inf-norm of condition numbers of symmetric
+'matrices are equal, so the algorithm doesn't take into account the
+'differences between these types of norms.
+'
+'Input parameters:
+'    A       -   Hermitian positive definite matrix which is given by its
+'                upper or lower triangle depending on the value of
+'                IsUpper. Array with elements [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    IsUpper -   storage format.
+'
+'Result:
+'    1/LowerBound(cond(A)), if matrix A is positive definite,
+'   -1, if matrix A is not positive definite, and its condition number
+'    could not be found by this algorithm.
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HPDMatrixRCond(ByRef A_() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim A() As Complex
+    Dim i As Long
+    Dim J As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim T() As Double
+    A = A_
+    ReDim T(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        T(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For J = J1 To J2 Step 1
+            If i = J Then
+                T(i) = T(i) + AbsComplex(A(i, i))
+            Else
+                T(i) = T(i) + AbsComplex(A(i, J))
+                T(J) = T(J) + AbsComplex(A(i, J))
+            End If
+        Next J
+    Next i
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        Nrm = MaxReal(Nrm, T(i))
+    Next i
+    If HPDMatrixCholesky(A, N, IsUpper) Then
+        Call HPDMatrixRCondCholeskyInternal(A, N, IsUpper, True, Nrm, V)
+        Result = V
+    Else
+        Result = -1#
+    End If
+    HPDMatrixRCond = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of a matrix condition number (1-norm)
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A   -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N   -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixRCond1(ByRef A_() As Complex, ByVal N As Long) As Double
+    Dim Result As Double
+    Dim A() As Complex
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    Dim T() As Double
+    A = A_
+    ReDim T(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        T(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        For J = 0# To N - 1# Step 1
+            T(J) = T(J) + AbsComplex(A(i, J))
+        Next J
+    Next i
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        Nrm = MaxReal(Nrm, T(i))
+    Next i
+    Call CMatrixLU(A, N, N, Pivots)
+    Call CMatrixRCondLUInternal(A, N, True, True, Nrm, V)
+    Result = V
+    CMatrixRCond1 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of a matrix condition number (infinity-norm).
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A   -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N   -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixRCondInf(ByRef A_() As Complex, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim A() As Complex
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    A = A_
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        V = 0#
+        For J = 0# To N - 1# Step 1
+            V = V + AbsComplex(A(i, J))
+        Next J
+        Nrm = MaxReal(Nrm, V)
+    Next i
+    Call CMatrixLU(A, N, N, Pivots)
+    Call CMatrixRCondLUInternal(A, N, False, True, Nrm, V)
+    Result = V
+    CMatrixRCondInf = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of the condition number of a matrix given by its LU decomposition (1-norm)
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    LUA         -   LU decomposition of a matrix in compact form. Output of
+'                    the RMatrixLU subroutine.
+'    N           -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixLURCond1(ByRef LUA() As Double, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call RMatrixRCondLUInternal(LUA, N, True, False, 0#, V)
+    Result = V
+    RMatrixLURCond1 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of the condition number of a matrix given by its LU decomposition
+'(infinity norm).
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    LUA     -   LU decomposition of a matrix in compact form. Output of
+'                the RMatrixLU subroutine.
+'    N       -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixLURCondInf(ByRef LUA() As Double, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call RMatrixRCondLUInternal(LUA, N, False, False, 0#, V)
+    Result = V
+    RMatrixLURCondInf = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimate of a symmetric positive definite matrix given by
+'Cholesky decomposition.
+'
+'The algorithm calculates a lower bound of the condition number. In this
+'case, the algorithm does not return a lower bound of the condition number,
+'but an inverse number (to avoid an overflow in case of a singular matrix).
+'
+'It should be noted that 1-norm and inf-norm condition numbers of symmetric
+'matrices are equal, so the algorithm doesn't take into account the
+'differences between these types of norms.
+'
+'Input parameters:
+'    CD  - Cholesky decomposition of matrix A,
+'          output of SMatrixCholesky subroutine.
+'    N   - size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SPDMatrixCholeskyRCond(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call SPDMatrixRCondCholeskyInternal(A, N, IsUpper, False, 0#, V)
+    Result = V
+    SPDMatrixCholeskyRCond = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimate of a Hermitian positive definite matrix given by
+'Cholesky decomposition.
+'
+'The algorithm calculates a lower bound of the condition number. In this
+'case, the algorithm does not return a lower bound of the condition number,
+'but an inverse number (to avoid an overflow in case of a singular matrix).
+'
+'It should be noted that 1-norm and inf-norm condition numbers of symmetric
+'matrices are equal, so the algorithm doesn't take into account the
+'differences between these types of norms.
+'
+'Input parameters:
+'    CD  - Cholesky decomposition of matrix A,
+'          output of SMatrixCholesky subroutine.
+'    N   - size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HPDMatrixCholeskyRCond(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call HPDMatrixRCondCholeskyInternal(A, N, IsUpper, False, 0#, V)
+    Result = V
+    HPDMatrixCholeskyRCond = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of the condition number of a matrix given by its LU decomposition (1-norm)
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    LUA         -   LU decomposition of a matrix in compact form. Output of
+'                    the CMatrixLU subroutine.
+'    N           -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixLURCond1(ByRef LUA() As Complex, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call CMatrixRCondLUInternal(LUA, N, True, False, 0#, V)
+    Result = V
+    CMatrixLURCond1 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Estimate of the condition number of a matrix given by its LU decomposition
+'(infinity norm).
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    LUA     -   LU decomposition of a matrix in compact form. Output of
+'                the CMatrixLU subroutine.
+'    N       -   size of matrix A.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixLURCondInf(ByRef LUA() As Complex, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call CMatrixRCondLUInternal(LUA, N, False, False, 0#, V)
+    Result = V
+    CMatrixLURCondInf = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Triangular matrix: estimate of a condition number (1-norm)
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A       -   matrix. Array[0..N-1, 0..N-1].
+'    N       -   size of A.
+'    IsUpper -   True, if the matrix is upper triangular.
+'    IsUnit  -   True, if the matrix has a unit diagonal.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixTRRCond1(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    Dim T() As Double
+    Dim J1 As Long
+    Dim J2 As Long
+    ReDim T(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        T(i) = 0#
+    Next i
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i + 1#
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i - 1#
+        End If
+        For J = J1 To J2 Step 1
+            T(J) = T(J) + AbsComplex(A(i, J))
+        Next J
+        If Isunit Then
+            T(i) = T(i) + 1#
+        Else
+            T(i) = T(i) + AbsComplex(A(i, i))
+        End If
+    Next i
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        Nrm = MaxReal(Nrm, T(i))
+    Next i
+    Call CMatrixRCondTRInternal(A, N, IsUpper, Isunit, True, Nrm, V)
+    Result = V
+    CMatrixTRRCond1 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Triangular matrix: estimate of a matrix condition number (infinity-norm).
+'
+'The algorithm calculates a lower bound of the condition number. In this case,
+'the algorithm does not return a lower bound of the condition number, but an
+'inverse number (to avoid an overflow in case of a singular matrix).
+'
+'Input parameters:
+'    A   -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N   -   size of matrix A.
+'    IsUpper -   True, if the matrix is upper triangular.
+'    IsUnit  -   True, if the matrix has a unit diagonal.
+'
+'Result: 1/LowerBound(cond(A))
+'
+'NOTE:
+'    if k(A) is very large, then matrix is  assumed  degenerate,  k(A)=INF,
+'    0.0 is returned in such cases.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function CMatrixTRRCondInf(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Nrm = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i + 1#
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i - 1#
+        End If
+        V = 0#
+        For J = J1 To J2 Step 1
+            V = V + AbsComplex(A(i, J))
+        Next J
+        If Isunit Then
+            V = V + 1#
+        Else
+            V = V + AbsComplex(A(i, i))
+        End If
+        Nrm = MaxReal(Nrm, V)
+    Next i
+    Call CMatrixRCondTRInternal(A, N, IsUpper, Isunit, False, Nrm, V)
+    Result = V
+    CMatrixTRRCondInf = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Threshold for rcond: matrices with condition number beyond this  threshold
+'are considered singular.
+'
+'Threshold must be far enough from underflow, at least Sqr(Threshold)  must
+'be greater than underflow.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RCondThreshold() As Double
+    Dim Result As Double
+    Result = Sqr(Sqr(MinRealNumber))
+    RCondThreshold = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for condition number estimation
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     February 29, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixRCondTRInternal(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OneNorm As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RC As Double)
+    Dim EX() As Double
+    Dim EV() As Double
+    Dim IWORK() As Long
+    Dim Tmp() As Double
+    Dim V As Double
+    Dim i As Long
+    Dim J As Long
+    Dim KASE As Long
+    Dim KASE1 As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim AINVNM As Double
+    Dim MaxGrowth As Double
+    Dim S As Double
+    Dim MUpper As Boolean
+    Dim MTrans As Boolean
+    Dim Munit As Boolean
+    
+    '
+    ' RC=0 if something happens
+    '
+    RC = 0#
+    
+    '
+    ' init
+    '
+    If OneNorm Then
+        KASE1 = 1#
+    Else
+        KASE1 = 2#
+    End If
+    MUpper = True
+    MTrans = True
+    Munit = True
+    ReDim IWORK(0 To N + 1# - 1)
+    ReDim Tmp(0 To N - 1)
+    
+    '
+    ' prepare parameters for triangular solver
+    '
+    MaxGrowth = 1# / RCondThreshold()
+    S = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i + 1#
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i - 1#
+        End If
+        For J = J1 To J2 Step 1
+            S = MaxReal(S, Abs(A(i, J)))
+        Next J
+        If Isunit Then
+            S = MaxReal(S, 1#)
+        Else
+            S = MaxReal(S, Abs(A(i, i)))
+        End If
+    Next i
+    If S = 0# Then
+        S = 1#
+    End If
+    S = 1# / S
+    
+    '
+    ' Scale according to S
+    '
+    ANORM = ANORM * S
+    
+    '
+    ' Quick return if possible
+    ' We assume that ANORM<>0 after this block
+    '
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    If N = 1# Then
+        RC = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the norm of inv(A).
+    '
+    AINVNM = 0#
+    KASE = 0#
+    Do While True
+        Call RMatrixEstimateNorm(N, EV, EX, IWORK, AINVNM, KASE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        
+        '
+        ' from 1-based array to 0-based
+        '
+        For i = 0# To N - 1# Step 1
+            EX(i) = EX(i + 1#)
+        Next i
+        
+        '
+        ' multiply by inv(A) or inv(A')
+        '
+        If KASE = KASE1 Then
+            
+            '
+            ' multiply by inv(A)
+            '
+            If Not RMatrixScaledTRSafeSolve(A, S, N, EX, IsUpper, 0#, Isunit, MaxGrowth) Then
+                Exit Sub
+            End If
+        Else
+            
+            '
+            ' multiply by inv(A')
+            '
+            If Not RMatrixScaledTRSafeSolve(A, S, N, EX, IsUpper, 1#, Isunit, MaxGrowth) Then
+                Exit Sub
+            End If
+        End If
+        
+        '
+        ' from 0-based array to 1-based
+        '
+        For i = N - 1# To 0# Step -1
+            EX(i + 1#) = EX(i)
+        Next i
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        RC = 1# / AINVNM
+        RC = RC / ANORM
+        If RC < RCondThreshold() Then
+            RC = 0#
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimation
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     March 31, 1993
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixRCondTRInternal(ByRef A() As Complex, _
+         ByRef N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OneNorm As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RC As Double)
+    Dim EX() As Complex
+    Dim CWORK2() As Complex
+    Dim CWORK3() As Complex
+    Dim CWORK4() As Complex
+    Dim ISAVE() As Long
+    Dim RSAVE() As Double
+    Dim KASE As Long
+    Dim KASE1 As Long
+    Dim AINVNM As Double
+    Dim V As Complex
+    Dim i As Long
+    Dim J As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim S As Double
+    Dim MaxGrowth As Double
+    
+    '
+    ' RC=0 if something happens
+    '
+    RC = 0#
+    
+    '
+    ' init
+    '
+    If N <= 0# Then
+        Exit Sub
+    End If
+    If N = 0# Then
+        RC = 1#
+        Exit Sub
+    End If
+    ReDim CWORK2(0 To N + 1# - 1)
+    
+    '
+    ' prepare parameters for triangular solver
+    '
+    MaxGrowth = 1# / RCondThreshold()
+    S = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i + 1#
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i - 1#
+        End If
+        For J = J1 To J2 Step 1
+            S = MaxReal(S, AbsComplex(A(i, J)))
+        Next J
+        If Isunit Then
+            S = MaxReal(S, 1#)
+        Else
+            S = MaxReal(S, AbsComplex(A(i, i)))
+        End If
+    Next i
+    If S = 0# Then
+        S = 1#
+    End If
+    S = 1# / S
+    
+    '
+    ' Scale according to S
+    '
+    ANORM = ANORM * S
+    
+    '
+    ' Quick return if possible
+    '
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the norm of inv(A).
+    '
+    AINVNM = 0#
+    If OneNorm Then
+        KASE1 = 1#
+    Else
+        KASE1 = 2#
+    End If
+    KASE = 0#
+    Do While True
+        Call CMatrixEstimateNorm(N, CWORK4, EX, AINVNM, KASE, ISAVE, RSAVE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        
+        '
+        ' From 1-based to 0-based
+        '
+        For i = 0# To N - 1# Step 1
+            EX(i) = EX(i + 1#)
+        Next i
+        
+        '
+        ' multiply by inv(A) or inv(A')
+        '
+        If KASE = KASE1 Then
+            
+            '
+            ' multiply by inv(A)
+            '
+            If Not CMatrixScaledTRSafeSolve(A, S, N, EX, IsUpper, 0#, Isunit, MaxGrowth) Then
+                Exit Sub
+            End If
+        Else
+            
+            '
+            ' multiply by inv(A')
+            '
+            If Not CMatrixScaledTRSafeSolve(A, S, N, EX, IsUpper, 2#, Isunit, MaxGrowth) Then
+                Exit Sub
+            End If
+        End If
+        
+        '
+        ' from 0-based to 1-based
+        '
+        For i = N - 1# To 0# Step -1
+            EX(i + 1#) = EX(i)
+        Next i
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        RC = 1# / AINVNM
+        RC = RC / ANORM
+        If RC < RCondThreshold() Then
+            RC = 0#
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for condition number estimation
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     February 29, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub SPDMatrixRCondCholeskyInternal(ByRef CHA() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal IsNormProvided As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RC As Double)
+    Dim i As Long
+    Dim J As Long
+    Dim KASE As Long
+    Dim AINVNM As Double
+    Dim EX() As Double
+    Dim EV() As Double
+    Dim Tmp() As Double
+    Dim IWORK() As Long
+    Dim SA As Double
+    Dim V As Double
+    Dim MaxGrowth As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    ReDim Tmp(0 To N - 1)
+    
+    '
+    ' RC=0 if something happens
+    '
+    RC = 0#
+    
+    '
+    ' prepare parameters for triangular solver
+    '
+    MaxGrowth = 1# / RCondThreshold()
+    SA = 0#
+    If IsUpper Then
+        For i = 0# To N - 1# Step 1
+            For J = i To N - 1# Step 1
+                SA = MaxReal(SA, AbsComplex(C_Complex(CHA(i, J))))
+            Next J
+        Next i
+    Else
+        For i = 0# To N - 1# Step 1
+            For J = 0# To i Step 1
+                SA = MaxReal(SA, AbsComplex(C_Complex(CHA(i, J))))
+            Next J
+        Next i
+    End If
+    If SA = 0# Then
+        SA = 1#
+    End If
+    SA = 1# / SA
+    
+    '
+    ' Estimate the norm of A.
+    '
+    If Not IsNormProvided Then
+        KASE = 0#
+        ANORM = 0#
+        Do While True
+            Call RMatrixEstimateNorm(N, EV, EX, IWORK, ANORM, KASE)
+            If KASE = 0# Then
+                Exit Do
+            End If
+            If IsUpper Then
+                
+                '
+                ' Multiply by U
+                '
+                For i = 1# To N Step 1
+                    i1_ = (i) - (i - 1#)
+                    V = 0#
+                    For i_ = i - 1# To N - 1# Step 1
+                        V = V + CHA(i - 1#, i_) * EX(i_ + i1_)
+                    Next i_
+                    EX(i) = V
+                Next i
+                For i_ = 1# To N Step 1
+                    EX(i_) = SA * EX(i_)
+                Next i_
+                
+                '
+                ' Multiply by U'
+                '
+                For i = 0# To N - 1# Step 1
+                    Tmp(i) = 0#
+                Next i
+                For i = 0# To N - 1# Step 1
+                    V = EX(i + 1#)
+                    For i_ = i To N - 1# Step 1
+                        Tmp(i_) = Tmp(i_) + V * CHA(i, i_)
+                    Next i_
+                Next i
+                i1_ = (0#) - (1#)
+                For i_ = 1# To N Step 1
+                    EX(i_) = Tmp(i_ + i1_)
+                Next i_
+                For i_ = 1# To N Step 1
+                    EX(i_) = SA * EX(i_)
+                Next i_
+            Else
+                
+                '
+                ' Multiply by L'
+                '
+                For i = 0# To N - 1# Step 1
+                    Tmp(i) = 0#
+                Next i
+                For i = 0# To N - 1# Step 1
+                    V = EX(i + 1#)
+                    For i_ = 0# To i Step 1
+                        Tmp(i_) = Tmp(i_) + V * CHA(i, i_)
+                    Next i_
+                Next i
+                i1_ = (0#) - (1#)
+                For i_ = 1# To N Step 1
+                    EX(i_) = Tmp(i_ + i1_)
+                Next i_
+                For i_ = 1# To N Step 1
+                    EX(i_) = SA * EX(i_)
+                Next i_
+                
+                '
+                ' Multiply by L
+                '
+                For i = N To 1# Step -1
+                    i1_ = (1#) - (0#)
+                    V = 0#
+                    For i_ = 0# To i - 1# Step 1
+                        V = V + CHA(i - 1#, i_) * EX(i_ + i1_)
+                    Next i_
+                    EX(i) = V
+                Next i
+                For i_ = 1# To N Step 1
+                    EX(i_) = SA * EX(i_)
+                Next i_
+            End If
+        Loop
+    End If
+    
+    '
+    ' Quick return if possible
+    '
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    If N = 1# Then
+        RC = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the 1-norm of inv(A).
+    '
+    KASE = 0#
+    Do While True
+        Call RMatrixEstimateNorm(N, EV, EX, IWORK, AINVNM, KASE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        For i = 0# To N - 1# Step 1
+            EX(i) = EX(i + 1#)
+        Next i
+        If IsUpper Then
+            
+            '
+            ' Multiply by inv(U').
+            '
+            If Not RMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 1#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(U).
+            '
+            If Not RMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 0#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+        Else
+            
+            '
+            ' Multiply by inv(L).
+            '
+            If Not RMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 0#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(L').
+            '
+            If Not RMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 1#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+        End If
+        For i = N - 1# To 0# Step -1
+            EX(i + 1#) = EX(i)
+        Next i
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        V = 1# / AINVNM
+        RC = V / ANORM
+        If RC < RCondThreshold() Then
+            RC = 0#
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for condition number estimation
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     February 29, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub HPDMatrixRCondCholeskyInternal(ByRef CHA() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal IsNormProvided As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RC As Double)
+    Dim ISAVE() As Long
+    Dim RSAVE() As Double
+    Dim EX() As Complex
+    Dim EV() As Complex
+    Dim Tmp() As Complex
+    Dim KASE As Long
+    Dim AINVNM As Double
+    Dim V As Complex
+    Dim i As Long
+    Dim J As Long
+    Dim SA As Double
+    Dim MaxGrowth As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    ReDim Tmp(0 To N - 1)
+    
+    '
+    ' RC=0 if something happens
+    '
+    RC = 0#
+    
+    '
+    ' prepare parameters for triangular solver
+    '
+    MaxGrowth = 1# / RCondThreshold()
+    SA = 0#
+    If IsUpper Then
+        For i = 0# To N - 1# Step 1
+            For J = i To N - 1# Step 1
+                SA = MaxReal(SA, AbsComplex(CHA(i, J)))
+            Next J
+        Next i
+    Else
+        For i = 0# To N - 1# Step 1
+            For J = 0# To i Step 1
+                SA = MaxReal(SA, AbsComplex(CHA(i, J)))
+            Next J
+        Next i
+    End If
+    If SA = 0# Then
+        SA = 1#
+    End If
+    SA = 1# / SA
+    
+    '
+    ' Estimate the norm of A
+    '
+    If Not IsNormProvided Then
+        ANORM = 0#
+        KASE = 0#
+        Do While True
+            Call CMatrixEstimateNorm(N, EV, EX, ANORM, KASE, ISAVE, RSAVE)
+            If KASE = 0# Then
+                Exit Do
+            End If
+            If IsUpper Then
+                
+                '
+                ' Multiply by U
+                '
+                For i = 1# To N Step 1
+                    i1_ = (i) - (i - 1#)
+                    V = C_Complex(0#)
+                    For i_ = i - 1# To N - 1# Step 1
+                        V = C_Add(V, C_Mul(CHA(i - 1#, i_), EX(i_ + i1_)))
+                    Next i_
+                    EX(i) = V
+                Next i
+                For i_ = 1# To N Step 1
+                    EX(i_) = C_MulR(EX(i_), SA)
+                Next i_
+                
+                '
+                ' Multiply by U'
+                '
+                For i = 0# To N - 1# Step 1
+                    Tmp(i) = C_Complex(0#)
+                Next i
+                For i = 0# To N - 1# Step 1
+                    V = EX(i + 1#)
+                    For i_ = i To N - 1# Step 1
+                        Tmp(i_) = C_Add(Tmp(i_), C_Mul(V, Conj(CHA(i, i_))))
+                    Next i_
+                Next i
+                i1_ = (0#) - (1#)
+                For i_ = 1# To N Step 1
+                    EX(i_) = Tmp(i_ + i1_)
+                Next i_
+                For i_ = 1# To N Step 1
+                    EX(i_) = C_MulR(EX(i_), SA)
+                Next i_
+            Else
+                
+                '
+                ' Multiply by L'
+                '
+                For i = 0# To N - 1# Step 1
+                    Tmp(i) = C_Complex(0#)
+                Next i
+                For i = 0# To N - 1# Step 1
+                    V = EX(i + 1#)
+                    For i_ = 0# To i Step 1
+                        Tmp(i_) = C_Add(Tmp(i_), C_Mul(V, Conj(CHA(i, i_))))
+                    Next i_
+                Next i
+                i1_ = (0#) - (1#)
+                For i_ = 1# To N Step 1
+                    EX(i_) = Tmp(i_ + i1_)
+                Next i_
+                For i_ = 1# To N Step 1
+                    EX(i_) = C_MulR(EX(i_), SA)
+                Next i_
+                
+                '
+                ' Multiply by L
+                '
+                For i = N To 1# Step -1
+                    i1_ = (1#) - (0#)
+                    V = C_Complex(0#)
+                    For i_ = 0# To i - 1# Step 1
+                        V = C_Add(V, C_Mul(CHA(i - 1#, i_), EX(i_ + i1_)))
+                    Next i_
+                    EX(i) = V
+                Next i
+                For i_ = 1# To N Step 1
+                    EX(i_) = C_MulR(EX(i_), SA)
+                Next i_
+            End If
+        Loop
+    End If
+    
+    '
+    ' Quick return if possible
+    ' After this block we assume that ANORM<>0
+    '
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    If N = 1# Then
+        RC = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the norm of inv(A).
+    '
+    AINVNM = 0#
+    KASE = 0#
+    Do While True
+        Call CMatrixEstimateNorm(N, EV, EX, AINVNM, KASE, ISAVE, RSAVE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        For i = 0# To N - 1# Step 1
+            EX(i) = EX(i + 1#)
+        Next i
+        If IsUpper Then
+            
+            '
+            ' Multiply by inv(U').
+            '
+            If Not CMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 2#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(U).
+            '
+            If Not CMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 0#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+        Else
+            
+            '
+            ' Multiply by inv(L).
+            '
+            If Not CMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 0#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(L').
+            '
+            If Not CMatrixScaledTRSafeSolve(CHA, SA, N, EX, IsUpper, 2#, False, MaxGrowth) Then
+                Exit Sub
+            End If
+        End If
+        For i = N - 1# To 0# Step -1
+            EX(i + 1#) = EX(i)
+        Next i
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        RC = 1# / AINVNM
+        RC = RC / ANORM
+        If RC < RCondThreshold() Then
+            RC = 0#
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for condition number estimation
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     February 29, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixRCondLUInternal(ByRef LUA() As Double, _
+         ByVal N As Long, _
+         ByVal OneNorm As Boolean, _
+         ByVal IsANormProvided As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RC As Double)
+    Dim EX() As Double
+    Dim EV() As Double
+    Dim IWORK() As Long
+    Dim Tmp() As Double
+    Dim V As Double
+    Dim i As Long
+    Dim J As Long
+    Dim KASE As Long
+    Dim KASE1 As Long
+    Dim AINVNM As Double
+    Dim MaxGrowth As Double
+    Dim SU As Double
+    Dim SL As Double
+    Dim MUpper As Boolean
+    Dim MTrans As Boolean
+    Dim Munit As Boolean
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' RC=0 if something happens
+    '
+    RC = 0#
+    
+    '
+    ' init
+    '
+    If OneNorm Then
+        KASE1 = 1#
+    Else
+        KASE1 = 2#
+    End If
+    MUpper = True
+    MTrans = True
+    Munit = True
+    ReDim IWORK(0 To N + 1# - 1)
+    ReDim Tmp(0 To N - 1)
+    
+    '
+    ' prepare parameters for triangular solver
+    '
+    MaxGrowth = 1# / RCondThreshold()
+    SU = 0#
+    SL = 1#
+    For i = 0# To N - 1# Step 1
+        For J = 0# To i - 1# Step 1
+            SL = MaxReal(SL, Abs(LUA(i, J)))
+        Next J
+        For J = i To N - 1# Step 1
+            SU = MaxReal(SU, Abs(LUA(i, J)))
+        Next J
+    Next i
+    If SU = 0# Then
+        SU = 1#
+    End If
+    SU = 1# / SU
+    SL = 1# / SL
+    
+    '
+    ' Estimate the norm of A.
+    '
+    If Not IsANormProvided Then
+        KASE = 0#
+        ANORM = 0#
+        Do While True
+            Call RMatrixEstimateNorm(N, EV, EX, IWORK, ANORM, KASE)
+            If KASE = 0# Then
+                Exit Do
+            End If
+            If KASE = KASE1 Then
+                
+                '
+                ' Multiply by U
+                '
+                For i = 1# To N Step 1
+                    i1_ = (i) - (i - 1#)
+                    V = 0#
+                    For i_ = i - 1# To N - 1# Step 1
+                        V = V + LUA(i - 1#, i_) * EX(i_ + i1_)
+                    Next i_
+                    EX(i) = V
+                Next i
+                
+                '
+                ' Multiply by L
+                '
+                For i = N To 1# Step -1
+                    If i > 1# Then
+                        i1_ = (1#) - (0#)
+                        V = 0#
+                        For i_ = 0# To i - 2# Step 1
+                            V = V + LUA(i - 1#, i_) * EX(i_ + i1_)
+                        Next i_
+                    Else
+                        V = 0#
+                    End If
+                    EX(i) = EX(i) + V
+                Next i
+            Else
+                
+                '
+                ' Multiply by L'
+                '
+                For i = 0# To N - 1# Step 1
+                    Tmp(i) = 0#
+                Next i
+                For i = 0# To N - 1# Step 1
+                    V = EX(i + 1#)
+                    If i >= 1# Then
+                        For i_ = 0# To i - 1# Step 1
+                            Tmp(i_) = Tmp(i_) + V * LUA(i, i_)
+                        Next i_
+                    End If
+                    Tmp(i) = Tmp(i) + V
+                Next i
+                i1_ = (0#) - (1#)
+                For i_ = 1# To N Step 1
+                    EX(i_) = Tmp(i_ + i1_)
+                Next i_
+                
+                '
+                ' Multiply by U'
+                '
+                For i = 0# To N - 1# Step 1
+                    Tmp(i) = 0#
+                Next i
+                For i = 0# To N - 1# Step 1
+                    V = EX(i + 1#)
+                    For i_ = i To N - 1# Step 1
+                        Tmp(i_) = Tmp(i_) + V * LUA(i, i_)
+                    Next i_
+                Next i
+                i1_ = (0#) - (1#)
+                For i_ = 1# To N Step 1
+                    EX(i_) = Tmp(i_ + i1_)
+                Next i_
+            End If
+        Loop
+    End If
+    
+    '
+    ' Scale according to SU/SL
+    '
+    ANORM = ANORM * SU * SL
+    
+    '
+    ' Quick return if possible
+    ' We assume that ANORM<>0 after this block
+    '
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    If N = 1# Then
+        RC = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the norm of inv(A).
+    '
+    AINVNM = 0#
+    KASE = 0#
+    Do While True
+        Call RMatrixEstimateNorm(N, EV, EX, IWORK, AINVNM, KASE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        
+        '
+        ' from 1-based array to 0-based
+        '
+        For i = 0# To N - 1# Step 1
+            EX(i) = EX(i + 1#)
+        Next i
+        
+        '
+        ' multiply by inv(A) or inv(A')
+        '
+        If KASE = KASE1 Then
+            
+            '
+            ' Multiply by inv(L).
+            '
+            If Not RMatrixScaledTRSafeSolve(LUA, SL, N, EX, Not MUpper, 0#, Munit, MaxGrowth) Then
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(U).
+            '
+            If Not RMatrixScaledTRSafeSolve(LUA, SU, N, EX, MUpper, 0#, Not Munit, MaxGrowth) Then
+                Exit Sub
+            End If
+        Else
+            
+            '
+            ' Multiply by inv(U').
+            '
+            If Not RMatrixScaledTRSafeSolve(LUA, SU, N, EX, MUpper, 1#, Not Munit, MaxGrowth) Then
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(L').
+            '
+            If Not RMatrixScaledTRSafeSolve(LUA, SL, N, EX, Not MUpper, 1#, Munit, MaxGrowth) Then
+                Exit Sub
+            End If
+        End If
+        
+        '
+        ' from 0-based array to 1-based
+        '
+        For i = N - 1# To 0# Step -1
+            EX(i + 1#) = EX(i)
+        Next i
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        RC = 1# / AINVNM
+        RC = RC / ANORM
+        If RC < RCondThreshold() Then
+            RC = 0#
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimation
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     March 31, 1993
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixRCondLUInternal(ByRef LUA() As Complex, _
+         ByRef N As Long, _
+         ByVal OneNorm As Boolean, _
+         ByVal IsANormProvided As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RC As Double)
+    Dim EX() As Complex
+    Dim CWORK2() As Complex
+    Dim CWORK3() As Complex
+    Dim CWORK4() As Complex
+    Dim ISAVE() As Long
+    Dim RSAVE() As Double
+    Dim KASE As Long
+    Dim KASE1 As Long
+    Dim AINVNM As Double
+    Dim V As Complex
+    Dim i As Long
+    Dim J As Long
+    Dim SU As Double
+    Dim SL As Double
+    Dim MaxGrowth As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    If N <= 0# Then
+        Exit Sub
+    End If
+    ReDim CWORK2(0 To N + 1# - 1)
+    RC = 0#
+    If N = 0# Then
+        RC = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' prepare parameters for triangular solver
+    '
+    MaxGrowth = 1# / RCondThreshold()
+    SU = 0#
+    SL = 1#
+    For i = 0# To N - 1# Step 1
+        For J = 0# To i - 1# Step 1
+            SL = MaxReal(SL, AbsComplex(LUA(i, J)))
+        Next J
+        For J = i To N - 1# Step 1
+            SU = MaxReal(SU, AbsComplex(LUA(i, J)))
+        Next J
+    Next i
+    If SU = 0# Then
+        SU = 1#
+    End If
+    SU = 1# / SU
+    SL = 1# / SL
+    
+    '
+    ' Estimate the norm of SU*SL*A.
+    '
+    If Not IsANormProvided Then
+        ANORM = 0#
+        If OneNorm Then
+            KASE1 = 1#
+        Else
+            KASE1 = 2#
+        End If
+        KASE = 0#
+        Do
+            Call CMatrixEstimateNorm(N, CWORK4, EX, ANORM, KASE, ISAVE, RSAVE)
+            If KASE <> 0# Then
+                If KASE = KASE1 Then
+                    
+                    '
+                    ' Multiply by U
+                    '
+                    For i = 1# To N Step 1
+                        i1_ = (i) - (i - 1#)
+                        V = C_Complex(0#)
+                        For i_ = i - 1# To N - 1# Step 1
+                            V = C_Add(V, C_Mul(LUA(i - 1#, i_), EX(i_ + i1_)))
+                        Next i_
+                        EX(i) = V
+                    Next i
+                    
+                    '
+                    ' Multiply by L
+                    '
+                    For i = N To 1# Step -1
+                        V = C_Complex(0#)
+                        If i > 1# Then
+                            i1_ = (1#) - (0#)
+                            V = C_Complex(0#)
+                            For i_ = 0# To i - 2# Step 1
+                                V = C_Add(V, C_Mul(LUA(i - 1#, i_), EX(i_ + i1_)))
+                            Next i_
+                        End If
+                        EX(i) = C_Add(V, EX(i))
+                    Next i
+                Else
+                    
+                    '
+                    ' Multiply by L'
+                    '
+                    For i = 1# To N Step 1
+                        CWORK2(i) = C_Complex(0#)
+                    Next i
+                    For i = 1# To N Step 1
+                        V = EX(i)
+                        If i > 1# Then
+                            i1_ = (0#) - (1#)
+                            For i_ = 1# To i - 1# Step 1
+                                CWORK2(i_) = C_Add(CWORK2(i_), C_Mul(V, Conj(LUA(i - 1#, i_ + i1_))))
+                            Next i_
+                        End If
+                        CWORK2(i) = C_Add(CWORK2(i), V)
+                    Next i
+                    
+                    '
+                    ' Multiply by U'
+                    '
+                    For i = 1# To N Step 1
+                        EX(i) = C_Complex(0#)
+                    Next i
+                    For i = 1# To N Step 1
+                        V = CWORK2(i)
+                        i1_ = (i - 1#) - (i)
+                        For i_ = i To N Step 1
+                            EX(i_) = C_Add(EX(i_), C_Mul(V, Conj(LUA(i - 1#, i_ + i1_))))
+                        Next i_
+                    Next i
+                End If
+            End If
+        Loop Until KASE = 0#
+    End If
+    
+    '
+    ' Scale according to SU/SL
+    '
+    ANORM = ANORM * SU * SL
+    
+    '
+    ' Quick return if possible
+    '
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the norm of inv(A).
+    '
+    AINVNM = 0#
+    If OneNorm Then
+        KASE1 = 1#
+    Else
+        KASE1 = 2#
+    End If
+    KASE = 0#
+    Do While True
+        Call CMatrixEstimateNorm(N, CWORK4, EX, AINVNM, KASE, ISAVE, RSAVE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        
+        '
+        ' From 1-based to 0-based
+        '
+        For i = 0# To N - 1# Step 1
+            EX(i) = EX(i + 1#)
+        Next i
+        
+        '
+        ' multiply by inv(A) or inv(A')
+        '
+        If KASE = KASE1 Then
+            
+            '
+            ' Multiply by inv(L).
+            '
+            If Not CMatrixScaledTRSafeSolve(LUA, SL, N, EX, False, 0#, True, MaxGrowth) Then
+                RC = 0#
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(U).
+            '
+            If Not CMatrixScaledTRSafeSolve(LUA, SU, N, EX, True, 0#, False, MaxGrowth) Then
+                RC = 0#
+                Exit Sub
+            End If
+        Else
+            
+            '
+            ' Multiply by inv(U').
+            '
+            If Not CMatrixScaledTRSafeSolve(LUA, SU, N, EX, True, 2#, False, MaxGrowth) Then
+                RC = 0#
+                Exit Sub
+            End If
+            
+            '
+            ' Multiply by inv(L').
+            '
+            If Not CMatrixScaledTRSafeSolve(LUA, SL, N, EX, False, 2#, True, MaxGrowth) Then
+                RC = 0#
+                Exit Sub
+            End If
+        End If
+        
+        '
+        ' from 0-based to 1-based
+        '
+        For i = N - 1# To 0# Step -1
+            EX(i + 1#) = EX(i)
+        Next i
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        RC = 1# / AINVNM
+        RC = RC / ANORM
+        If RC < RCondThreshold() Then
+            RC = 0#
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for matrix norm estimation
+'
+'  -- LAPACK auxiliary routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     February 29, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixEstimateNorm(ByVal N As Long, _
+         ByRef V() As Double, _
+         ByRef X() As Double, _
+         ByRef ISGN() As Long, _
+         ByRef EST As Double, _
+         ByRef KASE As Long)
+    Dim ITMAX As Long
+    Dim i As Long
+    Dim T As Double
+    Dim Flg As Boolean
+    Dim PosITER As Long
+    Dim PosJ As Long
+    Dim PosJLAST As Long
+    Dim PosJUMP As Long
+    Dim PosALTSGN As Long
+    Dim PosESTOLD As Long
+    Dim PosTEMP As Long
+    Dim i_ As Long
+    ITMAX = 5#
+    PosALTSGN = N + 1#
+    PosESTOLD = N + 2#
+    PosTEMP = N + 3#
+    PosITER = N + 1#
+    PosJ = N + 2#
+    PosJLAST = N + 3#
+    PosJUMP = N + 4#
+    If KASE = 0# Then
+        ReDim V(0 To N + 4# - 1)
+        ReDim X(0 To N + 1# - 1)
+        ReDim ISGN(0 To N + 5# - 1)
+        T = 1# / N
+        For i = 1# To N Step 1
+            X(i) = T
+        Next i
+        KASE = 1#
+        ISGN(PosJUMP) = 1#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 1)
+    '     FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If ISGN(PosJUMP) = 1# Then
+        If N = 1# Then
+            V(1#) = X(1#)
+            EST = Abs(V(1#))
+            KASE = 0#
+            Exit Sub
+        End If
+        EST = 0#
+        For i = 1# To N Step 1
+            EST = EST + Abs(X(i))
+        Next i
+        For i = 1# To N Step 1
+            If X(i) >= 0# Then
+                X(i) = 1#
+            Else
+                X(i) = -1#
+            End If
+            ISGN(i) = Sgn(X(i))
+        Next i
+        KASE = 2#
+        ISGN(PosJUMP) = 2#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 2)
+    '     FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY TRANDPOSE(A)*X.
+    '
+    If ISGN(PosJUMP) = 2# Then
+        ISGN(PosJ) = 1#
+        For i = 2# To N Step 1
+            If Abs(X(i)) > Abs(X(ISGN(PosJ))) Then
+                ISGN(PosJ) = i
+            End If
+        Next i
+        ISGN(PosITER) = 2#
+        
+        '
+        ' MAIN LOOP - ITERATIONS 2,3,...,ITMAX.
+        '
+        For i = 1# To N Step 1
+            X(i) = 0#
+        Next i
+        X(ISGN(PosJ)) = 1#
+        KASE = 1#
+        ISGN(PosJUMP) = 3#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 3)
+    '     X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If ISGN(PosJUMP) = 3# Then
+        For i_ = 1# To N Step 1
+            V(i_) = X(i_)
+        Next i_
+        V(PosESTOLD) = EST
+        EST = 0#
+        For i = 1# To N Step 1
+            EST = EST + Abs(V(i))
+        Next i
+        Flg = False
+        For i = 1# To N Step 1
+            If X(i) >= 0# And ISGN(i) < 0# Or X(i) < 0# And ISGN(i) >= 0# Then
+                Flg = True
+            End If
+        Next i
+        
+        '
+        ' REPEATED SIGN VECTOR DETECTED, HENCE ALGORITHM HAS CONVERGED.
+        ' OR MAY BE CYCLING.
+        '
+        If Not Flg Or EST <= V(PosESTOLD) Then
+            V(PosALTSGN) = 1#
+            For i = 1# To N Step 1
+                X(i) = V(PosALTSGN) * (1# + (i - 1#) / (N - 1#))
+                V(PosALTSGN) = -V(PosALTSGN)
+            Next i
+            KASE = 1#
+            ISGN(PosJUMP) = 5#
+            Exit Sub
+        End If
+        For i = 1# To N Step 1
+            If X(i) >= 0# Then
+                X(i) = 1#
+                ISGN(i) = 1#
+            Else
+                X(i) = -1#
+                ISGN(i) = -1#
+            End If
+        Next i
+        KASE = 2#
+        ISGN(PosJUMP) = 4#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 4)
+    '     X HAS BEEN OVERWRITTEN BY TRANDPOSE(A)*X.
+    '
+    If ISGN(PosJUMP) = 4# Then
+        ISGN(PosJLAST) = ISGN(PosJ)
+        ISGN(PosJ) = 1#
+        For i = 2# To N Step 1
+            If Abs(X(i)) > Abs(X(ISGN(PosJ))) Then
+                ISGN(PosJ) = i
+            End If
+        Next i
+        If X(ISGN(PosJLAST)) <> Abs(X(ISGN(PosJ))) And ISGN(PosITER) < ITMAX Then
+            ISGN(PosITER) = ISGN(PosITER) + 1#
+            For i = 1# To N Step 1
+                X(i) = 0#
+            Next i
+            X(ISGN(PosJ)) = 1#
+            KASE = 1#
+            ISGN(PosJUMP) = 3#
+            Exit Sub
+        End If
+        
+        '
+        ' ITERATION COMPLETE.  FINAL STAGE.
+        '
+        V(PosALTSGN) = 1#
+        For i = 1# To N Step 1
+            X(i) = V(PosALTSGN) * (1# + (i - 1#) / (N - 1#))
+            V(PosALTSGN) = -V(PosALTSGN)
+        Next i
+        KASE = 1#
+        ISGN(PosJUMP) = 5#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 5)
+    '     X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If ISGN(PosJUMP) = 5# Then
+        V(PosTEMP) = 0#
+        For i = 1# To N Step 1
+            V(PosTEMP) = V(PosTEMP) + Abs(X(i))
+        Next i
+        V(PosTEMP) = 2# * V(PosTEMP) / (3# * N)
+        If V(PosTEMP) > EST Then
+            For i_ = 1# To N Step 1
+                V(i_) = X(i_)
+            Next i_
+            EST = V(PosTEMP)
+        End If
+        KASE = 0#
+        Exit Sub
+    End If
+End Sub
+Private Sub CMatrixEstimateNorm(ByRef N As Long, _
+         ByRef V() As Complex, _
+         ByRef X() As Complex, _
+         ByRef EST As Double, _
+         ByRef KASE As Long, _
+         ByRef ISAVE() As Long, _
+         ByRef RSAVE() As Double)
+    Dim ITMAX As Long
+    Dim i As Long
+    Dim ITER As Long
+    Dim J As Long
+    Dim JLAST As Long
+    Dim JUMP As Long
+    Dim ABSXI As Double
+    Dim ALTSGN As Double
+    Dim ESTOLD As Double
+    Dim SAFMIN As Double
+    Dim Temp As Double
+    Dim i_ As Long
+    
+    '
+    'Executable Statements ..
+    '
+    ITMAX = 5#
+    SAFMIN = MinRealNumber
+    If KASE = 0# Then
+        ReDim V(0 To N + 1# - 1)
+        ReDim X(0 To N + 1# - 1)
+        ReDim ISAVE(0 To 5# - 1)
+        ReDim RSAVE(0 To 4# - 1)
+        For i = 1# To N Step 1
+            X(i) = C_Complex(1# / N)
+        Next i
+        KASE = 1#
+        JUMP = 1#
+        Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+        Exit Sub
+    End If
+    Call InternalComplexRCondLoadAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+    
+    '
+    ' ENTRY   (JUMP = 1)
+    ' FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If JUMP = 1# Then
+        If N = 1# Then
+            V(1#) = X(1#)
+            EST = AbsComplex(V(1#))
+            KASE = 0#
+            Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+            Exit Sub
+        End If
+        EST = InternalComplexRCondSCSUM1(X, N)
+        For i = 1# To N Step 1
+            ABSXI = AbsComplex(X(i))
+            If ABSXI > SAFMIN Then
+                X(i) = C_DivR(X(i), ABSXI)
+            Else
+                X(i) = C_Complex(1#)
+            End If
+        Next i
+        KASE = 2#
+        JUMP = 2#
+        Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+        Exit Sub
+    End If
+    
+    '
+    ' ENTRY   (JUMP = 2)
+    ' FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY CTRANS(A)*X.
+    '
+    If JUMP = 2# Then
+        J = InternalComplexRCondICMAX1(X, N)
+        ITER = 2#
+        
+        '
+        ' MAIN LOOP - ITERATIONS 2,3,...,ITMAX.
+        '
+        For i = 1# To N Step 1
+            X(i) = C_Complex(0#)
+        Next i
+        X(J) = C_Complex(1#)
+        KASE = 1#
+        JUMP = 3#
+        Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+        Exit Sub
+    End If
+    
+    '
+    ' ENTRY   (JUMP = 3)
+    ' X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If JUMP = 3# Then
+        For i_ = 1# To N Step 1
+            V(i_) = X(i_)
+        Next i_
+        ESTOLD = EST
+        EST = InternalComplexRCondSCSUM1(V, N)
+        
+        '
+        ' TEST FOR CYCLING.
+        '
+        If EST <= ESTOLD Then
+            
+            '
+            ' ITERATION COMPLETE.  FINAL STAGE.
+            '
+            ALTSGN = 1#
+            For i = 1# To N Step 1
+                X(i) = C_Complex(ALTSGN * (1# + (i - 1#) / (N - 1#)))
+                ALTSGN = -ALTSGN
+            Next i
+            KASE = 1#
+            JUMP = 5#
+            Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+            Exit Sub
+        End If
+        For i = 1# To N Step 1
+            ABSXI = AbsComplex(X(i))
+            If ABSXI > SAFMIN Then
+                X(i) = C_DivR(X(i), ABSXI)
+            Else
+                X(i) = C_Complex(1#)
+            End If
+        Next i
+        KASE = 2#
+        JUMP = 4#
+        Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+        Exit Sub
+    End If
+    
+    '
+    ' ENTRY   (JUMP = 4)
+    ' X HAS BEEN OVERWRITTEN BY CTRANS(A)*X.
+    '
+    If JUMP = 4# Then
+        JLAST = J
+        J = InternalComplexRCondICMAX1(X, N)
+        If AbsComplex(X(JLAST)) <> AbsComplex(X(J)) And ITER < ITMAX Then
+            ITER = ITER + 1#
+            
+            '
+            ' MAIN LOOP - ITERATIONS 2,3,...,ITMAX.
+            '
+            For i = 1# To N Step 1
+                X(i) = C_Complex(0#)
+            Next i
+            X(J) = C_Complex(1#)
+            KASE = 1#
+            JUMP = 3#
+            Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+            Exit Sub
+        End If
+        
+        '
+        ' ITERATION COMPLETE.  FINAL STAGE.
+        '
+        ALTSGN = 1#
+        For i = 1# To N Step 1
+            X(i) = C_Complex(ALTSGN * (1# + (i - 1#) / (N - 1#)))
+            ALTSGN = -ALTSGN
+        Next i
+        KASE = 1#
+        JUMP = 5#
+        Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+        Exit Sub
+    End If
+    
+    '
+    ' ENTRY   (JUMP = 5)
+    ' X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If JUMP = 5# Then
+        Temp = 2# * (InternalComplexRCondSCSUM1(X, N) / (3# * N))
+        If Temp > EST Then
+            For i_ = 1# To N Step 1
+                V(i_) = X(i_)
+            Next i_
+            EST = Temp
+        End If
+        KASE = 0#
+        Call InternalComplexRCondSaveAll(ISAVE, RSAVE, i, ITER, J, JLAST, JUMP, ABSXI, ALTSGN, ESTOLD, Temp)
+        Exit Sub
+    End If
+End Sub
+Private Function InternalComplexRCondSCSUM1(ByRef X() As Complex, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim i As Long
+    Result = 0#
+    For i = 1# To N Step 1
+        Result = Result + AbsComplex(X(i))
+    Next i
+    InternalComplexRCondSCSUM1 = Result
+End Function
+Private Function InternalComplexRCondICMAX1(ByRef X() As Complex, _
+         ByVal N As Long) As Long
+    Dim Result As Long
+    Dim i As Long
+    Dim M As Double
+    Result = 1#
+    M = AbsComplex(X(1#))
+    For i = 2# To N Step 1
+        If AbsComplex(X(i)) > M Then
+            Result = i
+            M = AbsComplex(X(i))
+        End If
+    Next i
+    InternalComplexRCondICMAX1 = Result
+End Function
+Private Sub InternalComplexRCondSaveAll(ByRef ISAVE() As Long, _
+         ByRef RSAVE() As Double, _
+         ByRef i As Long, _
+         ByRef ITER As Long, _
+         ByRef J As Long, _
+         ByRef JLAST As Long, _
+         ByRef JUMP As Long, _
+         ByRef ABSXI As Double, _
+         ByRef ALTSGN As Double, _
+         ByRef ESTOLD As Double, _
+         ByRef Temp As Double)
+    ISAVE(0#) = i
+    ISAVE(1#) = ITER
+    ISAVE(2#) = J
+    ISAVE(3#) = JLAST
+    ISAVE(4#) = JUMP
+    RSAVE(0#) = ABSXI
+    RSAVE(1#) = ALTSGN
+    RSAVE(2#) = ESTOLD
+    RSAVE(3#) = Temp
+End Sub
+Private Sub InternalComplexRCondLoadAll(ByRef ISAVE() As Long, _
+         ByRef RSAVE() As Double, _
+         ByRef i As Long, _
+         ByRef ITER As Long, _
+         ByRef J As Long, _
+         ByRef JLAST As Long, _
+         ByRef JUMP As Long, _
+         ByRef ABSXI As Double, _
+         ByRef ALTSGN As Double, _
+         ByRef ESTOLD As Double, _
+         ByRef Temp As Double)
+    i = ISAVE(0#)
+    ITER = ISAVE(1#)
+    J = ISAVE(2#)
+    JLAST = ISAVE(3#)
+    JUMP = ISAVE(4#)
+    ABSXI = RSAVE(0#)
+    ALTSGN = RSAVE(1#)
+    ESTOLD = RSAVE(2#)
+    Temp = RSAVE(3#)
+End Sub

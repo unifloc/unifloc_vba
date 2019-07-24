@@ -1,0 +1,291 @@
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'More precise dot-product. Absolute error of  subroutine  result  is  about
+'1 ulp of max(MX,V), where:
+'    MX = max( |a[i]*b[i]| )
+'    V  = |(a,b)|
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1], vector 1
+'    B       -   array[0..N-1], vector 2
+'    N       -   vectors length, N<2^29.
+'    Temp    -   array[0..N-1], pre-allocated temporary storage
+'
+'OUTPUT PARAMETERS
+'    R       -   (A,B)
+'    RErr    -   estimate of error. This estimate accounts for both  errors
+'                during  calculation  of  (A,B)  and  errors  introduced by
+'                rounding of A and B to fit in double (about 1 ulp).
+'
+'  -- ALGLIB --
+'     Copyright 24.08.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub XDot(ByRef A() As Double, _
+         ByRef B() As Double, _
+         ByVal N As Long, _
+         ByRef Temp() As Double, _
+         ByRef R As Double, _
+         ByRef RErr As Double)
+    Dim i As Long
+    Dim MX As Double
+    Dim V As Double
+    
+    '
+    ' special cases:
+    ' * N=0
+    '
+    If N = 0# Then
+        R = 0#
+        RErr = 0#
+        Exit Sub
+    End If
+    MX = 0#
+    For i = 0# To N - 1# Step 1
+        V = A(i) * B(i)
+        Temp(i) = V
+        MX = MaxReal(MX, Abs(V))
+    Next i
+    If MX = 0# Then
+        R = 0#
+        RErr = 0#
+        Exit Sub
+    End If
+    Call XSum(Temp, MX, N, R, RErr)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'More precise complex dot-product. Absolute error of  subroutine  result is
+'about 1 ulp of max(MX,V), where:
+'    MX = max( |a[i]*b[i]| )
+'    V  = |(a,b)|
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1], vector 1
+'    B       -   array[0..N-1], vector 2
+'    N       -   vectors length, N<2^29.
+'    Temp    -   array[0..2*N-1], pre-allocated temporary storage
+'
+'OUTPUT PARAMETERS
+'    R       -   (A,B)
+'    RErr    -   estimate of error. This estimate accounts for both  errors
+'                during  calculation  of  (A,B)  and  errors  introduced by
+'                rounding of A and B to fit in double (about 1 ulp).
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub XCDot(ByRef A() As Complex, _
+         ByRef B() As Complex, _
+         ByVal N As Long, _
+         ByRef Temp() As Double, _
+         ByRef R As Complex, _
+         ByRef RErr As Double)
+    Dim i As Long
+    Dim MX As Double
+    Dim V As Double
+    Dim RErrX As Double
+    Dim RErrY As Double
+    
+    '
+    ' special cases:
+    ' * N=0
+    '
+    If N = 0# Then
+        R = C_Complex(0#)
+        RErr = 0#
+        Exit Sub
+    End If
+    
+    '
+    ' calculate real part
+    '
+    MX = 0#
+    For i = 0# To N - 1# Step 1
+        V = A(i).X * B(i).X
+        Temp(2# * i + 0#) = V
+        MX = MaxReal(MX, Abs(V))
+        V = -(A(i).Y * B(i).Y)
+        Temp(2# * i + 1#) = V
+        MX = MaxReal(MX, Abs(V))
+    Next i
+    If MX = 0# Then
+        R.X = 0#
+        RErrX = 0#
+    Else
+        Call XSum(Temp, MX, 2# * N, R.X, RErrX)
+    End If
+    
+    '
+    ' calculate imaginary part
+    '
+    MX = 0#
+    For i = 0# To N - 1# Step 1
+        V = A(i).X * B(i).Y
+        Temp(2# * i + 0#) = V
+        MX = MaxReal(MX, Abs(V))
+        V = A(i).Y * B(i).X
+        Temp(2# * i + 1#) = V
+        MX = MaxReal(MX, Abs(V))
+    Next i
+    If MX = 0# Then
+        R.Y = 0#
+        RErrY = 0#
+    Else
+        Call XSum(Temp, MX, 2# * N, R.Y, RErrY)
+    End If
+    
+    '
+    ' total error
+    '
+    If RErrX = 0# And RErrY = 0# Then
+        RErr = 0#
+    Else
+        RErr = MaxReal(RErrX, RErrY) * Sqr(1# + Square(MinReal(RErrX, RErrY) / MaxReal(RErrX, RErrY)))
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for extra-precise calculation of SUM(w[i]).
+'
+'INPUT PARAMETERS:
+'    W   -   array[0..N-1], values to be added
+'            W is modified during calculations.
+'    MX  -   max(W[i])
+'    N   -   array size
+'
+'OUTPUT PARAMETERS:
+'    R   -   SUM(w[i])
+'    RErr-   error estimate for R
+'
+'  -- ALGLIB --
+'     Copyright 24.08.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub XSum(ByRef W() As Double, _
+         ByVal MX As Double, _
+         ByVal N As Long, _
+         ByRef R As Double, _
+         ByRef RErr As Double)
+    Dim i As Long
+    Dim K As Long
+    Dim KS As Long
+    Dim V As Double
+    Dim S As Double
+    Dim LN2 As Double
+    Dim Chunk As Double
+    Dim InvChunk As Double
+    Dim AllZeros As Boolean
+    Dim i_ As Long
+    
+    '
+    ' special cases:
+    ' * N=0
+    ' * N is too large to use integer arithmetics
+    '
+    If N = 0# Then
+        R = 0#
+        RErr = 0#
+        Exit Sub
+    End If
+    If MX = 0# Then
+        R = 0#
+        RErr = 0#
+        Exit Sub
+    End If
+    
+    '
+    ' Prepare
+    '
+    LN2 = Log(2#)
+    RErr = MX * MachineEpsilon
+    
+    '
+    ' 1. find S such that 0.5<=S*MX<1
+    ' 2. multiply W by S, so task is normalized in some sense
+    ' 3. S:=1/S so we can obtain original vector multiplying by S
+    '
+    K = Round(Log(MX) / LN2)
+    S = XFastPow(2#, -K)
+    Do While S * MX >= 1#
+        S = 0.5 * S
+    Loop
+    Do While S * MX < 0.5
+        S = 2# * S
+    Loop
+    For i_ = 0# To N - 1# Step 1
+        W(i_) = S * W(i_)
+    Next i_
+    S = 1# / S
+    
+    '
+    ' find Chunk=2^M such that N*Chunk<2^29
+    '
+    ' we have chosen upper limit (2^29) with enough space left
+    ' to tolerate possible problems with rounding and N's close
+    ' to the limit, so we don't want to be very strict here.
+    '
+    K = Fix(Log(536870912# / N) / LN2)
+    Chunk = XFastPow(2#, K)
+    If Chunk < 2# Then
+        Chunk = 2#
+    End If
+    InvChunk = 1# / Chunk
+    
+    '
+    ' calculate result
+    '
+    R = 0#
+    For i_ = 0# To N - 1# Step 1
+        W(i_) = Chunk * W(i_)
+    Next i_
+    Do While True
+        S = S * InvChunk
+        AllZeros = True
+        KS = 0#
+        For i = 0# To N - 1# Step 1
+            V = W(i)
+            K = Fix(V)
+            If V <> K Then
+                AllZeros = False
+            End If
+            W(i) = Chunk * (V - K)
+            KS = KS + K
+        Next i
+        R = R + S * KS
+        V = Abs(R)
+        If AllZeros Or S * N + MX = MX Then
+            Exit Do
+        End If
+    Loop
+    
+    '
+    ' correct error
+    '
+    RErr = MaxReal(RErr, Abs(R) * MachineEpsilon)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Fast Pow
+'
+'  -- ALGLIB --
+'     Copyright 24.08.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function XFastPow(ByVal R As Double, ByVal N As Long) As Double
+    Dim Result As Double
+    If N > 0# Then
+        If N Mod 2# = 0# Then
+            Result = Square(XFastPow(R, N \ 2#))
+        Else
+            Result = R * XFastPow(R, N - 1#)
+        End If
+        XFastPow = Result
+        Exit Function
+    End If
+    If N = 0# Then
+        Result = 1#
+    End If
+    If N < 0# Then
+        Result = XFastPow(1# / R, -N)
+    End If
+    XFastPow = Result
+End Function

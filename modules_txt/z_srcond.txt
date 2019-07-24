@@ -1,0 +1,530 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 1992-2007 The University of Tennessee.  All rights reserved.
+'
+'Contributors:
+'    * Sergey Bochkanov (ALGLIB project). Translation from FORTRAN to
+'      pseudocode.
+'
+'See subroutines comments for additional copyrights.
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimate of a symmetric matrix
+'
+'The algorithm calculates a lower bound of the condition number. In this
+'case, the algorithm does not return a lower bound of the condition number,
+'but an inverse number (to avoid an overflow in case of a singular matrix).
+'
+'It should be noted that 1-norm and inf-norm condition numbers of symmetric
+'matrices are equal, so the algorithm doesn't take into account the
+'differences between these types of norms.
+'
+'Input parameters:
+'    A       -   symmetric definite matrix which is given by its upper or
+'                lower triangle depending on IsUpper.
+'                Array with elements [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    IsUpper -   storage format.
+'
+'Result:
+'    1/LowerBound(cond(A))
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixRCond(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    Dim A1() As Double
+    ReDim A1(1# To N, 1# To N)
+    For i = 1# To N Step 1
+        If IsUpper Then
+            For J = i To N Step 1
+                A1(i, J) = A(i - 1#, J - 1#)
+            Next J
+        Else
+            For J = 1# To i Step 1
+                A1(i, J) = A(i - 1#, J - 1#)
+            Next J
+        End If
+    Next i
+    Result = RCondSymmetric(A1, N, IsUpper)
+    SMatrixRCond = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Condition number estimate of a matrix given by LDLT-decomposition
+'
+'The algorithm calculates a lower bound of the condition number. In this
+'case, the algorithm does not return a lower bound of the condition number,
+'but an inverse number (to avoid an overflow in case of a singular matrix).
+'
+'It should be noted that 1-norm and inf-norm condition numbers of symmetric
+'matrices are equal, so the algorithm doesn't take into account the
+'differences between these types of norms.
+'
+'Input parameters:
+'    L       -   LDLT-decomposition of matrix A given by the upper or lower
+'                triangle depending on IsUpper.
+'                Output of SMatrixLDLT subroutine.
+'    Pivots  -   table of permutations which were made during LDLT-decomposition,
+'                Output of SMatrixLDLT subroutine.
+'    N       -   size of matrix A.
+'    IsUpper -   storage format.
+'
+'Result:
+'    1/LowerBound(cond(A))
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixLDLTRCond(ByRef L() As Double, _
+         ByRef Pivots() As Long, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim J As Long
+    Dim L1() As Double
+    Dim P1() As Long
+    ReDim L1(1# To N, 1# To N)
+    For i = 1# To N Step 1
+        If IsUpper Then
+            For J = i To N Step 1
+                L1(i, J) = L(i - 1#, J - 1#)
+            Next J
+        Else
+            For J = 1# To i Step 1
+                L1(i, J) = L(i - 1#, J - 1#)
+            Next J
+        End If
+    Next i
+    ReDim P1(1# To N)
+    For i = 1# To N Step 1
+        If Pivots(i - 1#) >= 0# Then
+            P1(i) = Pivots(i - 1#) + 1#
+        Else
+            P1(i) = -(Pivots(i - 1#) + N + 1#)
+        End If
+    Next i
+    Result = RCondLDLT(L1, P1, N, IsUpper)
+    SMatrixLDLTRCond = Result
+End Function
+Public Function RCondSymmetric(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim A() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim IM As Long
+    Dim JM As Long
+    Dim V As Double
+    Dim Nrm As Double
+    Dim Pivots() As Long
+    A = A_
+    Nrm = 0#
+    For J = 1# To N Step 1
+        V = 0#
+        For i = 1# To N Step 1
+            IM = i
+            JM = J
+            If IsUpper And J < i Then
+                IM = J
+                JM = i
+            End If
+            If Not IsUpper And J > i Then
+                IM = J
+                JM = i
+            End If
+            V = V + Abs(A(IM, JM))
+        Next i
+        Nrm = MaxReal(Nrm, V)
+    Next J
+    Call LDLTDecomposition(A, N, IsUpper, Pivots)
+    Call InternalLDLTRCond(A, Pivots, N, IsUpper, True, Nrm, V)
+    Result = V
+    RCondSymmetric = Result
+End Function
+Public Function RCondLDLT(ByRef L() As Double, _
+         ByRef Pivots() As Long, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Double
+    Dim Result As Double
+    Dim V As Double
+    Call InternalLDLTRCond(L, Pivots, N, IsUpper, False, 0#, V)
+    Result = V
+    RCondLDLT = Result
+End Function
+Public Sub InternalLDLTRCond(ByRef L() As Double, _
+         ByRef Pivots() As Long, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal IsNormProvided As Boolean, _
+         ByVal ANORM As Double, _
+         ByRef RCOND As Double)
+    Dim i As Long
+    Dim KASE As Long
+    Dim K As Long
+    Dim KM1 As Long
+    Dim KM2 As Long
+    Dim KP1 As Long
+    Dim KP2 As Long
+    Dim AINVNM As Double
+    Dim WORK0() As Double
+    Dim WORK1() As Double
+    Dim WORK2() As Double
+    Dim IWORK() As Long
+    Dim V As Double
+    Dim i_ As Long
+    
+    '
+    ' Check that the diagonal matrix D is nonsingular.
+    '
+    RCOND = 0#
+    If IsUpper Then
+        For i = N To 1# Step -1
+            If Pivots(i) > 0# And L(i, i) = 0# Then
+                Exit Sub
+            End If
+        Next i
+    Else
+        For i = 1# To N Step 1
+            If Pivots(i) > 0# And L(i, i) = 0# Then
+                Exit Sub
+            End If
+        Next i
+    End If
+    
+    '
+    ' Estimate the norm of A.
+    '
+    If Not IsNormProvided Then
+        KASE = 0#
+        ANORM = 0#
+        Do While True
+            Call IterativeEstimate1Norm(N, WORK1, WORK0, IWORK, ANORM, KASE)
+            If KASE = 0# Then
+                Exit Do
+            End If
+            If IsUpper Then
+                
+                '
+                ' Multiply by U'
+                '
+                K = N
+                Do While K >= 1#
+                    If Pivots(K) > 0# Then
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K)
+                        WORK0(K) = WORK0(Pivots(K))
+                        WORK0(Pivots(K)) = V
+                        
+                        '
+                        ' U(k)
+                        '
+                        KM1 = K - 1#
+                        V = 0#
+                        For i_ = 1# To KM1 Step 1
+                            V = V + WORK0(i_) * L(i_, K)
+                        Next i_
+                        WORK0(K) = WORK0(K) + V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K - 1#
+                    Else
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K - 1#)
+                        WORK0(K - 1#) = WORK0(-Pivots(K - 1#))
+                        WORK0(-Pivots(K - 1#)) = V
+                        
+                        '
+                        ' U(k)
+                        '
+                        KM1 = K - 1#
+                        KM2 = K - 2#
+                        V = 0#
+                        For i_ = 1# To KM2 Step 1
+                            V = V + WORK0(i_) * L(i_, KM1)
+                        Next i_
+                        WORK0(KM1) = WORK0(KM1) + V
+                        V = 0#
+                        For i_ = 1# To KM2 Step 1
+                            V = V + WORK0(i_) * L(i_, K)
+                        Next i_
+                        WORK0(K) = WORK0(K) + V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K - 2#
+                    End If
+                Loop
+                
+                '
+                ' Multiply by D
+                '
+                K = N
+                Do While K >= 1#
+                    If Pivots(K) > 0# Then
+                        WORK0(K) = WORK0(K) * L(K, K)
+                        K = K - 1#
+                    Else
+                        V = WORK0(K - 1#)
+                        WORK0(K - 1#) = L(K - 1#, K - 1#) * WORK0(K - 1#) + L(K - 1#, K) * WORK0(K)
+                        WORK0(K) = L(K - 1#, K) * V + L(K, K) * WORK0(K)
+                        K = K - 2#
+                    End If
+                Loop
+                
+                '
+                ' Multiply by U
+                '
+                K = 1#
+                Do While K <= N
+                    If Pivots(K) > 0# Then
+                        
+                        '
+                        ' U(k)
+                        '
+                        KM1 = K - 1#
+                        V = WORK0(K)
+                        For i_ = 1# To KM1 Step 1
+                            WORK0(i_) = WORK0(i_) + V * L(i_, K)
+                        Next i_
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K)
+                        WORK0(K) = WORK0(Pivots(K))
+                        WORK0(Pivots(K)) = V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K + 1#
+                    Else
+                        
+                        '
+                        ' U(k)
+                        '
+                        KM1 = K - 1#
+                        KP1 = K + 1#
+                        V = WORK0(K)
+                        For i_ = 1# To KM1 Step 1
+                            WORK0(i_) = WORK0(i_) + V * L(i_, K)
+                        Next i_
+                        V = WORK0(KP1)
+                        For i_ = 1# To KM1 Step 1
+                            WORK0(i_) = WORK0(i_) + V * L(i_, KP1)
+                        Next i_
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K)
+                        WORK0(K) = WORK0(-Pivots(K))
+                        WORK0(-Pivots(K)) = V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K + 2#
+                    End If
+                Loop
+            Else
+                
+                '
+                ' Multiply by L'
+                '
+                K = 1#
+                Do While K <= N
+                    If Pivots(K) > 0# Then
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K)
+                        WORK0(K) = WORK0(Pivots(K))
+                        WORK0(Pivots(K)) = V
+                        
+                        '
+                        ' L(k)
+                        '
+                        KP1 = K + 1#
+                        V = 0#
+                        For i_ = KP1 To N Step 1
+                            V = V + WORK0(i_) * L(i_, K)
+                        Next i_
+                        WORK0(K) = WORK0(K) + V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K + 1#
+                    Else
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K + 1#)
+                        WORK0(K + 1#) = WORK0(-Pivots(K + 1#))
+                        WORK0(-Pivots(K + 1#)) = V
+                        
+                        '
+                        ' L(k)
+                        '
+                        KP1 = K + 1#
+                        KP2 = K + 2#
+                        V = 0#
+                        For i_ = KP2 To N Step 1
+                            V = V + WORK0(i_) * L(i_, K)
+                        Next i_
+                        WORK0(K) = WORK0(K) + V
+                        V = 0#
+                        For i_ = KP2 To N Step 1
+                            V = V + WORK0(i_) * L(i_, KP1)
+                        Next i_
+                        WORK0(KP1) = WORK0(KP1) + V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K + 2#
+                    End If
+                Loop
+                
+                '
+                ' Multiply by D
+                '
+                K = N
+                Do While K >= 1#
+                    If Pivots(K) > 0# Then
+                        WORK0(K) = WORK0(K) * L(K, K)
+                        K = K - 1#
+                    Else
+                        V = WORK0(K - 1#)
+                        WORK0(K - 1#) = L(K - 1#, K - 1#) * WORK0(K - 1#) + L(K, K - 1#) * WORK0(K)
+                        WORK0(K) = L(K, K - 1#) * V + L(K, K) * WORK0(K)
+                        K = K - 2#
+                    End If
+                Loop
+                
+                '
+                ' Multiply by L
+                '
+                K = N
+                Do While K >= 1#
+                    If Pivots(K) > 0# Then
+                        
+                        '
+                        ' L(k)
+                        '
+                        KP1 = K + 1#
+                        V = WORK0(K)
+                        For i_ = KP1 To N Step 1
+                            WORK0(i_) = WORK0(i_) + V * L(i_, K)
+                        Next i_
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K)
+                        WORK0(K) = WORK0(Pivots(K))
+                        WORK0(Pivots(K)) = V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K - 1#
+                    Else
+                        
+                        '
+                        ' L(k)
+                        '
+                        KP1 = K + 1#
+                        KM1 = K - 1#
+                        V = WORK0(K)
+                        For i_ = KP1 To N Step 1
+                            WORK0(i_) = WORK0(i_) + V * L(i_, K)
+                        Next i_
+                        V = WORK0(KM1)
+                        For i_ = KP1 To N Step 1
+                            WORK0(i_) = WORK0(i_) + V * L(i_, KM1)
+                        Next i_
+                        
+                        '
+                        ' P(k)
+                        '
+                        V = WORK0(K)
+                        WORK0(K) = WORK0(-Pivots(K))
+                        WORK0(-Pivots(K)) = V
+                        
+                        '
+                        ' Next k
+                        '
+                        K = K - 2#
+                    End If
+                Loop
+            End If
+        Loop
+    End If
+    
+    '
+    ' Quick return if possible
+    '
+    RCOND = 0#
+    If N = 0# Then
+        RCOND = 1#
+        Exit Sub
+    End If
+    If ANORM = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Estimate the 1-norm of inv(A).
+    '
+    KASE = 0#
+    Do While True
+        Call IterativeEstimate1Norm(N, WORK1, WORK0, IWORK, AINVNM, KASE)
+        If KASE = 0# Then
+            Exit Do
+        End If
+        Call SolveSystemLDLT(L, Pivots, WORK0, N, IsUpper, WORK2)
+        For i_ = 1# To N Step 1
+            WORK0(i_) = WORK2(i_)
+        Next i_
+    Loop
+    
+    '
+    ' Compute the estimate of the reciprocal condition number.
+    '
+    If AINVNM <> 0# Then
+        V = 1# / AINVNM
+        RCOND = V / ANORM
+    End If
+End Sub

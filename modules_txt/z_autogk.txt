@@ -1,0 +1,1039 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2005-2009, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Integration report:
+'* TerminationType = completetion code:
+'    * -5    non-convergence of Gauss-Kronrod nodes
+'            calculation subroutine.
+'    * -1    incorrect parameters were specified
+'    *  1    OK
+'* Rep.NFEV countains number of function calculations
+'* Rep.NIntervals contains number of intervals [a,b]
+'  was partitioned into.
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Type AutoGKReport
+    TerminationType As Long
+    NFEV As Long
+    NIntervals As Long
+End Type
+Public Type AutoGKInternalState
+    A As Double
+    B As Double
+    Eps As Double
+    XWidth As Double
+    X As Double
+    F As Double
+    Info As Long
+    R As Double
+    Heap() As Double
+    HeapSize As Long
+    HeapWidth As Long
+    HeapUsed As Long
+    SumErr As Double
+    SumAbs As Double
+    QN() As Double
+    WG() As Double
+    WK() As Double
+    WR() As Double
+    N As Long
+    RState As RCommState
+End Type
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This structure stores internal state of the integration algorithm  between
+'subsequent calls of the AutoGKIteration() subroutine.
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Type AutoGKState
+    A As Double
+    B As Double
+    Alpha As Double
+    Beta As Double
+    XWidth As Double
+    X As Double
+    XMinusA As Double
+    BMinusX As Double
+    F As Double
+    WrapperMode As Long
+    InternalState As AutoGKInternalState
+    RState As RCommState
+    V As Double
+    TerminationType As Long
+    NFEV As Long
+    NIntervals As Long
+End Type
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Integration of a smooth function F(x) on a finite interval [a,b].
+'
+'Fast-convergent algorithm based on a Gauss-Kronrod formula is used. Result
+'is calculated with accuracy close to the machine precision.
+'
+'Algorithm works well only with smooth integrands.  It  may  be  used  with
+'continuous non-smooth integrands, but with  less  performance.
+'
+'It should never be used with integrands which have integrable singularities
+'at lower or upper limits - algorithm may crash. Use AutoGKSingular in such
+'cases.
+'
+'INPUT PARAMETERS:
+'    A, B    -   interval boundaries (A<B, A=B or A>B)
+'
+'OUTPUT PARAMETERS
+'    State   -   structure which stores algorithm state between  subsequent
+'                calls of AutoGKIteration.  Used for reverse communication.
+'                This structure should be  passed  to  the  AutoGKIteration
+'                subroutine.
+'
+'SEE ALSO
+'    AutoGKSmoothW, AutoGKSingular, AutoGKIteration, AutoGKResults.
+'
+'
+'  -- ALGLIB --
+'     Copyright 06.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub AutoGKSmooth(ByVal A As Double, _
+         ByVal B As Double, _
+         ByRef State As AutoGKState)
+    Call AutoGKSmoothW(A, B, 0#, State)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Integration of a smooth function F(x) on a finite interval [a,b].
+'
+'This subroutine is same as AutoGKSmooth(), but it guarantees that interval
+'[a,b] is partitioned into subintervals which have width at most XWidth.
+'
+'Subroutine  can  be  used  when  integrating nearly-constant function with
+'narrow "bumps" (about XWidth wide). If "bumps" are too narrow, AutoGKSmooth
+'subroutine can overlook them.
+'
+'INPUT PARAMETERS:
+'    A, B    -   interval boundaries (A<B, A=B or A>B)
+'
+'OUTPUT PARAMETERS
+'    State   -   structure which stores algorithm state between  subsequent
+'                calls of AutoGKIteration.  Used for reverse communication.
+'                This structure should be  passed  to  the  AutoGKIteration
+'                subroutine.
+'
+'SEE ALSO
+'    AutoGKSmooth, AutoGKSingular, AutoGKIteration, AutoGKResults.
+'
+'
+'  -- ALGLIB --
+'     Copyright 06.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub AutoGKSmoothW(ByVal A As Double, _
+         ByVal B As Double, _
+         ByVal XWidth As Double, _
+         ByRef State As AutoGKState)
+    State.WrapperMode = 0#
+    State.A = A
+    State.B = B
+    State.XWidth = XWidth
+    ReDim State.RState.RA(0# To 10#)
+    State.RState.Stage = -1#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Integration on a finite interval [A,B].
+'Integrand have integrable singularities at A/B.
+'
+'F(X) must diverge as "(x-A)^alpha" at A, as "(B-x)^beta" at B,  with known
+'alpha/beta (alpha>-1, beta>-1).  If alpha/beta  are  not known,  estimates
+'from below can be used (but these estimates should be greater than -1 too).
+'
+'One  of  alpha/beta variables (or even both alpha/beta) may be equal to 0,
+'which means than function F(x) is non-singular at A/B. Anyway (singular at
+'bounds or not), function F(x) is supposed to be continuous on (A,B).
+'
+'Fast-convergent algorithm based on a Gauss-Kronrod formula is used. Result
+'is calculated with accuracy close to the machine precision.
+'
+'INPUT PARAMETERS:
+'    A, B    -   interval boundaries (A<B, A=B or A>B)
+'    Alpha   -   power-law coefficient of the F(x) at A,
+'                Alpha>-1
+'    Beta    -   power-law coefficient of the F(x) at B,
+'                Beta>-1
+'
+'OUTPUT PARAMETERS
+'    State   -   structure which stores algorithm state between  subsequent
+'                calls of AutoGKIteration.  Used for reverse communication.
+'                This structure should be  passed  to  the  AutoGKIteration
+'                subroutine.
+'
+'SEE ALSO
+'    AutoGKSmooth, AutoGKSmoothW, AutoGKIteration, AutoGKResults.
+'
+'
+'  -- ALGLIB --
+'     Copyright 06.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub AutoGKSingular(ByVal A As Double, _
+         ByVal B As Double, _
+         ByVal Alpha As Double, _
+         ByVal Beta As Double, _
+         ByRef State As AutoGKState)
+    State.WrapperMode = 1#
+    State.A = A
+    State.B = B
+    State.Alpha = Alpha
+    State.Beta = Beta
+    State.XWidth = 0#
+    ReDim State.RState.RA(0# To 10#)
+    State.RState.Stage = -1#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'One step of adaptive integration process.
+'
+'Called after initialization with one of AutoGKXXX subroutines.
+'See HTML documentation for examples.
+'
+'Input parameters:
+'    State   -   structure which stores algorithm state between  calls  and
+'                which  is  used  for   reverse   communication.   Must  be
+'                initialized with one of AutoGKXXX subroutines.
+'
+'If suborutine returned False, iterative proces has converged. If subroutine
+'returned True, caller should calculate function value State.F  at  State.X
+'and call AutoGKIteration again.
+'
+'NOTE:
+'
+'When integrating "difficult" functions with integrable singularities like
+'
+'    F(x) = (x-A)^alpha * (B-x)^beta
+'
+'subroutine may require the value of F at points which are too close to A/B.
+'Sometimes to calculate integral with high enough precision we  may need to
+'calculate F(A+delta) when delta is less than machine  epsilon.  In  finite
+'precision arithmetics A+delta will be effectively equal to A,  so  we  may
+'find us in situation when  we  are  trying  to  calculate  something  like
+'1/sqrt(1-1).
+'
+'To avoid  such  situations,  AutoGKIteration  subroutine  fills  not  only
+'State.X  field,  but  also   State.XMinusA   (which  equals  to  X-A)  and
+'State.BMinusX  (which  equals to B-X) fields.  If X is too close to A or B
+'(X-A<0.001*A, or B-X<0.001*B, for example) use  these  fields  instead  of
+'State.X
+'
+'
+'  -- ALGLIB --
+'     Copyright 07.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function AutoGKIteration(ByRef State As AutoGKState) As Boolean
+    Dim Result As Boolean
+    Dim S As Double
+    Dim Tmp As Double
+    Dim Eps As Double
+    Dim A As Double
+    Dim B As Double
+    Dim X As Double
+    Dim T As Double
+    Dim Alpha As Double
+    Dim Beta As Double
+    Dim V1 As Double
+    Dim V2 As Double
+    
+    '
+    ' Reverse communication preparations
+    ' I know it looks ugly, but it works the same way
+    ' anywhere from C++ to Python.
+    '
+    ' This code initializes locals by:
+    ' * random values determined during code
+    '   generation - on first subroutine call
+    ' * values from previous call - on subsequent calls
+    '
+    If State.RState.Stage >= 0# Then
+        S = State.RState.RA(0#)
+        Tmp = State.RState.RA(1#)
+        Eps = State.RState.RA(2#)
+        A = State.RState.RA(3#)
+        B = State.RState.RA(4#)
+        X = State.RState.RA(5#)
+        T = State.RState.RA(6#)
+        Alpha = State.RState.RA(7#)
+        Beta = State.RState.RA(8#)
+        V1 = State.RState.RA(9#)
+        V2 = State.RState.RA(10#)
+    Else
+        S = -983#
+        Tmp = -989#
+        Eps = -834#
+        A = 900#
+        B = -287#
+        X = 364#
+        T = 214#
+        Alpha = -338#
+        Beta = -686#
+        V1 = 912#
+        V2 = 585#
+    End If
+    If State.RState.Stage = 0# Then
+        GoTo lbl_0
+    End If
+    If State.RState.Stage = 1# Then
+        GoTo lbl_1
+    End If
+    If State.RState.Stage = 2# Then
+        GoTo lbl_2
+    End If
+    
+    '
+    ' Routine body
+    '
+    Eps = 0#
+    A = State.A
+    B = State.B
+    Alpha = State.Alpha
+    Beta = State.Beta
+    State.TerminationType = -1#
+    State.NFEV = 0#
+    State.NIntervals = 0#
+    
+    '
+    ' smooth function  at a finite interval
+    '
+    If State.WrapperMode <> 0# Then
+        GoTo lbl_3
+    End If
+    
+    '
+    ' special case
+    '
+    If A = B Then
+        State.TerminationType = 1#
+        State.V = 0#
+        Result = False
+        AutoGKIteration = Result
+        Exit Function
+    End If
+    
+    '
+    ' general case
+    '
+    Call AutoGKInternalPrepare(A, B, Eps, State.XWidth, State.InternalState)
+lbl_5:
+    If Not AutoGKInternalIteration(State.InternalState) Then
+        GoTo lbl_6
+    End If
+    X = State.InternalState.X
+    State.X = X
+    State.XMinusA = X - A
+    State.BMinusX = B - X
+    State.RState.Stage = 0#
+    GoTo lbl_rcomm
+lbl_0:
+    State.NFEV = State.NFEV + 1#
+    State.InternalState.F = State.F
+    GoTo lbl_5
+lbl_6:
+    State.V = State.InternalState.R
+    State.TerminationType = State.InternalState.Info
+    State.NIntervals = State.InternalState.HeapUsed
+    Result = False
+    AutoGKIteration = Result
+    Exit Function
+lbl_3:
+    
+    '
+    ' function with power-law singularities at the ends of a finite interval
+    '
+    If State.WrapperMode <> 1# Then
+        GoTo lbl_7
+    End If
+    
+    '
+    ' test coefficients
+    '
+    If Alpha <= -1# Or Beta <= -1# Then
+        State.TerminationType = -1#
+        State.V = 0#
+        Result = False
+        AutoGKIteration = Result
+        Exit Function
+    End If
+    
+    '
+    ' special cases
+    '
+    If A = B Then
+        State.TerminationType = 1#
+        State.V = 0#
+        Result = False
+        AutoGKIteration = Result
+        Exit Function
+    End If
+    
+    '
+    ' reduction to general form
+    '
+    If A < B Then
+        S = 1#
+    Else
+        S = -1#
+        Tmp = A
+        A = B
+        B = Tmp
+        Tmp = Alpha
+        Alpha = Beta
+        Beta = Tmp
+    End If
+    Alpha = MinReal(Alpha, 0#)
+    Beta = MinReal(Beta, 0#)
+    
+    '
+    ' first, integrate left half of [a,b]:
+    '     integral(f(x)dx, a, (b+a)/2) =
+    '     = 1/(1+alpha) * integral(t^(-alpha/(1+alpha))*f(a+t^(1/(1+alpha)))dt, 0, (0.5*(b-a))^(1+alpha))
+    '
+    Call AutoGKInternalPrepare(0#, Power(0.5 * (B - A), 1# + Alpha), Eps, State.XWidth, State.InternalState)
+lbl_9:
+    If Not AutoGKInternalIteration(State.InternalState) Then
+        GoTo lbl_10
+    End If
+    
+    '
+    ' Fill State.X, State.XMinusA, State.BMinusX.
+    ' Latter two are filled correctly even if B<A.
+    '
+    X = State.InternalState.X
+    T = Power(X, 1# / (1# + Alpha))
+    State.X = A + T
+    If S > 0# Then
+        State.XMinusA = T
+        State.BMinusX = B - (A + T)
+    Else
+        State.XMinusA = A + T - B
+        State.BMinusX = -T
+    End If
+    State.RState.Stage = 1#
+    GoTo lbl_rcomm
+lbl_1:
+    If Alpha <> 0# Then
+        State.InternalState.F = State.F * Power(X, -(Alpha / (1# + Alpha))) / (1# + Alpha)
+    Else
+        State.InternalState.F = State.F
+    End If
+    State.NFEV = State.NFEV + 1#
+    GoTo lbl_9
+lbl_10:
+    V1 = State.InternalState.R
+    State.NIntervals = State.NIntervals + State.InternalState.HeapUsed
+    
+    '
+    ' then, integrate right half of [a,b]:
+    '     integral(f(x)dx, (b+a)/2, b) =
+    '     = 1/(1+beta) * integral(t^(-beta/(1+beta))*f(b-t^(1/(1+beta)))dt, 0, (0.5*(b-a))^(1+beta))
+    '
+    Call AutoGKInternalPrepare(0#, Power(0.5 * (B - A), 1# + Beta), Eps, State.XWidth, State.InternalState)
+lbl_11:
+    If Not AutoGKInternalIteration(State.InternalState) Then
+        GoTo lbl_12
+    End If
+    
+    '
+    ' Fill State.X, State.XMinusA, State.BMinusX.
+    ' Latter two are filled correctly (X-A, B-X) even if B<A.
+    '
+    X = State.InternalState.X
+    T = Power(X, 1# / (1# + Beta))
+    State.X = B - T
+    If S > 0# Then
+        State.XMinusA = B - T - A
+        State.BMinusX = T
+    Else
+        State.XMinusA = -T
+        State.BMinusX = A - (B - T)
+    End If
+    State.RState.Stage = 2#
+    GoTo lbl_rcomm
+lbl_2:
+    If Beta <> 0# Then
+        State.InternalState.F = State.F * Power(X, -(Beta / (1# + Beta))) / (1# + Beta)
+    Else
+        State.InternalState.F = State.F
+    End If
+    State.NFEV = State.NFEV + 1#
+    GoTo lbl_11
+lbl_12:
+    V2 = State.InternalState.R
+    State.NIntervals = State.NIntervals + State.InternalState.HeapUsed
+    
+    '
+    ' final result
+    '
+    State.V = S * (V1 + V2)
+    State.TerminationType = 1#
+    Result = False
+    AutoGKIteration = Result
+    Exit Function
+lbl_7:
+    Result = False
+    AutoGKIteration = Result
+    Exit Function
+    
+    '
+    ' Saving state
+    '
+lbl_rcomm:
+    Result = True
+    State.RState.RA(0#) = S
+    State.RState.RA(1#) = Tmp
+    State.RState.RA(2#) = Eps
+    State.RState.RA(3#) = A
+    State.RState.RA(4#) = B
+    State.RState.RA(5#) = X
+    State.RState.RA(6#) = T
+    State.RState.RA(7#) = Alpha
+    State.RState.RA(8#) = Beta
+    State.RState.RA(9#) = V1
+    State.RState.RA(10#) = V2
+    AutoGKIteration = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Adaptive integration results
+'
+'Called after AutoGKIteration returned False.
+'
+'Input parameters:
+'    State   -   algorithm state (used by AutoGKIteration).
+'
+'Output parameters:
+'    V       -   integral(f(x)dx,a,b)
+'    Rep     -   optimization report (see AutoGKReport description)
+'
+'  -- ALGLIB --
+'     Copyright 14.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub AutoGKResults(ByRef State As AutoGKState, _
+         ByRef V As Double, _
+         ByRef Rep As AutoGKReport)
+    V = State.V
+    Rep.TerminationType = State.TerminationType
+    Rep.NFEV = State.NFEV
+    Rep.NIntervals = State.NIntervals
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal AutoGK subroutine
+'eps<0   - error
+'eps=0   - automatic eps selection
+'
+'width<0 -   error
+'width=0 -   no width requirements
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub AutoGKInternalPrepare(ByVal A As Double, _
+         ByVal B As Double, _
+         ByVal Eps As Double, _
+         ByVal XWidth As Double, _
+         ByRef State As AutoGKInternalState)
+    
+    '
+    ' Save settings
+    '
+    State.A = A
+    State.B = B
+    State.Eps = Eps
+    State.XWidth = XWidth
+    
+    '
+    ' Prepare RComm structure
+    '
+    ReDim State.RState.IA(0# To 3#)
+    ReDim State.RState.RA(0# To 8#)
+    State.RState.Stage = -1#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal AutoGK subroutine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function AutoGKInternalIteration(ByRef State As AutoGKInternalState) As Boolean
+    Dim Result As Boolean
+    Dim C1 As Double
+    Dim C2 As Double
+    Dim i As Long
+    Dim J As Long
+    Dim IntG As Double
+    Dim IntK As Double
+    Dim IntA As Double
+    Dim V As Double
+    Dim TA As Double
+    Dim TB As Double
+    Dim NS As Long
+    Dim QEps As Double
+    Dim Info As Long
+    
+    '
+    ' Reverse communication preparations
+    ' I know it looks ugly, but it works the same way
+    ' anywhere from C++ to Python.
+    '
+    ' This code initializes locals by:
+    ' * random values determined during code
+    '   generation - on first subroutine call
+    ' * values from previous call - on subsequent calls
+    '
+    If State.RState.Stage >= 0# Then
+        i = State.RState.IA(0#)
+        J = State.RState.IA(1#)
+        NS = State.RState.IA(2#)
+        Info = State.RState.IA(3#)
+        C1 = State.RState.RA(0#)
+        C2 = State.RState.RA(1#)
+        IntG = State.RState.RA(2#)
+        IntK = State.RState.RA(3#)
+        IntA = State.RState.RA(4#)
+        V = State.RState.RA(5#)
+        TA = State.RState.RA(6#)
+        TB = State.RState.RA(7#)
+        QEps = State.RState.RA(8#)
+    Else
+        i = 497#
+        J = -271#
+        NS = -581#
+        Info = 745#
+        C1 = -533#
+        C2 = -77#
+        IntG = 678#
+        IntK = -293#
+        IntA = 316#
+        V = 647#
+        TA = -756#
+        TB = 830#
+        QEps = -871#
+    End If
+    If State.RState.Stage = 0# Then
+        GoTo lbl_0
+    End If
+    If State.RState.Stage = 1# Then
+        GoTo lbl_1
+    End If
+    If State.RState.Stage = 2# Then
+        GoTo lbl_2
+    End If
+    
+    '
+    ' Routine body
+    '
+    
+    '
+    ' initialize quadratures.
+    ' use 15-point Gauss-Kronrod formula.
+    '
+    State.N = 15#
+    Call GKQGenerateGaussLegendre(State.N, Info, State.QN, State.WK, State.WG)
+    If Info < 0# Then
+        State.Info = -5#
+        State.R = 0#
+        Result = False
+        AutoGKInternalIteration = Result
+        Exit Function
+    End If
+    ReDim State.WR(0 To State.N - 1)
+    For i = 0# To State.N - 1# Step 1
+        If i = 0# Then
+            State.WR(i) = 0.5 * Abs(State.QN(1#) - State.QN(0#))
+            GoTo Cont_1
+        End If
+        If i = State.N - 1# Then
+            State.WR(State.N - 1#) = 0.5 * Abs(State.QN(State.N - 1#) - State.QN(State.N - 2#))
+            GoTo Cont_1
+        End If
+        State.WR(i) = 0.5 * Abs(State.QN(i - 1#) - State.QN(i + 1#))
+Cont_1:
+    Next i
+    
+    '
+    ' special case
+    '
+    If State.A = State.B Then
+        State.Info = 1#
+        State.R = 0#
+        Result = False
+        AutoGKInternalIteration = Result
+        Exit Function
+    End If
+    
+    '
+    ' test parameters
+    '
+    If State.Eps < 0# Or State.XWidth < 0# Then
+        State.Info = -1#
+        State.R = 0#
+        Result = False
+        AutoGKInternalIteration = Result
+        Exit Function
+    End If
+    State.Info = 1#
+    If State.Eps = 0# Then
+        State.Eps = 1000# * MachineEpsilon
+    End If
+    
+    '
+    ' First, prepare heap
+    ' * column 0   -   absolute error
+    ' * column 1   -   integral of a F(x) (calculated using Kronrod extension nodes)
+    ' * column 2   -   integral of a |F(x)| (calculated using modified rect. method)
+    ' * column 3   -   left boundary of a subinterval
+    ' * column 4   -   right boundary of a subinterval
+    '
+    If State.XWidth <> 0# Then
+        GoTo lbl_3
+    End If
+    
+    '
+    ' no maximum width requirements
+    ' start from one big subinterval
+    '
+    State.HeapWidth = 5#
+    State.HeapSize = 1#
+    State.HeapUsed = 1#
+    ReDim State.Heap(0 To State.HeapSize - 1, 0 To State.HeapWidth - 1)
+    C1 = 0.5 * (State.B - State.A)
+    C2 = 0.5 * (State.B + State.A)
+    IntG = 0#
+    IntK = 0#
+    IntA = 0#
+    i = 0#
+lbl_5:
+    If i > State.N - 1# Then
+        GoTo lbl_7
+    End If
+    
+    '
+    ' obtain F
+    '
+    State.X = C1 * State.QN(i) + C2
+    State.RState.Stage = 0#
+    GoTo lbl_rcomm
+lbl_0:
+    V = State.F
+    
+    '
+    ' Gauss-Kronrod formula
+    '
+    IntK = IntK + V * State.WK(i)
+    If i Mod 2# = 1# Then
+        IntG = IntG + V * State.WG(i)
+    End If
+    
+    '
+    ' Integral |F(x)|
+    ' Use rectangles method
+    '
+    IntA = IntA + Abs(V) * State.WR(i)
+    i = i + 1#
+    GoTo lbl_5
+lbl_7:
+    IntK = IntK * (State.B - State.A) * 0.5
+    IntG = IntG * (State.B - State.A) * 0.5
+    IntA = IntA * (State.B - State.A) * 0.5
+    State.Heap(0#, 0#) = Abs(IntG - IntK)
+    State.Heap(0#, 1#) = IntK
+    State.Heap(0#, 2#) = IntA
+    State.Heap(0#, 3#) = State.A
+    State.Heap(0#, 4#) = State.B
+    State.SumErr = State.Heap(0#, 0#)
+    State.SumAbs = Abs(IntA)
+    GoTo lbl_4
+lbl_3:
+    
+    '
+    ' maximum subinterval should be no more than XWidth.
+    ' so we create Ceil((B-A)/XWidth)+1 small subintervals
+    '
+    NS = Ceil(Abs(State.B - State.A) / State.XWidth) + 1#
+    State.HeapSize = NS
+    State.HeapUsed = NS
+    State.HeapWidth = 5#
+    ReDim State.Heap(0 To State.HeapSize - 1, 0 To State.HeapWidth - 1)
+    State.SumErr = 0#
+    State.SumAbs = 0#
+    J = 0#
+lbl_8:
+    If J > NS - 1# Then
+        GoTo lbl_10
+    End If
+    TA = State.A + J * (State.B - State.A) / NS
+    TB = State.A + (J + 1#) * (State.B - State.A) / NS
+    C1 = 0.5 * (TB - TA)
+    C2 = 0.5 * (TB + TA)
+    IntG = 0#
+    IntK = 0#
+    IntA = 0#
+    i = 0#
+lbl_11:
+    If i > State.N - 1# Then
+        GoTo lbl_13
+    End If
+    
+    '
+    ' obtain F
+    '
+    State.X = C1 * State.QN(i) + C2
+    State.RState.Stage = 1#
+    GoTo lbl_rcomm
+lbl_1:
+    V = State.F
+    
+    '
+    ' Gauss-Kronrod formula
+    '
+    IntK = IntK + V * State.WK(i)
+    If i Mod 2# = 1# Then
+        IntG = IntG + V * State.WG(i)
+    End If
+    
+    '
+    ' Integral |F(x)|
+    ' Use rectangles method
+    '
+    IntA = IntA + Abs(V) * State.WR(i)
+    i = i + 1#
+    GoTo lbl_11
+lbl_13:
+    IntK = IntK * (TB - TA) * 0.5
+    IntG = IntG * (TB - TA) * 0.5
+    IntA = IntA * (TB - TA) * 0.5
+    State.Heap(J, 0#) = Abs(IntG - IntK)
+    State.Heap(J, 1#) = IntK
+    State.Heap(J, 2#) = IntA
+    State.Heap(J, 3#) = TA
+    State.Heap(J, 4#) = TB
+    State.SumErr = State.SumErr + State.Heap(J, 0#)
+    State.SumAbs = State.SumAbs + Abs(IntA)
+    J = J + 1#
+    GoTo lbl_8
+lbl_10:
+lbl_4:
+    
+    '
+    ' method iterations
+    '
+lbl_14:
+    If False Then
+        GoTo lbl_15
+    End If
+    
+    '
+    ' additional memory if needed
+    '
+    If State.HeapUsed = State.HeapSize Then
+        Call MHeapResize(State.Heap, State.HeapSize, 4# * State.HeapSize, State.HeapWidth)
+    End If
+    
+    '
+    ' TODO: every 20 iterations recalculate errors/sums
+    ' TODO: one more criterion to prevent infinite loops with too strict Eps
+    '
+    If State.SumErr <= State.Eps * State.SumAbs Then
+        State.R = 0#
+        For J = 0# To State.HeapUsed - 1# Step 1
+            State.R = State.R + State.Heap(J, 1#)
+        Next J
+        Result = False
+        AutoGKInternalIteration = Result
+        Exit Function
+    End If
+    
+    '
+    ' Exclude interval with maximum absolute error
+    '
+    Call MHeapPop(State.Heap, State.HeapUsed, State.HeapWidth)
+    State.SumErr = State.SumErr - State.Heap(State.HeapUsed - 1#, 0#)
+    State.SumAbs = State.SumAbs - State.Heap(State.HeapUsed - 1#, 2#)
+    
+    '
+    ' Divide interval, create subintervals
+    '
+    TA = State.Heap(State.HeapUsed - 1#, 3#)
+    TB = State.Heap(State.HeapUsed - 1#, 4#)
+    State.Heap(State.HeapUsed - 1#, 3#) = TA
+    State.Heap(State.HeapUsed - 1#, 4#) = 0.5 * (TA + TB)
+    State.Heap(State.HeapUsed, 3#) = 0.5 * (TA + TB)
+    State.Heap(State.HeapUsed, 4#) = TB
+    J = State.HeapUsed - 1#
+lbl_16:
+    If J > State.HeapUsed Then
+        GoTo lbl_18
+    End If
+    C1 = 0.5 * (State.Heap(J, 4#) - State.Heap(J, 3#))
+    C2 = 0.5 * (State.Heap(J, 4#) + State.Heap(J, 3#))
+    IntG = 0#
+    IntK = 0#
+    IntA = 0#
+    i = 0#
+lbl_19:
+    If i > State.N - 1# Then
+        GoTo lbl_21
+    End If
+    
+    '
+    ' F(x)
+    '
+    State.X = C1 * State.QN(i) + C2
+    State.RState.Stage = 2#
+    GoTo lbl_rcomm
+lbl_2:
+    V = State.F
+    
+    '
+    ' Gauss-Kronrod formula
+    '
+    IntK = IntK + V * State.WK(i)
+    If i Mod 2# = 1# Then
+        IntG = IntG + V * State.WG(i)
+    End If
+    
+    '
+    ' Integral |F(x)|
+    ' Use rectangles method
+    '
+    IntA = IntA + Abs(V) * State.WR(i)
+    i = i + 1#
+    GoTo lbl_19
+lbl_21:
+    IntK = IntK * (State.Heap(J, 4#) - State.Heap(J, 3#)) * 0.5
+    IntG = IntG * (State.Heap(J, 4#) - State.Heap(J, 3#)) * 0.5
+    IntA = IntA * (State.Heap(J, 4#) - State.Heap(J, 3#)) * 0.5
+    State.Heap(J, 0#) = Abs(IntG - IntK)
+    State.Heap(J, 1#) = IntK
+    State.Heap(J, 2#) = IntA
+    State.SumErr = State.SumErr + State.Heap(J, 0#)
+    State.SumAbs = State.SumAbs + State.Heap(J, 2#)
+    J = J + 1#
+    GoTo lbl_16
+lbl_18:
+    Call MHeapPush(State.Heap, State.HeapUsed - 1#, State.HeapWidth)
+    Call MHeapPush(State.Heap, State.HeapUsed, State.HeapWidth)
+    State.HeapUsed = State.HeapUsed + 1#
+    GoTo lbl_14
+lbl_15:
+    Result = False
+    AutoGKInternalIteration = Result
+    Exit Function
+    
+    '
+    ' Saving state
+    '
+lbl_rcomm:
+    Result = True
+    State.RState.IA(0#) = i
+    State.RState.IA(1#) = J
+    State.RState.IA(2#) = NS
+    State.RState.IA(3#) = Info
+    State.RState.RA(0#) = C1
+    State.RState.RA(1#) = C2
+    State.RState.RA(2#) = IntG
+    State.RState.RA(3#) = IntK
+    State.RState.RA(4#) = IntA
+    State.RState.RA(5#) = V
+    State.RState.RA(6#) = TA
+    State.RState.RA(7#) = TB
+    State.RState.RA(8#) = QEps
+    AutoGKInternalIteration = Result
+End Function
+Private Sub MHeapPop(ByRef Heap() As Double, _
+         ByVal HeapSize As Long, _
+         ByVal HeapWidth As Long)
+    Dim i As Long
+    Dim P As Long
+    Dim T As Double
+    Dim MaxCP As Long
+    If HeapSize = 1# Then
+        Exit Sub
+    End If
+    For i = 0# To HeapWidth - 1# Step 1
+        T = Heap(HeapSize - 1#, i)
+        Heap(HeapSize - 1#, i) = Heap(0#, i)
+        Heap(0#, i) = T
+    Next i
+    P = 0#
+    Do While 2# * P + 1# < HeapSize - 1#
+        MaxCP = 2# * P + 1#
+        If 2# * P + 2# < HeapSize - 1# Then
+            If Heap(2# * P + 2#, 0#) > Heap(2# * P + 1#, 0#) Then
+                MaxCP = 2# * P + 2#
+            End If
+        End If
+        If Heap(P, 0#) < Heap(MaxCP, 0#) Then
+            For i = 0# To HeapWidth - 1# Step 1
+                T = Heap(P, i)
+                Heap(P, i) = Heap(MaxCP, i)
+                Heap(MaxCP, i) = T
+            Next i
+            P = MaxCP
+        Else
+            Exit Do
+        End If
+    Loop
+End Sub
+Private Sub MHeapPush(ByRef Heap() As Double, _
+         ByVal HeapSize As Long, _
+         ByVal HeapWidth As Long)
+    Dim i As Long
+    Dim P As Long
+    Dim T As Double
+    Dim Parent As Long
+    If HeapSize = 0# Then
+        Exit Sub
+    End If
+    P = HeapSize
+    Do While P <> 0#
+        Parent = (P - 1#) \ 2#
+        If Heap(P, 0#) > Heap(Parent, 0#) Then
+            For i = 0# To HeapWidth - 1# Step 1
+                T = Heap(P, i)
+                Heap(P, i) = Heap(Parent, i)
+                Heap(Parent, i) = T
+            Next i
+            P = Parent
+        Else
+            Exit Do
+        End If
+    Loop
+End Sub
+Private Sub MHeapResize(ByRef Heap() As Double, _
+         ByRef HeapSize As Long, _
+         ByVal NewHeapSize As Long, _
+         ByVal HeapWidth As Long)
+    Dim Tmp() As Double
+    Dim i As Long
+    Dim i_ As Long
+    ReDim Tmp(0 To HeapSize - 1, 0 To HeapWidth - 1)
+    For i = 0# To HeapSize - 1# Step 1
+        For i_ = 0# To HeapWidth - 1# Step 1
+            Tmp(i, i_) = Heap(i, i_)
+        Next i_
+    Next i
+    ReDim Heap(0 To NewHeapSize - 1, 0 To HeapWidth - 1)
+    For i = 0# To HeapSize - 1# Step 1
+        For i_ = 0# To HeapWidth - 1# Step 1
+            Heap(i, i_) = Tmp(i, i_)
+        Next i_
+    Next i
+    HeapSize = NewHeapSize
+End Sub

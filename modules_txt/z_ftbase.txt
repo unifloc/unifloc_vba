@@ -1,0 +1,1414 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2009, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+Public Type FTPlan
+    Plan() As Long
+    Precomputed() As Double
+    TmpBuf() As Double
+    StackBuf() As Double
+End Type
+'Global constants
+Private Const FTBasePlanEntrySize As Long = 8#
+Private Const FTBaseCFFTTask As Long = 0#
+Private Const FTBaseRFHTTask As Long = 1#
+Private Const FTBaseRFFTTask As Long = 2#
+Private Const FFTCooleyTukeyPlan As Long = 0#
+Private Const FFTBluesteinPlan As Long = 1#
+Private Const FFTCodeletPlan As Long = 2#
+Private Const FHTCooleyTukeyPlan As Long = 3#
+Private Const FHTCodeletPlan As Long = 4#
+Private Const FFTRealCooleyTukeyPlan As Long = 5#
+Private Const FFTEmptyPlan As Long = 6#
+Private Const FHTN2Plan As Long = 999#
+Private Const FTBaseUpdateTw As Long = 4#
+Private Const FTBaseCodeletMax As Long = 5#
+Private Const FTBaseCodeletRecommended As Long = 5#
+Private Const FTBaseInefficiencyFactor As Double = 1.3
+Private Const FTBaseMaxSmoothFactor As Long = 5#
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine generates FFT plan - a decomposition of a N-length FFT to
+'the more simpler operations. Plan consists of the root entry and the child
+'entries.
+'
+'Subroutine parameters:
+'    N               task size
+'
+'Output parameters:
+'    Plan            plan
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTBaseGenerateComplexFFTPlan(ByVal N As Long, ByRef Plan As FTPlan)
+    Dim PlanArraySize As Long
+    Dim PlanSize As Long
+    Dim PrecomputedSize As Long
+    Dim TmpMemSize As Long
+    Dim StackMemSize As Long
+    Dim StackPtr As Long
+    PlanArraySize = 1#
+    PlanSize = 0#
+    PrecomputedSize = 0#
+    StackMemSize = 0#
+    StackPtr = 0#
+    TmpMemSize = 2# * N
+    ReDim Plan.Plan(0 To PlanArraySize - 1)
+    Call FTBaseGeneratePlanRec(N, FTBaseCFFTTask, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+    ReDim Plan.StackBuf(0 To MaxInt(StackMemSize, 1#) - 1)
+    ReDim Plan.TmpBuf(0 To MaxInt(TmpMemSize, 1#) - 1)
+    ReDim Plan.Precomputed(0 To MaxInt(PrecomputedSize, 1#) - 1)
+    StackPtr = 0#
+    Call FTBasePrecomputePlanRec(Plan, 0#, StackPtr)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Generates real FFT plan
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTBaseGenerateRealFFTPlan(ByVal N As Long, ByRef Plan As FTPlan)
+    Dim PlanArraySize As Long
+    Dim PlanSize As Long
+    Dim PrecomputedSize As Long
+    Dim TmpMemSize As Long
+    Dim StackMemSize As Long
+    Dim StackPtr As Long
+    PlanArraySize = 1#
+    PlanSize = 0#
+    PrecomputedSize = 0#
+    StackMemSize = 0#
+    StackPtr = 0#
+    TmpMemSize = 2# * N
+    ReDim Plan.Plan(0 To PlanArraySize - 1)
+    Call FTBaseGeneratePlanRec(N, FTBaseRFFTTask, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+    ReDim Plan.StackBuf(0 To MaxInt(StackMemSize, 1#) - 1)
+    ReDim Plan.TmpBuf(0 To MaxInt(TmpMemSize, 1#) - 1)
+    ReDim Plan.Precomputed(0 To MaxInt(PrecomputedSize, 1#) - 1)
+    StackPtr = 0#
+    Call FTBasePrecomputePlanRec(Plan, 0#, StackPtr)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Generates real FHT plan
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTBaseGenerateRealFHTPlan(ByVal N As Long, ByRef Plan As FTPlan)
+    Dim PlanArraySize As Long
+    Dim PlanSize As Long
+    Dim PrecomputedSize As Long
+    Dim TmpMemSize As Long
+    Dim StackMemSize As Long
+    Dim StackPtr As Long
+    PlanArraySize = 1#
+    PlanSize = 0#
+    PrecomputedSize = 0#
+    StackMemSize = 0#
+    StackPtr = 0#
+    TmpMemSize = N
+    ReDim Plan.Plan(0 To PlanArraySize - 1)
+    Call FTBaseGeneratePlanRec(N, FTBaseRFHTTask, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+    ReDim Plan.StackBuf(0 To MaxInt(StackMemSize, 1#) - 1)
+    ReDim Plan.TmpBuf(0 To MaxInt(TmpMemSize, 1#) - 1)
+    ReDim Plan.Precomputed(0 To MaxInt(PrecomputedSize, 1#) - 1)
+    StackPtr = 0#
+    Call FTBasePrecomputePlanRec(Plan, 0#, StackPtr)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine executes FFT/FHT plan.
+'
+'If Plan is a:
+'* complex FFT plan  -   sizeof(A)=2*N,
+'                        A contains interleaved real/imaginary values
+'* real FFT plan     -   sizeof(A)=2*N,
+'                        A contains real values interleaved with zeros
+'* real FHT plan     -   sizeof(A)=2*N,
+'                        A contains real values interleaved with zeros
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTBaseExecutePlan(ByRef A() As Double, _
+         ByVal AOffset As Long, _
+         ByVal N As Long, _
+         ByRef Plan As FTPlan)
+    Dim StackPtr As Long
+    StackPtr = 0#
+    Call FTBaseExecutePlanRec(A, AOffset, Plan, 0#, StackPtr)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Recurrent subroutine for the FTBaseExecutePlan
+'
+'Parameters:
+'    A           FFT'ed array
+'    AOffset     offset of the FFT'ed part (distance is measured in doubles)
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTBaseExecutePlanRec(ByRef A() As Double, _
+         ByVal AOffset As Long, _
+         ByRef Plan As FTPlan, _
+         ByVal EntryOffset As Long, _
+         ByVal StackPtr As Long)
+    Dim i As Long
+    Dim J As Long
+    Dim K As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim N As Long
+    Dim M As Long
+    Dim Offs As Long
+    Dim Offs1 As Long
+    Dim Offs2 As Long
+    Dim OffsA As Long
+    Dim OffsB As Long
+    Dim OffsP As Long
+    Dim HK As Double
+    Dim HNK As Double
+    Dim X As Double
+    Dim Y As Double
+    Dim BX As Double
+    Dim BY As Double
+    Dim EmptyArray() As Double
+    Dim A0X As Double
+    Dim A0Y As Double
+    Dim A1X As Double
+    Dim A1Y As Double
+    Dim A2X As Double
+    Dim A2Y As Double
+    Dim A3X As Double
+    Dim A3Y As Double
+    Dim V0 As Double
+    Dim V1 As Double
+    Dim V2 As Double
+    Dim V3 As Double
+    Dim T1X As Double
+    Dim T1Y As Double
+    Dim T2X As Double
+    Dim T2Y As Double
+    Dim T3X As Double
+    Dim T3Y As Double
+    Dim T4X As Double
+    Dim T4Y As Double
+    Dim T5X As Double
+    Dim T5Y As Double
+    Dim M1X As Double
+    Dim M1Y As Double
+    Dim M2X As Double
+    Dim M2Y As Double
+    Dim M3X As Double
+    Dim M3Y As Double
+    Dim M4X As Double
+    Dim M4Y As Double
+    Dim M5X As Double
+    Dim M5Y As Double
+    Dim S1X As Double
+    Dim S1Y As Double
+    Dim S2X As Double
+    Dim S2Y As Double
+    Dim S3X As Double
+    Dim S3Y As Double
+    Dim S4X As Double
+    Dim S4Y As Double
+    Dim S5X As Double
+    Dim S5Y As Double
+    Dim C1 As Double
+    Dim C2 As Double
+    Dim C3 As Double
+    Dim C4 As Double
+    Dim C5 As Double
+    Dim Tmp() As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    If Plan.Plan(EntryOffset + 3#) = FFTEmptyPlan Then
+        Exit Sub
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FFTCooleyTukeyPlan Then
+        
+        '
+        ' Cooley-Tukey plan
+        ' * transposition
+        ' * row-wise FFT
+        ' * twiddle factors:
+        '   - TwBase is a basis twiddle factor for I=1, J=1
+        '   - TwRow is a twiddle factor for a second element in a row (J=1)
+        '   - Tw is a twiddle factor for a current element
+        ' * transposition again
+        ' * row-wise FFT again
+        '
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        Call InternalComplexLinTranspose(A, N1, N2, AOffset, Plan.TmpBuf)
+        For i = 0# To N2 - 1# Step 1
+            Call FTBaseExecutePlanRec(A, AOffset + i * N1 * 2#, Plan, Plan.Plan(EntryOffset + 5#), StackPtr)
+        Next i
+        Call FFTTwCalc(A, AOffset, N1, N2)
+        Call InternalComplexLinTranspose(A, N2, N1, AOffset, Plan.TmpBuf)
+        For i = 0# To N1 - 1# Step 1
+            Call FTBaseExecutePlanRec(A, AOffset + i * N2 * 2#, Plan, Plan.Plan(EntryOffset + 6#), StackPtr)
+        Next i
+        Call InternalComplexLinTranspose(A, N1, N2, AOffset, Plan.TmpBuf)
+        Exit Sub
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FFTRealCooleyTukeyPlan Then
+        
+        '
+        ' Cooley-Tukey plan
+        ' * transposition
+        ' * row-wise FFT
+        ' * twiddle factors:
+        '   - TwBase is a basis twiddle factor for I=1, J=1
+        '   - TwRow is a twiddle factor for a second element in a row (J=1)
+        '   - Tw is a twiddle factor for a current element
+        ' * transposition again
+        ' * row-wise FFT again
+        '
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        Call InternalComplexLinTranspose(A, N2, N1, AOffset, Plan.TmpBuf)
+        For i = 0# To N1 \ 2# - 1# Step 1
+            
+            '
+            ' pack two adjacent smaller real FFT's together,
+            ' make one complex FFT,
+            ' unpack result
+            '
+            Offs = AOffset + 2# * i * N2 * 2#
+            For K = 0# To N2 - 1# Step 1
+                A(Offs + 2# * K + 1#) = A(Offs + 2# * N2 + 2# * K + 0#)
+            Next K
+            Call FTBaseExecutePlanRec(A, Offs, Plan, Plan.Plan(EntryOffset + 6#), StackPtr)
+            Plan.TmpBuf(0#) = A(Offs + 0#)
+            Plan.TmpBuf(1#) = 0#
+            Plan.TmpBuf(2# * N2 + 0#) = A(Offs + 1#)
+            Plan.TmpBuf(2# * N2 + 1#) = 0#
+            For K = 1# To N2 - 1# Step 1
+                Offs1 = 2# * K
+                Offs2 = 2# * N2 + 2# * K
+                HK = A(Offs + 2# * K + 0#)
+                HNK = A(Offs + 2# * (N2 - K) + 0#)
+                Plan.TmpBuf(Offs1 + 0#) = (0.5 * (HK + HNK))
+                Plan.TmpBuf(Offs2 + 1#) = -(0.5 * (HK - HNK))
+                HK = A(Offs + 2# * K + 1#)
+                HNK = A(Offs + 2# * (N2 - K) + 1#)
+                Plan.TmpBuf(Offs2 + 0#) = (0.5 * (HK + HNK))
+                Plan.TmpBuf(Offs1 + 1#) = (0.5 * (HK - HNK))
+            Next K
+            i1_ = (0#) - (Offs)
+            For i_ = Offs To Offs + 2# * N2 * 2# - 1# Step 1
+                A(i_) = Plan.TmpBuf(i_ + i1_)
+            Next i_
+        Next i
+        If N1 Mod 2# <> 0# Then
+            Call FTBaseExecutePlanRec(A, AOffset + (N1 - 1#) * N2 * 2#, Plan, Plan.Plan(EntryOffset + 6#), StackPtr)
+        End If
+        Call FFTTwCalc(A, AOffset, N2, N1)
+        Call InternalComplexLinTranspose(A, N1, N2, AOffset, Plan.TmpBuf)
+        For i = 0# To N2 - 1# Step 1
+            Call FTBaseExecutePlanRec(A, AOffset + i * N1 * 2#, Plan, Plan.Plan(EntryOffset + 5#), StackPtr)
+        Next i
+        Call InternalComplexLinTranspose(A, N2, N1, AOffset, Plan.TmpBuf)
+        Exit Sub
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FHTCooleyTukeyPlan Then
+        
+        '
+        ' Cooley-Tukey FHT plan:
+        ' * transpose                    \
+        ' * smaller FHT's                |
+        ' * pre-process                  |
+        ' * multiply by twiddle factors  | corresponds to multiplication by H1
+        ' * post-process                 |
+        ' * transpose again              /
+        ' * multiply by H2 (smaller FHT's)
+        ' * final transposition
+        '
+        ' For more details see Vitezslav Vesely, "Fast algorithms
+        ' of Fourier and Hartley transform and their implementation in MATLAB",
+        ' page 31.
+        '
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        N = N1 * N2
+        Call InternalRealLinTranspose(A, N1, N2, AOffset, Plan.TmpBuf)
+        For i = 0# To N2 - 1# Step 1
+            Call FTBaseExecutePlanRec(A, AOffset + i * N1, Plan, Plan.Plan(EntryOffset + 5#), StackPtr)
+        Next i
+        For i = 0# To N2 - 1# Step 1
+            For J = 0# To N1 - 1# Step 1
+                OffsA = AOffset + i * N1
+                HK = A(OffsA + J)
+                HNK = A(OffsA + (N1 - J) Mod N1)
+                Offs = 2# * (i * N1 + J)
+                Plan.TmpBuf(Offs + 0#) = -(0.5 * (HNK - HK))
+                Plan.TmpBuf(Offs + 1#) = (0.5 * (HK + HNK))
+            Next J
+        Next i
+        Call FFTTwCalc(Plan.TmpBuf, 0#, N1, N2)
+        For J = 0# To N1 - 1# Step 1
+            A(AOffset + J) = Plan.TmpBuf(2# * J + 0#) + Plan.TmpBuf(2# * J + 1#)
+        Next J
+        If N2 Mod 2# = 0# Then
+            Offs = 2# * (N2 \ 2#) * N1
+            OffsA = AOffset + (N2 \ 2#) * N1
+            For J = 0# To N1 - 1# Step 1
+                A(OffsA + J) = Plan.TmpBuf(Offs + 2# * J + 0#) + Plan.TmpBuf(Offs + 2# * J + 1#)
+            Next J
+        End If
+        For i = 1# To (N2 + 1#) \ 2# - 1# Step 1
+            Offs = 2# * i * N1
+            Offs2 = 2# * (N2 - i) * N1
+            OffsA = AOffset + i * N1
+            For J = 0# To N1 - 1# Step 1
+                A(OffsA + J) = Plan.TmpBuf(Offs + 2# * J + 1#) + Plan.TmpBuf(Offs2 + 2# * J + 0#)
+            Next J
+            OffsA = AOffset + (N2 - i) * N1
+            For J = 0# To N1 - 1# Step 1
+                A(OffsA + J) = Plan.TmpBuf(Offs + 2# * J + 0#) + Plan.TmpBuf(Offs2 + 2# * J + 1#)
+            Next J
+        Next i
+        Call InternalRealLinTranspose(A, N2, N1, AOffset, Plan.TmpBuf)
+        For i = 0# To N1 - 1# Step 1
+            Call FTBaseExecutePlanRec(A, AOffset + i * N2, Plan, Plan.Plan(EntryOffset + 6#), StackPtr)
+        Next i
+        Call InternalRealLinTranspose(A, N1, N2, AOffset, Plan.TmpBuf)
+        Exit Sub
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FHTN2Plan Then
+        
+        '
+        ' Cooley-Tukey FHT plan
+        '
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        N = N1 * N2
+        Call RefFHT(A, N, AOffset)
+        Exit Sub
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FFTCodeletPlan Then
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        N = N1 * N2
+        If N = 2# Then
+            A0X = A(AOffset + 0#)
+            A0Y = A(AOffset + 1#)
+            A1X = A(AOffset + 2#)
+            A1Y = A(AOffset + 3#)
+            V0 = A0X + A1X
+            V1 = A0Y + A1Y
+            V2 = A0X - A1X
+            V3 = A0Y - A1Y
+            A(AOffset + 0#) = V0
+            A(AOffset + 1#) = V1
+            A(AOffset + 2#) = V2
+            A(AOffset + 3#) = V3
+            Exit Sub
+        End If
+        If N = 3# Then
+            Offs = Plan.Plan(EntryOffset + 7#)
+            C1 = Plan.Precomputed(Offs + 0#)
+            C2 = Plan.Precomputed(Offs + 1#)
+            A0X = A(AOffset + 0#)
+            A0Y = A(AOffset + 1#)
+            A1X = A(AOffset + 2#)
+            A1Y = A(AOffset + 3#)
+            A2X = A(AOffset + 4#)
+            A2Y = A(AOffset + 5#)
+            T1X = A1X + A2X
+            T1Y = A1Y + A2Y
+            A0X = A0X + T1X
+            A0Y = A0Y + T1Y
+            M1X = C1 * T1X
+            M1Y = C1 * T1Y
+            M2X = C2 * (A1Y - A2Y)
+            M2Y = C2 * (A2X - A1X)
+            S1X = A0X + M1X
+            S1Y = A0Y + M1Y
+            A1X = S1X + M2X
+            A1Y = S1Y + M2Y
+            A2X = S1X - M2X
+            A2Y = S1Y - M2Y
+            A(AOffset + 0#) = A0X
+            A(AOffset + 1#) = A0Y
+            A(AOffset + 2#) = A1X
+            A(AOffset + 3#) = A1Y
+            A(AOffset + 4#) = A2X
+            A(AOffset + 5#) = A2Y
+            Exit Sub
+        End If
+        If N = 4# Then
+            A0X = A(AOffset + 0#)
+            A0Y = A(AOffset + 1#)
+            A1X = A(AOffset + 2#)
+            A1Y = A(AOffset + 3#)
+            A2X = A(AOffset + 4#)
+            A2Y = A(AOffset + 5#)
+            A3X = A(AOffset + 6#)
+            A3Y = A(AOffset + 7#)
+            T1X = A0X + A2X
+            T1Y = A0Y + A2Y
+            T2X = A1X + A3X
+            T2Y = A1Y + A3Y
+            M2X = A0X - A2X
+            M2Y = A0Y - A2Y
+            M3X = A1Y - A3Y
+            M3Y = A3X - A1X
+            A(AOffset + 0#) = T1X + T2X
+            A(AOffset + 1#) = T1Y + T2Y
+            A(AOffset + 4#) = T1X - T2X
+            A(AOffset + 5#) = T1Y - T2Y
+            A(AOffset + 2#) = M2X + M3X
+            A(AOffset + 3#) = M2Y + M3Y
+            A(AOffset + 6#) = M2X - M3X
+            A(AOffset + 7#) = M2Y - M3Y
+            Exit Sub
+        End If
+        If N = 5# Then
+            Offs = Plan.Plan(EntryOffset + 7#)
+            C1 = Plan.Precomputed(Offs + 0#)
+            C2 = Plan.Precomputed(Offs + 1#)
+            C3 = Plan.Precomputed(Offs + 2#)
+            C4 = Plan.Precomputed(Offs + 3#)
+            C5 = Plan.Precomputed(Offs + 4#)
+            T1X = A(AOffset + 2#) + A(AOffset + 8#)
+            T1Y = A(AOffset + 3#) + A(AOffset + 9#)
+            T2X = A(AOffset + 4#) + A(AOffset + 6#)
+            T2Y = A(AOffset + 5#) + A(AOffset + 7#)
+            T3X = A(AOffset + 2#) - A(AOffset + 8#)
+            T3Y = A(AOffset + 3#) - A(AOffset + 9#)
+            T4X = A(AOffset + 6#) - A(AOffset + 4#)
+            T4Y = A(AOffset + 7#) - A(AOffset + 5#)
+            T5X = T1X + T2X
+            T5Y = T1Y + T2Y
+            A(AOffset + 0#) = A(AOffset + 0#) + T5X
+            A(AOffset + 1#) = A(AOffset + 1#) + T5Y
+            M1X = C1 * T5X
+            M1Y = C1 * T5Y
+            M2X = C2 * (T1X - T2X)
+            M2Y = C2 * (T1Y - T2Y)
+            M3X = -(C3 * (T3Y + T4Y))
+            M3Y = C3 * (T3X + T4X)
+            M4X = -(C4 * T4Y)
+            M4Y = C4 * T4X
+            M5X = -(C5 * T3Y)
+            M5Y = C5 * T3X
+            S3X = M3X - M4X
+            S3Y = M3Y - M4Y
+            S5X = M3X + M5X
+            S5Y = M3Y + M5Y
+            S1X = A(AOffset + 0#) + M1X
+            S1Y = A(AOffset + 1#) + M1Y
+            S2X = S1X + M2X
+            S2Y = S1Y + M2Y
+            S4X = S1X - M2X
+            S4Y = S1Y - M2Y
+            A(AOffset + 2#) = S2X + S3X
+            A(AOffset + 3#) = S2Y + S3Y
+            A(AOffset + 4#) = S4X + S5X
+            A(AOffset + 5#) = S4Y + S5Y
+            A(AOffset + 6#) = S4X - S5X
+            A(AOffset + 7#) = S4Y - S5Y
+            A(AOffset + 8#) = S2X - S3X
+            A(AOffset + 9#) = S2Y - S3Y
+            Exit Sub
+        End If
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FHTCodeletPlan Then
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        N = N1 * N2
+        If N = 2# Then
+            A0X = A(AOffset + 0#)
+            A1X = A(AOffset + 1#)
+            A(AOffset + 0#) = A0X + A1X
+            A(AOffset + 1#) = A0X - A1X
+            Exit Sub
+        End If
+        If N = 3# Then
+            Offs = Plan.Plan(EntryOffset + 7#)
+            C1 = Plan.Precomputed(Offs + 0#)
+            C2 = Plan.Precomputed(Offs + 1#)
+            A0X = A(AOffset + 0#)
+            A1X = A(AOffset + 1#)
+            A2X = A(AOffset + 2#)
+            T1X = A1X + A2X
+            A0X = A0X + T1X
+            M1X = C1 * T1X
+            M2Y = C2 * (A2X - A1X)
+            S1X = A0X + M1X
+            A(AOffset + 0#) = A0X
+            A(AOffset + 1#) = S1X - M2Y
+            A(AOffset + 2#) = S1X + M2Y
+            Exit Sub
+        End If
+        If N = 4# Then
+            A0X = A(AOffset + 0#)
+            A1X = A(AOffset + 1#)
+            A2X = A(AOffset + 2#)
+            A3X = A(AOffset + 3#)
+            T1X = A0X + A2X
+            T2X = A1X + A3X
+            M2X = A0X - A2X
+            M3Y = A3X - A1X
+            A(AOffset + 0#) = T1X + T2X
+            A(AOffset + 1#) = M2X - M3Y
+            A(AOffset + 2#) = T1X - T2X
+            A(AOffset + 3#) = M2X + M3Y
+            Exit Sub
+        End If
+        If N = 5# Then
+            Offs = Plan.Plan(EntryOffset + 7#)
+            C1 = Plan.Precomputed(Offs + 0#)
+            C2 = Plan.Precomputed(Offs + 1#)
+            C3 = Plan.Precomputed(Offs + 2#)
+            C4 = Plan.Precomputed(Offs + 3#)
+            C5 = Plan.Precomputed(Offs + 4#)
+            T1X = A(AOffset + 1#) + A(AOffset + 4#)
+            T2X = A(AOffset + 2#) + A(AOffset + 3#)
+            T3X = A(AOffset + 1#) - A(AOffset + 4#)
+            T4X = A(AOffset + 3#) - A(AOffset + 2#)
+            T5X = T1X + T2X
+            V0 = A(AOffset + 0#) + T5X
+            A(AOffset + 0#) = V0
+            M2X = C2 * (T1X - T2X)
+            M3Y = C3 * (T3X + T4X)
+            S3Y = M3Y - C4 * T4X
+            S5Y = M3Y + C5 * T3X
+            S1X = V0 + C1 * T5X
+            S2X = S1X + M2X
+            S4X = S1X - M2X
+            A(AOffset + 1#) = S2X - S3Y
+            A(AOffset + 2#) = S4X - S5Y
+            A(AOffset + 3#) = S4X + S5Y
+            A(AOffset + 4#) = S2X + S3Y
+            Exit Sub
+        End If
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FFTBluesteinPlan Then
+        
+        '
+        ' Bluestein plan:
+        ' 1. multiply by precomputed coefficients
+        ' 2. make convolution: forward FFT, multiplication by precomputed FFT
+        '    and backward FFT. backward FFT is represented as
+        '
+        '        invfft(x) = fft(x')'/M
+        '
+        '    for performance reasons reduction of inverse FFT to
+        '    forward FFT is merged with multiplication of FFT components
+        '    and last stage of Bluestein's transformation.
+        ' 3. post-multiplication by Bluestein factors
+        '
+        N = Plan.Plan(EntryOffset + 1#)
+        M = Plan.Plan(EntryOffset + 4#)
+        Offs = Plan.Plan(EntryOffset + 7#)
+        For i = StackPtr + 2# * N To StackPtr + 2# * M - 1# Step 1
+            Plan.StackBuf(i) = 0#
+        Next i
+        OffsP = Offs + 2# * M
+        OffsA = AOffset
+        OffsB = StackPtr
+        For i = 0# To N - 1# Step 1
+            BX = Plan.Precomputed(OffsP + 0#)
+            BY = Plan.Precomputed(OffsP + 1#)
+            X = A(OffsA + 0#)
+            Y = A(OffsA + 1#)
+            Plan.StackBuf(OffsB + 0#) = X * BX - Y * -BY
+            Plan.StackBuf(OffsB + 1#) = X * -BY + Y * BX
+            OffsP = OffsP + 2#
+            OffsA = OffsA + 2#
+            OffsB = OffsB + 2#
+        Next i
+        Call FTBaseExecutePlanRec(Plan.StackBuf, StackPtr, Plan, Plan.Plan(EntryOffset + 5#), StackPtr + 2# * 2# * M)
+        OffsB = StackPtr
+        OffsP = Offs
+        For i = 0# To M - 1# Step 1
+            X = Plan.StackBuf(OffsB + 0#)
+            Y = Plan.StackBuf(OffsB + 1#)
+            BX = Plan.Precomputed(OffsP + 0#)
+            BY = Plan.Precomputed(OffsP + 1#)
+            Plan.StackBuf(OffsB + 0#) = X * BX - Y * BY
+            Plan.StackBuf(OffsB + 1#) = -(X * BY + Y * BX)
+            OffsB = OffsB + 2#
+            OffsP = OffsP + 2#
+        Next i
+        Call FTBaseExecutePlanRec(Plan.StackBuf, StackPtr, Plan, Plan.Plan(EntryOffset + 5#), StackPtr + 2# * 2# * M)
+        OffsB = StackPtr
+        OffsP = Offs + 2# * M
+        OffsA = AOffset
+        For i = 0# To N - 1# Step 1
+            X = (Plan.StackBuf(OffsB + 0#) / M)
+            Y = -(Plan.StackBuf(OffsB + 1#) / M)
+            BX = Plan.Precomputed(OffsP + 0#)
+            BY = Plan.Precomputed(OffsP + 1#)
+            A(OffsA + 0#) = X * BX - Y * -BY
+            A(OffsA + 1#) = X * -BY + Y * BX
+            OffsP = OffsP + 2#
+            OffsA = OffsA + 2#
+            OffsB = OffsB + 2#
+        Next i
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns good factorization N=N1*N2.
+'
+'Usually N1<=N2 (but not always - small N's may be exception).
+'if N1<>1 then N2<>1.
+'
+'Factorization is chosen depending on task type and codelets we have.
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FTBaseFactorize(ByVal N As Long, _
+         ByVal TaskType As Long, _
+         ByRef N1 As Long, _
+         ByRef N2 As Long)
+    Dim J As Long
+    N1 = 0#
+    N2 = 0#
+    
+    '
+    ' try to find good codelet
+    '
+    If N1 * N2 <> N Then
+        For J = FTBaseCodeletRecommended To 2# Step -1
+            If N Mod J = 0# Then
+                N1 = J
+                N2 = N \ J
+                Exit For
+            End If
+        Next J
+    End If
+    
+    '
+    ' try to factorize N
+    '
+    If N1 * N2 <> N Then
+        For J = FTBaseCodeletRecommended + 1# To N - 1# Step 1
+            If N Mod J = 0# Then
+                N1 = J
+                N2 = N \ J
+                Exit For
+            End If
+        Next J
+    End If
+    
+    '
+    ' looks like N is prime :(
+    '
+    If N1 * N2 <> N Then
+        N1 = 1#
+        N2 = N
+    End If
+    
+    '
+    ' normalize
+    '
+    If N2 = 1# And N1 <> 1# Then
+        N2 = N1
+        N1 = 1#
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Is number smooth?
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function FTBaseIsSmooth(ByVal N As Long) As Boolean
+    Dim Result As Boolean
+    Dim i As Long
+    For i = 2# To FTBaseMaxSmoothFactor Step 1
+        Do While N Mod i = 0#
+            N = N \ i
+        Loop
+    Next i
+    Result = N = 1#
+    FTBaseIsSmooth = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns smallest smooth (divisible only by 2, 3, 5) number that is greater
+'than or equal to max(N,2)
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function FTBaseFindSmooth(ByVal N As Long) As Long
+    Dim Result As Long
+    Dim Best As Long
+    Best = 2#
+    Do While Best < N
+        Best = 2# * Best
+    Loop
+    Call FTBaseFindSmoothRec(N, 1#, 2#, Best)
+    Result = Best
+    FTBaseFindSmooth = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns  smallest  smooth  (divisible only by 2, 3, 5) even number that is
+'greater than or equal to max(N,2)
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function FTBaseFindSmoothEven(ByVal N As Long) As Long
+    Dim Result As Long
+    Dim Best As Long
+    Best = 2#
+    Do While Best < N
+        Best = 2# * Best
+    Loop
+    Call FTBaseFindSmoothRec(N, 2#, 2#, Best)
+    Result = Best
+    FTBaseFindSmoothEven = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns estimate of FLOP count for the FFT.
+'
+'It is only an estimate based on operations count for the PERFECT FFT
+'and relative inefficiency of the algorithm actually used.
+'
+'N should be power of 2, estimates are badly wrong for non-power-of-2 N's.
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function FTBaseGetFLOPEstimate(ByVal N As Long) As Double
+    Dim Result As Double
+    Result = FTBaseInefficiencyFactor * (4# * N * Log(N) / Log(2#) - 6# * N + 8#)
+    FTBaseGetFLOPEstimate = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Recurrent subroutine for the FFTGeneratePlan:
+'
+'PARAMETERS:
+'    N                   plan size
+'    IsReal              whether input is real or not.
+'                        subroutine MUST NOT ignore this flag because real
+'                        inputs comes with non-initialized imaginary parts,
+'                        so ignoring this flag will result in corrupted output
+'    HalfOut             whether full output or only half of it from 0 to
+'                        floor(N/2) is needed. This flag may be ignored if
+'                        doing so will simplify calculations
+'    Plan                plan array
+'    PlanSize            size of used part (in integers)
+'    PrecomputedSize     size of precomputed array allocated yet
+'    PlanArraySize       plan array size (actual)
+'    TmpMemSize          temporary memory required size
+'    BluesteinMemSize    temporary memory required size
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FTBaseGeneratePlanRec(ByVal N As Long, _
+         ByVal TaskType As Long, _
+         ByRef Plan As FTPlan, _
+         ByRef PlanSize As Long, _
+         ByRef PrecomputedSize As Long, _
+         ByRef PlanArraySize As Long, _
+         ByRef TmpMemSize As Long, _
+         ByRef StackMemSize As Long, _
+         ByVal StackPtr As Long)
+    Dim K As Long
+    Dim M As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim ESize As Long
+    Dim EntryOffset As Long
+    
+    '
+    ' prepare
+    '
+    If PlanSize + FTBasePlanEntrySize > PlanArraySize Then
+        Call FFTArrayResize(Plan.Plan, PlanArraySize, 8# * PlanArraySize)
+    End If
+    EntryOffset = PlanSize
+    ESize = FTBasePlanEntrySize
+    PlanSize = PlanSize + ESize
+    
+    '
+    ' if N=1, generate empty plan and exit
+    '
+    If N = 1# Then
+        Plan.Plan(EntryOffset + 0#) = ESize
+        Plan.Plan(EntryOffset + 1#) = -1#
+        Plan.Plan(EntryOffset + 2#) = -1#
+        Plan.Plan(EntryOffset + 3#) = FFTEmptyPlan
+        Plan.Plan(EntryOffset + 4#) = -1#
+        Plan.Plan(EntryOffset + 5#) = -1#
+        Plan.Plan(EntryOffset + 6#) = -1#
+        Plan.Plan(EntryOffset + 7#) = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' generate plans
+    '
+    Call FTBaseFactorize(N, TaskType, N1, N2)
+    If TaskType = FTBaseCFFTTask Or TaskType = FTBaseRFFTTask Then
+        
+        '
+        ' complex FFT plans
+        '
+        If N1 <> 1# Then
+            
+            '
+            ' Cooley-Tukey plan (real or complex)
+            '
+            ' Note that child plans are COMPLEX
+            ' (whether plan itself is complex or not).
+            '
+            TmpMemSize = MaxInt(TmpMemSize, 2# * N1 * N2)
+            Plan.Plan(EntryOffset + 0#) = ESize
+            Plan.Plan(EntryOffset + 1#) = N1
+            Plan.Plan(EntryOffset + 2#) = N2
+            If TaskType = FTBaseCFFTTask Then
+                Plan.Plan(EntryOffset + 3#) = FFTCooleyTukeyPlan
+            Else
+                Plan.Plan(EntryOffset + 3#) = FFTRealCooleyTukeyPlan
+            End If
+            Plan.Plan(EntryOffset + 4#) = 0#
+            Plan.Plan(EntryOffset + 5#) = PlanSize
+            Call FTBaseGeneratePlanRec(N1, FTBaseCFFTTask, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+            Plan.Plan(EntryOffset + 6#) = PlanSize
+            Call FTBaseGeneratePlanRec(N2, FTBaseCFFTTask, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+            Plan.Plan(EntryOffset + 7#) = -1#
+            Exit Sub
+        Else
+            If N = 2# Or N = 3# Or N = 4# Or N = 5# Then
+                
+                '
+                ' hard-coded plan
+                '
+                Plan.Plan(EntryOffset + 0#) = ESize
+                Plan.Plan(EntryOffset + 1#) = N1
+                Plan.Plan(EntryOffset + 2#) = N2
+                Plan.Plan(EntryOffset + 3#) = FFTCodeletPlan
+                Plan.Plan(EntryOffset + 4#) = 0#
+                Plan.Plan(EntryOffset + 5#) = -1#
+                Plan.Plan(EntryOffset + 6#) = -1#
+                Plan.Plan(EntryOffset + 7#) = PrecomputedSize
+                If N = 3# Then
+                    PrecomputedSize = PrecomputedSize + 2#
+                End If
+                If N = 5# Then
+                    PrecomputedSize = PrecomputedSize + 5#
+                End If
+                Exit Sub
+            Else
+                
+                '
+                ' Bluestein's plan
+                '
+                ' Select such M that M>=2*N-1, M is composite, and M's
+                ' factors are 2, 3, 5
+                '
+                K = 2# * N2 - 1#
+                M = FTBaseFindSmooth(K)
+                TmpMemSize = MaxInt(TmpMemSize, 2# * M)
+                Plan.Plan(EntryOffset + 0#) = ESize
+                Plan.Plan(EntryOffset + 1#) = N2
+                Plan.Plan(EntryOffset + 2#) = -1#
+                Plan.Plan(EntryOffset + 3#) = FFTBluesteinPlan
+                Plan.Plan(EntryOffset + 4#) = M
+                Plan.Plan(EntryOffset + 5#) = PlanSize
+                StackPtr = StackPtr + 2# * 2# * M
+                StackMemSize = MaxInt(StackMemSize, StackPtr)
+                Call FTBaseGeneratePlanRec(M, FTBaseCFFTTask, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+                StackPtr = StackPtr - 2# * 2# * M
+                Plan.Plan(EntryOffset + 6#) = -1#
+                Plan.Plan(EntryOffset + 7#) = PrecomputedSize
+                PrecomputedSize = PrecomputedSize + 2# * M + 2# * N
+                Exit Sub
+            End If
+        End If
+    End If
+    If TaskType = FTBaseRFHTTask Then
+        
+        '
+        ' real FHT plans
+        '
+        If N1 <> 1# Then
+            
+            '
+            ' Cooley-Tukey plan
+            '
+            '
+            TmpMemSize = MaxInt(TmpMemSize, 2# * N1 * N2)
+            Plan.Plan(EntryOffset + 0#) = ESize
+            Plan.Plan(EntryOffset + 1#) = N1
+            Plan.Plan(EntryOffset + 2#) = N2
+            Plan.Plan(EntryOffset + 3#) = FHTCooleyTukeyPlan
+            Plan.Plan(EntryOffset + 4#) = 0#
+            Plan.Plan(EntryOffset + 5#) = PlanSize
+            Call FTBaseGeneratePlanRec(N1, TaskType, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+            Plan.Plan(EntryOffset + 6#) = PlanSize
+            Call FTBaseGeneratePlanRec(N2, TaskType, Plan, PlanSize, PrecomputedSize, PlanArraySize, TmpMemSize, StackMemSize, StackPtr)
+            Plan.Plan(EntryOffset + 7#) = -1#
+            Exit Sub
+        Else
+            
+            '
+            ' N2 plan
+            '
+            Plan.Plan(EntryOffset + 0#) = ESize
+            Plan.Plan(EntryOffset + 1#) = N1
+            Plan.Plan(EntryOffset + 2#) = N2
+            Plan.Plan(EntryOffset + 3#) = FHTN2Plan
+            Plan.Plan(EntryOffset + 4#) = 0#
+            Plan.Plan(EntryOffset + 5#) = -1#
+            Plan.Plan(EntryOffset + 6#) = -1#
+            Plan.Plan(EntryOffset + 7#) = -1#
+            If N = 2# Or N = 3# Or N = 4# Or N = 5# Then
+                
+                '
+                ' hard-coded plan
+                '
+                Plan.Plan(EntryOffset + 0#) = ESize
+                Plan.Plan(EntryOffset + 1#) = N1
+                Plan.Plan(EntryOffset + 2#) = N2
+                Plan.Plan(EntryOffset + 3#) = FHTCodeletPlan
+                Plan.Plan(EntryOffset + 4#) = 0#
+                Plan.Plan(EntryOffset + 5#) = -1#
+                Plan.Plan(EntryOffset + 6#) = -1#
+                Plan.Plan(EntryOffset + 7#) = PrecomputedSize
+                If N = 3# Then
+                    PrecomputedSize = PrecomputedSize + 2#
+                End If
+                If N = 5# Then
+                    PrecomputedSize = PrecomputedSize + 5#
+                End If
+                Exit Sub
+            End If
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Recurrent subroutine for precomputing FFT plans
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FTBasePrecomputePlanRec(ByRef Plan As FTPlan, _
+         ByVal EntryOffset As Long, _
+         ByVal StackPtr As Long)
+    Dim i As Long
+    Dim Idx As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim N As Long
+    Dim M As Long
+    Dim Offs As Long
+    Dim V As Double
+    Dim EmptyArray() As Double
+    Dim BX As Double
+    Dim BY As Double
+    If Plan.Plan(EntryOffset + 3#) = FFTCooleyTukeyPlan Or Plan.Plan(EntryOffset + 3#) = FFTRealCooleyTukeyPlan Or Plan.Plan(EntryOffset + 3#) = FHTCooleyTukeyPlan Then
+        Call FTBasePrecomputePlanRec(Plan, Plan.Plan(EntryOffset + 5#), StackPtr)
+        Call FTBasePrecomputePlanRec(Plan, Plan.Plan(EntryOffset + 6#), StackPtr)
+        Exit Sub
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FFTCodeletPlan Or Plan.Plan(EntryOffset + 3#) = FHTCodeletPlan Then
+        N1 = Plan.Plan(EntryOffset + 1#)
+        N2 = Plan.Plan(EntryOffset + 2#)
+        N = N1 * N2
+        If N = 3# Then
+            Offs = Plan.Plan(EntryOffset + 7#)
+            Plan.Precomputed(Offs + 0#) = Cos(2# * Pi() / 3#) - 1#
+            Plan.Precomputed(Offs + 1#) = Sin(2# * Pi() / 3#)
+            Exit Sub
+        End If
+        If N = 5# Then
+            Offs = Plan.Plan(EntryOffset + 7#)
+            V = 2# * Pi() / 5#
+            Plan.Precomputed(Offs + 0#) = (Cos(V) + Cos(2# * V)) / 2# - 1#
+            Plan.Precomputed(Offs + 1#) = (Cos(V) - Cos(2# * V)) / 2#
+            Plan.Precomputed(Offs + 2#) = -Sin(V)
+            Plan.Precomputed(Offs + 3#) = -(Sin(V) + Sin(2# * V))
+            Plan.Precomputed(Offs + 4#) = Sin(V) - Sin(2# * V)
+            Exit Sub
+        End If
+    End If
+    If Plan.Plan(EntryOffset + 3#) = FFTBluesteinPlan Then
+        Call FTBasePrecomputePlanRec(Plan, Plan.Plan(EntryOffset + 5#), StackPtr)
+        N = Plan.Plan(EntryOffset + 1#)
+        M = Plan.Plan(EntryOffset + 4#)
+        Offs = Plan.Plan(EntryOffset + 7#)
+        For i = 0# To 2# * M - 1# Step 1
+            Plan.Precomputed(Offs + i) = 0#
+        Next i
+        For i = 0# To N - 1# Step 1
+            BX = Cos(Pi() * Square(i) / N)
+            BY = Sin(Pi() * Square(i) / N)
+            Plan.Precomputed(Offs + 2# * i + 0#) = BX
+            Plan.Precomputed(Offs + 2# * i + 1#) = BY
+            Plan.Precomputed(Offs + 2# * M + 2# * i + 0#) = BX
+            Plan.Precomputed(Offs + 2# * M + 2# * i + 1#) = BY
+            If i > 0# Then
+                Plan.Precomputed(Offs + 2# * (M - i) + 0#) = BX
+                Plan.Precomputed(Offs + 2# * (M - i) + 1#) = BY
+            End If
+        Next i
+        Call FTBaseExecutePlanRec(Plan.Precomputed, Offs, Plan, Plan.Plan(EntryOffset + 5#), StackPtr)
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Twiddle factors calculation
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FFTTwCalc(ByRef A() As Double, _
+         ByVal AOffset As Long, _
+         ByVal N1 As Long, _
+         ByVal N2 As Long)
+    Dim i As Long
+    Dim J As Long
+    Dim N As Long
+    Dim Idx As Long
+    Dim Offs As Long
+    Dim X As Double
+    Dim Y As Double
+    Dim TwXM1 As Double
+    Dim TwY As Double
+    Dim TwBaseXM1 As Double
+    Dim TwBaseY As Double
+    Dim TwRowXM1 As Double
+    Dim TwRowY As Double
+    Dim TmpX As Double
+    Dim TmpY As Double
+    Dim V As Double
+    N = N1 * N2
+    V = -(2# * Pi() / N)
+    TwBaseXM1 = -(2# * Square(Sin(0.5 * V)))
+    TwBaseY = Sin(V)
+    TwRowXM1 = 0#
+    TwRowY = 0#
+    For i = 0# To N2 - 1# Step 1
+        TwXM1 = 0#
+        TwY = 0#
+        For J = 0# To N1 - 1# Step 1
+            Idx = i * N1 + J
+            Offs = AOffset + 2# * Idx
+            X = A(Offs + 0#)
+            Y = A(Offs + 1#)
+            TmpX = X * TwXM1 - Y * TwY
+            TmpY = X * TwY + Y * TwXM1
+            A(Offs + 0#) = X + TmpX
+            A(Offs + 1#) = Y + TmpY
+            
+            '
+            ' update Tw: Tw(new) = Tw(old)*TwRow
+            '
+            If J < N1 - 1# Then
+                If J Mod FTBaseUpdateTw = 0# Then
+                    V = -(2# * Pi() * i * (J + 1#) / N)
+                    TwXM1 = -(2# * Square(Sin(0.5 * V)))
+                    TwY = Sin(V)
+                Else
+                    TmpX = TwRowXM1 + TwXM1 * TwRowXM1 - TwY * TwRowY
+                    TmpY = TwRowY + TwXM1 * TwRowY + TwY * TwRowXM1
+                    TwXM1 = TwXM1 + TmpX
+                    TwY = TwY + TmpY
+                End If
+            End If
+        Next J
+        
+        '
+        ' update TwRow: TwRow(new) = TwRow(old)*TwBase
+        '
+        If i < N2 - 1# Then
+            If J Mod FTBaseUpdateTw = 0# Then
+                V = -(2# * Pi() * (i + 1#) / N)
+                TwRowXM1 = -(2# * Square(Sin(0.5 * V)))
+                TwRowY = Sin(V)
+            Else
+                TmpX = TwBaseXM1 + TwRowXM1 * TwBaseXM1 - TwRowY * TwBaseY
+                TmpY = TwBaseY + TwRowXM1 * TwBaseY + TwRowY * TwBaseXM1
+                TwRowXM1 = TwRowXM1 + TmpX
+                TwRowY = TwRowY + TmpY
+            End If
+        End If
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Linear transpose: transpose complex matrix stored in 1-dimensional array
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub InternalComplexLinTranspose(ByRef A() As Double, _
+         ByVal M As Long, _
+         ByVal N As Long, _
+         ByVal AStart As Long, _
+         ByRef Buf() As Double)
+    Dim i_ As Long
+    Dim i1_ As Long
+    Call FFTICLTRec(A, AStart, N, Buf, 0#, M, M, N)
+    i1_ = (0#) - (AStart)
+    For i_ = AStart To AStart + 2# * M * N - 1# Step 1
+        A(i_) = Buf(i_ + i1_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Linear transpose: transpose real matrix stored in 1-dimensional array
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub InternalRealLinTranspose(ByRef A() As Double, _
+         ByVal M As Long, _
+         ByVal N As Long, _
+         ByVal AStart As Long, _
+         ByRef Buf() As Double)
+    Dim i_ As Long
+    Dim i1_ As Long
+    Call FFTIRLTRec(A, AStart, N, Buf, 0#, M, M, N)
+    i1_ = (0#) - (AStart)
+    For i_ = AStart To AStart + M * N - 1# Step 1
+        A(i_) = Buf(i_ + i1_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Recurrent subroutine for a InternalComplexLinTranspose
+'
+'Write A^T to B, where:
+'* A is m*n complex matrix stored in array A as pairs of real/image values,
+'  beginning from AStart position, with AStride stride
+'* B is n*m complex matrix stored in array B as pairs of real/image values,
+'  beginning from BStart position, with BStride stride
+'stride is measured in complex numbers, i.e. in real/image pairs.
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FFTICLTRec(ByRef A() As Double, _
+         ByVal AStart As Long, _
+         ByVal AStride As Long, _
+         ByRef B() As Double, _
+         ByVal BStart As Long, _
+         ByVal BStride As Long, _
+         ByVal M As Long, _
+         ByVal N As Long)
+    Dim i As Long
+    Dim J As Long
+    Dim Idx1 As Long
+    Dim Idx2 As Long
+    Dim M2 As Long
+    Dim M1 As Long
+    Dim N1 As Long
+    If M = 0# Or N = 0# Then
+        Exit Sub
+    End If
+    If MaxInt(M, N) <= 8# Then
+        M2 = 2# * BStride
+        For i = 0# To M - 1# Step 1
+            Idx1 = BStart + 2# * i
+            Idx2 = AStart + 2# * i * AStride
+            For J = 0# To N - 1# Step 1
+                B(Idx1 + 0#) = A(Idx2 + 0#)
+                B(Idx1 + 1#) = A(Idx2 + 1#)
+                Idx1 = Idx1 + M2
+                Idx2 = Idx2 + 2#
+            Next J
+        Next i
+        Exit Sub
+    End If
+    If N > M Then
+        
+        '
+        ' New partition:
+        '
+        ' "A^T -> B" becomes "(A1 A2)^T -> ( B1 )
+        '                                  ( B2 )
+        '
+        N1 = N \ 2#
+        If N - N1 >= 8# And N1 Mod 8# <> 0# Then
+            N1 = N1 + (8# - N1 Mod 8#)
+        End If
+        Call FFTICLTRec(A, AStart, AStride, B, BStart, BStride, M, N1)
+        Call FFTICLTRec(A, AStart + 2# * N1, AStride, B, BStart + 2# * N1 * BStride, BStride, M, N - N1)
+    Else
+        
+        '
+        ' New partition:
+        '
+        ' "A^T -> B" becomes "( A1 )^T -> ( B1 B2 )
+        '                     ( A2 )
+        '
+        M1 = M \ 2#
+        If M - M1 >= 8# And M1 Mod 8# <> 0# Then
+            M1 = M1 + (8# - M1 Mod 8#)
+        End If
+        Call FFTICLTRec(A, AStart, AStride, B, BStart, BStride, M1, N)
+        Call FFTICLTRec(A, AStart + 2# * M1 * AStride, AStride, B, BStart + 2# * M1, BStride, M - M1, N)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Recurrent subroutine for a InternalRealLinTranspose
+'
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FFTIRLTRec(ByRef A() As Double, _
+         ByVal AStart As Long, _
+         ByVal AStride As Long, _
+         ByRef B() As Double, _
+         ByVal BStart As Long, _
+         ByVal BStride As Long, _
+         ByVal M As Long, _
+         ByVal N As Long)
+    Dim i As Long
+    Dim J As Long
+    Dim Idx1 As Long
+    Dim Idx2 As Long
+    Dim M1 As Long
+    Dim N1 As Long
+    If M = 0# Or N = 0# Then
+        Exit Sub
+    End If
+    If MaxInt(M, N) <= 8# Then
+        For i = 0# To M - 1# Step 1
+            Idx1 = BStart + i
+            Idx2 = AStart + i * AStride
+            For J = 0# To N - 1# Step 1
+                B(Idx1) = A(Idx2)
+                Idx1 = Idx1 + BStride
+                Idx2 = Idx2 + 1#
+            Next J
+        Next i
+        Exit Sub
+    End If
+    If N > M Then
+        
+        '
+        ' New partition:
+        '
+        ' "A^T -> B" becomes "(A1 A2)^T -> ( B1 )
+        '                                  ( B2 )
+        '
+        N1 = N \ 2#
+        If N - N1 >= 8# And N1 Mod 8# <> 0# Then
+            N1 = N1 + (8# - N1 Mod 8#)
+        End If
+        Call FFTIRLTRec(A, AStart, AStride, B, BStart, BStride, M, N1)
+        Call FFTIRLTRec(A, AStart + N1, AStride, B, BStart + N1 * BStride, BStride, M, N - N1)
+    Else
+        
+        '
+        ' New partition:
+        '
+        ' "A^T -> B" becomes "( A1 )^T -> ( B1 B2 )
+        '                     ( A2 )
+        '
+        M1 = M \ 2#
+        If M - M1 >= 8# And M1 Mod 8# <> 0# Then
+            M1 = M1 + (8# - M1 Mod 8#)
+        End If
+        Call FFTIRLTRec(A, AStart, AStride, B, BStart, BStride, M1, N)
+        Call FFTIRLTRec(A, AStart + M1 * AStride, AStride, B, BStart + M1, BStride, M - M1, N)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'recurrent subroutine for FFTFindSmoothRec
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FTBaseFindSmoothRec(ByVal N As Long, _
+         ByVal Seed As Long, _
+         ByVal LeastFactor As Long, _
+         ByRef Best As Long)
+    If Seed >= N Then
+        Best = MinInt(Best, Seed)
+        Exit Sub
+    End If
+    If LeastFactor <= 2# Then
+        Call FTBaseFindSmoothRec(N, Seed * 2#, 2#, Best)
+    End If
+    If LeastFactor <= 3# Then
+        Call FTBaseFindSmoothRec(N, Seed * 3#, 3#, Best)
+    End If
+    If LeastFactor <= 5# Then
+        Call FTBaseFindSmoothRec(N, Seed * 5#, 5#, Best)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine: array resize
+'
+'  -- ALGLIB --
+'     Copyright 01.05.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub FFTArrayResize(ByRef A() As Long, _
+         ByRef ASize As Long, _
+         ByVal NewASize As Long)
+    Dim Tmp() As Long
+    Dim i As Long
+    ReDim Tmp(0 To ASize - 1)
+    For i = 0# To ASize - 1# Step 1
+        Tmp(i) = A(i)
+    Next i
+    ReDim A(0 To NewASize - 1)
+    For i = 0# To ASize - 1# Step 1
+        A(i) = Tmp(i)
+    Next i
+    ASize = NewASize
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Reference FHT stub
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RefFHT(ByRef A() As Double, ByVal N As Long, ByVal Offs As Long)
+    Dim Buf() As Double
+    Dim i As Long
+    Dim J As Long
+    Dim V As Double
+    ReDim Buf(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        V = 0#
+        For J = 0# To N - 1# Step 1
+            V = V + A(Offs + J) * (Cos(2# * Pi() * i * J / N) + Sin(2# * Pi() * i * J / N))
+        Next J
+        Buf(i) = V
+    Next i
+    For i = 0# To N - 1# Step 1
+        A(Offs + i) = Buf(i)
+    Next i
+End Sub
