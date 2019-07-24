@@ -149,6 +149,7 @@ Public Function FindSolutions(Yvalue As Double, Optional ByVal with_extrapolatio
   Dim N As Integer
   Dim i As Integer
   
+On Error GoTo err1:
   FkSolPoints = 0  ' assume no soutions
   If UBound(FPoints) = LBound(FPoints) Then  ' если только одна точка то ничего нельзя сделать
         FindSolutions = 0
@@ -156,25 +157,31 @@ Public Function FindSolutions(Yvalue As Double, Optional ByVal with_extrapolatio
   End If
   
   ReDim Preserve FSolutionPoints(FkSolPoints) ' удаляем хранилище точек пересечений
-  For i = LBound(FPoints) To UBound(FPoints) - 1
-        If (FPoints(i).Y <= Yvalue) And (FPoints(i + 1).Y >= Yvalue) Or (FPoints(i).Y >= Yvalue) And (FPoints(i + 1).Y <= Yvalue) Then    ' must be solution here
-            If (FPoints(i).Y = Yvalue) And (FPoints(i + 1).Y = Yvalue) Then   ' infinite solutions of line segment
-                If FkSolPoints = 0 Then
-                    AddPointToSolPoints FPoints(i).x, FPoints(i).Y
-                ElseIf FSolutionPoints(FkSolPoints - 1).x <> FPoints(i).x Then ' особенности VBA, чтобы при FkSolPoints = 0 не падало
-                    ' особенности VBA,
-                    AddPointToSolPoints FPoints(i).x, FPoints(i).Y
-                End If
-                
-            Else ' one solution
-                 X1 = FPoints(i).x
-                 X2 = FPoints(i + 1).x
-                 y1 = FPoints(i).Y
-                 Y2 = FPoints(i + 1).Y
-                 x = (X2 - X1) / (Y2 - y1) * (Yvalue - y1) + X1
-                 AddPointToSolPoints x, Yvalue
-            End If
+  For i = LBound(FPoints) To UBound(FPoints)
+    If i < UBound(FPoints) Then
+          If (FPoints(i).Y <= Yvalue) And (FPoints(i + 1).Y >= Yvalue) Or (FPoints(i).Y >= Yvalue) And (FPoints(i + 1).Y <= Yvalue) Then    ' must be solution here
+              If (FPoints(i).Y = Yvalue) And (FPoints(i + 1).Y = Yvalue) Then   ' infinite solutions of line segment
+                  If FkSolPoints = 0 Then
+                      AddPointToSolPoints FPoints(i).x, FPoints(i).Y
+                  ElseIf FSolutionPoints(FkSolPoints - 1).x <> FPoints(i).x Then ' особенности VBA, чтобы при FkSolPoints = 0 не падало
+                      ' особенности VBA,
+                      AddPointToSolPoints FPoints(i).x, FPoints(i).Y
+                  End If
+                  
+              Else ' one solution
+                   X1 = FPoints(i).x
+                   X2 = FPoints(i + 1).x
+                   y1 = FPoints(i).Y
+                   Y2 = FPoints(i + 1).Y
+                   x = (X2 - X1) / (Y2 - y1) * (Yvalue - y1) + X1
+                   AddPointToSolPoints x, Yvalue
+              End If
+          End If
+    Else
+        If FPoints(i).Y = Yvalue Then
+            AddPointToSolPoints FPoints(i).x, FPoints(i).Y
         End If
+    End If
   Next i
   
   If FkSolPoints = 0 And with_extrapolation = TS_EXTRPOLATION Then
@@ -200,6 +207,14 @@ Public Function FindSolutions(Yvalue As Double, Optional ByVal with_extrapolatio
         End If
   End If
   FindSolutions = FkSolPoints
+  Exit Function
+err1:
+            ' унифицированная реакция на ошибочный ввод ключевых параметров класса
+        Dim msg As String, fname As String
+        fname = "FindSolutions"
+        msg = p_clname & "." & fname & ": error finding solution for" & Yvalue & " = " & S(Yvalue)
+        addLogMsg msg
+        Err.Raise kErrTinterpolation, p_clname & "." & fname, msg
 End Function
 Public Function FindMinOneSolution(Yvalue As Double, Optional ByVal with_extrapolation As TINTERPOLATION_SOLUTION = TS_EXTRPOLATION) As Double
 ' FindSolutions Функция поиска решений X по известному Y. По умолчанию расчет ведется с линейной экстраполяцией на краях
@@ -237,6 +252,17 @@ Public Function FindMaxOneSolution(Yvalue As Double, Optional ByVal with_extrapo
     End If
 End Function
 Private Sub AddPointToSolPoints(ByVal x As Double, ByVal Y As Double)
+      Dim i As Integer
+      If FkSolPoints > 0 Then
+        For i = 0 To FkSolPoints - 1
+          If FSolutionPoints(i).x = x Then
+              ' если точка решения уже есть - перезапишем
+              FSolutionPoints(i).Y = Y
+              Exit Sub
+          End If
+        Next i
+      End If
+      
       ReDim Preserve FSolutionPoints(FkSolPoints)
       FSolutionPoints(FkSolPoints).x = x
       FSolutionPoints(FkSolPoints).Y = Y
