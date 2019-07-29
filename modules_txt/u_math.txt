@@ -11,7 +11,7 @@
 ''
 '
 '
-'Option Explicit
+Option Explicit
 '
 'Public Const MachineEpsilon = 5E-16
 'Public Const MaxRealNumber = 1E+300
@@ -82,14 +82,14 @@ End Function
 'End Function
 '
 Public Function isEqual(A As Double, B As Double) As Double
-    Const EPS = const_P_difference
+    Const Eps = const_P_difference
     isEqual = False
-    If Abs(A - B) < EPS Then isEqual = True
+    If Abs(A - B) < Eps Then isEqual = True
 End Function
 Public Function isGreater(A As Double, B As Double) As Double
-    Const EPS = const_P_difference
+    Const Eps = const_P_difference
     isGreater = False
-    If (A - B) > EPS Then isGreater = True
+    If (A - B) > Eps Then isGreater = True
 End Function
 Public Function isBetween(A As Double, a0 As Double, A1 As Double)
     isBetween = False
@@ -468,3 +468,106 @@ End Function
 '
 '
 '
+Private Function get_array(a_name As Variant) As Variant
+    Dim one_cell(1 To 1, 1 To 1) As Variant
+    
+    If TypeName(a_name) = "Range" Then a_name = a_name.Value2
+    
+    If IsArray(a_name) = True Then
+        get_array = a_name
+    Else
+        one_cell(1, 1) = a_name
+        get_array = one_cell
+    End If
+End Function
+' Convert variant arrays (which will always be base
+' 1, 2 dimension arrays) into the form required by the AlgLib
+' routines, which will always be base 0, and may be 1 or 2 dimensional.
+Function variant_arr_to_double_1D_0(XL_A As Variant, _
+                              ByRef AL_A() As Double, _
+                              ByRef Nrows As Long, _
+                              ByRef Ncols As Long) As Long
+Dim i As Long, j As Long, LB As Long
+On Error GoTo iErr
+    If TypeName(XL_A) = "Range" Then XL_A = XL_A.Value2
+    LB = LBound(XL_A)
+    Nrows = UBound(XL_A)
+    Ncols = UBound(XL_A, 2)
+    ' Copy 2D base 1 variant array to 1D base 0 double array
+    ReDim AL_A(0 To Nrows * Ncols - 1)
+    For i = 1 To Nrows
+        For j = 1 To Ncols
+            AL_A((i - 1) * Ncols + j - 1) = XL_A(i, j)
+        Next j
+    Next i
+    variant_arr_to_double_1D_0 = 0
+Exit Function
+iErr:
+    variant_arr_to_double_1D_0 = 1
+End Function
+' функция решения ОДУ методом Кэш Карпа (Cash-Karp adaptive ODE solver)
+' Решается ОДУ вида  Y'=f(Y,x)  с начальными устьвиями Y(xs)=Ys
+' Y или одна переменная или вектор размерности N.
+Public Function ode_solve(ByVal func_name As String, _
+                          Y0() As Double, _
+                          XA() As Double, _
+                          coeffA As Variant, _
+                 Optional Eps As Double = 0.000001, _
+                 Optional Step As Double = 10, _
+                 Optional MaxIts As Long = 1000)
+' func_name         - имя функции  f(x)
+' Y0                - начальное значение для расчета
+' XA                - значения аргумента для которых ищем решение
+' CoeffA            - дополнительные параметры функции градиента
+' Eps
+' Step
+' MaxIts
+    Dim M As Long, N As Long, State As ODESolverState, _
+    YA() As Double, i As Long, _
+    rtn As Boolean, rep As ODESolverReport
+  
+    N = UBound(Y0) + 1
+    M = UBound(XA) + 1
+    'Set up any required output arrays
+    ReDim YA(0 To M - 1, 0 To N - 1)
+    
+    'Call the appropriate AlgLib routine to initialise the State object
+    Call ODESolverRKCK(Y0(), N, XA, M, Eps, Step, State)
+    
+    ' Loop through the AlgLib solver routine and the external ODE
+    ' evaluation routine until the solver routine returns "False",
+    ' which indicates that it has finished.
+    ' The VBA function named in "FuncName" is called using
+    ' the Application.Run method.
+    rtn = True
+    i = 0
+    Do While rtn = True And i < MaxIts
+        rtn = ODESolverIteration(State)
+        State.DY(0) = Application.Run(func_name, State.x, State.Y(0), coeffA(0))(0)
+        i = i + 1
+    Loop
+    
+     ' Extract the desired results from the State
+     ' object using the appropriate AlgLib routine
+     Call ODESolverResults(State, M, XA, YA, rep)
+    
+    ' If necessary convert the AlgLib output array(s) to
+    ' a form suitable for Excel.  In this case YA2 is
+    ' a 2D base 0 array, which may be assigned to the
+    ' function return value without further processing.
+    
+    ' Assign the output array to the function return value
+     ode_solve = YA
+End Function
+' функция расчета градиента давления для одномерной задачи
+Public Function calc_grad_1d(ByVal l_m As Double, _
+                             ByVal p_atma As Double, _
+                             pipe As CPipe) As Double()
+    Dim out(1) As Double
+    Dim res As PIPE_FLOW_PARAMS
+    With pipe
+        res = pipe.calc_grad(l_m, p_atma, pipe.Tinit_C(l_m), calc_dtdl:=False)
+    End With
+    out(0) = res.dp_dl
+    calc_grad_1d = out
+End Function

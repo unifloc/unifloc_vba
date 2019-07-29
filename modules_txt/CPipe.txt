@@ -58,7 +58,7 @@ Option Base 0
         '  CurvesOut("c_vl")
         '  CurvesOut("c_vg")
 ' геометрия трубы заданная массивами
- Private p_Hmes_insert_m As TInterpolation              ' измеренная глубина которую надо вставить в расчет трубы
+ Private p_Hmes_insert_m As CInterpolation              ' измеренная глубина которую надо вставить в расчет трубы
  Private p_Param As PARAMCALC                           ' параметры расчета по трубе
                                                         ' чтобы отловить изменение градиента температуры, например при динамическом уровне
  Private p_total_legth_m As Double                      ' общая длинна трубы
@@ -70,7 +70,7 @@ Option Base 0
 ' набор расчетных параметров по стволу скважины
  Private p_NumPointsCurve As Integer                    ' количество точек которые должны быть сохранены для распределения давления в трубе в итоговых кривых
  Private p_StepHmCurve As Double                        ' шаг для формирования выходного массива по трубе. м
- Private p_HmCurve As New TInterpolation                ' кривая для хранения набора точек, для которых должны строится все другие кривые
+ Private p_HmCurve As New CInterpolation                ' кривая для хранения набора точек, для которых должны строится все другие кривые
  
  ' поправочные коэффициенты для расчета распределения давления
  Private p_c_calibr_grav As Double
@@ -98,7 +98,7 @@ Option Base 0
         .tempMethod = StartEndTemp
     End With
     p_HmCurve.ClearPoints
-    Set p_Hmes_insert_m = New TInterpolation
+    Set p_Hmes_insert_m = New CInterpolation
     p_Hmes_insert_m.ClearPoints
     Call p_Hmes_insert_m.AddPoint(0, 0)
     Call p_Hmes_insert_m.AddPoint(LengthMes_m, 0)
@@ -444,7 +444,7 @@ End Function
 '=================================================================================================
 ' новый подход - можно обойтись без разделение на прямой участок и кривой - расчет за один проход.
 '=================================================================================================
-Private Function CalcGrad(L_m As Double, _
+Public Function calc_grad(l_m As Double, _
                          p_atma As Double, _
                          t_C As Double, _
                          Optional calc_dtdl As Boolean = True, _
@@ -476,10 +476,10 @@ Dim Hv_m As Double
 Dim dp_dl As Double, dp_dl_arr
 Dim dt_dl As Double
 Dim V As Double, dvdL As Double
-d_m = DiamZ(L_m)                ' определяем диаметр на указанной глубине
-theta_deg = AngleThetaZ(L_m)    ' определяем наклон на заданной глубине
-rough_m = RoughnessZ(L_m)       ' определяем шероховатость на заданной глубине
-Hv_m = HvertZ(L_m)              ' определяем вертикальную глубину для заданной измеренной глубины
+d_m = DiamZ(l_m)                ' определяем диаметр на указанной глубине
+theta_deg = AngleThetaZ(l_m)    ' определяем наклон на заданной глубине
+rough_m = RoughnessZ(l_m)       ' определяем шероховатость на заданной глубине
+Hv_m = HvertZ(l_m)              ' определяем вертикальную глубину для заданной измеренной глубины
 With fluid
   'проверим на корректность исходных данных
     If p_atma < const_minPpipe_atma Then
@@ -623,7 +623,7 @@ endlab:
  res.dp_dl = dp_dl
  res.dt_dl = dt_dl
  
-         res.md_m = L_m                                 ' pipe measured depth (from start - top)
+         res.md_m = l_m                                 ' pipe measured depth (from start - top)
          res.vd_m = Hv_m                                ' pipe vertical depth from start - top
          res.dpdl_a_atmm = dpdla_out                    ' acceleration gradient at measured depth
          res.dpdl_f_atmm = dpdlf_out                    ' friction gradient at measured depth
@@ -658,9 +658,8 @@ endlab:
          res.vl_msec = vl_msec  ' скорость жидкости реальная
          res.vg_msec = vg_msec  ' скорость газа реальная
   
- CalcGrad = res
+ calc_grad = res
 End With
-'
 End Function
 Public Function calc_dPipe(PT As PTtype, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
 ' здесь выбираем метод расчета
@@ -682,17 +681,17 @@ Private Function calc_dPipe_2d(PT As PTtype, Optional saveCurve As CALC_RESULTS 
 Dim Y0(1) As Double   ' начальные значения для проведения расчета
 Dim N, M As Long
 Dim x() As Double, Y() As Double     ' массив глубин для которых нужны значения
-Dim EPS As Double
+Dim Eps As Double
 Dim Step As Double
 Dim State As ODESolverState
-Dim Rtn As Boolean
+Dim rtn As Boolean
 Dim i As Integer
 Dim pfp As PIPE_FLOW_PARAMS
-Dim Rep As ODESolverReport
+Dim rep As ODESolverReport
 Dim stPt As Boolean
 'ReDim Y0(1)
 On Error GoTo err1:
-    EPS = 0.01
+    Eps = 0.01
     Step = 10
     Y0(0) = PT.p_atma
     Y0(1) = PT.t_C
@@ -714,24 +713,24 @@ On Error GoTo err1:
     If fluid.qliq_sm3day = 0 Then
         Y0(1) = AmbientForm.AmbTemp_С(x(0))
     End If
-    Call ODESolverRKCK(Y0(), N, x, M, EPS, Step, State)
+    Call ODESolverRKCK(Y0(), N, x, M, Eps, Step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
     ' The VBA function named in "FuncName" is called using
     ' the Application.Run method.
-    Rtn = True
+    rtn = True
     i = 0
-    Do While Rtn = True And i < 10000
-        Rtn = ODESolverIteration(State)
-        pfp = CalcGrad(State.x, State.Y(0), State.Y(1))  ' Application.Run(FuncName, State.X, State.Y, CoeffA)
+    Do While rtn = True And i < 10000
+        rtn = ODESolverIteration(State)
+        pfp = calc_grad(State.x, State.Y(0), State.Y(1))  ' Application.Run(FuncName, State.X, State.Y, CoeffA)
         State.DY(0) = pfp.dp_dl
         State.DY(1) = pfp.dt_dl
         i = i + 1
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, Y, Rep)
+    Call ODESolverResults(State, M, x, Y, rep)
     ' If necessary convert the AlgLib output array(s) to
     ' a form suitable for Excel.  In this case YA2 is
     ' a 2D base 0 array, which may be assigned to the
@@ -771,23 +770,18 @@ Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESU
 ' основан на применении ODEsolver
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim Y0(0) As Double   ' начальные значения для проведения расчета
-Dim N, M As Long
+Dim M As Long
 Dim x() As Double, Y() As Double     ' массив глубин для которых нужны значения
-Dim EPS As Double
-Dim Step As Double
-Dim State As ODESolverState
-Dim Rtn As Boolean
+Dim Eps As Double
+Dim rtn As Boolean
 Dim i As Integer
 Dim pfp As PIPE_FLOW_PARAMS
-Dim Rep As ODESolverReport
 Dim stPt As Boolean
 On Error GoTo err1:
-    EPS = 0.1
-    Step = 10
+    Eps = 0.01
     Y0(0) = p_atma
     
-'    Y0(1) = PT.T_C
-    N = 1                   ' размер системы  - одна переменные - давление и температура
+    
     M = p_HmCurve.numPoints ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
@@ -799,41 +793,11 @@ On Error GoTo err1:
             x(i) = p_HmCurve.pointX(M - i)
         End If
     Next i
-      ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
-      ' без такой проверки расчет градиента температуры сходит с ума
-'    If fluid.qliq_sm3day = 0 Then
-'        Y0(1) = AmbientForm.AmbTemp_С(X(0))
-'    End If
-    Call ODESolverRKCK(Y0(), N, x, M, EPS, Step, State)
-    ' Loop through the AlgLib solver routine and the external ODE
-    ' evaluation routine until the solver routine returns "False",
-    ' which indicates that it has finished.
-    ' The VBA function named in "FuncName" is called using
-    ' the Application.Run method.
-    Rtn = True
-    i = 0
-    Do While Rtn = True And i < 10000
-        Rtn = ODESolverIteration(State)
-        If State.Y(0) < const_minPpipe_atma Then
-        ' при расчете давления получили отрицательные значения
-        ' может происходить про расчете в затрубе
-        ' тогда имитируем правильное завершение работы цикла
-            State.RepTerminationType = 2
-            Rtn = False
-        End If
-        pfp = CalcGrad(State.x, State.Y(0), Tinit_C(State.x), calc_dtdl:=False)
-        State.DY(0) = pfp.dp_dl
-        i = i + 1
-    Loop
-     ' Extract the desired results from the State
-     ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, Y, Rep)
-    ' If necessary convert the AlgLib output array(s) to
-    ' a form suitable for Excel.  In this case YA2 is
-    ' a 2D base 0 array, which may be assigned to the
-    ' function return value without further processing.
-    ' Assign the output array to the function return value
-    ' ODE = YA2
+    
+    Dim coeffA(0)
+    Set coeffA(0) = Me
+    
+    Y = ode_solve("calc_grad_1d", Y0, x, coeffA, Eps)
     
     ' подговим выходные результаты функции
     calc_dPipe_1d.p_atma = Y(M - 1, 0)
@@ -876,7 +840,7 @@ Dim FlowParams_out As PIPE_FLOW_PARAMS
     CurvesOut.ClearPoints
  
     For i = 1 To M
-     FlowParams_out = CalcGrad(p_HmCurve.pointX(i), Curves("c_P").PointY(i), Curves("c_T").PointY(i))
+     FlowParams_out = calc_grad(p_HmCurve.pointX(i), Curves("c_P").PointY(i), Curves("c_T").PointY(i))
      With FlowParams_out
         CurvesOut("c_Hvert").AddPoint .md_m, .vd_m
         CurvesOut("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
@@ -981,6 +945,6 @@ End Sub
 '    Next i
 'End Sub
 '
-Public Property Get PCurve() As TInterpolation
+Public Property Get PCurve() As CInterpolation
     Set PCurve = Curves("c_P")
 End Property
