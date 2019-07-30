@@ -37,7 +37,7 @@ Option Base 0
         '  CurvesOut("c_vsg")
         '  CurvesOut("c_Hl")
         '  CurvesOut("c_fpat")
-        ' ' дополнительные выводные параметры по трубам
+        '   дополнительные выводные параметры по трубам
         '  CurvesOut("c_Rs")
         '  CurvesOut("c_gasfrac")
         '  CurvesOut("c_muo")
@@ -67,6 +67,7 @@ Option Base 0
  Private p_FlowParams_out() As PIPE_FLOW_PARAMS         ' расчетные параметры по трубе после расчета
  
  Private p_dTdLinit As Double                           ' распределение градиента температуры по длине начальное
+ Private p_t_calc_C As Double                           ' начальная температура флюида для расчета с учетом эмисии тепла
 ' набор расчетных параметров по стволу скважины
  Private p_NumPointsCurve As Integer                    ' количество точек которые должны быть сохранены для распределения давления в трубе в итоговых кривых
  Private p_StepHmCurve As Double                        ' шаг для формирования выходного массива по трубе. м
@@ -110,24 +111,24 @@ Option Base 0
  Public Property Get PARAM() As PARAMCALC
     PARAM = p_Param
  End Property
- Public Property Let PARAM(Val As PARAMCALC)
-    p_Param = Val
+ Public Property Let PARAM(val As PARAMCALC)
+    p_Param = val
  End Property
  Public Property Get c_calibr_grav() As Double
     c_calibr_grav = p_c_calibr_grav
  End Property
  
- Public Property Let c_calibr_grav(Val As Double)
-    If Val >= 0 And Val < 2 Then
+ Public Property Let c_calibr_grav(val As Double)
+    If val >= 0 And val < 2 Then
     ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
-        p_c_calibr_grav = Val
+        p_c_calibr_grav = val
     End If
  End Property
  
- Public Property Let c_calibr_fric(Val As Double)
-    If Val >= 0 And Val < 2 Then
+ Public Property Let c_calibr_fric(val As Double)
+    If val >= 0 And val < 2 Then
     ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
-        p_c_calibr_fric = Val
+        p_c_calibr_fric = val
     End If
  End Property
  
@@ -139,20 +140,20 @@ Option Base 0
    Hmes_insert_m = p_Hmes_insert_m.pointX(i)
  End Property
  
- Public Function AddHmes_insert_m(ByVal Val As Double) As Boolean
-    Call p_Hmes_insert_m.AddPoint(Val, 0)   ' Запишем точку, которую надо сохранить
+ Public Function AddHmes_insert_m(ByVal val As Double) As Boolean
+    Call p_Hmes_insert_m.AddPoint(val, 0)   ' Запишем точку, которую надо сохранить
  End Function
  
  Public Property Get StepHmCurve() As Double
     StepHmCurve = p_StepHmCurve
  End Property
  
- Public Property Let StepHmCurve(Val As Double)
+ Public Property Let StepHmCurve(val As Double)
     Dim i As Integer
     Dim Hm As Double
     Dim Hm_max As Double
     
-    p_StepHmCurve = Val
+    p_StepHmCurve = val
     ' установили шаг - сразу подготовим массив точек по давлению для которых должен быть проведен расчет
     p_HmCurve.ClearPoints    ' очистили точки по давлению
     For i = 1 To p_Hmes_insert_m.numPoints    ' пустили цикл по количеству точек, которые должны быть обязательно
@@ -213,6 +214,22 @@ Property Let tempMethod(cor As TEMP_CALC_METHOD)
 End Property
 Property Get tempMethod() As TEMP_CALC_METHOD
     tempMethod = PARAM.tempMethod
+End Property
+Property Get t_calc_C() As Double
+    t_calc_C = p_t_calc_C
+End Property
+Property Let t_calc_C(val As Double)
+    p_t_calc_C = val
+End Property
+Property Get Tin_C() As Double
+   ' If PARAM.FlowDirection = FlowAlongCoord Then
+        Tin_C = Curves("c_Tinit").getPoint(ZeroCoordMes_m)
+   ' Else
+   '     Tin_C = Curves("c_Tinit").getPoint(ZeroCoordMes_m + LengthMes_m)
+   ' End If
+End Property
+Property Get Tout_C() As Double
+    Tout_C = Curves("c_Tinit").getPoint(ZeroCoordMes_m + LengthMes_m)
 End Property
     
  Public Sub InitTlinear(ByVal Tstart_C As Double, ByVal Tend_C As Double)
@@ -446,7 +463,7 @@ End Function
 '=================================================================================================
 Public Function calc_grad(l_m As Double, _
                          p_atma As Double, _
-                         t_C As Double, _
+                         t_c As Double, _
                          Optional calc_dtdl As Boolean = True, _
                          Optional Pcas_atma As Double = 0.95) As PIPE_FLOW_PARAMS
 ' функция расчета градиента давления и температуры в скважине при заданных параметрах
@@ -487,9 +504,9 @@ With fluid
         GoTo endlab:
     End If
   
-    Call .calc_PVT(p_atma, t_C)             ' найдем все PVT в заданных условиях
+    Call .calc_PVT(p_atma, t_c)             ' найдем все PVT в заданных условиях
     If .q_mix_rc_m3day = 0 Then
-        t_C = AmbientForm.AmbTemp_С(Hv_m)
+        t_c = AmbientForm.AmbTemp_С(Hv_m)
     End If
   
     If PARAM.correlation = BeggsBrill Then
@@ -612,8 +629,8 @@ With fluid
               Case AmbientTemp
                   V = vg_msec    ' оценка сверху
                   dvdL = -V / p_atma * dp_dl
-                  dt_dl = AmbientForm.calc_dTdL_Cm(Hv_m, sind(theta_deg), t_C, .wm_kgsec, .cmix_JkgC, _
-                                                          dp_dl, V, dvdL, .cJT_Katm, PARAM.FlowDirection = FlowAgainstCoord)
+                  dt_dl = AmbientForm.calc_dTdL_Cm(Hv_m, sind(theta_deg), t_c, .wm_kgsec, .cmix_JkgC, _
+                                                          dp_dl, V, dvdL, .cJT_Katm, theta_deg > 0)
         End Select
     End If
     ' тут надо записать в результаты все расчетные параметры
@@ -633,7 +650,7 @@ endlab:
          res.h_l_d = h_l_out                            ' liquid hold up
          res.Qg_m3day = fluid.q_gas_rc_m3day
          res.p_atma = p_atma                              '  pipe pressure at measured depth
-         res.t_C = t_C                                  ' pipe temp at measured depth
+         res.t_c = t_c                                  ' pipe temp at measured depth
          res.v_sl_msec = v_sl_out                       ' superficial liquid velosity
          res.v_sg_msec = v_sg_out                       ' superficial gas velosity
          res.thete_deg = theta_deg                      '
@@ -661,17 +678,18 @@ endlab:
  calc_grad = res
 End With
 End Function
-Public Function calc_dPipe(PT As PTtype, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
+Public Function calc_dPipe(p_atma As Double, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
 ' здесь выбираем метод расчета
 ' если не надо рассчитывать эмисию тепла - то можно расчет делать только по давлению - это быстрее
 ' если температуру рассчитываем то решаем систему и по давлению и по температуре - медленнее
+' если для расчета нужна стартовая температура флюида то берется из t_calc_C
     If PARAM.tempMethod = AmbientTemp Then
-        calc_dPipe = calc_dPipe_2d(PT, saveCurve)
+        calc_dPipe = calc_dPipe_2d(p_atma, p_t_calc_C, saveCurve)
     Else
-        calc_dPipe = calc_dPipe_1d(PT.p_atma, saveCurve)
+        calc_dPipe = calc_dPipe_1d(p_atma, saveCurve)
     End If
 End Function
-Private Function calc_dPipe_2d(PT As PTtype, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
+Private Function calc_dPipe_2d(p_atma As Double, t_c As Double, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
 ' новая версия расчета перепада давления в трубе, сразу с учетом инклинометрии
 ' основан на применении ODEsolver
 ' PT   - термобарические условия в точке задания условия по давлению
@@ -681,20 +699,20 @@ Private Function calc_dPipe_2d(PT As PTtype, Optional saveCurve As CALC_RESULTS 
 Dim Y0(1) As Double   ' начальные значения для проведения расчета
 Dim N, M As Long
 Dim x() As Double, Y() As Double     ' массив глубин для которых нужны значения
-Dim Eps As Double
+Dim EPS As Double
 Dim Step As Double
 Dim State As ODESolverState
-Dim rtn As Boolean
+Dim Rtn As Boolean
 Dim i As Integer
 Dim pfp As PIPE_FLOW_PARAMS
-Dim rep As ODESolverReport
+Dim Rep As ODESolverReport
 Dim stPt As Boolean
 'ReDim Y0(1)
 On Error GoTo err1:
-    Eps = 0.01
+    EPS = 0.01
     Step = 10
-    Y0(0) = PT.p_atma
-    Y0(1) = PT.t_C
+    Y0(0) = p_atma
+    Y0(1) = t_c
     N = 2                   ' размер системы  - две переменные - давление и температура
     M = p_HmCurve.numPoints ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
@@ -702,7 +720,7 @@ On Error GoTo err1:
     ReDim x(M - 1)
     
     For i = 0 To M - 1
-        If PARAM.FlowDirection = FlowAlongCoord Then
+        If PARAM.FlowDirection = FlowAgainstCoord Then
             x(i) = p_HmCurve.pointX(i + 1)
         Else
             x(i) = p_HmCurve.pointX(M - i)
@@ -714,18 +732,18 @@ On Error GoTo err1:
         Y0(1) = AmbientForm.AmbTemp_С(x(0))
     End If
         
- '   Y = ode_solve("calc_grad_2d", Y0, x, coeffA, Eps)
+ '   Y = solve_ode("calc_grad_2d", Y0, x, coeffA, Eps)
     
-    Call ODESolverRKCK(Y0(), N, x, M, Eps, Step, State)
+    Call ODESolverRKCK(Y0(), N, x, M, EPS, Step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
     ' The VBA function named in "FuncName" is called using
     ' the Application.Run method.
-    rtn = True
+    Rtn = True
     i = 0
-    Do While rtn = True And i < 10000
-        rtn = ODESolverIteration(State)
+    Do While Rtn = True And i < 10000
+        Rtn = ODESolverIteration(State)
         pfp = calc_grad(State.x, State.Y(0), State.Y(1))  ' Application.Run(FuncName, State.X, State.Y, CoeffA)
         State.DY(0) = pfp.dp_dl
         State.DY(1) = pfp.dt_dl
@@ -733,7 +751,7 @@ On Error GoTo err1:
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, Y, rep)
+    Call ODESolverResults(State, M, x, Y, Rep)
     ' If necessary convert the AlgLib output array(s) to
     ' a form suitable for Excel.  In this case YA2 is
     ' a 2D base 0 array, which may be assigned to the
@@ -743,7 +761,7 @@ On Error GoTo err1:
     
     ' подговим выходные результаты функции
     calc_dPipe_2d.p_atma = Y(M - 1, 0)
-    calc_dPipe_2d.t_C = Y(M - 1, 1)
+    calc_dPipe_2d.t_c = Y(M - 1, 1)
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         Curves("c_P").ClearPoints
@@ -773,38 +791,73 @@ Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESU
 ' основан на применении ODEsolver
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim Y0(0) As Double   ' начальные значения для проведения расчета
-Dim M As Long
+Dim N, M As Long
 Dim x() As Double, Y() As Double     ' массив глубин для которых нужны значения
-Dim Eps As Double
-Dim rtn As Boolean
+Dim EPS As Double
+Dim Step As Double
+Dim State As ODESolverState
+Dim Rtn As Boolean
 Dim i As Integer
 Dim pfp As PIPE_FLOW_PARAMS
+Dim Rep As ODESolverReport
 Dim stPt As Boolean
-    Dim coeffA(0)
 On Error GoTo err1:
-    Set coeffA(0) = Me
-    Eps = 0.01
+    EPS = 0.1
+    Step = 10
     Y0(0) = p_atma
     
-    
+'    Y0(1) = PT.T_C
+    N = 1                   ' размер системы  - одна переменные - давление и температура
     M = p_HmCurve.numPoints ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
     ReDim x(M - 1)
     For i = 0 To M - 1
-        If PARAM.FlowDirection = FlowAlongCoord Then
+        If PARAM.FlowDirection = FlowAgainstCoord Then
             x(i) = p_HmCurve.pointX(i + 1)
         Else
             x(i) = p_HmCurve.pointX(M - i)
         End If
     Next i
-    
-    
-    Y = ode_solve("calc_grad_1d", Y0, x, coeffA, Eps)
+      ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
+      ' без такой проверки расчет градиента температуры сходит с ума
+'    If fluid.qliq_sm3day = 0 Then
+'        Y0(1) = AmbientForm.AmbTemp_С(X(0))
+'    End If
+    Call ODESolverRKCK(Y0(), N, x, M, EPS, Step, State)
+    ' Loop through the AlgLib solver routine and the external ODE
+    ' evaluation routine until the solver routine returns "False",
+    ' which indicates that it has finished.
+    ' The VBA function named in "FuncName" is called using
+    ' the Application.Run method.
+    Rtn = True
+    i = 0
+    Do While Rtn = True And i < 10000
+        Rtn = ODESolverIteration(State)
+        If State.Y(0) < const_minPpipe_atma Then
+        ' при расчете давления получили отрицательные значения
+        ' может происходить про расчете в затрубе
+        ' тогда имитируем правильное завершение работы цикла
+            State.RepTerminationType = 2
+            Rtn = False
+        End If
+        pfp = calc_grad(State.x, State.Y(0), Tinit_C(State.x), calc_dtdl:=False)
+        State.DY(0) = pfp.dp_dl
+        i = i + 1
+    Loop
+     ' Extract the desired results from the State
+     ' object using the appropriate AlgLib routine
+    Call ODESolverResults(State, M, x, Y, Rep)
+    ' If necessary convert the AlgLib output array(s) to
+    ' a form suitable for Excel.  In this case YA2 is
+    ' a 2D base 0 array, which may be assigned to the
+    ' function return value without further processing.
+    ' Assign the output array to the function return value
+    ' ODE = YA2
     
     ' подговим выходные результаты функции
     calc_dPipe_1d.p_atma = Y(M - 1, 0)
-    calc_dPipe_1d.t_C = Tinit_C(x(M - 1))
+    calc_dPipe_1d.t_c = Tinit_C(x(M - 1))
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         Curves("c_P").ClearPoints
@@ -825,13 +878,13 @@ err1:
     addLogMsg ("CPipe.calc_dPipe_1d: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
 End Function
-Public Function calc_dPipeZNLF(PT As PTtype, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
+Public Function calc_dPipeZNLF(pt As PTtype, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
     ' расчет перепада давления в неподвижной колонне с газом
     ' единственное отличие - флюид имеет флаг xnlf что меняет дебит
     ' для расчета должна применяться механистическая корреляция
     PARAM.correlation = Ansari
     fluid.ZNLF = True
-    calc_dPipeZNLF = calc_dPipe_1d(PT.p_atma, saveCurve)
+    calc_dPipeZNLF = calc_dPipe_1d(pt.p_atma, saveCurve)
 End Function
 Public Sub FillDetailedCurve()
 ' функция расчета  детальных распределений параметров по длине трубы
