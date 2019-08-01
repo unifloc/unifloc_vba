@@ -18,19 +18,19 @@ End Function
 Function sind(ang) As Double
  sind = Sin(ang / 180 * const_Pi)
 End Function
-Public Function isEqual(a As Double, B As Double) As Double
+Public Function isEqual(A As Double, B As Double) As Double
     Const EPS = const_P_difference
     isEqual = False
-    If Abs(a - B) < EPS Then isEqual = True
+    If Abs(A - B) < EPS Then isEqual = True
 End Function
-Public Function isGreater(a As Double, B As Double) As Double
+Public Function isGreater(A As Double, B As Double) As Double
     Const EPS = const_P_difference
     isGreater = False
-    If (a - B) > EPS Then isGreater = True
+    If (A - B) > EPS Then isGreater = True
 End Function
-Public Function isBetween(a As Double, a0 As Double, A1 As Double)
+Public Function isBetween(A As Double, a0 As Double, A1 As Double)
     isBetween = False
-    If ((a <= a0) And (a >= A1)) Or ((a >= a0) And (a <= A1)) Then isBetween = True
+    If ((A <= a0) And (A >= A1)) Or ((A >= a0) And (A <= A1)) Then isBetween = True
 End Function
 ' функция решения ОДУ методом Кэш Карпа (Cash-Karp adaptive ODE solver)
 ' Решается ОДУ вида  Y'=f(Y,x)  с начальными устьвиями Y(xs)=Ys
@@ -38,7 +38,7 @@ End Function
 Public Function solve_ode(ByVal func_name As String, _
                           Y0() As Double, _
                           XA() As Double, _
-                          coeffA As Variant, _
+                          CoeffA As Variant, _
                  Optional EPS As Double = 0.000001, _
                  Optional Step As Double = 10, _
                  Optional MaxIts As Long = 1000)
@@ -71,7 +71,7 @@ Public Function solve_ode(ByVal func_name As String, _
     i = 0
     Do While Rtn = True And i < MaxIts
         Rtn = ODESolverIteration(State)
-        r = Application.Run(func_name, State.x, State.Y, coeffA(0))
+        r = Application.Run(func_name, State.X, State.Y, CoeffA(0))
         State.DY(0) = r(0)
         i = i + 1
     Loop
@@ -91,9 +91,9 @@ End Function
 ' функция ищет корни уравнения вида
 ' f(x) = 0 на отрезке [x1..x2]
 Public Function solve_equation_bisection(func_name As String, _
-                                         x1 As Double, _
-                                         x2 As Double, _
-                                         coeffA, _
+                                         X1 As Double, _
+                                         X2 As Double, _
+                                         CoeffA, _
                                          prm As CSolveParam) As Boolean
 ' func_name             - название функции для которой ищем решение
 ' x1                    - левая граница аргумента для поиска решения
@@ -109,8 +109,8 @@ Public Function solve_equation_bisection(func_name As String, _
     i = 0
     
     ' определим значения параметров на границе
-    y1 = Application.Run(func_name, x1, coeffA)
-    y2 = Application.Run(func_name, x2, coeffA)
+    y1 = Application.Run(func_name, X1, CoeffA)
+    y2 = Application.Run(func_name, X2, CoeffA)
     With prm
         If y1 * y2 > 0 Then
             ' если значения на границе одного знака - то метод поиска решения не работает
@@ -125,8 +125,8 @@ Public Function solve_equation_bisection(func_name As String, _
         Do
             i = i + 1
             ' делим отрезок пополам
-            x_temp = (x1 + x2) / 2
-            y_temp = Application.Run(func_name, x_temp, coeffA)
+            x_temp = (X1 + X2) / 2
+            y_temp = Application.Run(func_name, x_temp, CoeffA)
             If Abs(y_temp) < .y_tolerance + 0.1 Then
                 solve_equation_bisection = True
                 .x_solution = x_temp
@@ -136,10 +136,10 @@ Public Function solve_equation_bisection(func_name As String, _
                 Exit Function
             Else
                 If y_temp * y1 > 0 Then
-                    x1 = x_temp
+                    X1 = x_temp
                     y1 = y_temp
                 Else
-                    x2 = x_temp
+                    X2 = x_temp
                     y2 = y_temp
                 End If
             End If
@@ -147,3 +147,225 @@ Public Function solve_equation_bisection(func_name As String, _
     End With
     
 End Function
+'
+' Non-linear least squares fit for function evaluated by VBA routine
+' нелинейная регрессия МНК для VBA функции
+'
+'
+Function AL_NLFit(func As String, _
+                  Y_Range As Variant, _
+                  X_Range As Variant, _
+                  CoeffA As Variant, _
+         Optional TolA As Variant, _
+         Optional WeightA As Variant, _
+         Optional CheapFG As Boolean = False, _
+         Optional UseHess As Boolean = False) As Variant
+' func      - имя функции VBA для которой делается мачинг
+' Y_Range   - значение функции под который надо делать подстройку
+' X_Range   - значения аргументов от которых зависит функция
+' CoeffA    - параметры VBA функции
+' TolA
+'
+'
+                  
+    Dim C() As Double, N As Long, M As Long, K As Long, State As LSFitState, WeightAD() As Double, UseWeights As Boolean
+    Dim Slopea As Variant, RtnState As Boolean, ResA() As Double, NumWeights As Long, NumWCols As Long
+    Dim XAD() As Double, YAD() As Double, CAD() As Double, Rtn As Long, NLoops As Long
+    Dim i As Long, Info As Long, Rep As LSFitReport
+    Dim EpsF As Double, EpsX As Double, MaxIts As Long
+    If IsMissing(TolA) = False Then
+        GetArray TolA
+        EpsF = TolA(1, 1)
+        EpsX = TolA(2, 1)
+        MaxIts = TolA(3, 1)
+    Else
+        EpsF = 0
+        EpsX = 0.000000001
+        MaxIts = 1000
+    End If
+    Rtn = GetNLFitData(X_Range, Y_Range, CoeffA, XAD, YAD, CAD, N, M, K)
+    ReDim ResA(1 To K + 4)
+    If IsMissing(WeightA) = False Then
+        GetArray WeightA
+        NumWeights = UBound(WeightA)
+        NumWCols = UBound(WeightA, 2)
+        ReDim WeightAD(0 To NumWeights - 1)
+        Call Array120D(WeightA, WeightAD, NumWeights, NumWCols)
+        UseWeights = True
+    End If
+    If UseWeights = True Then
+        If UseHess = True Then
+            Call LSFitNonlinearWFGH(XAD, YAD, WeightAD, CAD, N, M, K, State)
+        Else
+            Call LSFitNonlinearWFG(XAD, YAD, WeightAD, CAD, N, M, K, CheapFG, State)
+        End If
+    Else
+        If UseHess = True Then
+            Call LSFitNonlinearFGH(XAD, YAD, CAD, N, M, K, State)
+        Else
+            Call LSFitNonlinearFG(XAD, YAD, CAD, N, M, K, CheapFG, State)
+        End If
+    End If
+    Call LSFitNonlinearSetCond(State, EpsF, EpsX, MaxIts)
+    Do While LSFitNonlinearIteration(State) = True
+        NLoops = NLoops + 1
+        State.F = Application.Run(func, State.X, State.C, 1)
+        If State.NeedFG = True Then
+            State.G = Application.Run(func, State.X, State.C, 2)
+        End If
+        If State.NeedFGH = True Then
+            State.H = Application.Run(func, State.X, State.C, 3)
+        End If
+    Loop
+    Call LSFitNonlinearResults(State, Info, C, Rep)
+    For i = 1 To K
+        ResA(i) = C(i - 1)
+    Next i
+    ResA(K + 1) = Rep.RMSError
+    ResA(K + 2) = Rep.MaxError
+    ResA(K + 3) = NLoops
+    ResA(K + 4) = Info
+    AL_NLFit = ResA
+End Function
+' подготовка данных для нелинейное регрессии
+'
+Private Function GetNLFitData(XA As Variant, _
+                              YA As Variant, _
+                              CA As Variant, _
+                              XAD() As Double, _
+                              YAD() As Double, _
+                              CAD() As Double, _
+                              N As Long, _
+                              M As Long, _
+                              K As Long, _
+                              Optional CAT As Variant) As Variant
+' XA input vector for arguments (N x M)
+'    N is a number of points,
+'    M is a dimension of a space points belong to,
+'    K is a dimension of a space of parameters being fitted,
+    Dim NumYRows As Long, i As Long, j As Long, CATD As Variant
+    ' если на входе range - переводим их в массивы
+    If TypeName(XA) = "Range" Then XA = XA.Value2
+    If TypeName(YA) = "Range" Then YA = YA.Value2
+    If TypeName(CA) = "Range" Then CA = CA.Value2
+    N = UBound(XA)
+    M = UBound(XA, 2)
+    K = UBound(CA)
+    If UBound(CA, 2) = 2 Then
+        K = K - M
+        ReDim CAT(0 To K + M - 1)
+    End If
+    ReDim XAD(0 To N - 1, 0 To M - 1)
+    ReDim YAD(0 To N - 1)
+    ReDim CAD(0 To K - 1)
+    For i = 1 To N
+        YAD(i - 1) = YA(i, 1)
+    Next i
+    For i = 1 To N
+        For j = 1 To M
+            XAD(i - 1, j - 1) = XA(i, j)
+        Next j
+    Next i
+    If UBound(CA, 2) = 1 Then
+        For i = 1 To K
+            CAD(i - 1) = CA(i, 1)
+        Next i
+    Else
+        For i = 1 To K
+            CAT(i - 1) = CA(i, 1)
+            CAD(i - 1) = CA(i, 2)
+        Next i
+        For i = K + 1 To K + M
+            CAT(i - 1) = CA(i, 1)
+        Next i
+    End If
+End Function
+Function GradientA(func As Variant, Pvaluea0() As Double, _
+                   XvalueA0() As Double, NumP As Long, NumX As Long, Optional dP As Double = 0.000001) As Variant
+    Dim Eform As String, Eform2 As String, i As Long, j As Long, K As Long, ResA() As Double
+    Dim Res1 As Double, Res2 As Double
+    ' Evaluate the gradient vector (vector of partial first differentials, wrt each parameter)
+    ' for the function specified in Func, using finite difference method.
+    ReDim ResA(0 To NumP - 1)
+    For i = 0 To NumP - 1
+        Pvaluea0(i) = Pvaluea0(i) + dP
+        Res1 = Application.Run(func, XvalueA0, Pvaluea0, 1)
+        Pvaluea0(i) = Pvaluea0(i) - dP * 2
+        Res2 = Application.Run(func, XvalueA0, Pvaluea0, 1)
+        ResA(i) = (Res1 - Res2) / (dP * 2)
+        Pvaluea0(i) = Pvaluea0(i) + dP
+    Next i
+    GradientA = ResA
+End Function
+Public Sub GetArray(arrayname)
+    Dim temp As Variant
+    If TypeName(arrayname) = "Range" Then
+        If arrayname.Rows.Count = 1 Then
+            If arrayname.Columns.Count = 1 Then
+                arrayname = Array(arrayname.Value2)
+                temp = arrayname(0)
+                ReDim arrayname(1 To 1, 1 To 1)
+                arrayname(1, 1) = temp
+            Else
+                arrayname = Array(arrayname.Value2)
+                arrayname = WorksheetFunction.Transpose(arrayname)
+            End If
+        Else
+            arrayname = arrayname.Value2
+        End If
+    ElseIf Not IsArray(arrayname) Then
+        arrayname = Array(arrayname)
+        arrayname = WorksheetFunction.Transpose(arrayname)
+    Else
+        On Error Resume Next
+        arrayname = WorksheetFunction.Transpose(arrayname)
+    End If
+End Sub
+'
+Public Sub Array120D(arrayname As Variant, DA() As Double, NumRows As Long, NumCols As Long)
+    Dim i As Long, j As Long, Off As Long
+    ' Convert base 1 variant array  to base 0 array double array
+    ' Convert 2B arrays with 1 row or 1 colum to 1D
+    Off = LBound(arrayname)
+    If NumCols = 1 Then
+        For i = 1 To NumRows
+            DA(i - Off) = arrayname(i, 1)
+        Next i
+    ElseIf NumRows = 1 Then
+        For i = 1 To NumCols
+            DA(i - Off) = arrayname(1, i)
+        Next i
+    Else
+        For i = 1 To NumRows
+            For j = 1 To NumCols
+                DA(i - Off, j - Off) = arrayname(i, j)
+            Next j
+        Next i
+    End If
+End Sub
+'
+'Public Sub Array120S(arrayname As Variant, DS() As String, NumRows As Long, NumCols As Long)
+'    Dim i As Long, j As Long, Off As Long
+'    ' Convert base 1 variant array  to base 0 array double array
+'    ' Convert 2D arrays with 1 row or 1 colum to 1D
+'
+'
+'    Off = LBound(arrayname)
+'    If NumCols = 1 Then
+'        For i = 1 To NumRows
+'            DS(i - Off) = arrayname(i, 1)
+'        Next i
+'
+'    ElseIf NumRows = 1 Then
+'        For i = 1 To NumCols
+'            DS(i - Off) = arrayname(1, i)
+'        Next i
+'    Else
+'        For i = 1 To NumRows
+'            For j = 1 To NumCols
+'                DS(i - Off, j - Off) = arrayname(i, j)
+'            Next j
+'        Next i
+'    End If
+'End Sub
+'
