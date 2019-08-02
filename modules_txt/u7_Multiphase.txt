@@ -90,7 +90,11 @@ Public Function unf_AnsariGradient(ByVal arr_d_m As Double, _
  timeStamp = Time()
  roughness_d = eps_m '/ arr_d_m
  Ap_m2 = const_Pi * arr_d_m ^ 2 / 4
- lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+ If Ql_rc_m3day = 0 Then
+    lambda_l = 1
+ Else
+     lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+ End If
  Vsl_msec = const_conver_sec_day * Ql_rc_m3day / Ap_m2
  Vsg_msec = const_conver_sec_day * Qg_rc_m3day / Ap_m2
  ang1 = arr_theta_deg
@@ -614,25 +618,25 @@ Private Sub single1(angr, Di, ed, V, den, vis, P, pgf, pge, pga, pgt, ioerr, iEr
 iErr = 0
 If (angr < 0# Or angr > 1.5708) Then
   
-    addLogMsg "single: illegal value input for angr"
+    addLogMsg "Ansari:single: illegal value input for angr"
     iErr = 1
     ElseIf (Di <= 0#) Then
-    addLogMsg "single: illegal value input for di"
+    addLogMsg "Ansari:single: illegal value input for di"
     iErr = 1
     ElseIf (ed < 0# Or ed >= 0.05) Then
-    addLogMsg "single: illegal value input for ed"
+    addLogMsg "Ansari:single: illegal value input for ed"
     iErr = 1
-    ElseIf (V <= 0#) Then
-    addLogMsg "single: illegal value input for v"
+    ElseIf (V < 0#) Then
+    addLogMsg "Ansari:single: illegal value input for v"
     iErr = 1
     ElseIf (den < 0#) Then
-    addLogMsg "single: illegal value input for den"
+    addLogMsg "Ansari:single: illegal value input for den"
     iErr = 1
     ElseIf (vis < 0#) Then
-    addLogMsg "single: illegal value input for vis"
+    addLogMsg "Ansari:single: illegal value input for vis"
     iErr = 1
     ElseIf (P < 0#) Then
-    addLogMsg "single: illegal value input for p"
+    addLogMsg "Ansari:single: illegal value input for p"
     iErr = 1
 End If
 If (iErr = 1) Then GoTo L999
@@ -647,11 +651,14 @@ pge = den * Sin(angr) * 9.81
 '     calculate frictional pressure gradient.
 '     ---------------------------------------
 Dim Re, Ff
-Re = Di * den * V / vis
-'Debug.Print "unf_single1.di =" & Di
-Ff = 64# / Re
-If (Re > 2000#) Then
-   Ff = 0.25 / (Log10(ed / 3.7 - 5.02 / Re * Log10(ed / 3.7 + 13# / Re))) ^ 2
+If V > 0 Then
+    Re = Di * den * V / vis
+    Ff = 64# / Re
+    If (Re > 2000#) Then
+       Ff = 0.25 / (Log10(ed / 3.7 - 5.02 / Re * Log10(ed / 3.7 + 13# / Re))) ^ 2
+    End If
+Else
+    Ff = 0
 End If
 pgf = 0.5 * den * Ff * V * V / Di
 '     -------------------------------------------
@@ -2194,54 +2201,63 @@ Dim F As Double ' friction factor
 Dim Y, S As Double
 Const c_p = 0.000009871668   ' переводной коэффициент
 Ap_m2 = const_Pi * arr_d_m ^ 2 / 4
-lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
-roughness_d = eps_m / arr_d_m
-Vsl_msec = const_conver_sec_day * Ql_rc_m3day / Ap_m2
-Vsg_msec = const_conver_sec_day * Qg_rc_m3day / Ap_m2
-Vsm_msec = Vsl_msec + Vsg_msec
-Rho_n_kgm3 = rho_lrc_kgm3 * lambda_l + rho_grc_kgm3 * (1 - lambda_l) ' No-slip mixture density
-Mu_n_cP = Mul_rc_cP * lambda_l + Mug_rc_cP * (1 - lambda_l) ' No slip mixture viscosity
-n_re = 1000 * Rho_n_kgm3 * Vsm_msec * arr_d_m / Mu_n_cP
-n_fr = Vsm_msec ^ 2 / (const_g * arr_d_m)
-n_lv = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25
-'-----------------------------------------------------------------------
-'determine flow pattern
-If (n_fr >= 316 * lambda_l ^ 0.302 Or n_fr >= 0.5 * lambda_l ^ -6.738) Then
-  flow_pattern = 2
-Else
-  If (n_fr <= 0.000925 * lambda_l ^ -2.468) Then
+If Ql_rc_m3day = 0 Then
+  ' специально отработае случай нулевого дебита
+    lambda_l = 1
+    Hl_out_fr = 1
+    F = 0
+    Rho_n_kgm3 = rho_lrc_kgm3 * lambda_l + rho_grc_kgm3 * (1 - lambda_l) ' No-slip mixture density
     flow_pattern = 0
-  Else
-    If (n_fr <= 0.1 * lambda_l ^ -1.452) Then
-      flow_pattern = 3
+Else
+    lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+    roughness_d = eps_m / arr_d_m
+    Vsl_msec = const_conver_sec_day * Ql_rc_m3day / Ap_m2
+    Vsg_msec = const_conver_sec_day * Qg_rc_m3day / Ap_m2
+    Vsm_msec = Vsl_msec + Vsg_msec
+    Rho_n_kgm3 = rho_lrc_kgm3 * lambda_l + rho_grc_kgm3 * (1 - lambda_l) ' No-slip mixture density
+    Mu_n_cP = Mul_rc_cP * lambda_l + Mug_rc_cP * (1 - lambda_l) ' No slip mixture viscosity
+    n_re = 1000 * Rho_n_kgm3 * Vsm_msec * arr_d_m / Mu_n_cP
+    n_fr = Vsm_msec ^ 2 / (const_g * arr_d_m)
+    n_lv = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25
+    '-----------------------------------------------------------------------
+    'determine flow pattern
+    If (n_fr >= 316 * lambda_l ^ 0.302 Or n_fr >= 0.5 * lambda_l ^ -6.738) Then
+      flow_pattern = 2
     Else
-      flow_pattern = 1
+      If (n_fr <= 0.000925 * lambda_l ^ -2.468) Then
+        flow_pattern = 0
+      Else
+        If (n_fr <= 0.1 * lambda_l ^ -1.452) Then
+          flow_pattern = 3
+        Else
+          flow_pattern = 1
+        End If
+      End If
     End If
-  End If
+          
+    '-----------------------------------------------------------------------
+    'determine liquid holdup
+    If (flow_pattern = 0 Or flow_pattern = 1 Or flow_pattern = 2) Then
+      Hl_out_fr = h_l_arr_theta_deg(flow_pattern, lambda_l, n_fr, n_lv, arr_theta_deg, Payne_et_all_holdup)
+    Else
+      l_2 = 0.000925 * lambda_l ^ -2.468
+      l_3 = 0.1 * lambda_l ^ -1.452
+      aa = (l_3 - n_fr) / (l_3 - l_2)
+      Hl_out_fr = aa * h_l_arr_theta_deg(0, lambda_l, n_fr, n_lv, arr_theta_deg, Payne_et_all_holdup) + _
+                (1 - aa) * h_l_arr_theta_deg(1, lambda_l, n_fr, n_lv, arr_theta_deg, Payne_et_all_holdup)
+    End If
+    'Calculate normalized friction factor
+    f_n = unf_calc_friction_factor(n_re, roughness_d, Payne_et_all_friction)
+    'calculate friction factor correction for multiphase flow
+    Y = MaxReal(lambda_l / Hl_out_fr ^ 2, 0.001)
+    If (Y > 1 And Y < 1.2) Then
+      S = Log(2.2 * Y - 1.2)
+    Else
+      S = Log(Y) / (-0.0523 + 3.182 * Log(Y) - 0.8725 * (Log(Y)) ^ 2 + 0.01853 * (Log(Y)) ^ 4)
+    End If
+    'calculate friction factor
+    F = f_n * Exp(S)
 End If
-      
-'-----------------------------------------------------------------------
-'determine liquid holdup
-If (flow_pattern = 0 Or flow_pattern = 1 Or flow_pattern = 2) Then
-  Hl_out_fr = h_l_arr_theta_deg(flow_pattern, lambda_l, n_fr, n_lv, arr_theta_deg, Payne_et_all_holdup)
-Else
-  l_2 = 0.000925 * lambda_l ^ -2.468
-  l_3 = 0.1 * lambda_l ^ -1.452
-  aa = (l_3 - n_fr) / (l_3 - l_2)
-  Hl_out_fr = aa * h_l_arr_theta_deg(0, lambda_l, n_fr, n_lv, arr_theta_deg, Payne_et_all_holdup) + _
-            (1 - aa) * h_l_arr_theta_deg(1, lambda_l, n_fr, n_lv, arr_theta_deg, Payne_et_all_holdup)
-End If
-'Calculate normalized friction factor
-f_n = unf_calc_friction_factor(n_re, roughness_d, Payne_et_all_friction)
-'calculate friction factor correction for multiphase flow
-Y = MaxReal(lambda_l / Hl_out_fr ^ 2, 0.001)
-If (Y > 1 And Y < 1.2) Then
-  S = Log(2.2 * Y - 1.2)
-Else
-  S = Log(Y) / (-0.0523 + 3.182 * Log(Y) - 0.8725 * (Log(Y)) ^ 2 + 0.01853 * (Log(Y)) ^ 4)
-End If
-'calculate friction factor
-F = f_n * Exp(S)
 'calculate mixture density
 rho_s = rho_lrc_kgm3 * Hl_out_fr + rho_grc_kgm3 * (1 - Hl_out_fr)
 'calculate pressure gradient due to gravity
@@ -2336,7 +2352,7 @@ Public Function unf_UnifiedTUFFPGradient(ByVal arr_d_m As Double, _
  Dim dPdL_out_atmm As Double
  Dim roughness_d As Double
  Dim Ap_m2 As Double ' площадь трубы
- Dim lambda_l   As Double
+' Dim lambda_l   As Double
  Dim Vsl_msec, Vsg_msec
  Dim pgf_out As Double
  Dim pge_out As Double
@@ -2347,7 +2363,11 @@ Public Function unf_UnifiedTUFFPGradient(ByVal arr_d_m As Double, _
  
  roughness_d = eps_m / arr_d_m
  Ap_m2 = const_Pi * arr_d_m ^ 2 / 4
- lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+' If Ql_rc_m3day > 0 Then
+'     lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+' Else
+'    lambda_l = 1
+' End If
  Vsl_msec = const_conver_sec_day * Ql_rc_m3day / Ap_m2
  Vsg_msec = const_conver_sec_day * Qg_rc_m3day / Ap_m2
  'On Error Resume Next
@@ -2556,14 +2576,18 @@ axp = const_Pi * D * D / 4#
 '     ---------------------------
 '     check for single phase flow
 '     ---------------------------
-ens = vsl / (vsl + vsg)
+If vsl + vsg > 0 Then
+    ens = vsl / (vsl + vsg)
+Else
+    ens = 1
+End If
 If (ens >= 0.99999) Then
     fpt = "liq"
     Hl = 1#
     SL = D * const_Pi
     Call singlee(D, ed, ang, P, denl, vsl, visl, Ff, pgt, pgf, pgg, pga)
     GoTo L60
-    ElseIf (ens <= 0.00001) Then
+ElseIf (ens <= 0.00001) Then
     fpt = "gas"
     Hl = 0#
     SL = 0#
@@ -3084,10 +3108,16 @@ Re = Abs(D * den * V / vis)
 fr2 = 16# / 2000#
 fr3 = 1# / (3.6 * Log10(6.9 / 3000# + (ed / 3.7) ^ 1.11)) ^ 2
 '      fr3=0.046/(3000.0)^0.2
-If (Re < 2000#) Then Ff = 16# / Re
-If (Re > 3000#) Then Ff = 1# / (3.6 * Log10(6.9 / Re + (ed / 3.7) ^ 1.11)) ^ 2
+If Re = 0 Then
+    Ff = 0
+ElseIf (Re < 2000#) Then
+    Ff = 16# / Re
+ElseIf (Re > 3000#) Then
+    Ff = 1# / (3.6 * Log10(6.9 / Re + (ed / 3.7) ^ 1.11)) ^ 2
 '      if(re > 3000.0) ff=0.046/(re)^0.2
-If (Re >= 2000# And Re <= 3000#) Then Ff = fr2 + (fr3 - fr2) * (Re - 2000#) / 1000#
+ElseIf (Re >= 2000# And Re <= 3000#) Then
+    Ff = fr2 + (fr3 - fr2) * (Re - 2000#) / 1000#
+End If
 pgf = -2# * Ff * den * V * V / D
 '     -------------------------------------------
 '     calculate accelerational pressure gradient.
@@ -3815,28 +3845,24 @@ Function unf_calc_friction_factor(ByVal n_re As Double, ByVal E As Double, ByVal
 'using Drew correlation for smooth pipes
 'friction factor and iterated friction factor
 Dim f_n, f_n_new, f_int As Double
-If n_re > 2000 Then 'turbulent flow
-  
-  If Rough_pipe > 0 Then 'calculate friction factor for rough pipes according to Moody method - Payne et all modification for Beggs&Brill correlation
-  
-    f_n = (2 * Log10(2 / 3.7 * E - 5.02 / n_re * Log10(2 / 3.7 * E + 13 / n_re))) ^ -2
-    Dim i As Integer
-    i = 0
-    'iterate until error in friction factor is sufficiently small
-    Do
-      f_n_new = (1.74 - 2 * Log10(2 * E + 18.7 / (n_re * f_n ^ 0.5))) ^ -2
-      i = i + 1
-      f_int = f_n
-      f_n = f_n_new
-    'stop when error is sufficiently small or max number of iterations exceedied
-    Loop Until (Abs(f_n_new - f_int) <= 0.001 Or i > 19)
-  Else 'Calculate friction factor for smooth pipes using Drew correlation - original Begs&Brill with no modification
-    
-    f_n = 0.0056 + 0.5 * n_re ^ -0.32
-    
+Dim i As Integer
+If n_re = 0 Then
+    f_n = 0
+ElseIf n_re > 2000 Then 'turbulent flow
+    If Rough_pipe > 0 Then 'calculate friction factor for rough pipes according to Moody method - Payne et all modification for Beggs&Brill correlation
+        f_n = (2 * Log10(2 / 3.7 * E - 5.02 / n_re * Log10(2 / 3.7 * E + 13 / n_re))) ^ -2
+        i = 0
+        Do 'iterate until error in friction factor is sufficiently small
+            f_n_new = (1.74 - 2 * Log10(2 * E + 18.7 / (n_re * f_n ^ 0.5))) ^ -2
+            i = i + 1
+            f_int = f_n
+            f_n = f_n_new
+            'stop when error is sufficiently small or max number of iterations exceedied
+        Loop Until (Abs(f_n_new - f_int) <= 0.001 Or i > 19)
+    Else 'Calculate friction factor for smooth pipes using Drew correlation - original Begs&Brill with no modification
+        f_n = 0.0056 + 0.5 * n_re ^ -0.32
   End If
-Else 'laminar flow
-  
+Else  'laminar flow
   f_n = 64 / n_re
 End If
 unf_calc_friction_factor = f_n
@@ -4139,7 +4165,7 @@ Public Function unf_GrayModifiedGradient(ByVal d_m As Double, _
                                   ByVal rho_grc_kgm3 As Double, _
                                   Optional Payne_et_all_holdup As Integer = 0, _
                                   Optional Payne_et_all_friction As Integer = 1, _
-                                  Optional correl3 As Double = 0, _
+                                  Optional ByVal correl3 As Double = 0, _
                                   Optional c_calibr_grav As Double = 1, _
                                   Optional c_calibr_fric As Double = 1)
                                   
@@ -4193,20 +4219,24 @@ Dim flow_pattern As Integer
 Dim f_n As Double ' normalized friction factor
 Dim F As Double ' friction factor
 Dim Y, S As Double
-Const c_p = 0.000009871668   ' переводной коэффициент
-    Dim r As Double 'dimensionless'superficial liquid to gas ratio parameter
-    Dim E As Double    'Pipe relative roughness
-    Dim E1 As Double
-    Dim crit As Double
-    Dim Nv As Double ' dimensionless 'velocity number
-    Dim Nd As Double 'nominal diameter
-    Dim B As Double
-    Dim h_l 'liquid holdup by original Gray
-    Dim dpdl_g As Double, dpdl_f As Double, dpdl_g1 As Double, dpdl_f1 As Double
-    Dim dPdL_out_atmm
+Dim r As Double 'dimensionless'superficial liquid to gas ratio parameter
+Dim E As Double    'Pipe relative roughness
+Dim E1 As Double
+Dim crit As Double
+Dim Nv As Double ' dimensionless 'velocity number
+Dim Nd As Double 'nominal diameter
+Dim B As Double
+Dim h_l 'liquid holdup by original Gray
+Dim dpdl_g As Double, dpdl_f As Double, dpdl_g1 As Double, dpdl_f1 As Double
+Dim dPdL_out_atmm
     
+Const c_p = 0.000009871668   ' переводной коэффициент
 Ap_m2 = const_Pi * d_m ^ 2 / 4
-lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+If Ql_rc_m3day + Qg_rc_m3day > 0 Then
+    lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+Else
+    lambda_l = 1
+End If
 roughness_d = eps_m / d_m
 Vsl_msec = const_conver_sec_day * Ql_rc_m3day / Ap_m2
 Vsg_msec = const_conver_sec_day * Qg_rc_m3day / Ap_m2
@@ -4217,6 +4247,11 @@ n_re = 1000 * Rho_n_kgm3 * Vsm_msec * d_m / Mu_n_cP
 n_fr = Vsm_msec ^ 2 / (const_g * d_m)
 n_lv = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25
     'liquid holdup is calculated by Gray Original formula
+If Vsm_msec = 0 Then
+    h_l = 1
+    correl3 = 1
+    F = 0
+Else
     If Vsg_msec > 0 Then
         r = Vsl_msec / Vsg_msec
     Else
@@ -4242,6 +4277,7 @@ n_lv = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25
         S = Log(Y) / (-0.0523 + 3.182 * Log(Y) - 0.8725 * (Log(Y)) ^ 2 + 0.01853 * (Log(Y)) ^ 4)
     End If
     F = f_n
+End If
     rho_s = rho_lrc_kgm3 * h_l + rho_grc_kgm3 * (1 - h_l) 'calculate mixture density
     dpdl_g = c_p * rho_s * const_g * sind(theta_deg)  'calculate pressure gradient due to gravity
     dpdl_f = c_p * F * Rho_n_kgm3 * Vsm_msec ^ 2 / (2 * d_m)  'calculate pressure gradient due to friction
@@ -4533,7 +4569,7 @@ Public Function unf_HagedornandBrawnmodified(ByVal d_m As Double, _
                                   ByVal p_atma As Double, _
                                   Optional Payne_et_all_holdup As Integer = 0, _
                                   Optional Payne_et_all_friction As Integer = 1, _
-                                  Optional correl3 As Double = 0, _
+                                  Optional ByVal correl3 As Double = 0, _
                                   Optional c_calibr_grav As Double = 1, _
                                   Optional c_calibr_fric As Double = 1)
 'function for calculation of pressure gradient in pipe according to Begs and Brill method
@@ -4621,7 +4657,11 @@ Dim c3 As Double
 Dim c4 As Double
     
 Ap_m2 = const_Pi * d_m ^ 2 / 4
-lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+If Ql_rc_m3day + Qg_rc_m3day > 0 Then
+    lambda_l = Ql_rc_m3day / (Ql_rc_m3day + Qg_rc_m3day)
+Else
+    lambda_l = 1
+End If
 roughness_d = eps_m / d_m
 Vsl_msec = const_conver_sec_day * Ql_rc_m3day / Ap_m2
 Vsg_msec = const_conver_sec_day * Qg_rc_m3day / Ap_m2
@@ -4631,57 +4671,73 @@ Mu_n_cP = Mul_rc_cP * lambda_l + Mug_rc_cP * (1 - lambda_l) ' No slip mixture vi
 n_re = 1000 * Rho_n_kgm3 * Vsm_msec * d_m / Mu_n_cP
 'n_fr = Vsm_msec ^ 2 / (const_g * d_m)
 'n_lv1 = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25
-B0 = -0.1030658
-b1 = 0.617774
-B2 = -0.632946
-B3 = 0.29598
-B4 = -0.0401
-C0 = 0.9116257
-C1 = -4.821756
-c2 = 1232.25
-c3 = -22253.58
-c4 = 116174.3
-'Determine Duns and ROs dimensionless groups
-'Determine Liquid velosity number
-n_lv = 1.938 * Vsl_msec / 0.3048 * (rho_lrc_kgm3 * 0.06243 / (sigma_l_Nm * 1000)) ^ 0.25
-''Determine Gas velosity number
-n_gv = 1.938 * Vsg_msec / 0.3048 * (rho_lrc_kgm3 * 0.06243 / (sigma_l_Nm * 1000)) ^ 0.25
-''Determine Diametr number
-n_d = 120.872 * d_m / 0.3048 * (rho_lrc_kgm3 * 0.06243 / (sigma_l_Nm * 1000)) ^ 0.5
-''Determine Liquid viscosity number
-n_l = 0.15726 * Mul_rc_cP * (1 / (rho_lrc_kgm3 * 0.06243 * (sigma_l_Nm * 1000) ^ 3)) ^ 0.25
-' проверим режим потока, чтобы определить надо использовать поправку Гриффитса для пузырькового режима
-A = 1.071 - (0.2218 * (Vsm_msec * const_convert_m_ft) ^ 2) / (d_m * const_convert_m_ft)
-If A < 0.13 Then A = 0.13
-B = Vsg_msec / Vsm_msec
-If (B - A) >= 0 Then  ' считаем по Хайгедорну Брауну
-        n_lv = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25 'Determine Liquid velosity number  dimensionless
-        n_gv = Vsg_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25 'Determine Gas velosity number
-        n_d = d_m * (rho_lrc_kgm3 * const_g / sigma_l_Nm) ^ 0.5 'Determine Diametr number
-        n_l = Mul_rc_cP * const_convert_cP_Pasec * (const_g / (rho_lrc_kgm3 * sigma_l_Nm ^ 3)) ^ 0.25 'Determine Liquid viscosity number
-        N_lc = -0.0259 * n_l ^ 4 + 0.1011 * n_l ^ 3 - 0.1272 * n_l ^ 2 + 0.0619 * n_l + 0.0018  ' корреляция подобрана по графуку рнт
-        HB_complex = (n_lv / n_gv ^ 0.575) * (N_lc / n_d) * (p_atma) ^ 0.1
-        Hl_phi = B0 + b1 * (Log10(HB_complex) + 6) + B2 * (Log10(HB_complex) + 6) ^ 2 + B3 * (Log10(HB_complex) + 6) ^ 3 + B4 * (Log10(HB_complex) + 6) ^ 4
-        B = (n_gv * n_l ^ 0.38) / n_d ^ 2.14
-        phi = C0 + C1 * B + c2 * B ^ 2 + c3 * B ^ 3 + c4 * B ^ 4
-          
-        h_l = Hl_phi * phi 'determine liquid holdup
-        If h_l < lambda_l Then h_l = lambda_l
-        
-Else    ' считаем по гриффитсу
-        Dim vs_ftsec As Double, vs_msec As Double   ' bubble rise velocity
-        vs_ftsec = 0.8
-        vs_msec = vs_ftsec * const_convert_ft_m
-      '  Dim Hg As Double
-        h_l = 1 - 0.5 * (1 + Vsm_msec / vs_msec - ((1 + Vsm_msec / vs_msec) ^ 2 - 4 * (Vsg_msec / vs_msec)) ^ 0.5)
+If Vsm_msec > 0 Then
+    
+    B0 = -0.1030658
+    b1 = 0.617774
+    B2 = -0.632946
+    B3 = 0.29598
+    B4 = -0.0401
+    
+    C0 = 0.9116257
+    C1 = -4.821756
+    c2 = 1232.25
+    c3 = -22253.58
+    c4 = 116174.3
+    
+    'Determine Duns and ROs dimensionless groups
+    
+    'Determine Liquid velosity number
+    n_lv = 1.938 * Vsl_msec / 0.3048 * (rho_lrc_kgm3 * 0.06243 / (sigma_l_Nm * 1000)) ^ 0.25
+    ''Determine Gas velosity number
+    n_gv = 1.938 * Vsg_msec / 0.3048 * (rho_lrc_kgm3 * 0.06243 / (sigma_l_Nm * 1000)) ^ 0.25
+    ''Determine Diametr number
+    n_d = 120.872 * d_m / 0.3048 * (rho_lrc_kgm3 * 0.06243 / (sigma_l_Nm * 1000)) ^ 0.5
+    ''Determine Liquid viscosity number
+    n_l = 0.15726 * Mul_rc_cP * (1 / (rho_lrc_kgm3 * 0.06243 * (sigma_l_Nm * 1000) ^ 3)) ^ 0.25
+    
+    ' проверим режим потока, чтобы определить надо использовать поправку Гриффитса для пузырькового режима
+    A = 1.071 - (0.2218 * (Vsm_msec * const_convert_m_ft) ^ 2) / (d_m * const_convert_m_ft)
+    If A < 0.13 Then A = 0.13
+    B = Vsg_msec / Vsm_msec
+    If (B - A) >= 0 Then  ' считаем по Хайгедорну Брауну
+            n_lv = Vsl_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25 'Determine Liquid velosity number  dimensionless
+            n_gv = Vsg_msec * (rho_lrc_kgm3 / (const_g * sigma_l_Nm)) ^ 0.25 'Determine Gas velosity number
+            n_d = d_m * (rho_lrc_kgm3 * const_g / sigma_l_Nm) ^ 0.5 'Determine Diametr number
+            n_l = Mul_rc_cP * const_convert_cP_Pasec * (const_g / (rho_lrc_kgm3 * sigma_l_Nm ^ 3)) ^ 0.25 'Determine Liquid viscosity number
+            N_lc = -0.0259 * n_l ^ 4 + 0.1011 * n_l ^ 3 - 0.1272 * n_l ^ 2 + 0.0619 * n_l + 0.0018  ' корреляция подобрана по графуку рнт
+            HB_complex = (n_lv / n_gv ^ 0.575) * (N_lc / n_d) * (p_atma) ^ 0.1
+            Hl_phi = B0 + b1 * (Log10(HB_complex) + 6) + B2 * (Log10(HB_complex) + 6) ^ 2 + B3 * (Log10(HB_complex) + 6) ^ 3 + B4 * (Log10(HB_complex) + 6) ^ 4
+            B = (n_gv * n_l ^ 0.38) / n_d ^ 2.14
+            phi = C0 + C1 * B + c2 * B ^ 2 + c3 * B ^ 3 + c4 * B ^ 4
+              
+            h_l = Hl_phi * phi 'determine liquid holdup
+            If h_l < lambda_l Then h_l = lambda_l
+            
+    
+    Else    ' считаем по гриффитсу
+            Dim vs_ftsec As Double, vs_msec As Double   ' bubble rise velocity
+            vs_ftsec = 0.8
+            vs_msec = vs_ftsec * const_convert_ft_m
+          '  Dim Hg As Double
+            h_l = 1 - 0.5 * (1 + Vsm_msec / vs_msec - ((1 + Vsm_msec / vs_msec) ^ 2 - 4 * (Vsg_msec / vs_msec)) ^ 0.5)
+    End If
+    
+    
+    rho_tp = rho_lrc_kgm3 * h_l + rho_grc_kgm3 * (1 - h_l)
+    mu_tp = Mul_rc_cP ^ h_l + Mug_rc_cP ^ (1 - h_l)
+    
+    f_n = unf_calc_friction_factor(n_re, E, Payne_et_all_friction)
+    F = f_n
+    
+    rho_s = rho_lrc_kgm3 * h_l + rho_grc_kgm3 * (1 - h_l) 'calculate mixture density
+    dpdl_g = c_p * rho_tp * const_g * sind(theta_deg) 'calculate pressure gradient due to gravity
+    dpdl_f = c_p * F * Rho_n_kgm3 ^ 2 * Vsm_msec ^ 2 / (2 * d_m * rho_tp) 'calculate pressure gradient due to friction
+Else
+    F = 0
+    correl3 = 1
+    rho_tp = Rho_n_kgm3
 End If
-rho_tp = rho_lrc_kgm3 * h_l + rho_grc_kgm3 * (1 - h_l)
-mu_tp = Mul_rc_cP ^ h_l + Mug_rc_cP ^ (1 - h_l)
-f_n = unf_calc_friction_factor(n_re, E, Payne_et_all_friction)
-F = f_n
-rho_s = rho_lrc_kgm3 * h_l + rho_grc_kgm3 * (1 - h_l) 'calculate mixture density
-dpdl_g = c_p * rho_tp * const_g * sind(theta_deg) 'calculate pressure gradient due to gravity
-dpdl_f = c_p * F * Rho_n_kgm3 ^ 2 * Vsm_msec ^ 2 / (2 * d_m * rho_tp) 'calculate pressure gradient due to friction
 dpdl_g1 = c_p * Rho_n_kgm3 * const_g * sind(theta_deg)
 dpdl_f1 = c_p * F * Rho_n_kgm3 ^ 2 * Vsm_msec ^ 2 / (2 * d_m * rho_tp) 'calculate pressure gradient due to friction
 Select Case correl3
@@ -4972,59 +5028,62 @@ q_l = q_o + q_w
 q_g = b_g * (q_gsc - r_s * q_osc)
 'if gas rate is negative - assign gas rate to zero
 If q_g < 0 Then
- 
  q_g = 0
 End If
-'calculate volume fraction of water in liquid at no-slip conditions
 Dim f_w, lambda_l  As Double
-f_w = q_w / q_l
-'volume fraction of liquid at no-slip conditions
-lambda_l = q_l / (q_l + q_g)
-'Debug, remove
-'lambda_l = 0.00001
-'densities
-Dim rho_o, rho_w, rho_l, rho_g, rho_n As Double
-rho_o = (rho_osc + c_rs(Units) * r_s * rho_gsc) / b_o
-rho_w = rho_wsc / b_w
-rho_l = rho_o * (1 - f_w) + rho_w * f_w
-rho_g = rho_gsc / b_g
-'no-slip mixture density
-rho_n = rho_l * lambda_l + rho_g * (1 - lambda_l)
-'Liquid surface tension
-Dim sigma_l As Double
-sigma_l = sigma_o * (1 - f_w) + sigma_w * f_w
-'Liquid viscosity
-Dim mu_l As Double
-mu_l = mu_o * (1 - f_w) + mu_w * f_w
-'No slip mixture viscosity
-Dim mu_n As Double
-mu_n = mu_l * lambda_l + mu_g * (1 - lambda_l)
-'Sureficial velocities
-Dim v_m As Double
-V_sl = 0.000011574 * q_l / a_p
-V_sg = 0.000011574 * q_g / a_p
-v_m = V_sl + V_sg
-'Reinolds number
-Dim n_re As Double
-n_re = c_re(Units) * 1000 * rho_n * v_m * D / mu_n
-'Froude number
-Dim n_fr As Double
-n_fr = v_m ^ 2 / (G(Units) * D)
-'Liquid velocity number
-Dim n_lv As Double
-n_lv = c_sl(Units) * V_sl * (rho_l / (G(Units) * sigma_l)) ^ 0.25
-'Pipe relative roughness
-E = EPS / D
-'-----------------------------------------------------------------------
-'determine flow pattern
-Dim delta_rho    ' увеличение плотности смеси за счёт относительного движения газа
-Dim We ' Число Вебера
-Dim Ku 'Безразмерный параметр, покритерию подобный критерию Кутателадзе
-Dim f_mohov  'коэффициентобщих потерь
-delta_rho = rho_o - rho_g
-We = sigma_o / (delta_rho * D ^ 2 * G(Units))
-Ku = ((rho_l ^ 2) / (delta_rho ^ 2) * (n_fr ^ 2) / We) ^ (1 / 4)
-f_mohov = (0.13 * Ku + 1) / (1.13 * Ku + 1) * delta_rho / rho_l * 2 * (1 - lambda_l) / n_fr * Sin(const_Pi / 180 * THETA) + 0.11 * (68 / n_re + E / D) ^ 0.25
+    Dim rho_o, rho_w, rho_l, rho_g, rho_n As Double
+If q_l > 0 Then
+    'calculate volume fraction of water in liquid at no-slip conditions
+    f_w = q_w / q_l
+    'volume fraction of liquid at no-slip conditions
+    lambda_l = q_l / (q_l + q_g)
+    'densities
+    rho_o = (rho_osc + c_rs(Units) * r_s * rho_gsc) / b_o
+    rho_w = rho_wsc / b_w
+    rho_l = rho_o * (1 - f_w) + rho_w * f_w
+    rho_g = rho_gsc / b_g
+    'no-slip mixture density
+    rho_n = rho_l * lambda_l + rho_g * (1 - lambda_l)
+    'Liquid surface tension
+    Dim sigma_l As Double
+    sigma_l = sigma_o * (1 - f_w) + sigma_w * f_w
+    'Liquid viscosity
+    Dim mu_l As Double
+    mu_l = mu_o * (1 - f_w) + mu_w * f_w
+    'No slip mixture viscosity
+    Dim mu_n As Double
+    mu_n = mu_l * lambda_l + mu_g * (1 - lambda_l)
+    'Sureficial velocities
+    Dim v_m As Double
+    V_sl = 0.000011574 * q_l / a_p
+    V_sg = 0.000011574 * q_g / a_p
+    v_m = V_sl + V_sg
+    'Reinolds number
+    Dim n_re As Double
+    n_re = c_re(Units) * 1000 * rho_n * v_m * D / mu_n
+    'Froude number
+    Dim n_fr As Double
+    n_fr = v_m ^ 2 / (G(Units) * D)
+    'Liquid velocity number
+    Dim n_lv As Double
+    n_lv = c_sl(Units) * V_sl * (rho_l / (G(Units) * sigma_l)) ^ 0.25
+    'Pipe relative roughness
+    E = EPS / D
+    '-----------------------------------------------------------------------
+    'determine flow pattern
+    Dim delta_rho    ' увеличение плотности смеси за счёт относительного движения газа
+    Dim We ' Число Вебера
+    Dim Ku 'Безразмерный параметр, покритерию подобный критерию Кутателадзе
+    Dim f_mohov  'коэффициентобщих потерь
+    delta_rho = rho_o - rho_g
+    We = sigma_o / (delta_rho * D ^ 2 * G(Units))
+    Ku = ((rho_l ^ 2) / (delta_rho ^ 2) * (n_fr ^ 2) / We) ^ (1 / 4)
+    f_mohov = (0.13 * Ku + 1) / (1.13 * Ku + 1) * delta_rho / rho_l * 2 * (1 - lambda_l) / n_fr * Sin(const_Pi / 180 * THETA) + 0.11 * (68 / n_re + E / D) ^ 0.25
+Else
+    f_mohov = 0
+    v_m = 0
+    rho_n = rho_wsc / b_w
+End If
 'calculate pressure gradient due to gravity
 dpdl_g = c_p(Units) * rho_n * G(Units) * Sin(const_Pi / 180 * THETA)
 'calculate pressure gradient due to friction
