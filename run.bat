@@ -1,0 +1,1 @@
+%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy ByPass -NoExit -Command "& 'C:\Anaconda3\shell\condabin\conda-hook.ps1' ; conda activate 'C:\Anaconda3' ; python description_generator.py; python listings_generator.py"
