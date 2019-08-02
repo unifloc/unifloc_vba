@@ -448,7 +448,7 @@ for code_file in file_name:
 create file .txt for generated description module and fill it
 """
 f3_module_txt = path_listings_out + '/' + file_name_for_description_module + ".txt"
-f3_module_txt = open(f3_module_txt, "w", encoding='UTF-8')
+f3_module_txt = open(f3_module_txt, "w", encoding='cp1251')
 f3_module_txt.writelines([""])
 
 f2 = open(fname2, "r", encoding='UTF-8')
