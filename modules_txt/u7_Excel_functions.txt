@@ -1683,19 +1683,19 @@ Public Function MF_calibr_pipe_m3day( _
 ' c_calibr_fric  - поправка на трение в перепаде давлени€
 ' roughness_m - шероховатость трубы
 ' calibr_type - тип калибровки
-'             0 - подбор подстроечных коэффициентов коррел€ции
-'             1 - подбор дебита
+'             0 - подбор параметра c_calibr_grav
+'             1 - подбор параметра c_calibr_fric
 '             2 - подбор обводненности
 '             3 - подбор газового фактор
-'             4 - минимизаци€ нескольких параметров
 ' результат   - число - давление на другом конце трубы atma.
 'description_end
     
     
     Dim pipe As New CPipe
-    Dim PVT As New CPVT
     Dim PTin As PTtype, PTout As PTtype
     Dim TM As TEMP_CALC_METHOD
+    Dim prm As New CSolveParam
+    Dim CoeffA(0 To 2)
 On Error GoTo err1:
     ' length must be positive
     length_m = Abs(length_m)
@@ -1705,29 +1705,59 @@ On Error GoTo err1:
         Exit Function
     End If
     ' initialize PVT properties
-    Set PVT = PVT_decode_string(str_PVT)
+    Set pipe.fluid = PVT_decode_string(str_PVT)
+    With pipe.fluid
     ' set liquid rate and watercut
-    PVT.qliq_sm3day = qliq_sm3day
-    PVT.fw_perc = fw_perc
-    Set pipe.fluid = PVT
+        .qliq_sm3day = qliq_sm3day
+        .fw_perc = fw_perc
+    End With
     ' initialize boundary conditions
     If Tout_C < 0 Then Tout_C = Tin_C
 '    ' initialize geometry
     Call pipe.InitPipe(d_mm / 1000, length_m, theta_deg, roughness_m)
-    pipe.param = param_calc_along_flow(hydr_corr, TempMeth:=StartEndTemp)
-    pipe.InitTlinear Tin_C, Tout_C
-    pipe.c_calibr_grav = c_calibr_grav
-    
-    Dim prm As New CSolveParam
-    Dim CoeffA(0 To 2)
+    With pipe
+        .param = param_calc_along_flow(hydr_corr, TempMeth:=StartEndTemp)
+        .InitTlinear Tin_C, Tout_C
+        .c_calibr_grav = c_calibr_grav
+    End With
+    ' prepare solution function
     Set CoeffA(0) = pipe
-    CoeffA(1) = pin_atma
-    CoeffA(2) = pout_atma
-    
-    If solve_equation_bisection("calc_pipe_dp_error_atm", 0.5, 1.5, CoeffA, prm) Then
+        CoeffA(1) = pin_atma
+        CoeffA(2) = pout_atma
+    Dim func As String
+    Dim val_min As Double, val_max As Double
+    Select Case calibr_type
+        Case 0
+            func = "calc_pipe_dp_error_calibr_grav_atm"
+            val_min = 0.5
+            val_max = 1.5
+        Case 1
+            func = "calc_pipe_dp_error_calibr_fric_atm"
+            val_min = 0.5
+            val_max = 1.5
+        Case 2
+            func = "calc_pipe_dp_error_rp_atm"
+            val_min = pipe.fluid.rp_m3m3 * 0.5
+            val_max = pipe.fluid.rp_m3m3 * 2
+        Case 3
+            func = "calc_pipe_dp_error_fw_atm"
+            val_min = pipe.fluid.fw_fr * 0.5
+            val_max = pipe.fluid.fw_fr * 2
+            If val_max > 1 Then val_max = 1
+    End Select
+    If solve_equation_bisection(func, val_min, val_max, CoeffA, prm) Then
+        MF_calibr_pipe_m3day = Array(prm.x_solution, _
+                                     prm.y_solution, _
+                                     prm.iterations, _
+                                     prm.msg)
+        
+    Else
+       MF_calibr_pipe_m3day = Array("no solution", _
+                                    prm.y_solution, _
+                                    prm.iterations, _
+                                    prm.msg)
     End If
-    MF_calibr_pipe_m3day = prm.x_solution
-    'MF_calibr_pipe_m3day = calc_pipe_dp_error_atm(c_calibr_grav, pipe, pin_atma, pout_atma)
+    
     Exit Function
 err1:
     MF_calibr_pipe_m3day = Array(-1, "error")
