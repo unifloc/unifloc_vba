@@ -4,75 +4,12 @@
 ''2000 - 2019
 ''
 ''=======================================================================================
-'Функция для вычисления соответствующего диаметра порта клапана через заданный расход газа и давления в затрубе и в НКТ на глубине клапан
-'Для вычисления используется уравнение Thornhill-Crave
-'Возвращает диаметр порта клапана в мм
-Public Function GL_dchoke_mm(Qg_m3d As Double, Pu_atma As Double, Pd_atma As Double, gamma_g As Double, Tu_C As Double)
-On Error GoTo err1:
-    If Qg_m3d <= 0 Then
-        GL_dchoke_mm = 0
-        Exit Function
-    End If
-    
-    If Pu_atma < Pd_atma Then
-        GL_dchoke_mm = -1
-        Exit Function
-    End If
-    Dim K As Double
-    K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
-    
-    Dim Pu_psi As Double
-    Dim Pd_psi As Double
-    Pu_psi = Pu_atma * 14.2233 'upstream pressure, psi
-    Pd_psi = Pd_atma * 14.2233 'downstream pressure, psi
-    
-    Dim Tu_F As Double
-    Tu_F = Tu_C / 100 * 180 + 32
-    
-    Dim CD As Double  ' discharge coefficient
-    CD = 0.865
-    
-    Dim G As Double
-    G = 32.17 'ft/sec^2
-    
-    Dim Qg_Mcfd As Double
-    Qg_Mcfd = Qg_m3d / 28.31993658
-    
-    Dim Pd_Pu_crit As Double
-    Pd_Pu_crit = (2 / (K + 1)) ^ (K / (K - 1))
-    
-    Dim Pd_Pu As Double
-    Pd_Pu = Pd_atma / Pu_atma
-    
-    Dim C0 As Double, C1 As Double, c2 As Double
-    C0 = ((Pd_Pu ^ (2 / K) - Pd_Pu ^ (1 + 1 / K))) ^ 0.5
-    C1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
-    c2 = (2 * G * K / (K - 1)) ^ 0.5
-    
-    Dim A As Double
-    
-    If Pd_Pu <= Pd_Pu_crit Then
-        A = Qg_Mcfd / (155.5 * CD * Pu_psi * C1 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
-    Else
-        A = Qg_Mcfd / (155.5 * CD * Pu_psi * C0 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
-    End If
-    
-    Dim d_in As Double
-    d_in = (A * 4 / Application.Pi) ^ 0.5
-    
-    GL_dchoke_mm = d_in / 0.03937
-    
-    
-    Exit Function
-err1:
-    GL_dchoke_mm = -1
-    addLogMsg "error in function : GL_dchoke_mm"
-End Function
-Function GL_dPgasPipe_atmg(ByVal H_m As Double, ByVal P_atmg As Double, ByVal t_c As Double, _
+Option Explicit
+Function GL_dPgasPipe_atmg(ByVal H_m As Double, ByVal P_atmg As Double, ByVal t_C As Double, _
                                Optional ByVal d_cas_mm As Double = 125, _
                                Optional ByVal dtub_mm As Double = 73, _
                                Optional ByVal gamma_gas As Double = 0.8, _
-                               Optional ByVal Qg_scm3day As Double = 10000, _
+                               Optional ByVal qg_scm3day As Double = 10000, _
                                Optional ByVal roughness As Double = 0.001, _
                                Optional ByVal THETA As Double = 90 _
                                ) As Double
@@ -87,13 +24,13 @@ Function GL_dPgasPipe_atmg(ByVal H_m As Double, ByVal P_atmg As Double, ByVal t_
 'T - temperature, C
 'P - pressure, atma
 On Error GoTo err1:
-Dim de, Di, qg_sc, EPS, length, T, P
+Dim de, Di, qg_sc, EPS, length, t, P
 de = d_cas_mm / 1000
 Di = dtub_mm / 1000
-qg_sc = Qg_scm3day
+qg_sc = qg_scm3day
 EPS = roughness
 length = H_m
-T = t_c
+t = t_C
 P = P_atmg
     
     'convert m3/d to scf/d
@@ -105,8 +42,8 @@ P = P_atmg
     
     
     Dim T_K As Double, t_F As Double
-    T_K = T + 273 'convert Celcsius to Kelvin
-    t_F = (9 / 5) * T + 32 'convert Celcsius to Fahrengheit
+    T_K = t + 273 'convert Celcsius to Kelvin
+    t_F = (9 / 5) * t + 32 'convert Celcsius to Fahrengheit
      
     Dim T_pc As Double
     Dim p_pc As Double
@@ -153,113 +90,37 @@ err1:
     addLogMsg "error in function : GL_dPgasPipe_atmg"
     
 End Function
-' function to calculated gas passage trough orifice or gas valve
-' link in K Brawn AL 2A - Craft, Holden, Graves (p.111)
-' also found in Mischenko book
-Public Function GL_Qgasvalve_m3day(d_mm As Double, Pu_atma As Double, Pd_atma As Double, gamma_g As Double, Tu_C As Double)
-    
-On Error GoTo err1:
-    Dim K As Double
-    K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
-    
-    Dim d_in As Double
-    d_in = d_mm * 0.03937
-    
-    Dim Pu_psi As Double
-    Dim Pd_psi As Double
-    Pu_psi = Pu_atma * 14.2233 'upstream pressure, psi
-    Pd_psi = Pd_atma * 14.2233 'downstream pressure, psi
-    
-    Dim Tu_F As Double
-    Tu_F = Tu_C / 100 * 180 + 32
-    
-    Dim Pd_Pu_crit As Double
-    Pd_Pu_crit = (2 / (K + 1)) ^ (K / (K - 1))
-    
-    
-    Dim CD As Double  ' discharge coefficient
-    CD = 0.865
-    
-    Dim G As Double
-    G = 32.17 'ft/sec^2
-    
-    Dim C0 As Double, C1 As Double, c2 As Double
-    C1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
-    c2 = (2 * G * K / (K - 1)) ^ 0.5
-    
-    Dim A As Double
-    A = Application.Pi * d_in ^ 2 / 4 'area of choke, sq in.
-    
-    Dim Qg_crit As Double
-    Qg_crit = 155.5 * CD * A * Pu_psi * C1 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5 'critical flow ratio, Mcf/d
-    
-    Dim Pd_Pu As Double
-    Pd_Pu = Pd_atma / Pu_atma
-    
-    If Pd_Pu >= 1 Then
-        GL_Qgasvalve_m3day = 0
-        Exit Function
-    End If
-    
-    If Pd_Pu <= 0 Then
-        GL_Qgasvalve_m3day = 0
-        Exit Function
-    End If
-    
-    If Pd_Pu <= Pd_Pu_crit Then
-        GL_Qgasvalve_m3day = Qg_crit * 28.31993658
-    Else
-        C0 = ((Pd_Pu ^ (2 / K) - Pd_Pu ^ (1 + 1 / K))) ^ 0.5
-        GL_Qgasvalve_m3day = Qg_crit * 28.31993658 * C0 / C1
-    End If
-    
-    Exit Function
-err1:
-    GL_Qgasvalve_m3day = -1
-    addLogMsg "error in function : GL_Qgasvalve_m3day"
+' функция для поиска решения по расчету давления в клапане
+Public Function calc_dq_gas_pu_valve(Pu As Double, coeffA)
+   Dim q_gas As Double, d_mm As Double, Pd As Double, gg As Double, t As Double
+   q_gas = coeffA(0)
+   d_mm = coeffA(1)
+   Pd = coeffA(2)
+   gg = coeffA(3)
+   t = coeffA(4)
+   
+   calc_dq_gas_pu_valve = q_gas - GLV_q_gas_sm3day(d_mm, Pu, Pd, gg, t)
 End Function
-Public Function GL_Pd_gas_valve_atma(d_mm As Double, Pu_atma As Double, Qg_m3day As Double, gamma_g As Double, Tu_C As Double)
-' расчет перепада давления на клапане при проходе газа через него
-On Error GoTo err1:
-    Dim Qmax_m3day As Double
-    Dim Qtest_sm3day As Double
-    Dim Pd As Double
-    Dim Pd2 As Double
-    Dim Pd1 As Double
-    
-    Pd = 1
-    Dim K As Double
-    K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
-    
-    Dim Pd_Pu_crit As Double
-    Pd_Pu_crit = (2 / (K + 1)) ^ (K / (K - 1))
-    
-    Dim i As Integer
-    i = 0
-    
-    Qmax_m3day = GL_Qgasvalve_m3day(d_mm, Pu_atma, Pd, gamma_g, Tu_C)
-    If Qmax_m3day > Qg_m3day Then
-        Pd1 = Pd_Pu_crit * Pu_atma
-        Pd2 = Pu_atma
-        Do
-            i = i + 1
-            Pd = (Pd2 + Pd1) / 2
-            Qtest_sm3day = GL_Qgasvalve_m3day(d_mm, Pu_atma, Pd, gamma_g, Tu_C)
-            If Qg_m3day > Qtest_sm3day Then
-                Pd2 = Pd
-            Else
-                Pd1 = Pd
-            End If
-        Loop While (Abs(Qg_m3day - Qtest_sm3day) > 0.01) And (i < 100)
-        GL_Pd_gas_valve_atma = Pd
-    Else
-        GL_Pd_gas_valve_atma = Pu_atma
-    End If
-    
-        
-    Exit Function
-err1:
-    GL_Pd_gas_valve_atma = -1
-    addLogMsg "error in function : GL_Pd_gas_valve_atma"
+Public Function calc_dq_gas_pd_valve(Pd As Double, coeffA)
+   Dim q_gas As Double, d_mm As Double, Pu As Double, gg As Double, t As Double
+   q_gas = coeffA(0)
+   d_mm = coeffA(1)
+   Pu = coeffA(2)
+   gg = coeffA(3)
+   t = coeffA(4)
+   calc_dq_gas_pd_valve = q_gas - GLV_q_gas_sm3day(d_mm, Pu, Pd, gg, t)
 End Function
-    
+' функция расчета ошибки в расходе газа при произвольном давлении внутри клапана
+Public Function calc_dq_gas_pv_vkr_valve(Pv As Double, coeffA)
+   Dim q_gas As Double, d_mm As Double, Pu As Double, Pd As Double, gg As Double, t As Double
+   Dim d_vkr As Double
+   
+   d_mm = coeffA(0)
+   d_vkr = coeffA(1)
+   Pu = coeffA(2)
+   Pd = coeffA(3)
+   gg = coeffA(4)
+   t = coeffA(5)
+   
+   calc_dq_gas_pv_vkr_valve = GLV_q_gas_sm3day(d_mm, Pu, Pv, gg, t) - GLV_q_gas_sm3day(d_vkr, Pv, Pd, gg, t)
+End Function

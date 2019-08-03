@@ -7,14 +7,15 @@
 '
 Option Explicit
 ' Gaslift valve description
-Public p_d_mm As Double   ' диаметр порта клапана эффективный
-Public Hmes_m As Double ' глубина установки газлифтного клапана
-Public Pbellow_sc_atma As Double ' давление зарядки на поверхности
-Public p_intake_atma As Double  ' casing pressure at gas valve
-Public p_out_atma As Double ' tubing pressure at gas valve
-Public t_intake_C As Double  ' casing temperature at gas valve
-Public Tout_C As Double ' tubing temperature at gas valve
-Public Qgas_inj_scm3day As Double ' gas rate through valve
+Public h_mes_m As Double            ' глубина установки газлифтного клапана
+Public p_bellow_sc_atma As Double   ' давление зарядки сильфона на поверхности на поверхности
+Public p_in_atma As Double          ' casing pressure at gas valve
+Public p_v_atma As Double           ' pressure between inlet and outlet
+Public p_out_atma As Double         ' tubing pressure at gas valve
+Public t_in_C As Double             ' casing temperature at gas valve
+Public t_v_C As Double              ' temp inside valve
+Public t_out_C As Double            ' tubing temperature at gas valve
+Public q_gas_inj_scm3day As Double  ' gas rate through valve
 ' IPO valve data
 ' for now supposed Wheatherford R-1 data
 Public r As Double
@@ -22,20 +23,26 @@ Public dext_mm As Double
 Public Ab_mm2 As Double
 Public Ap_mm2 As Double
 Public PREF As Double
-Public dport_mm As Double
+'Public dport_mm As Double
 Public IPO As Boolean
-Private p_dvkr_mm() As Double
-Private p_dvkr_eff_mm As Double
-Public fluid As CPVT
+Private p_d_vkr_mm() As Double
+Private p_d_vkr_eff_mm As Double
+Private p_d_port_mm As Double             ' диаметр порта
+Public fluid As CPVT                 ' gas properties
+' задаем характеристики клапана R-1 с учетом наличия вкруток
 Public Sub set_GLV_R1(Optional IPO As Boolean = False, _
                       Optional port_mm As GLV_R1_PORT_SIZE = R1_port_1_8, _
-                      Optional dvkr1_mm As Double = -1, _
-                      Optional dvkr2_mm As Double = -1, _
-                      Optional dvkr3_mm As Double = -1, _
-                      Optional dvkr4_mm As Double = -1)
+                      Optional d_vkr1_mm As Double = -1, _
+                      Optional d_vkr2_mm As Double = -1, _
+                      Optional d_vkr3_mm As Double = -1, _
+                      Optional d_vkr4_mm As Double = -1)
 ' set R-1 valve data
+    Dim Ap_Ab As Double
+    Dim i As Integer
+    
     Me.IPO = IPO
-    dport_mm = port_mm
+    
+    p_d_port_mm = port_mm
     dext_mm = 25.4
     Ab_mm2 = 200
     Select Case port_mm
@@ -52,100 +59,115 @@ Public Sub set_GLV_R1(Optional IPO As Boolean = False, _
         Case Else
             Ap_mm2 = (port_mm ^ 2) * (1 - 0.16)  ' approximation based on R-1 table
     End Select
-    Dim Ap_Ab As Double
     Ap_Ab = Ap_mm2 / Ab_mm2
     r = Ap_Ab
     PREF = Ap_Ab / (1 - Ap_Ab)
     ' estimate effective diameter with "vkrutka"
     Dim num_vkr As Integer
     num_vkr = 0
-    If dvkr1_mm > 0 Then
+    If d_vkr1_mm > 0 Then
         num_vkr = num_vkr + 1
-        ReDim Preserve p_dvkr_mm(1 To num_vkr)
-        p_dvkr_mm(num_vkr) = dvkr1_mm
+        ReDim Preserve p_d_vkr_mm(1 To num_vkr)
+        p_d_vkr_mm(num_vkr) = d_vkr1_mm
     End If
-    If dvkr2_mm > 0 Then
+    If d_vkr2_mm > 0 Then
         num_vkr = num_vkr + 1
-        ReDim Preserve p_dvkr_mm(1 To num_vkr)
-        p_dvkr_mm(num_vkr) = dvkr2_mm
+        ReDim Preserve p_d_vkr_mm(1 To num_vkr)
+        p_d_vkr_mm(num_vkr) = d_vkr2_mm
     End If
-    If dvkr3_mm > 0 Then
+    If d_vkr3_mm > 0 Then
         num_vkr = num_vkr + 1
-        ReDim Preserve p_dvkr_mm(1 To num_vkr)
-        p_dvkr_mm(num_vkr) = dvkr3_mm
+        ReDim Preserve p_d_vkr_mm(1 To num_vkr)
+        p_d_vkr_mm(num_vkr) = d_vkr3_mm
     End If
-    If dvkr4_mm > 0 Then
+    If d_vkr4_mm > 0 Then
         num_vkr = num_vkr + 1
-        ReDim Preserve p_dvkr_mm(1 To num_vkr)
-        p_dvkr_mm(num_vkr) = dvkr4_mm
+        ReDim Preserve p_d_vkr_mm(1 To num_vkr)
+        p_d_vkr_mm(num_vkr) = d_vkr4_mm
     End If
-    Dim i As Integer
-    p_dvkr_eff_mm = 0
-    For i = LBound(p_dvkr_mm) To UBound(p_dvkr_mm)
-        p_dvkr_eff_mm = p_dvkr_eff_mm + (p_dvkr_mm(i)) ^ 2
+    p_d_vkr_eff_mm = 0
+    For i = LBound(p_d_vkr_mm) To UBound(p_d_vkr_mm)
+        p_d_vkr_eff_mm = p_d_vkr_eff_mm + (p_d_vkr_mm(i)) ^ 2
     Next i
-    p_dvkr_eff_mm = p_dvkr_eff_mm ^ 0.5
+    p_d_vkr_eff_mm = p_d_vkr_eff_mm ^ 0.5
     
 End Sub
-Public Property Get d_mm() As Double
-    d_mm = dport_mm
+Public Property Get d_port_mm() As Double
+    d_port_mm = p_d_port_mm
 End Property
-Public Property Let d_mm(val As Double)
-    dport_mm = val
+Public Property Let d_port_mm(val As Double)
+    p_d_port_mm = val
+End Property
+Public Property Get p_open_atma() As Double
+    If IPO Then
+        p_open_atma = p_close_atma / (1 - r) - p_v_atma * r / (1 - r)
+    Else
+        p_open_atma = 1
+    End If
+End Property
+Public Property Get p_close_atma() As Double
+    If IPO Then
+        p_close_atma = GLV_p_close_atma(p_bellow_sc_atma, t_out_C)
+    Else
+        p_close_atma = 1
+    End If
 End Property
 ' функция расчета расхода газа через клапан
 Public Function calc_q_gas_sm3day(Optional p_intake_atma As Double = -1, _
                              Optional p_out_atma As Double = -1, _
-                             Optional t_intake_C As Double = -1) As Double
-    If p_intake_atma < 0 Then p_intake_atma = Me.p_intake_atma
+                             Optional t_in_C As Double = -1) As Double
+    Dim rslt
+    
+    p_in_atma = p_intake_atma
+    Me.p_out_atma = p_out_atma
+    
+    If p_intake_atma < 0 Then p_intake_atma = Me.p_in_atma
     If p_out_atma < 0 Then p_out_atma = Me.p_out_atma
-    If t_intake_C < 0 Then t_intake_C = Me.t_intake_C
+    If t_in_C < 0 Then t_in_C = Me.t_in_C
     
-    If (p_out_atma < p_intake_atma) And (d_mm > 0) Then
-        calc_q_gas_sm3day = GL_Qgasvalve_m3day(d_mm, p_intake_atma, p_out_atma, fluid.gamma_g, t_intake_C)
-    Else
-        calc_q_gas_sm3day = 0
+    If (p_out_atma < p_intake_atma) And (p_d_port_mm > 0) And (p_d_vkr_eff_mm = 0) Then
+        calc_q_gas_sm3day = GLV_q_gas_sm3day(p_d_port_mm, p_intake_atma, p_out_atma, fluid.gamma_g, t_in_C)
+        p_v_atma = p_out_atma
+    ElseIf (p_out_atma < p_intake_atma) And (p_d_port_mm > 0) And (p_d_vkr_eff_mm > 0) Then
+        rslt = GLV_q_gas_vkr_sm3day(p_d_port_mm, p_d_vkr_eff_mm, p_intake_atma, p_out_atma, fluid.gamma_g, t_in_C)
+        calc_q_gas_sm3day = rslt(0)
+        p_v_atma = rslt(1)
     End If
-End Function
-Public Function calc_p_out_atma(p_intake_atma)
+    
+    If IPO Then
+    ' need check open condition
+        If p_intake_atma < p_close_atma Then
+            calc_q_gas_sm3day = 0
+        End If
+    End If
     
 End Function
-Public Function calc_p_intake_atma(p_out_atma As Double, Qg_scm3day As Double)
-    calc_p_intake_atma = GL_Pd_gas_valve_atma(d_mm, p_out_atma, Qg_scm3day, fluid.gamma_g, t_intake_C)
+Public Function calc_p_out_atma(p_intake_atma As Double, q_gas_scm3day As Double)
+    Me.p_out_atma = p_out_atma
+    ' ищем давление внутри клапана
+    If p_d_vkr_eff_mm > 0 Then
+        p_v_atma = GLV_p_atma(p_d_vkr_eff_mm, p_intake_atma, q_gas_scm3day, fluid.gamma_g, t_in_C, True)
+        t_v_C = t_in_C
+    Else
+        p_v_atma = p_out_atma
+        t_v_C = t_out_C
+    End If
+    p_out_atma = GLV_p_atma(p_d_port_mm, t_v_C, q_gas_scm3day, fluid.gamma_g, t_in_C, False)
+    calc_p_out_atma = p_out_atma
+    
 End Function
-' функция расчета давления в сильфоне с поправкой на температуру
-Public Function Pbellow_atma(P_atm As Double, t_c As Double)
-' estimate IPO GLV bellow pressure sc required to get given pressure at given temperature
-' p_atma - pressure given
-' T_C - temperature given
-'
-Dim t_F As Double
-Dim Ct As Double
-Dim M As Double
-Dim Pb_psia As Double
-Pb_psia = P_atm * 14.696
-t_F = t_c * 9 / 5 + 32
-If Pb_psia < 1238 Then
-    M = 0.0000003054 * Pb_psia ^ 2 + 0.001934 * Pb_psia - 0.00226
-Else
-    M = 0.000000184 * Pb_psia ^ 2 + 0.002298 * Pb_psia - 0.267
-End If
-Ct = 1 / (1 + (t_F - 60) * M / Pb_psia)
-Pbellow_atma = P_atm * Ct
-End Function
-Public Function PGLclose_atma(t_c As Double)
-' calculate IPO GLV closing pressure based on Valve data
-Dim t_F As Double
-Dim Ct As Double
-Dim M As Double
-Dim Pb_psia As Double
-Pb_psia = Pbellow_sc_atma * 14.696
-t_F = t_c * 9 / 5 + 32
-If Pb_psia < 1238 Then
-    M = 0.0000003054 * Pb_psia ^ 2 + 0.001934 * Pb_psia - 0.00226
-Else
-    M = 0.000000184 * Pb_psia ^ 2 + 0.002298 * Pb_psia - 0.267
-End If
-Ct = 1 / (1 + (t_F - 60) * M / Pb_psia)
-PGLclose_atma = Pbellow_sc_atma / Ct
+' расчет давления на входе в клапан (затрубное давление)
+' по давлению в НКТ
+Public Function calc_p_in_atma(p_out_atma As Double, q_gas_scm3day As Double)
+    Me.p_out_atma = p_out_atma
+    ' ищем давление внутри клапана
+    If p_d_vkr_eff_mm > 0 Then
+        p_v_atma = GLV_p_atma(p_d_vkr_eff_mm, p_out_atma, q_gas_scm3day, fluid.gamma_g, t_in_C, False)
+        t_v_C = t_in_C
+    Else
+        p_v_atma = p_out_atma
+        t_v_C = t_out_C
+    End If
+    p_in_atma = GLV_p_atma(p_d_port_mm, t_v_C, q_gas_scm3day, fluid.gamma_g, t_in_C, False)
+    calc_p_in_atma = p_in_atma
 End Function
