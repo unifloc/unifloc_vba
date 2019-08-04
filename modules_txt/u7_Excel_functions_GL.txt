@@ -117,6 +117,7 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета расхода газа через газлифтный клапан
 ' с учетом наличия вкруток на выходе клапана
+' результат массив значений и подписей
 Public Function GLV_q_gas_sm3day(d_mm As Double, _
                                 p_in_atma As Double, _
                                 p_out_atma As Double, _
@@ -137,10 +138,27 @@ On Error GoTo err1:
     Dim Pd_Pu_crit As Double
     Dim CD As Double  ' discharge coefficient
     Dim G As Double
-    Dim C0 As Double, C1 As Double, c2 As Double
+    Dim C0 As Double, C1 As Double, C2 As Double
     Dim A As Double
     Dim Qg_crit As Double
+    Dim Qg As Double
     Dim Pd_Pu As Double
+    Dim crit As Boolean
+    Dim p_crit_out_atma  As Double
+    
+    crit = False
+    Pd_Pu = p_out_atma / p_in_atma
+    
+    If Pd_Pu >= 1 Then
+        GLV_q_gas_sm3day = Array(Array(0, 0, crit), _
+                             Array("q_gas_sm3day", "p_crit_atma", "critical flow"))
+        Exit Function
+    End If
+    
+    If Pd_Pu <= 0 Then
+        GLV_q_gas_sm3day = 0
+        Exit Function
+    End If
     
     K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
     
@@ -154,27 +172,23 @@ On Error GoTo err1:
     G = 32.17 'ft/sec^2
     
     C1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
-    c2 = (2 * G * K / (K - 1)) ^ 0.5
-    Qg_crit = 155.5 * CD * A * Pu_psi * C1 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5 'critical flow ratio, Mcf/d
+    C2 = (2 * G * K / (K - 1)) ^ 0.5
+    Qg_crit = 155.5 * CD * A * Pu_psi * C1 * C2 / (gamma_g * (Tu_F + 460)) ^ 0.5 'critical flow ratio, Mcf/d
     
-    Pd_Pu = p_out_atma / p_in_atma
-    
-    If Pd_Pu >= 1 Then
-        GLV_q_gas_sm3day = 0
-        Exit Function
-    End If
-    
-    If Pd_Pu <= 0 Then
-        GLV_q_gas_sm3day = 0
-        Exit Function
-    End If
+    p_crit_out_atma = p_in_atma * Pd_Pu_crit
     
     If Pd_Pu <= Pd_Pu_crit Then
-        GLV_q_gas_sm3day = Qg_crit * 28.31993658
+        Qg = Qg_crit * 28.31993658
+        p_out_atma = p_crit_out_atma
+        crit = True
     Else
         C0 = ((Pd_Pu ^ (2 / K) - Pd_Pu ^ (1 + 1 / K))) ^ 0.5
-        GLV_q_gas_sm3day = Qg_crit * 28.31993658 * C0 / C1
+        Qg = Qg_crit * 28.31993658 * C0 / C1
+        crit = False
     End If
+    
+    GLV_q_gas_sm3day = Array(Array(Qg, p_crit_out_atma, crit), _
+                             Array("q_gas_sm3day", "p_crit_atma", "critical flow"))
     
     Exit Function
 err1:
@@ -183,7 +197,8 @@ err1:
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета расхода газа через газлифтный клапан
-' с учетом наличия вкруток на выходе клапана
+' с учетом наличия вкруток на выходе клапана.
+' результат массив значений и подписей.
 Public Function GLV_q_gas_vkr_sm3day(d_port_mm As Double, _
                                      d_vkr_mm As Double, _
                                      p_in_atma As Double, _
@@ -202,6 +217,10 @@ Public Function GLV_q_gas_vkr_sm3day(d_port_mm As Double, _
     Dim func As String
     Dim pv_atma As Double
     Dim q_gas_sm3day As Double
+    Dim res1
+    Dim res2
+    Dim crit1 As Boolean
+    Dim crit2 As Boolean
     
     func = "calc_dq_gas_pv_vkr_valve"
      
@@ -211,17 +230,112 @@ Public Function GLV_q_gas_vkr_sm3day(d_port_mm As Double, _
     coeffA(3) = p_out_atma
     coeffA(4) = gamma_g
     coeffA(5) = t_C
-    prm.y_tolerance = 0.1
+    prm.y_tolerance = 0.01
     
     Call solve_equation_bisection(func, p_out_atma, p_in_atma, coeffA, prm)
     pv_atma = prm.x_solution
-    q_gas_sm3day = GLV_q_gas_sm3day(d_port_mm, p_in_atma, pv_atma, gamma_g, t_C)
-    GLV_q_gas_vkr_sm3day = Array(q_gas_sm3day, pv_atma)
+    res1 = GLV_q_gas_sm3day(d_port_mm, p_in_atma, pv_atma, gamma_g, t_C)
+    res2 = GLV_q_gas_sm3day(d_vkr_mm, pv_atma, p_out_atma, gamma_g, t_C)
+    q_gas_sm3day = res1(0)(0)
+    crit1 = res1(0)(2)
+    crit2 = res2(0)(2)
     
+    GLV_q_gas_vkr_sm3day = Array(Array(q_gas_sm3day, p_in_atma, pv_atma, p_out_atma, q_gas_sm3day, crit1, crit2), _
+                                 Array("q_gas_sm3day", "p_in_atma", "pv_atma", "p_out_atma", "q_gas_sm3day", "crit1", "crit2"))
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета давления на входе или на выходе
-' газлифтного клапана (простого) при закачке газа
+' газлифтного клапана (простого) при закачке газа.
+' результат массив значений и подписей
+Public Function GLV_p_vkr_atma(d_port_mm As Double, _
+                               d_vkr_mm As Double, _
+                               p_calc_atma As Double, _
+                               q_gas_sm3day As Double, _
+                               gamma_g As Double, _
+                               t_C As Double, _
+                               calc_alog_flow As Boolean)
+' d_port_mm     - диаметр порта клапана, мм
+' d_vkr_mm      - диаметр вкрутки клапана, мм
+' p_calc_atma   - давление на входе (выходе) клапана, атма
+' q_gas_sm3day  - расход газа, ст. м3/сут
+' gamma_g       - удельная плотность газа
+' t_C           - температура в точке установки клапана
+' calc_alog_flow - направление расчета:
+'              0 - против потока (расчет давления на входе);
+'              1 - по потоку (расчет давления на выходе).
+'description_end
+    ' ищем давление внутри клапана
+    Dim p_v_atma As Double
+    Dim p_in As Double
+    Dim p_out As Double
+    Dim p_atma As Double
+    Dim p2
+    Dim p1
+    Dim crit1 As Boolean
+    Dim crit2 As Boolean
+    
+On Error GoTo er1:
+    crit1 = False
+    crit2 = False
+    If calc_alog_flow Then
+        p_in = p_calc_atma
+        p1 = GLV_p_atma(d_port_mm, p_in, q_gas_sm3day, gamma_g, t_C, True)
+        p_v_atma = p1(0)(0)
+        If p_v_atma < 0 Then
+        ' critical flow through the port achived
+            q_gas_sm3day = p1(0)(1)
+            p_v_atma = p1(0)(2)
+            crit1 = True
+        End If
+    
+        If d_vkr_mm > 0 Then
+            p2 = GLV_p_atma(d_vkr_mm, p_v_atma, q_gas_sm3day, gamma_g, t_C, True)
+            p_atma = p2(0)(0)
+            If p_atma < 0 Then
+            ' critical flow through the vkrutka achived
+                q_gas_sm3day = p2(0)(1)
+                p_atma = p2(0)(2)
+                crit2 = True
+            End If
+        Else
+            p_atma = p_v_atma
+        End If
+        p_out = p_atma
+    Else
+        p_out = p_calc_atma
+        If d_vkr_mm > 0 Then
+            p1 = GLV_p_atma(d_vkr_mm, p_calc_atma, q_gas_sm3day, gamma_g, t_C, False)
+            p_v_atma = p1(0, 0)
+            If p_v_atma < 0 Then
+            ' critical flow through the vkrutka achived
+                q_gas_sm3day = p1(0)(1)
+                p_v_atma = p1(0)(2)
+                crit2 = True
+            End If
+        Else
+            p_v_atma = p_calc_atma
+        End If
+        p2 = GLV_p_atma(d_port_mm, p_v_atma, q_gas_sm3day, gamma_g, t_C, False)
+        p_atma = p2(0)(0)
+        If p_atma < 0 Then
+        ' critical flow through the port achived
+            q_gas_sm3day = p2(0)(1)
+            p_atma = p2(0)(2)
+            crit1 = True
+        End If
+        p_in = p_atma
+    End If
+    GLV_p_vkr_atma = Array(Array(p_atma, p_in, p_v_atma, p_out, q_gas_sm3day, crit1, crit2), _
+                           Array("p_atma", "p_in_atma", "p_v_atma", "p_out_atma", "q_gas_sm3day", "port critical flow", "vkrutka critical flow"))
+    Exit Function
+er1:
+    GLV_p_vkr_atma = "error"
+    addLogMsg "error in function : GLV_p_vkr_atma"
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета давления на входе или на выходе
+' газлифтного клапана (простого) при закачке газа.
+' результат массив значений и подписей
 Public Function GLV_p_atma(d_mm As Double, _
                            p_calc_atma As Double, _
                            q_gas_sm3day As Double, _
@@ -239,10 +353,13 @@ Public Function GLV_p_atma(d_mm As Double, _
 'description_end
 On Error GoTo err1:
     Dim Qmax_m3day As Double
+    Dim qres
     Dim Pd As Double
     Dim Pu As Double
+    Dim Pcrit As Double
     Dim K As Double
     Dim Pd_Pu_crit As Double
+    Dim crit As Boolean
     
     Dim prm As New CSolveParam
     Dim coeffA(4) As Double
@@ -259,34 +376,43 @@ On Error GoTo err1:
     If calc_alog_flow Then
         Pu = p_calc_atma
         Pd = 1
-        Qmax_m3day = GLV_q_gas_sm3day(d_mm, Pu, Pd, gamma_g, t_C)
+        qres = GLV_q_gas_sm3day(d_mm, Pu, Pd, gamma_g, t_C)
+        Qmax_m3day = qres(0)(0)
+        Pcrit = Pd
         If Qmax_m3day > q_gas_sm3day Then
             func = "calc_dq_gas_pd_valve"
             coeffA(2) = Pu
+            crit = False
             Call solve_equation_bisection(func, Pd_Pu_crit * Pu, Pu, coeffA, prm)
-            GLV_p_atma = prm.x_solution
+            GLV_p_atma = Array(Array(prm.x_solution, Qmax_m3day, Pcrit, crit), _
+                               Array("p", "Qmax_m3day", "Pcrit", "critical flow"))
         Else
-            GLV_p_atma = Pu
+            crit = True
+            GLV_p_atma = Array(Array(-1, Qmax_m3day, Pcrit, crit), _
+                               Array("p, atma", "Qmax_m3day", "Pcrit", "critical flow"))
         End If
     Else
+        Qmax_m3day = q_gas_sm3day
         Pd = p_calc_atma
-        Pu = 200
+        Pu = 500
         func = "calc_dq_gas_pu_valve"
         coeffA(2) = Pd
+        crit = False
         Call solve_equation_bisection(func, Pd, Pu, coeffA, prm)
-        GLV_p_atma = prm.x_solution
+        GLV_p_atma = Array(Array(prm.x_solution, prm.y_solution, Pu, crit), _
+                           Array("p, atma", "Q_m3day", "Pu max", "critical flow"))
     End If
         
     Exit Function
 err1:
-    GLV_p_atma = -1
-    addLogMsg "error in function : GL_Pd_gas_valve_atma"
+    GLV_p_atma = "error"
+    addLogMsg "error in function : GLV_p_atma"
 End Function
     
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета давления зарядки сильфона на стенде при
 ' стандартной температуре по данным рабочих давления и температуры
-Public Function GLV_p_bellow_atma(p_atma As Double, t_C As Double)
+Public Function GLV_p_bellow_atma(p_atma As Double, t_C As Double) As Double
 ' p_atma - рабочее давление открытия клапана в скважине, атм
 ' t_C   - рабочая температура открытия клапана в скважине, С
 'description_end
@@ -309,7 +435,7 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' фукнция расчета давления в сильфоне с азотом
 ' в рабочих условиях при заданной температуре
-Public Function GLV_p_close_atma(p_bellow_atm As Double, t_C As Double)
+Public Function GLV_p_close_atma(p_bellow_atm As Double, t_C As Double) As Double
 ' p_bellow_atm  - давление зарядки сильфона при стандартных условиях
 ' t_C           - температура рабочая
 'description_end
@@ -386,17 +512,17 @@ On Error GoTo err1:
     Dim Pd_Pu As Double
     Pd_Pu = p_out_atma / p_in_atma
     
-    Dim C0 As Double, C1 As Double, c2 As Double
+    Dim C0 As Double, C1 As Double, C2 As Double
     C0 = ((Pd_Pu ^ (2 / K) - Pd_Pu ^ (1 + 1 / K))) ^ 0.5
     C1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
-    c2 = (2 * G * K / (K - 1)) ^ 0.5
+    C2 = (2 * G * K / (K - 1)) ^ 0.5
     
     Dim A As Double
     
     If Pd_Pu <= Pd_Pu_crit Then
-        A = Qg_Mcfd / (155.5 * CD * Pu_psi * C1 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
+        A = Qg_Mcfd / (155.5 * CD * Pu_psi * C1 * C2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
     Else
-        A = Qg_Mcfd / (155.5 * CD * Pu_psi * C0 * c2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
+        A = Qg_Mcfd / (155.5 * CD * Pu_psi * C0 * C2 / (gamma_g * (Tu_F + 460)) ^ 0.5)
     End If
     
     Dim d_in As Double
