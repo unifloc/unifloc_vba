@@ -41,7 +41,7 @@ Public Event ReportProgress(msg As String)
 Public isCalcCasing As Boolean
 Private PipesProd As New Collection      ' коллеция труб по которым идет добыча из которых состоит скважина
 Private PipesInj As New Collection       '  коллекция труб по которым идет закачка газа
-Private valves As New CGLValveSet         ' коллекция клапанов установленных в скважине
+Public valves As New CGLValveSet         ' коллекция клапанов установленных в скважине
 Private p_fluidCas As New CPVT
 ' it is assumed - one fluid in tubing - other in casing
 ' in gasing gas - with additional amount of gas in flow
@@ -189,24 +189,24 @@ End Property
 '------------------------------------------------------------
 ' temperature general properties
 '------------------------------------------------------------
-Public Property Get Tline_C() As Double
-    Tline_C = p_PTlin.t_C
+Public Property Get t_line_C() As Double
+    t_line_C = p_PTlin.t_C
 End Property
-Public Property Get Tbuf_C() As Double
-    Tbuf_C = p_PTbuf.t_C
-End Property
- 
-Public Property Get tbh_C() As Double
-    tbh_C = p_PTwf.t_C
+Public Property Get t_buf_C() As Double
+    t_buf_C = p_PTbuf.t_C
 End Property
  
-Public Property Get twh_C() As Double
-    twh_C = p_PTbuf.t_C
+Public Property Get t_bh_C() As Double
+    t_bh_C = p_PTwf.t_C
 End Property
-Public Property Get Tsurf_C() As Double
+ 
+Public Property Get t_wh_C() As Double
+    t_wh_C = p_PTbuf.t_C
+End Property
+Public Property Get t_surf_C() As Double
     On Error Resume Next
-    Tsurf_C = p_PTbuf.t_C
-    Tsurf_C = AmbientForm.AmbTemp_С(0)
+    t_surf_C = p_PTbuf.t_C
+    t_surf_C = AmbientForm.AmbTemp_С(0)
 End Property
 Public Property Get AmbientForm() As CAmbientFormation
     Set AmbientForm = p_AmbientForm
@@ -226,23 +226,23 @@ End Property
 '------------------------------------------------------------
 ' pressure general properties
 '------------------------------------------------------------
-Public Property Get Pline_atma() As Double
-   Pline_atma = p_PTlin.p_atma
+Public Property Get p_line_atma() As Double
+   p_line_atma = p_PTlin.p_atma
 End Property
-Public Property Get pbuf_atma() As Double
+Public Property Get p_buf_atma() As Double
 ' buffer pressure
-   pbuf_atma = p_PTbuf.p_atma
+   p_buf_atma = p_PTbuf.p_atma
 End Property
-Public Property Get pwf_atma() As Double
+Public Property Get p_wf_atma() As Double
 ' давление на забое
-   pwf_atma = p_PTwf.p_atma
+   p_wf_atma = p_PTwf.p_atma
 End Property
-Public Property Get Pan_atma() As Double
-' annulus presure
-   Pan_atma = p_PTgas_inj.p_atma
-End Property
-Public Property Get Pcas_atma() As Double
-    Pcas_atma = p_PTgas_inj.p_atma
+'Public Property Get p_an_atma() As Double
+'' annulus presure
+'   p_an_atma = p_PTgas_inj.p_atma
+'End Property
+Public Property Get p_cas_atma() As Double
+    p_cas_atma = p_PTgas_inj.p_atma
 End Property
 '------------------------------------------------------------
 ' well rates general properties
@@ -257,9 +257,9 @@ End Property
 Public Property Get qliq_sm3day() As Double
    qliq_sm3day = p_fluid.qliq_sm3day
 End Property
-Public Property Get W_kgsec() As Double
+Public Property Get w_kgsec() As Double
 '    массовый расход продукции рассчитаем
-   W_kgsec = p_fluid.wm_kgsec
+   w_kgsec = p_fluid.wm_kgsec
 End Property
 Public Property Get q_oil_sm3day() As Double
    q_oil_sm3day = p_fluid.q_oil_sm3day
@@ -623,7 +623,7 @@ On Error GoTo err2:
                 End If
             Else
                 Qgas_inj_GLV_scm3day = pipe.GLVin.calc_q_gas_sm3day(-1, -1, -1)
-                i = i / 0
+              '  i = i / 0
             End If
             pipe.GLVin.q_gas_inj_scm3day = Qgas_inj_GLV_scm3day
 On Error GoTo err1:
@@ -755,10 +755,10 @@ On Error GoTo err1:
     End If
     
    ' Call SetQgasInj(Pcas_inj_atma, Qgas_inj_scm3day)
-    p_PTlin = SetPT(calc_plin_pwf_atma(p_PTwf.p_atma, saveCurve:=saveCurve), Tbuf_C)
+    p_PTlin = SetPT(calc_plin_pwf_atma(p_PTwf.p_atma, saveCurve:=saveCurve), t_buf_C)
     
-    If Abs(Pline_atma - plin_atma) > const_well_P_tolerance Then
-       addLogMsg "CWellGL.calc_pwf_plin_atma: BHP estimation error exceeds tolerance " & const_well_P_tolerance & ". Equal = " & Abs(Me.Pline_atma - plin_atma)
+    If Abs(p_line_atma - plin_atma) > const_well_P_tolerance Then
+       addLogMsg "CWellGL.calc_pwf_plin_atma: BHP estimation error exceeds tolerance " & const_well_P_tolerance & ". Equal = " & Abs(Me.p_line_atma - plin_atma)
     End If
     calc_pwf_plin_atma = p_PTwf.p_atma
     
@@ -801,8 +801,11 @@ Private Sub FillWellConstructionTr()
     End If
     segmDown_m = segmUp_m
     i = valves.Count
-    segmUp_m = valves.Hmes_m(i)
-    
+    If i > 0 Then
+        segmUp_m = valves.Hmes_m(i)
+    Else
+        segmUp_m = 0
+    End If
     For j = i To 0 Step -1
         If segmUp_m < segmDown_m Then
             Set pipe = New CPipe  ' creating new object
@@ -827,9 +830,8 @@ Private Sub FillWellConstructionTr()
             Set pipe.GLVin = valves.valves(j)
             PipesInj.Add pipe
         End If
-        
-        
     Next j
+       
 '   Hvd_m = Trajectory.Htubing_m ' определим глубину спуска установки
 '   p_Hspvert_m = Trajectory.HabsZ_m(p_Hsp_m)    ' в том числе по вертикали
 '   Call p_Pipe_HspHvd.InitPipeConstrTr(Trajectory, Trajectory.Htubing_m, Trajectory.hperf_m, 1)
@@ -868,16 +870,16 @@ End Sub
 'End Sub
  
  
-Public Property Get Pgas_inj_atma() As Double
-    Pgas_inj_atma = p_PTgas_inj.p_atma
+Public Property Get p_gas_inj_atma() As Double
+    p_gas_inj_atma = p_PTgas_inj.p_atma
 End Property
-Public Property Let Pgas_inj_atma(val As Double)
+Public Property Let p_gas_inj_atma(val As Double)
     p_PTgas_inj.p_atma = val
 End Property
 ' ======================================================================
 ' Iwell implementation
 ' ======================================================================
-Private Function IWell_CalcDown(Pline_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
+Private Function IWell_CalcDown(pline_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
  '   IWell_CalcDown = calc_pwf_plin_atma(Pline_atma, tbh_C, saveCurve:=saveCurve)
 End Function
 Private Function IWell_CalcUp(pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
