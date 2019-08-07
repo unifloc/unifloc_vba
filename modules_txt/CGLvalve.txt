@@ -87,9 +87,11 @@ Public Sub set_GLV_R1(Optional ByVal IPO As Boolean = False, _
         p_d_vkr_mm(num_vkr) = d_vkr4_mm
     End If
     p_d_vkr_eff_mm = 0
-    For i = LBound(p_d_vkr_mm) To UBound(p_d_vkr_mm)
-        p_d_vkr_eff_mm = p_d_vkr_eff_mm + (p_d_vkr_mm(i)) ^ 2
-    Next i
+    If num_vkr > 0 Then
+        For i = LBound(p_d_vkr_mm) To UBound(p_d_vkr_mm)
+            p_d_vkr_eff_mm = p_d_vkr_eff_mm + (p_d_vkr_mm(i)) ^ 2
+        Next i
+    End If
     p_d_vkr_eff_mm = p_d_vkr_eff_mm ^ 0.5
     
 End Sub
@@ -102,16 +104,16 @@ End Property
 Public Property Get p_open_atma() As Double
     If IPO Then
         ' for opening assume p_v_atma = p_out_atma
-        p_open_atma = p_close_atma / (1 - r) - p_out_atma * r / (1 - r)
+        p_open_atma = p_bellow_rc_atma / (1 - r) - p_out_atma * r / (1 - r)
     Else
         p_open_atma = 1
     End If
 End Property
-Public Property Get p_close_atma() As Double
+Public Property Get p_bellow_rc_atma() As Double
     If IPO Then
-        p_close_atma = GLV_p_close_atma(p_bellow_sc_atma, t_C)
+        p_bellow_rc_atma = GLV_p_close_atma(p_bellow_sc_atma, t_C)
     Else
-        p_close_atma = 1
+        p_bellow_rc_atma = 1
     End If
 End Property
 ' функция расчета расхода газа через клапан
@@ -146,22 +148,42 @@ Public Function calc_q_gas_sm3day(Optional p_intake_atma As Double = -1, _
     
     If IPO Then
     ' need check open condition
-        If p_intake_atma < p_close_atma Then
-            calc_q_gas_sm3day = 0
+        Dim pdif As Double
+        If p_intake_atma < p_open_atma + 2 Then
+            pdif = p_open_atma + 2 - p_intake_atma
+            If pdif < 0 Then pdif = 0
+            calc_q_gas_sm3day = calc_q_gas_sm3day * (pdif) / 2
         End If
     End If
     
 End Function
 Public Function calc_p_out_atma(p_intake_atma As Double, q_gas_scm3day As Double)
-    Me.p_out_atma = p_out_atma
-    ' ищем давление внутри клапана
-    If p_d_vkr_eff_mm > 0 Then
-        p_v_atma = GLV_p_atma(p_d_vkr_eff_mm, p_intake_atma, q_gas_scm3day, fluid.gamma_g, t_C, True)
-    Else
-        p_v_atma = p_out_atma
+    Me.p_in_atma = p_intake_atma
+    Dim res
+    res = GLV_p_vkr_atma(d_port_mm, p_d_vkr_eff_mm, p_intake_atma, q_gas_scm3day, fluid.gamma_g, t_C, True)
+'    ' ищем давление внутри клапана
+'    If p_d_vkr_eff_mm > 0 Then
+'        p_v_atma = GLV_p_atma(p_d_vkr_eff_mm, p_intake_atma, q_gas_scm3day, fluid.gamma_g, t_C, True)
+'    Else
+'        p_v_atma = p_out_atma
+'    End If
+'    p_out_atma = GLV_p_atma(p_d_port_mm, p_v_atma, q_gas_scm3day, fluid.gamma_g, t_C, True)
+'    calc_p_out_atma = p_out_atma
+'
+    p_v_atma = res(0)(2)
+    p_in_atma = res(0)(0)
+    
+    If IPO Then
+    ' need check open condition
+        Dim pdif As Double
+        If p_in_atma < p_open_atma + 2 Then
+            pdif = p_open_atma + 2 - p_in_atma
+            If pdif < 0 Then pdif = 0
+            calc_q_gas_sm3day = calc_q_gas_sm3day * (pdif) / 2
+        End If
     End If
-    p_out_atma = GLV_p_atma(p_d_port_mm, p_v_atma, q_gas_scm3day, fluid.gamma_g, t_C, True)
-    calc_p_out_atma = p_out_atma
+    
+    calc_p_out_atma = p_in_atma
     
 End Function
 ' расчет давления на входе в клапан (затрубное давление)
@@ -169,11 +191,14 @@ End Function
 Public Function calc_p_in_atma(p_out_atma As Double, q_gas_scm3day As Double)
     Me.p_out_atma = p_out_atma
     ' ищем давление внутри клапана
-    If p_d_vkr_eff_mm > 0 Then
-        p_v_atma = GLV_p_atma(p_d_vkr_eff_mm, p_out_atma, q_gas_scm3day, fluid.gamma_g, t_C, False)
-    Else
-        p_v_atma = p_out_atma
-    End If
-    p_in_atma = GLV_p_atma(p_d_port_mm, p_v_atma, q_gas_scm3day, fluid.gamma_g, t_C, False)
+    Dim res
+    res = GLV_p_vkr_atma(d_port_mm, p_d_vkr_eff_mm, p_out_atma, q_gas_scm3day, fluid.gamma_g, t_C, False)
+'    If p_d_vkr_eff_mm > 0 Then
+'        p_v_atma = GLV_p_atma(p_d_vkr_eff_mm, p_out_atma, q_gas_scm3day, fluid.gamma_g, t_C, False)
+'    Else
+'        p_v_atma = p_out_atma
+'    End If
+    p_v_atma = res(0)(2)
+    p_in_atma = res(0)(0)
     calc_p_in_atma = p_in_atma
 End Function
