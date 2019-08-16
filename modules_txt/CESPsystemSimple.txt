@@ -9,10 +9,10 @@
 ' класс описывает систему ЭЦН в простом варианте - один ЭЦН+ПЭД+кабель
 ' класс отвечатает и за расчет сепарации и свойств флюидов
 Option Explicit
-Private p_ESPpump As CESPpump  ' сам насос
+Private ESP_pump_ As CESPpump  ' сам насос
 ' описание газосепаратора
 Public isGasSep As Boolean
-Public KSepGasSep_fr As Double           ' коэффициент сепарации газосепаратора
+Public ksep_gassep_fr As Double           ' коэффициент сепарации газосепаратора
 Public dPower_GasSep_W As Double
 ' параметры сепарации газа на приеме насоса
 ' при расчете снизу вверх могут быть рассчитаны по корреляциям
@@ -23,23 +23,23 @@ Public isManualSeparationCalc As SEPAR_CALC_METHOD   ' флаг для ручного задания 
                                            ' 0 - нет - расчет автоматический
                                            ' 1 - Ксеп ручной, давления автомат
                                            ' 2 - Ксеп ручной, давления и температура ручные
-Public KsepNat_fr As Double
-' property KsepTotal_fr As Double  defined below
+Public ksep_nat_fr As Double
+' property ksep_total_fr As Double  defined below
 ' для расчета сепарации надо либо задать, либо спасти значения при которых проводился расчет сепарации
-Public Psep_atma As Double
-Public Tsep_C As Double
-Public tintake_C As Double
+Public p_ksep_atma As Double
+Public t_ksep_C As Double
+Public t_int_C As Double
 Public t_dis_C As Double
 ' простой набор параметров для описания УЭЦН
 Public U_V As Double                ' напряжение на ПЭД фактическое
-Private p_U_trans_high_V As Double    ' напряжение на трансформатере на высокой стороне, расчетное
-Private p_U_trans_low_V As Double     ' напряжение на трансформатере на низкой стороне, константа по факту
+Private U_trans_high_V_ As Double    ' напряжение на трансформатере на высокой стороне, расчетное
+Private U_trans_low_V_ As Double     ' напряжение на трансформатере на низкой стороне, константа по факту
                                     ' todo логично было бы задавать напряжение на поверхности, а считать какое
                                     ' будет внизу - но это усложняе расчет и отложено на потом
 Public power_motor_nom_W As Double  ' номинальная мощность ПЭД на номинальной частоте
-Private p_power_motor_W As Double       ' расчетная мощность на ПЭД, только читать
-Private p_power_motor_fact_W As Double ' фактическая мощность ПЭД, задается для коррекции мощности
-Private p_Energy_fact_Whday As Double  ' фактическое потребление энергии за сутки Втч/день
+Private power_motor_W_ As Double       ' расчетная мощность на ПЭД, только читать
+Private power_motor_fact_W_ As Double ' фактическая мощность ПЭД, задается для коррекции мощности
+Private energy_fact_Whday_ As Double  ' фактическое потребление энергии за сутки Втч/день
 Public freq_nom_Hz As Double        ' номинальная частота вращения ЭЦН из базы ЭЦН
 Public motor_eff_fr As Double       ' номинальный КПД ПЭД todo заменить на характеристик ПЭД
 Public CS_eff_fr As Double          ' номинальный КПД станции управления УЭЦН
@@ -58,7 +58,7 @@ Public cable_Tmax_C As Double       ' температурный рейтинг  todo сделать провер
 Public cable_dU_V As Double         ' падение напряжения на кабеле
 Public cable_dPower_W As Double     ' мощность потребляемая кабелем
 Public cable_power_W As Double      ' мощность на входе в кабель
-Public p_freq_Hz As Double          ' частота питающего напряжения, Гц
+Public freq_Hz_ As Double          ' частота питающего напряжения, Гц
 Public slip_fr As Double            ' номинальная величина проскальзывания
                                     ' в отличии от насоса где частота соответствует частоте вращения вала
                                     ' в системе УЭЦН это частота тока и во вращение транслируется с проскальзыванием
@@ -68,19 +68,18 @@ Public load_fr As Double            ' загрузка ПЭД УЭЦН
                                     ' отношение фактической потребляемой мощности при работе
                                     ' к номинальной скорректированной на частоту
 ' параметры установки УЭЦН в скважине
-Private p_HmesTop_m As Double
-Private p_ESP_length_m As Double
+Private h_mes_top__m As Double
+Private ESP_length_m_ As Double
 Public d_cas_mm As Double
 Public d_intake_mm As Double
-Public Angle_deg As Double
+Public angle_deg As Double
+Private PKV_work_min_ As Double     ' время работы в ПКВ режиме
+Private PKV_stop_min_ As Double     ' время ожидания в ПКВ режиме
 ' флюиды которые работают в системе УЭЦН
-Private p_fluid As CPVT    ' флюид перед входом в насос
-Public fluidTub As CPVT    ' флюид в НКТ выше насоса
-Public fluidCas As CPVT    ' флюид в затрубном пространстве
+Private fluid_ As CPVT    ' флюид перед входом в насос
+Public fluid_tub As CPVT    ' флюид в НКТ выше насоса
+Public fluid_cas As CPVT    ' флюид в затрубном пространстве
 Public fluidGasSep As CPVT ' флюид в газосепараторе
-'
-Private p_PKV_work_min As Double     ' время работы в ПКВ режиме
-Private p_PKV_stop_min As Double     ' время ожидания в ПКВ режиме
 ' параметры определяющие режим периодической кратковременной работы скважины
 ' ПКВ режим влияет на расчет показателей УЭЦН
 '   - учитывается, что в период работы дебит равен мгновенному
@@ -95,114 +94,114 @@ Private p_PKV_stop_min As Double     ' время ожидания в ПКВ режиме
 '         - что в затруб
 '   - задает электрические показатели системы УЭЦН и проводит расчет системы
 '   - тепературный режим регулируется параметрами класса
-'           Tintake_C - температура на приеме насоса
+'           t_int_C - температура на приеме насоса
 '           t_dis_C - температура на выкиде насоса. если =-1 то рассчитывается при calc_along_flow = True
 Public Property Get freq_Hz() As Double
-   freq_Hz = p_freq_Hz
+   freq_Hz = freq_Hz_
 End Property
 Public Property Let freq_Hz(val As Double)
-   p_freq_Hz = val
-   p_ESPpump.freq_Hz = val * (1 - slip_fr)
+   freq_Hz_ = val
+   ESP_pump_.freq_Hz = val * (1 - slip_fr)
 End Property
-Public Property Get ESPpump() As CESPpump
-   Set ESPpump = p_ESPpump
+Public Property Get ESP_pump() As CESPpump
+   Set ESP_pump = ESP_pump_
 End Property
-Public Property Set ESPpump(pmp As CESPpump)
-   Set p_ESPpump = pmp
+Public Property Set ESP_pump(pmp As CESPpump)
+   Set ESP_pump_ = pmp
    freq_nom_Hz = pmp.nom_freq_Hz
 End Property
 Public Property Get power_motor_fact_W() As Double
-   power_motor_fact_W = p_power_motor_fact_W
+   power_motor_fact_W = power_motor_fact_W_
 End Property
-Public Property Get Energy_fact_Whday() As Double
-   Energy_fact_Whday = p_Energy_fact_Whday
+Public Property Get energy_fact_Whday() As Double
+   energy_fact_Whday = energy_fact_Whday_
 End Property
-Public Property Let Energy_fact_Whday(val As Double)
-   p_Energy_fact_Whday = val
-   p_power_motor_fact_W = val / 24 / PKV_frac
+Public Property Let energy_fact_Whday(val As Double)
+   energy_fact_Whday_ = val
+   power_motor_fact_W_ = val / 24 / PKV_frac
 End Property
 Public Property Get power_motor_W() As Double
-   power_motor_W = p_power_motor_W
+   power_motor_W = power_motor_W_
 End Property
 Public Property Get U_trans_high_V() As Double
 ' напряжение на трансфоратере по высокой стороне
-    U_trans_high_V = p_U_trans_high_V
+    U_trans_high_V = U_trans_high_V_
 End Property
 Public Property Get U_trans_low_V() As Double
 ' напряжение на трансфоратере по низкой стороне
-    U_trans_low_V = p_U_trans_low_V
+    U_trans_low_V = U_trans_low_V_
 End Property
 Public Property Get trans_coef_fr() As Double
 ' коэффициент трансформации трансформатора
     trans_coef_fr = U_trans_high_V / U_trans_low_V
 End Property
-Public Property Get isPKV() As Boolean
+Public Property Get is_PKV() As Boolean
 ' оценка работает ли скважина в ПКВ режиме
-    isPKV = p_PKV_work_min > 0 And p_PKV_stop_min > 0
+    is_PKV = PKV_work_min_ > 0 And PKV_stop_min_ > 0
 End Property
-Public Property Let isPKV(val As Boolean)
+Public Property Let is_PKV(val As Boolean)
 ' нужна для отключения ПКВ режима
     If val Then
-        Call setPKV(30, 30)
+        Call PKV_set(30, 30)
     Else
-        Call setPKV(-1, -1)
+        Call PKV_set(-1, -1)
     End If
 End Property
-Public Sub setPKV(ByVal PKV_work_min As Double, _
+Public Sub PKV_set(ByVal PKV_work_min As Double, _
                   ByVal PKV_stop_min As Double)
 ' устновка ПКВ режима
 ' в виде отдельной процедуры, так как надо при этом модифицировать флюид
-    p_PKV_work_min = PKV_work_min
-    p_PKV_stop_min = PKV_stop_min
-    If isPKV Then
-        Set p_ESPpump.fluid = fluid
+    PKV_work_min_ = PKV_work_min
+    PKV_stop_min_ = PKV_stop_min
+    If is_PKV Then
+        Set ESP_pump_.fluid = fluid
     End If
 End Sub
 Private Sub PKV_update()
     ' обновляем все параметры чтобы лучше работать с ПКВ
     
     ' корректируем дебит
-    ESP.fluid.qliq_sm3day = ESP.fluid.qliq_sm3day / PKV_frac
-    p_power_motor_fact_W = Energy_fact_Whday / 24 / PKV_frac
+    ESP.fluid.q_liq_sm3day = ESP.fluid.q_liq_sm3day / PKV_frac
+    power_motor_fact_W_ = energy_fact_Whday / 24 / PKV_frac
 End Sub
 ' свойства для управления флюидом
 Public Property Get fluid() As CPVT
-    Set fluid = p_fluid
+    Set fluid = fluid_
 End Property
 Public Property Set fluid(val As CPVT)
-    Set p_fluid = val
+    Set fluid_ = val
     ' сбросим также все другие флюиды
-    Set fluidTub = val
-    Set fluidCas = val
+    Set fluid_tub = val
+    Set fluid_cas = val
     Set fluidGasSep = val
     ' в насосе всегда свой флюид
-    Set p_ESPpump.fluid = val.Clone()
+    Set ESP_pump_.fluid = val.clone()
     Call PKV_update
 End Property
-Public Property Get KsepTotal_fr() As Double
+Public Property Get ksep_total_fr() As Double
 ' общая сепарация УЭЦН параметр только для чтения
 ' для задания вручную надо задать естественную сепарацию и сепарацию газосепаратора
-    KsepTotal_fr = KsepNat_fr + (1 - KsepNat_fr) * KSepGasSep_fr
+    ksep_total_fr = ksep_nat_fr + (1 - ksep_nat_fr) * ksep_gassep_fr
 End Property
-Public Property Get HmesTop_m() As Double
-    HmesTop_m = p_HmesTop_m
+Public Property Get h_mes_top_m() As Double
+    h_mes_top_m = h_mes_top__m
 End Property
-Public Property Let HmesTop_m(val As Double)
-    p_HmesTop_m = val
+Public Property Let h_mes_top_m(val As Double)
+    h_mes_top__m = val
 End Property
 Public Property Get HmesBottom_m() As Double
-    HmesBottom_m = p_HmesTop_m + p_ESP_length_m
+    HmesBottom_m = h_mes_top__m + ESP_length_m_
 End Property
 Private Sub Class_Initialize()
     ' парметры установки по умолчанию
     d_cas_mm = 150
     d_intake_mm = 100
-    Angle_deg = 90
-    HmesTop_m = 1000
-    p_ESP_length_m = const_ESP_length
+    angle_deg = 90
+    h_mes_top_m = 1000
+    ESP_length_m_ = const_ESP_length
     
     U_V = 1000
-    p_U_trans_low_V = 380
+    U_trans_low_V_ = 380
     
     power_motor_nom_W = 30000
     freq_nom_Hz = 50
@@ -211,7 +210,7 @@ Private Sub Class_Initialize()
     Transform_eff_fr = 0.97
     Call setCable(1)
     cable_dU_V = -1
-    p_freq_Hz = 50
+    freq_Hz_ = 50
     slip_fr = 0.05
     cos_phi = 0.9
     
@@ -220,10 +219,10 @@ Private Sub Class_Initialize()
     
     isGasSep = True
     isManualSeparationCalc = True
-    KsepNat_fr = 0.5
-    KSepGasSep_fr = 0.5
-    Psep_atma = 100
-    Tsep_C = 60
+    ksep_nat_fr = 0.5
+    ksep_gassep_fr = 0.5
+    p_ksep_atma = 100
+    t_ksep_C = 60
 End Sub
 Public Sub setCable(ByVal cable_type As Integer)
     Select Case cable_type
@@ -246,56 +245,56 @@ Public Function calc_separation(p_atma As Double, t_C As Double)
     Select Case isManualSeparationCalc
         Case byCorrealation
             ' все по сепарации по корреляциям
-            Psep_atma = p_atma
-            Tsep_C = t_C
-            Call p_fluid.calc_PVT(Psep_atma, Tsep_C)
-            With p_fluid
-                KsepNat_fr = unf_calc_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, _
-                                            .qliq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
+            p_ksep_atma = p_atma
+            t_ksep_C = t_C
+            Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
+            With fluid_
+                ksep_nat_fr = unf_calc_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, _
+                                            .q_liq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
                                             .sigma_oil_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
                                     
             End With
         Case pressureManual
             ' берем значение ручное, давления как есть
-             Call p_fluid.calc_PVT(Psep_atma, Tsep_C)
-             With p_fluid
-                KsepNat_fr = unf_calc_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, _
-                                            .qliq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
+             Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
+             With fluid_
+                ksep_nat_fr = unf_calc_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, _
+                                            .q_liq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
                                             .sigma_oil_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
                                     
              End With
         Case valueManual
             ' берем и коэффициенты и давления как было задано при установке значений
-            Psep_atma = p_atma
-            Tsep_C = t_C
-            Call p_fluid.calc_PVT(Psep_atma, Tsep_C)
+            p_ksep_atma = p_atma
+            t_ksep_C = t_C
+            Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
         Case fullyManual
             ' берем и коэффициенты и давления как было задано при установке значений
-            Call p_fluid.calc_PVT(Psep_atma, Tsep_C)
+            Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
         
     End Select
     
     ' потом, когда будет расчет газосепаратора - то надо будет разделить алгоритмы
     ' ручного задания и задания с использованием газосепаратора
     If isGasSep Then
-        KSepGasSep_fr = KSepGasSep_fr
+        ksep_gassep_fr = ksep_gassep_fr
     Else
-        KSepGasSep_fr = 0
+        ksep_gassep_fr = 0
     End If
     
-    Set fluidTub = p_fluid.Clone()
-    Call fluidTub.mod_after_separation(Psep_atma, Tsep_C, KsepTotal_fr, GasGoesIntoSolution)
-    Set fluidCas = p_fluid.Clone() ' тут надо будет доделать чтобы считать затруб с газом
-    fluidCas.q_gas_free_sm3day = fluid.q_gas_insitu_sm3day * KsepTotal_fr
-    Set fluidGasSep = p_fluid.Clone()
-    Call fluidGasSep.mod_after_separation(Psep_atma, Tsep_C, KSepGasSep_fr, GasGoesIntoSolution)
+    Set fluid_tub = fluid_.clone()
+    Call fluid_tub.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_total_fr, GasGoesIntoSolution)
+    Set fluid_cas = fluid_.clone() ' тут надо будет доделать чтобы считать затруб с газом
+    fluid_cas.q_gas_free_sm3day = fluid.q_gas_insitu_sm3day * ksep_total_fr
+    Set fluidGasSep = fluid_.clone()
+    Call fluidGasSep.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_gassep_fr, GasGoesIntoSolution)
     ' в насосе свой флюид отличный от НКТ
-    Set p_ESPpump.fluid = fluidTub.Clone()
+    Set ESP_pump_.fluid = fluid_tub.clone()
     Call PKV_update
 End Function
 Public Property Get PKV_frac() As Double
-    If isPKV Then
-        PKV_frac = p_PKV_work_min / (p_PKV_work_min + p_PKV_stop_min)
+    If is_PKV Then
+        PKV_frac = PKV_work_min_ / (PKV_work_min_ + PKV_stop_min_)
     Else
         PKV_frac = 1
     End If
@@ -317,49 +316,49 @@ Public Function calc_ESPsys(p_atma As Double, _
     If calc_temperature Then
         t_dis_C = -1
     ElseIf t_dis_C < 0 Then
-        t_dis_C = tintake_C
+        t_dis_C = t_int_C
     End If
   
     '1. расчет распределения давления в ЭЦН при работе УЭЦН
-    Call p_ESPpump.calc_ESP(p_atma, tintake_C, t_dis_C, calc_along_flow)
+    Call ESP_pump_.calc_ESP(p_atma, t_int_C, t_dis_C, calc_along_flow)
     '2. Оценим мощность на валу
-    power_shaft_W = p_ESPpump.PowerESP_Wt + dPower_protector_W + dPower_GasSep_W
+    power_shaft_W = ESP_pump_.power_ESP_W + dPower_protector_W + dPower_GasSep_W
     '3. Оценим электрическую мощность потребляемую ПЭД
-    p_power_motor_W = power_shaft_W / motor_eff_fr
+    power_motor_W_ = power_shaft_W / motor_eff_fr
     '4. оценим потери в кабеле - для этого найдем примерно ток двигателя
-    I_A = p_power_motor_W / 1.732050808 / U_V / cos_phi
+    I_A = power_motor_W_ / 1.732050808 / U_V / cos_phi
     '5 по данным тока и сопротивления кабеля найдем падение напряжения в кабеле
-    cable_dU_V = I_A * cable_R_Omkm * HmesTop_m / 1000
-    p_U_trans_high_V = U_V + cable_dU_V
+    cable_dU_V = I_A * cable_R_Omkm * h_mes_top_m / 1000
+    U_trans_high_V_ = U_V + cable_dU_V
     '6 по падению напряжения оценим мощность рассеиваемую кабелем в тепло. учитываем 3 жилы. Тут учитывается полный ток и активный и реактивный
     cable_dPower_W = 3 * cable_dU_V * I_A
     '7 найдет мощность электрическую на входе в кабель
-    cable_power_W = p_power_motor_W + cable_dPower_W
+    cable_power_W = power_motor_W_ + cable_dPower_W
     '8. оценим потери мощность в трансформаторе и станции управления
     dPower_transform_W = (1 - CS_eff_fr) * cable_power_W
     dPower_CS_W = (1 - Transform_eff_fr) * (cable_power_W + dPower_transform_W)
     '9. оценим общую потребляемую мощность УЭЦН
     power_CS_teor_calc_W = cable_power_W + dPower_transform_W + dPower_CS_W
     If calc_cfPower Then
-        p_ESPpump.c_calibr_power = 1 - p_power_motor_fact_W / power_CS_teor_calc_W
+        ESP_pump_.c_calibr_power = 1 - power_motor_fact_W_ / power_CS_teor_calc_W
     End If
     '10. внесем в мощность поправку на деградацию по мощности
     power_CS_calc_W = power_CS_teor_calc_W * (1 - c_calibr_power)
     ' 11 рассчитаем загрузку двигателя, для этого получим номинальную мощность на данной частоте
     Dim PowNom_corr_W As Double
     PowNom_corr_W = power_motor_nom_W * freq_Hz / freq_nom_Hz   ' потом надо проверить что именно так считается номинальная мощность
-    load_fr = p_power_motor_W / PowNom_corr_W
+    load_fr = power_motor_W_ / PowNom_corr_W
     
     
-    calc_ESPsys = SetPT(p_ESPpump.Pdis_atma, p_ESPpump.t_dis_C)
+    calc_ESPsys = SetPT(ESP_pump_.p_dis_atma, ESP_pump_.t_dis_C)
 End Function
- Public Property Get PTsep() As PTtype
-    PTsep = SetPT(Psep_atma, Tsep_C)
- End Property
- Public Sub setKseptotal(calc_method As SEPAR_CALC_METHOD, KsepNat_fr As Double, _
+' Public Property Get PTsep() As PTtype
+'    PTsep = SetPT(p_ksep_atma, t_ksep_C)
+' End Property
+ Public Sub setksep_total(calc_method As SEPAR_CALC_METHOD, ksep_nat_fr As Double, _
                          Optional KsepGS_fr As Double = 0, _
-                         Optional Psep_atma As Double = -1, _
-                         Optional Tsep_C As Double = -1)
+                         Optional p_ksep_atma As Double = -1, _
+                         Optional t_ksep_C As Double = -1)
  ' устанавливает значение сепарации для уэцн вручную
  ' сначала установим значение газосепаратора - оно всегда одинаково для всех вариантов
     
@@ -368,25 +367,25 @@ End Function
     Else
        isGasSep = False
     End If
-    KSepGasSep_fr = KsepGS_fr
+    ksep_gassep_fr = KsepGS_fr
     
-    Me.Psep_atma = Psep_atma
-    Me.Tsep_C = Tsep_C
-    Me.KsepNat_fr = KsepNat_fr
+    Me.p_ksep_atma = p_ksep_atma
+    Me.t_ksep_C = t_ksep_C
+    Me.ksep_nat_fr = ksep_nat_fr
     
     ' установим метод расчета
     ' но так чтобы он не противоречил введенным данным
-     If KsepNat_fr >= 0 And KsepNat_fr <= 1 And PTsep.p_atma > 0 And PTsep.t_C > 0 Then
+     If ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
         ' если ввели хорошие параметры то можно применить любой метод расчета
          isManualSeparationCalc = calc_method
-     ElseIf KsepNat_fr >= 0 And KsepNat_fr <= 1 And PTsep.p_atma <= 0 Then
+     ElseIf ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma <= 0 Then
         ' плохое значение давления не позволяет полностью ручной метод
         If calc_method <> fullyManual Then
             isManualSeparationCalc = calc_method
         Else
             isManualSeparationCalc = valueManual
         End If
-     ElseIf (KsepNat_fr < 0 Or KsepNat_fr > 1) And (PTsep.p_atma > 0 And PTsep.t_C > 0) Then
+     ElseIf (ksep_nat_fr < 0 Or ksep_nat_fr > 1) And (p_ksep_atma > 0 And t_ksep_C > 0) Then
         ' плохая сепарация, но хорошие давления
          If calc_method = byCorrealation Or calc_method = pressureManual Then
             isManualSeparationCalc = calc_method
@@ -400,62 +399,62 @@ End Function
      
  End Sub
  ' дебит газожидкостной смеси перед насосом в рабочих условиях
- Public Property Get QmixBeforePump_m3day() As Double
-   fluid.calc_PVT ESP.Pint_atma, ESP.tintake_C
-   QmixBeforePump_m3day = fluid.q_mix_rc_m3day
+ Public Property Get q_mix_BeforePump_m3day() As Double
+   fluid.calc_PVT ESP.p_int_atma, ESP.t_int_C
+   q_mix_BeforePump_m3day = fluid.q_mix_rc_m3day
  End Property
  
  ' дебит газожидкостной смеси внути газосепаратора (после естественной сепарации)
- Public Property Get QmixInGasSep_m3day() As Double
+ Public Property Get q_mix_InGasSep_m3day() As Double
    ' надо рассчитать свойства флюида после частичной сепарации
-   fluidGasSep.calc_PVT ESP.Pint_atma, ESP.tintake_C
-   QmixInGasSep_m3day = fluidGasSep.q_mix_rc_m3day
+   fluidGasSep.calc_PVT ESP.p_int_atma, ESP.t_int_C
+   q_mix_InGasSep_m3day = fluidGasSep.q_mix_rc_m3day
  End Property
  ' дебит газожидкостной смеси в насосе на первых ступенях (после естественной сепарации и газосепаратора)
- Public Property Get QmixPumpIntake_m3day() As Double
-   fluidTub.calc_PVT ESP.Pint_atma, ESP.tintake_C
-   QmixPumpIntake_m3day = fluidTub.q_mix_rc_m3day
+ Public Property Get q_mix_PumpIntake_m3day() As Double
+   fluid_tub.calc_PVT ESP.p_int_atma, ESP.t_int_C
+   q_mix_PumpIntake_m3day = fluid_tub.q_mix_rc_m3day
  End Property
  
  ' дебит газожидкостной смеси на выкиде насоса (на последних ступенях)
- Public Property Get QmixPumpOutlet_m3day() As Double
-   fluidTub.calc_PVT ESP.Pdis_atma, ESP.t_dis_C
-   QmixPumpOutlet_m3day = fluidTub.q_mix_rc_m3day
+ Public Property Get q_mix_PumpOutlet_m3day() As Double
+   fluid_tub.calc_PVT ESP.p_dis_atma, ESP.t_dis_C
+   q_mix_PumpOutlet_m3day = fluid_tub.q_mix_rc_m3day
  End Property
  
- Public Property Get GasFraction_BeforePump_d() As Double
-    fluid.calc_PVT ESP.Pint_atma, ESP.tintake_C
-    GasFraction_BeforePump_d = fluid.gas_fraction_d(0)
+ Public Property Get gas_fraction_BeforePump_d() As Double
+    fluid.calc_PVT ESP.p_int_atma, ESP.t_int_C
+    gas_fraction_BeforePump_d = fluid.gas_fraction_d(0)
  End Property
  
- Public Property Get GasFraction_InGasSep_d() As Double
-    fluidGasSep.calc_PVT ESP.Pint_atma, ESP.tintake_C
-    GasFraction_InGasSep_d = fluidGasSep.gas_fraction_d(0)
+ Public Property Get gas_fraction_InGasSep_d() As Double
+    fluidGasSep.calc_PVT ESP.p_int_atma, ESP.t_int_C
+    gas_fraction_InGasSep_d = fluidGasSep.gas_fraction_d(0)
  End Property
- Public Property Get GasFraction_PumpIntake_d() As Double
-    fluidTub.calc_PVT ESP.Pint_atma, ESP.tintake_C
-    GasFraction_PumpIntake_d = fluidTub.gas_fraction_d(0)
+ Public Property Get gas_fraction_PumpIntake_d() As Double
+    fluid_tub.calc_PVT ESP.p_int_atma, ESP.t_int_C
+    gas_fraction_PumpIntake_d = fluid_tub.gas_fraction_d(0)
  End Property
  
- Public Property Get GasFraction_PumpOutlet_d() As Double
-    fluidTub.calc_PVT ESP.Pdis_atma, ESP.t_dis_C
-    GasFraction_PumpOutlet_d = fluidTub.gas_fraction_d(0)
+ Public Property Get gas_fraction_PumpOutlet_d() As Double
+    fluid_tub.calc_PVT ESP.p_dis_atma, ESP.t_dis_C
+    gas_fraction_PumpOutlet_d = fluid_tub.gas_fraction_d(0)
  End Property
  
  
  Public Property Get c_calibr_head() As Double
-    c_calibr_head = p_ESPpump.c_calibr_head
+    c_calibr_head = ESP_pump_.c_calibr_head
  End Property
  
  Public Property Let c_calibr_head(val As Double)
-    p_ESPpump.c_calibr_head = val
+    ESP_pump_.c_calibr_head = val
  End Property
  
  Public Property Get c_calibr_power() As Double
-    c_calibr_power = p_ESPpump.c_calibr_power
+    c_calibr_power = ESP_pump_.c_calibr_power
  End Property
   
  Public Property Get c_calibr_rate() As Double
-    c_calibr_rate = p_ESPpump.c_calibr_rate
+    c_calibr_rate = ESP_pump_.c_calibr_rate
  End Property
  
