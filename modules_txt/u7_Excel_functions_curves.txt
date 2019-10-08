@@ -150,13 +150,27 @@ Public Function crv_intersection(x1_points, y1_points, _
     Dim crv1 As New CInterpolation
     Dim crv2 As New CInterpolation
     Dim crv As CInterpolation
+    
+    Dim count_vert As Integer
+    Dim eps As Double
+    Dim new_x1_arr As Double
 On Error GoTo err1:
-        
+    
+    count_vert = 0
+    eps = 0.001
+    
     ' прочитаем все исходные вектора с листа и подготовим выходной массив
     Call read_xy_vectors(x1_points, y1_points, 0, x1_arr, y1_arr, y_val_arr, x_out)
     ' формируем объект функции дл€ работы с ним
     For i = 1 To UBound(x1_arr)
-        crv1.AddPoint x1_arr(i), y1_arr(i)
+        new_x1_arr = x1_arr(i)
+        If i > 1 Then
+            If Abs(x1_arr(i) - x1_arr(i - 1)) < eps Then
+                count_vert = count_vert + 1
+                new_x1_arr = x1_arr(i - 1) + eps * count_vert
+            End If
+        End If
+        crv1.AddPoint new_x1_arr, y1_arr(i)
     Next i
             
     ' прочитаем все исходные вектора с листа и подготовим выходной массив
@@ -270,3 +284,80 @@ err1:
     addLogMsg msg
     Err.Raise kreadRangeError, fname, msg
 End Sub
+'description_to_manual      - дл€ автогенерации описани€ - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' интерпол€ци€ функции заданной параметрически (параметр номер значени€)
+Public Function crv_parametric_interpolation(x_points, y_points, x_val, _
+                        Optional ByVal type_interpolation As Integer = 0, _
+                        Optional param_points = -1)
+' x_points  - таблица аргументов функции
+' y_points  - таблица значений функции
+'             количество агрументов и значений функции должно совпадать
+'             дл€ табличной функции одному аргументу соответствует
+'             строго одно значение функции (последнее)
+' x_val     - аргумент дл€ которого надо найти значение
+'             одно значение в €чейке или диапазон значений
+'             дл€ диапазона аргументов будет найден диапазон значений
+'             диапазоны могут быть заданы как в строках,
+'             так и в столбцах
+' type_interpolation - тип интерпол€ции
+'                    0 - линейна€ интерпол€ци€
+'                    1 - кубическа€ интерпол€ци€
+'                    2 - интерпол€ци€ јкима (выбросы)
+'                        https://en.wikipedia.org/wiki/Akima_spline
+'                    3 - кубический сплайн  атмулла –ома
+'                        https://en.wikipedia.org/wiki/Cubic_Hermite_spline
+' результат
+'             значение функции дл€ заданного x_val
+'description_end
+    Dim x_arr(), y_arr(), x_val_arr(), y_val_arr()
+    Dim x_val_temp
+    Dim y_val_temp
+    Dim X_Range As Range
+    Dim Y_Range As Range
+    Dim i As Integer
+    Dim crv_x As New CInterpolation
+    Dim crv_y As New CInterpolation
+    Dim interp_type As String
+    
+On Error GoTo err1:
+        
+    ' прочитаем все исходные вектора с листа и подготовим выходной массив
+    Call read_xy_vectors(x_points, y_points, x_val, x_arr, y_arr, x_val_arr, y_val_arr)
+    ' формируем объекты двух кривых дл€ параметрического задани€ функции
+    For i = 1 To UBound(x_arr)
+        crv_x.AddPoint i, x_arr(i) ', y_arr(i)
+        crv_y.AddPoint i, y_arr(i)
+    Next i
+    
+    ' готовим интерпол€цию
+    Select Case type_interpolation
+        Case 0
+            interp_type = "Linear"
+        Case 1
+            interp_type = "Cubic"
+        Case 2
+            interp_type = "Akima"
+        Case 3
+            interp_type = "CatmullRom"
+    End Select
+           
+    crv_x.init_interpolation interp_type
+    crv_y.init_interpolation interp_type
+    
+    ' интерполируем требуемые данные и готовим дл€ вывода массива значений
+    For i = LBound(x_val_arr) To UBound(x_val_arr)
+        x_val_temp = crv_x.get_interpolation_point(x_val_arr(i))
+        y_val_temp = crv_y.get_interpolation_point(x_val_arr(i))
+        If UBound(y_val_arr, 1) > 1 Then
+            y_val_arr(i, LBound(y_val_arr)) = y_val_temp
+        Else
+            y_val_arr(LBound(y_val_arr), i) = y_val_temp
+        End If
+    Next i
+    crv_parametric_interpolation = y_val_arr
+    
+    Exit Function
+err1:
+    crv_parametric_interpolation = "error"
+    addLogMsg "Error:crv_interpolation:" & Err.Description
+End Function
