@@ -18,7 +18,7 @@ const_tres_default = 90
 const_Roughness_default = 0.0001 
 Standing_based = 0 
 import xlwings as xw
-#addin_name_str = "UniflocVBA_7.xlam"
+addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
@@ -2208,4 +2208,4 @@ class API():
         self.f_crv_parametric_interpolation = self.book.macro("crv_parametric_interpolation")
         return self.f_crv_parametric_interpolation(x_points,y_points,x_val,type_interpolation,param_points)
 
-#UniflocVBA = API(addin_name_str)
+UniflocVBA = API(addin_name_str)

@@ -26,7 +26,7 @@ path_vba_txt = 'modules_txt/'
 path_listings_out = 'description_generated/'
 path_python_api_out = 'unifloc_vba_python_api/'
 start_string_for_module = "' автоматически сгенерированное описание функций unifloc VBA \n" \
-                          "' description_generator.py использован для генерации \n " \
+                          "' description_generator.py использован для генерации. \n " \
                           "Option Explicit \n Sub Set_Descriptions() \n On Error Resume Next \n"
 end_string_for_module = "End Sub"
 
