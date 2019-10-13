@@ -1,0 +1,179 @@
+'=======================================================================================
+'Unifloc 7.11  Apodemus agrarius                                           khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
+'
+'=======================================================================================
+'функции для расчета гидродинамических исследований
+'
+Option Explicit
+Function Ei(x)
+    If x > 0 Then
+        Ei = ExponentialIntegralEI(x)
+    Else
+        Ei = -ExponentialIntegralEN(-x, 1)
+    End If
+End Function
+Function E_1(x)
+    E_1 = ExponentialIntegralEN(x, 1)
+End Function
+' terminal rate solution
+Function transient_pwf_radial_atma(ByVal t_day As Double, _
+                                   ByVal r_m As Double, _
+                                   ByVal r_w As Double, _
+                                   ByVal k_mD As Double, _
+                                   ByVal mu_cP As Double, _
+                                   ByVal ct_1atm As Double)
+End Function
+Function transient_pd(ByVal td As Double, _
+            Optional ByVal cd As Double = 0, _
+            Optional ByVal skin As Double = 0, _
+            Optional ByVal rd As Double = 1, _
+            Optional model As Integer = 0)
+            
+    Dim coeffA(4) As Double
+    coeffA(0) = rd
+    coeffA(1) = cd
+    coeffA(2) = skin
+    coeffA(3) = model
+    Select Case model
+    Case 0
+        transient_pd = Abs(Stehfest("pd_lalp_Ei", td, coeffA))
+    Case 1
+        transient_pd = Abs(Stehfest("pd_lalp_rw", td, coeffA))
+    Case 2
+        coeffA(3) = 0
+        transient_pd = Abs(Stehfest("pd_lalp_cd_skin", td, coeffA))
+    Case 3
+        coeffA(3) = 1
+        transient_pd = Abs(Stehfest("pd_lalp_cd_skin", td, coeffA))
+    End Select
+    ' здесь abs чтобы при маленьких значениях pd около нуля все оставалось положительным
+End Function
+Function Stehfest(func_name As String, _
+                  td As Double, _
+                  coeffA) As Double
+   Dim SumR As Double, DlogTW As Double, z As Double
+   Dim j As Integer, n As Integer
+   Dim v, m As Integer
+   Dim plapl As Double
+   SumR = 0#
+   n = 12
+   DlogTW = Log(2#)
+   v = coef_stehfest(n)
+   
+   For j = 1 To n
+      z = j * DlogTW / td
+      plapl = Application.Run(func_name, z, coeffA)
+      SumR = SumR + v(j) * plapl * z / j
+   Next j
+   Stehfest = SumR
+   
+End Function
+Private Function coef_stehfest(n As Integer)
+    Dim g(20) As Double, h(10) As Double
+    Dim NH As Integer, SN As Double
+    Dim K As Integer, K1 As Integer, K2 As Integer
+    Dim i As Integer, FI As Double
+    Dim v(20) As Double
+    Dim m As Integer
+    If m <> n Then
+        m = n
+        g(1) = 1#
+        NH = n / 2
+        For i = 2 To n
+            g(i) = g(i - 1) * i
+        Next i
+        h(1) = 2# / g(NH - 1)
+        For i = 2 To NH
+            FI = i
+            If i <> NH Then
+                h(i) = (FI ^ NH) * g(2 * i) / (g(NH - i) * g(i) * g(i - 1))
+            Else
+                h(i) = (FI ^ NH) * g(2 * i) / (g(i) * g(i - 1))
+            End If
+        Next i
+        SN = 2 * (NH - (NH \ 2) * 2) - 1
+        For i = 1 To n
+           v(i) = 0#
+           K1 = (i + 1) \ 2
+           K2 = i
+           If K2 > NH Then K2 = NH
+           For K = K1 To K2
+                If 2 * K - i = 0 Then
+                    v(i) = v(i) + h(K) / (g(i - K))
+                    GoTo nxtIt
+                End If
+                If i = K Then
+                    v(i) = v(i) + h(K) / g(2 * K - i)
+                    GoTo nxtIt
+                End If
+                v(i) = v(i) + h(K) / (g(i - K) * g(2 * K - i))
+nxtIt:     Next K
+           v(i) = SN * v(i)
+           SN = -SN
+        Next i
+    End If
+    coef_stehfest = v
+    
+End Function
+Function plapl(z As Double, coeffA) As Double
+   Dim pd As Double
+   Dim cd As Double
+   Dim skin As Double
+   cd = coeffA(0)
+   skin = coeffA(1)
+   pd = BesselK0(Sqr(z)) / z
+   
+   plapl = (z * pd + skin) / (z + cd * z * z * (z * pd + skin))
+End Function
+' Laplace space solution corresponding Ei function
+Function pd_lalp_Ei(z As Double, coeffA) As Double
+' coeffA - ожидаемый набор переменных для построения решения
+'        coeffA(0) - rd безразмерное расстояние
+   Dim pd As Double
+   Dim rd As Double
+   rd = coeffA(0)
+   pd_lalp_Ei = BesselK0(rd * Sqr(z)) / z
+   
+End Function
+' Laplace space solution with rw = const
+Function pd_lalp_rw(z As Double, coeffA) As Double
+' coeffA - ожидаемый набор переменных для построения решения
+'        coeffA(0) - rd безразмерное расстояние
+   Dim pd As Double
+   Dim sqrz As Double
+   Dim rd As Double
+   rd = coeffA(0)
+   sqrz = Sqr(z)
+   pd_lalp_rw = BesselK0(rd * sqrz) / z / sqrz / BesselK1(sqrz)
+   
+End Function
+' Laplace space solution with rw = const
+Function pd_lalp_cd_skin(z As Double, coeffA) As Double
+' coeffA - ожидаемый набор переменных для построения решения
+'        coeffA(0) - rd безразмерное расстояние
+   Dim pd As Double
+   Dim sqrz As Double
+   Dim rd As Double
+   Dim cd As Double
+   Dim skin As Double
+   Dim model As Double
+   Dim spds As Double
+   
+   rd = coeffA(0)
+   cd = coeffA(1)
+   skin = coeffA(2)
+   model = coeffA(3)
+   
+   sqrz = Sqr(z)
+   Select Case model
+   Case 0
+        spds = z * pd_lalp_Ei(z, coeffA) + skin
+   Case 1
+        spds = z * pd_lalp_rw(z, coeffA) + skin
+   End Select
+   pd_lalp_cd_skin = spds / (z * (1 + z * cd * spds))
+   
+   
+End Function
