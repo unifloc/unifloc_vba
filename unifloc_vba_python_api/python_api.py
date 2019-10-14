@@ -22,7 +22,7 @@ addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
-    def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" функция расчета объемного коэффициента газа
         
                        p_atma давление, атм    
@@ -39,9 +39,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -60,9 +60,9 @@ class API():
         """
 
         self.f_PVT_bg_m3m3 = self.book.macro("PVT_bg_m3m3")
-        return self.f_PVT_bg_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_bg_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_bo_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_bo_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет объемного коэффициента нефти
         
                        p_atma давление, атм    
@@ -79,9 +79,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -100,9 +100,9 @@ class API():
         """
 
         self.f_PVT_bo_m3m3 = self.book.macro("PVT_bo_m3m3")
-        return self.f_PVT_bo_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_bo_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_bw_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_bw_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет объемного коэффициента воды
         
                        p_atma давление, атм    
@@ -119,9 +119,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -140,9 +140,9 @@ class API():
         """
 
         self.f_PVT_bw_m3m3 = self.book.macro("PVT_bw_m3m3")
-        return self.f_PVT_bw_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_bw_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_salinity_ppm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_salinity_ppm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет солености воды
         
                        p_atma давление, атм    
@@ -159,9 +159,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -180,9 +180,9 @@ class API():
         """
 
         self.f_PVT_salinity_ppm = self.book.macro("PVT_salinity_ppm")
-        return self.f_PVT_salinity_ppm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_salinity_ppm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_mu_oil_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_mu_oil_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет вязкости нефти
         
                        p_atma давление, атм    
@@ -199,9 +199,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -220,9 +220,9 @@ class API():
         """
 
         self.f_PVT_mu_oil_cP = self.book.macro("PVT_mu_oil_cP")
-        return self.f_PVT_mu_oil_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_mu_oil_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_mu_gas_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_mu_gas_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет вязкости газа
         
                        p_atma давление, атм    
@@ -239,9 +239,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -260,9 +260,9 @@ class API():
         """
 
         self.f_PVT_mu_gas_cP = self.book.macro("PVT_mu_gas_cP")
-        return self.f_PVT_mu_gas_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_mu_gas_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_mu_wat_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_mu_wat_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет вязкости воды
         
                        p_atma давление, атм    
@@ -279,9 +279,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -300,9 +300,9 @@ class API():
         """
 
         self.f_PVT_mu_wat_cP = self.book.macro("PVT_mu_wat_cP")
-        return self.f_PVT_mu_wat_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_mu_wat_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rs_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rs_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет газосодержания
         
                        p_atma давление, атм    
@@ -319,9 +319,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -340,9 +340,9 @@ class API():
         """
 
         self.f_PVT_rs_m3m3 = self.book.macro("PVT_rs_m3m3")
-        return self.f_PVT_rs_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rs_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_z(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_z(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет коэффициента сверхсжимаемости газа
         
                        p_atma давление, атм    
@@ -359,9 +359,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -380,9 +380,9 @@ class API():
         """
 
         self.f_PVT_z = self.book.macro("PVT_z")
-        return self.f_PVT_z(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_z(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rho_oil_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rho_oil_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет плотности нефти в рабочих условиях
         
                        p_atma давление, атм    
@@ -399,9 +399,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -420,9 +420,9 @@ class API():
         """
 
         self.f_PVT_rho_oil_kgm3 = self.book.macro("PVT_rho_oil_kgm3")
-        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rho_gas_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rho_gas_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет плотности газа в рабочих условиях
         
                        p_atma давление, атм    
@@ -439,9 +439,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -460,9 +460,9 @@ class API():
         """
 
         self.f_PVT_rho_gas_kgm3 = self.book.macro("PVT_rho_gas_kgm3")
-        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rho_wat_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rho_wat_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет плотности воды в рабочих условиях
         
                        p_atma давление, атм    
@@ -479,9 +479,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -500,9 +500,9 @@ class API():
         """
 
         self.f_PVT_rho_wat_kgm3 = self.book.macro("PVT_rho_wat_kgm3")
-        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_pb_atma(self, t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_pb_atma(self, t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" Расчет давления насыщения
         
                        t_c температура, с.    
@@ -517,9 +517,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -538,9 +538,9 @@ class API():
         """
 
         self.f_PVT_pb_atma = self.book.macro("PVT_pb_atma")
-        return self.f_PVT_pb_atma(t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_pb_atma(t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_ST_oilgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_ST_oilgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет коэффициента поверхностного натяжения нефть - газ
         
                        p_atma давление, атм    
@@ -557,9 +557,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -578,9 +578,9 @@ class API():
         """
 
         self.f_PVT_ST_oilgas_Nm = self.book.macro("PVT_ST_oilgas_Nm")
-        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_ST_watgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_ST_watgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет коэффициента поверхностного натяжения вода - газ
         
                        p_atma давление, атм    
@@ -597,9 +597,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -618,9 +618,9 @@ class API():
         """
 
         self.f_PVT_ST_watgas_Nm = self.book.macro("PVT_ST_watgas_Nm")
-        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_ST_liqgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_ST_liqgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" расчет коэффициента поверхностного натяжения жидкость - газ
         
                        p_atma давление, атм    
@@ -637,9 +637,9 @@ class API():
 
         rp_m3m3 замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+        pb_atma давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-        pb_atma давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c пластовая темп..см.мануал   
+        tres_c пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
 
         bob_m3m3 объемный коэффициент нефти, м3/м3.    
 
@@ -658,7 +658,7 @@ class API():
         """
 
         self.f_PVT_ST_liqgas_Nm = self.book.macro("PVT_ST_liqgas_Nm")
-        return self.f_PVT_ST_liqgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_ST_liqgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
     def MF_CJT_Katm(self, p_atma,t_C,str_PVT=PVT_DEFAULT,qliq_sm3day=10,fw_perc=0):
         """" функция расчета коэффициента Джоуля Томсона
@@ -815,32 +815,6 @@ class API():
 
         self.f_MF_ksep_total_d = self.book.macro("MF_ksep_total_d")
         return self.f_MF_ksep_total_d(SepNat,SepGasSep)
-
-    def MF_ksep_gasseparator_d(self, gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz=50):
-        """" расчет коэффициента сепарации газосепаратора  по результатам стендовых испытаний РГУ нефти и газа
-        
-                       gsep_type_type - тип сепаратора (номер от 1 до 29)    
-
-        gas_frac_d - газосодержание на входе в газосепаратор    
-
-        qliq_sm3day - дебит жидкости в стандартных условиях    
-
-        freq_hz - частота врашения, гц    )  
-
-        """
-
-        self.f_MF_ksep_gasseparator_d = self.book.macro("MF_ksep_gasseparator_d")
-        return self.f_MF_ksep_gasseparator_d(gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz)
-
-    def MF_gasseparator_name(self, gsep_type_TYPE):
-        """" название газосопаратора
-        
-                       gsep_type_type - тип сепаратора (номер от 1 до 29)    )  
-
-        """
-
-        self.f_MF_gasseparator_name = self.book.macro("MF_gasseparator_name")
-        return self.f_MF_gasseparator_name(gsep_type_TYPE)
 
     def MF_dpdl_atmm(self, d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,gamma_oil=const_go_,gamma_gas=const_gg_,eps_m=0.0001,theta_deg=90,ZNLF=False):
         """"расчет градиента давления с использованием многофазных корреляций
@@ -1572,6 +1546,32 @@ class API():
         self.f_motor_Pnom_kW = self.book.macro("motor_Pnom_kW")
         return self.f_motor_Pnom_kW(Unom_V,Inom_A,Fnom_Hz,motorID)
 
+    def ESP_ksep_gasseparator_d(self, gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz=50):
+        """" расчет коэффициента сепарации газосепаратора  по результатам стендовых испытаний РГУ нефти и газа
+        
+                       gsep_type_type - тип сепаратора (номер от 1 до 29)    
+
+        gas_frac_d - газосодержание на входе в газосепаратор    
+
+        qliq_sm3day - дебит жидкости в стандартных условиях    
+
+        freq_hz - частота врашения, гц    )  
+
+        """
+
+        self.f_ESP_ksep_gasseparator_d = self.book.macro("ESP_ksep_gasseparator_d")
+        return self.f_ESP_ksep_gasseparator_d(gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz)
+
+    def ESP_gasseparator_name(self, gsep_type_TYPE):
+        """" название газосопаратора
+        
+                       gsep_type_type - тип сепаратора (номер от 1 до 29)    )  
+
+        """
+
+        self.f_ESP_gasseparator_name = self.book.macro("ESP_gasseparator_name")
+        return self.f_ESP_gasseparator_name(gsep_type_TYPE)
+
     def GLV_q_gas_sm3day(self, d_mm,p_in_atma,p_out_atma,gamma_g,t_C):
         """" функция расчета расхода газа через газлифтный клапан  с учетом наличия вкруток на выходе клапана  результат массив значений и подписей
         
@@ -1778,7 +1778,7 @@ class API():
         self.f_GLV_IPO_p_close = self.book.macro("GLV_IPO_p_close")
         return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
 
-    def PVT_encode_string(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,gas_only=False):
+    def PVT_encode_string(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,gas_only=False):
         """" Функция кодирования параметров PVT в строку,  для передачи PVT свойств в прикладных пользовательских функциях.
         
                        gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
@@ -1791,9 +1791,9 @@ class API():
 
         rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-        pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
+        pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
 
-        pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.  t_res_c - пластова..см.мануал   
+        tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
 
         bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
 
@@ -1812,7 +1812,7 @@ class API():
         """
 
         self.f_PVT_encode_string = self.book.macro("PVT_encode_string")
-        return self.f_PVT_encode_string(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,gas_only)
+        return self.f_PVT_encode_string(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,gas_only)
 
     def PVT_decode_string(self, str_PVT=PVT_DEFAULT,getStr=False):
         """" функция расшифровки параметров PVT закодированных в строке
@@ -2207,5 +2207,117 @@ class API():
 
         self.f_crv_parametric_interpolation = self.book.macro("crv_parametric_interpolation")
         return self.f_crv_parametric_interpolation(x_points,y_points,x_val,type_interpolation,param_points)
+
+    def Ei(self, x):
+        """" Расчет интегральной показательной функции Ei(x)
+        
+                       x - агрумент функции, может быть и положительным и отрицательным    )  
+
+        """
+
+        self.f_Ei = self.book.macro("Ei")
+        return self.f_Ei(x)
+
+    def E_1(self, x):
+        """" Расчет интегральной показательной функции $E_1(x)$  для вещественных положительных x, x>0 верно E_1(x)=- Ei(-x)
+        
+                       x - агрумент функции, может быть и положительным и отрицательным    )  
+
+        """
+
+        self.f_E_1 = self.book.macro("E_1")
+        return self.f_E_1(x)
+
+    def transient_pd_radial(self, td,cd=0,skin=0,rd=1,model=0):
+        """" Расчет неустановившегося решения уравнения фильтрации  для различных моделей радиального притока к вертикльной скважине  основано не решениях в пространстве Лапласа и преобразовании Стефеста
+        
+                       td - безразмерное время для которого проводится расчет  сd - безразмерный коэффициент влияния ствола скважины    
+
+   cd   
+
+        skin - скин-фактор, безразмерный skin>0.  для skin<0 используйте эффективный радиус скважины    
+
+        rd - безразмерное расстояние для которого проводится расчет  rd=1 соответвует забою скважины    
+
+        model - модель проведения расчета. 0 - модель линейного стока ei  1 - модель линейного стока через преобразование стефеста  2 - конечный радиус скважины  3 - линейный сток ..см.мануал   )  
+
+        """
+
+        self.f_transient_pd_radial = self.book.macro("transient_pd_radial")
+        return self.f_transient_pd_radial(td,cd,skin,rd,model)
+
+    def transient_pwf_radial_atma(self, t_day,qliq_sm3day,pi_atma=250,skin=0,cs_1atm=0,r_m=0.1,rw_m=0.1,k_mD=100,h_m=10,porosity=0.2,mu_cP=1,b_m3m3=1.2,ct_1atm=0.00001,model=0):
+        """" расчет изменения забойного давления после запуска скважины  с постоянным дебитом (terminal rate solution)
+        
+                       t_day - время для которого проводится расчет, сут    
+
+        qliq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+
+        pi_atma - начальное пластовое давление, атма    
+
+        skin - скин - фактор, может быть отрицательным    
+
+        cs_1atm - коэффициент влияния ствола скважины, 1/атм    
+
+        r_m - расстояние от скважины для которого проводится расчет, м    
+
+        rw_m - радиус скважины, м    
+
+        k_md - проницаемость пласта, мд    
+
+        h_m - толщина пласта, м    
+
+        porosity - пористость    
+
+        mu_cp - вязкость флюида в пласте, сп    
+
+        b_m3m3 - объемный коэффициент нефти, м3/м3    
+
+        ct_1atm - общая сжимаемость системы в пласте, 1/атм    
+
+        model - модель проведения расчета. 0 - модель линейного стока ei  1 - модель линейного стока через преобразование стефеста  2 - конечный радиус скважины  3 - линейный сток ..см.мануал   )  
+
+        """
+
+        self.f_transient_pwf_radial_atma = self.book.macro("transient_pwf_radial_atma")
+        return self.f_transient_pwf_radial_atma(t_day,qliq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,model)
+
+    def transient_cd(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+        """" расчет безразмерного коэффициента влияния ствола скважины
+        
+                       cs_1atm - коэффициент влияния ствола скважины, 1/атм    
+
+        rw_m - радиус скважины, м    
+
+        h_m - толщина пласта, м    
+
+        porosity - пористость    
+
+        ct_1atm - общая сжимаемость системы в пласте, 1/атм    )  
+
+        """
+
+        self.f_transient_cd = self.book.macro("transient_cd")
+        return self.f_transient_cd(cs_1atm,rw_m,h_m,porosity,ct_1atm)
+
+    def transient_td(self, t_day,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+        """" расчет безразмерного времени
+        
+                       t_day - время для которого проводится расчет, сут    
+
+        rw_m - радиус скважины, м    
+
+        k_md - проницаемость пласта, мд    
+
+        porosity - пористость    
+
+        mu_cp - вязкость флюида в пласте, сп    
+
+        ct_1atm - общая сжимаемость системы в пласте, 1/атм    )  
+
+        """
+
+        self.f_transient_td = self.book.macro("transient_td")
+        return self.f_transient_td(t_day,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
 UniflocVBA = API(addin_name_str)

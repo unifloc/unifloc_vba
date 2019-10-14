@@ -1,0 +1,178 @@
+'=======================================================================================
+'Unifloc 7.11  Apodemus agrarius                                           khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
+'
+'=======================================================================================
+'функции для расчета гидродинамических исследований
+'
+Option Explicit
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Расчет интегральной показательной функции Ei(x)
+Function Ei(ByVal x As Double)
+' x         - агрумент функции, может быть и положительным и отрицательным
+' результат - значение функции
+'description_end
+    If x > 0 Then
+        Ei = ExponentialIntegralEI(x)
+    Else
+        Ei = -ExponentialIntegralEN(-x, 1)
+    End If
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Расчет интегральной показательной функции $E_1(x)$
+' для вещественных положительных x, x>0 верно E_1(x)=- Ei(-x)
+Function E_1(ByVal x As Double)
+' x         - агрумент функции, может быть и положительным и отрицательным
+' результат - значение функции
+'description_end
+    E_1 = ExponentialIntegralEN(x, 1)
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Расчет неустановившегося решения уравнения фильтрации
+' для различных моделей радиального притока к вертикльной скважине
+' основано не решениях в пространстве Лапласа и преобразовании Стефеста
+Function transient_pd_radial(ByVal td As Double, _
+                    Optional ByVal cd As Double = 0, _
+                    Optional ByVal skin As Double = 0, _
+                    Optional ByVal rd As Double = 1, _
+                    Optional model As Integer = 0)
+' td         - безразмерное время для которого проводится расчет
+' сd         - безразмерный коэффициент влияния ствола скважины
+' skin       - скин-фактор, безразмерный skin>0.
+'              для skin<0 используйте эффективный радиус скважины
+' rd         - безразмерное расстояние для которого проводится расчет
+'              rd=1 соответвует забою скважины
+' model      - модель проведения расчета. 0 - модель линейного стока Ei
+'              1 - модель линейного стока через преобразование Стефеста
+'              2 - конечный радиус скважины
+'              3 - линейный сток со скином и послепритоком
+'              4 - конечный радиус скважины со скином и послепритоком
+' результат - безразмерное давление pd
+'description_end
+On Error GoTo err1:
+    Dim coeffA(4) As Double
+    If rd < 1 Then rd = 1
+    If skin < 0 Then skin = 0
+    coeffA(0) = rd
+    coeffA(1) = cd
+    coeffA(2) = skin
+    coeffA(3) = model
+    Select Case model
+    
+    Case 0
+        transient_pd_radial = 0.5 * E_1(rd ^ 2 / 4 / td)
+    Case 1
+        transient_pd_radial = Abs(Stehfest("pd_lalp_Ei", td, coeffA))
+    Case 2
+        transient_pd_radial = Abs(Stehfest("pd_lalp_rw", td, coeffA))
+    Case 3
+        coeffA(3) = 0
+        transient_pd_radial = Abs(Stehfest("pd_lalp_cd_skin", td, coeffA))
+    Case 4
+        coeffA(3) = 1
+        transient_pd_radial = Abs(Stehfest("pd_lalp_cd_skin", td, coeffA))
+    End Select
+    ' здесь abs чтобы при маленьких значениях pd около нуля все оставалось положительным
+    Exit Function
+err1:
+    transient_pd_radial = -1
+    addLogMsg "Error:transient_pd_radial:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет изменения забойного давления после запуска скважины
+' с постоянным дебитом (terminal rate solution)
+Function transient_pwf_radial_atma(ByVal t_day As Double, _
+                                   ByVal qliq_sm3day As Double, _
+                          Optional ByVal pi_atma As Double = 250, _
+                          Optional ByVal skin As Double = 0, _
+                          Optional ByVal cs_1atm As Double = 0, _
+                          Optional ByVal r_m As Double = 0.1, _
+                          Optional ByVal rw_m As Double = 0.1, _
+                          Optional ByVal k_mD As Double = 100, _
+                          Optional ByVal h_m As Double = 10, _
+                          Optional ByVal porosity As Double = 0.2, _
+                          Optional ByVal mu_cP As Double = 1, _
+                          Optional ByVal b_m3m3 As Double = 1.2, _
+                          Optional ByVal ct_1atm As Double = 0.00001, _
+                          Optional ByVal model As Integer = 0) As Double
+' t_day       - время для которого проводится расчет, сут
+' qliq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях
+' pi_atma     - начальное пластовое давление, атма
+' skin        - скин - фактор, может быть отрицательным
+' cs_1atm     - коэффициент влияния ствола скважины, 1/атм
+' r_m         - расстояние от скважины для которого проводится расчет, м
+' rw_m        - радиус скважины, м
+' k_mD        - проницаемость пласта, мД
+' h_m         - толщина пласта, м
+' porosity    - пористость
+' mu_cP       - вязкость флюида в пласте, сП
+' b_m3m3      - объемный коэффициент нефти, м3/м3
+' ct_1atm     - общая сжимаемость системы в пласте, 1/атм
+' model      - модель проведения расчета. 0 - модель линейного стока Ei
+'              1 - модель линейного стока через преобразование Стефеста
+'              2 - конечный радиус скважины
+'              3 - линейный сток со скином и послепритоком
+'              4 - конечный радиус скважины со скином и послепритоком
+' результат - безразмерное давление pd
+'description_end
+    Dim td As Double, cd As Double, rd As Double
+    Dim pd As Double
+    Dim delta_p_atm As Double
+    
+    cd = 0.159 / h_m / porosity / ct_1atm / (rw_m * rw_m) * cs_1atm
+    If skin < 0 Then
+        rw_m = rw_m * Exp(-skin)
+        If r_m < rw_m Then r_m = rw_m
+        skin = 0
+    End If
+    
+    td = 0.00036 * k_mD / porosity / mu_cP / ct_1atm / (rw_m * rw_m) * t_day
+    rd = r_m / rw_m
+    
+    pd = transient_pd_radial(td, cd, skin, rd, model)
+    
+    delta_p_atm = 18.41 * qliq_sm3day * b_m3m3 * mu_cP / k_mD / h_m * pd
+    transient_pwf_radial_atma = pi_atma - delta_p_atm
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет безразмерного коэффициента влияния ствола скважины
+Function transient_cd(ByVal cs_1atm As Double, _
+             Optional ByVal rw_m As Double = 0.1, _
+             Optional ByVal h_m As Double = 10, _
+             Optional ByVal porosity As Double = 0.2, _
+             Optional ByVal ct_1atm As Double = 0.00001 _
+             ) As Double
+' cs_1atm     - коэффициент влияния ствола скважины, 1/атм
+' rw_m        - радиус скважины, м
+' h_m         - толщина пласта, м
+' porosity    - пористость
+' ct_1atm     - общая сжимаемость системы в пласте, 1/атм
+' результат   - безразмерный коэффициент влияния ствола скважины  cd
+'description_end
+    
+    transient_cd = 0.159 / h_m / porosity / ct_1atm / (rw_m * rw_m) * cs_1atm
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет безразмерного времени
+Function transient_td(ByVal t_day As Double, _
+             Optional ByVal rw_m As Double = 0.1, _
+             Optional ByVal k_mD As Double = 100, _
+             Optional ByVal porosity As Double = 0.2, _
+             Optional ByVal mu_cP As Double = 1, _
+             Optional ByVal ct_1atm As Double = 0.00001 _
+             ) As Double
+' t_day       - время для которого проводится расчет, сут
+' rw_m        - радиус скважины, м
+' k_mD        - проницаемость пласта, мД
+' porosity    - пористость
+' mu_cP       - вязкость флюида в пласте, сП
+' ct_1atm     - общая сжимаемость системы в пласте, 1/атм
+' результат   - безразмерное время td
+'description_end
+    
+    transient_td = 0.00036 * k_mD / porosity / mu_cP / ct_1atm / (rw_m * rw_m) * t_day
+    
+End Function
