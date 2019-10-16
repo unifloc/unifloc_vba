@@ -79,6 +79,42 @@ err1:
     addLogMsg "Error:crv_interpolation:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция поиска значения функции по двумерным табличным данным (интерполяция 2D)
+Function crv_interpolation_2D(XA As Variant, _
+                              YA As Variant, _
+                              FA As Variant, _
+                     Optional XYIA As Variant, _
+                     Optional out As Long = 1, _
+                     Optional ByVal type_interpolation As Integer = 0) As Variant
+' XA    - x значения исходных данных (строка значений или массив)
+' YA    - y значения исходных данных (столбец значений или массив)
+' FA    - табличные значения интерполируемой функции,
+'         двумерная таблица или массив
+' XYIA  - таблица значений для которой надо найти результат
+'         два столбца значений (x,y) или массив с двумя колонками
+'         если не заданы возвращаются кубические коэффициента для каждого сегмента
+' out   - для интерполяции кубическими сплайнами
+'           out = 0 возвращаются только значения
+'           out = 1 возвращаются значения и производные
+' type_interpolation - тип интерполяции
+'                    0 - линейная интерполяция
+'                    1 - кубическая интерполяция
+' результат
+'             значение функции для заданного XYIA
+'description_end
+On Error GoTo err1:
+    Select Case type_interpolation
+        Case 0
+            crv_interpolation_2D = crv_lin_spline_2D(XA, YA, FA, XYIA)
+        Case 1
+            crv_interpolation_2D = crv_cubic_spline_2D(XA, YA, FA, XYIA, out)
+    End Select
+    Exit Function
+err1:
+    crv_interpolation_2D = "error"
+    addLogMsg "Error:crv_interpolation_2D:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция решения уравнения в табличном виде f(x) = y_val
 ' ищется значение аргумента соответствующее заданному значению
 ' используется линейная интерполяция
@@ -142,7 +178,6 @@ Public Function crv_intersection(x1_points, y1_points, _
 ' результат
 '             массив значений аргументов пересечений двух функций
 'description_end
-'description_end
     Dim x1_arr(), y1_arr(), y_val_arr(), x_out()
     Dim x2_arr(), y2_arr()
     Dim n_y_val As Integer
@@ -197,6 +232,98 @@ err1:
     crv_intersection = "error:" & Err.Description
     addLogMsg "Error:crv_intersection:" & Err.Description
 End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' поиск пересечений для кривых заданных таблицами
+' используется линейная интерполяция
+' возможно несколько решений
+Public Function crv_splinefit_1D(XA As Variant, _
+                            YA As Variant, _
+                            M As Long, _
+                   Optional XIA As Variant, _
+                   Optional WA As Variant, _
+                   Optional XCA As Variant, _
+                   Optional YCA As Variant, _
+                   Optional DCA As Variant, _
+                   Optional hermite As Boolean = False)
+' XA    - x значения исходных данных (строка значений или массив)
+' YA    - y значения исходных данных (столбец значений или массив)
+' М     - количество точек для сплайна интерполяции
+'         должно быть четное для hermite = True
+' XIA   - таблица значений для которой надо найти результат
+'         столбц значений (x) или массив. значения в возрастающем порядке
+'         если не заданы возвращаются кубические коэффициента для каждого сегмента
+' WA    - веса исходных данных
+' XCA   - х значения матрицы ограничений (столбец или массив)
+' YCA   - величина ограничения для заданного значения (столбец или массив)
+' DCA   - тип ограничения. 0 - значение, 1 - наклон. (столбец или массив).
+'         если хоть одно из ограничений не задано - они не учитываются
+' результат
+'          значение функции для заданного XIA
+'description_end
+On Error GoTo err1:
+    If Not hermite Then
+        If IsMissing(XCA) Or IsMissing(YCA) Or IsMissing(DCA) Or IsMissing(WA) Then
+            crv_splinefit_1D = CSplineFit1DA(XA, YA, M, XIA)
+        Else
+            crv_splinefit_1D = CSplineFitCW1DA(XA, YA, WA, M, XIA, XCA, YCA, DCA)
+        End If
+    Else
+        crv_splinefit_1D = HSplineFit1DA(XA, YA, M, XIA)
+    End If
+Exit Function
+err1:
+    crv_splinefit_1D = "error"
+    addLogMsg "Error:crv_splinefit_1D:" & Err.Description
+End Function
+' функция конвертации входной переменной в вектор
+' на входе может быть range, массив, число
+Public Sub convert_to_array(ByVal val, ByRef arr_out())
+    
+    Dim val_range As Range
+    Dim msg As String
+    Dim i As Integer
+    Dim fname As String
+    
+On Error GoTo err1:
+    If IsObject(val) Then
+        Set val_range = val
+         ' проверим что данные заданы в строке для вектора аргументов
+        If val_range.Rows.Count = 1 And val_range.Columns.Count > 1 Then
+            ' используем трюк excel для преобразования в массив
+            arr_out = Application.Transpose(Application.Transpose(val_range))
+        ' если не в строке, то проверим столбец
+        ElseIf val_range.Rows.Count > 1 And val_range.Columns.Count = 1 Then
+            ' используем трюк excel для преобразования в массив
+            arr_out = Application.Transpose(val_range)
+        ' проверим, вдруг это число которое передали как range
+        ElseIf val_range.Rows.Count = 1 And val_range.Columns.Count = 1 Then
+            ReDim arr_out(1)
+            arr_out(1) = val_range.Value2
+        ' если не удалось найти или один столбец или одну строку то плохо
+        Else
+            msg = "first data set must be in row or column"
+            GoTo err1:
+        End If
+    ElseIf IsArray(val) Then
+            ReDim arr_out(UBound(val) - LBound(val) + 1)
+            For i = 1 To UBound(val) - LBound(val) + 1
+                arr_out(i) = val(i - (1 - LBound(val)))
+            Next i
+    Else
+        ReDim arr_out(1)
+        arr_out(1) = val
+    End If
+    'convert_to_array = arr_out
+    Exit Sub
+err1:
+    ' унифицированная реакция на ошибочный ввод ключевых параметров класса
+    
+    fname = "convert_to_array"
+    msg = fname & ": " & msg
+    addLogMsg msg
+    Err.Raise kreadRangeError, fname, msg
+ 
+End Sub
 ' рабочая функция для чтения данных кривых из range
 Private Sub read_xy_vectors(x_points, y_points, x_val, _
                                 ByRef x_arr(), _
@@ -210,71 +337,12 @@ Dim x_val_range As Range
 Dim check_x As Boolean
 Dim check_y As Boolean
 Dim msg As String, fname As String
+Dim i As Integer
 On Error GoTo err1:
-    ' проверим что на входе range объекты
-    If (IsObject(x_points)) And (IsObject(y_points)) Then
-        Set X_Range = x_points
-        Set Y_Range = y_points
-        
-        ' проверим что данные заданы в строке для вектора аргументов
-        If X_Range.Rows.Count = 1 And X_Range.Columns.Count > 1 Then
-            x_arr = Application.Transpose(Application.Transpose(X_Range))
-        ' если не в строке, то проверим столбец
-        ElseIf X_Range.Rows.Count > 1 And X_Range.Columns.Count = 1 Then
-            x_arr = Application.Transpose(X_Range)
-        ' если не удалось найти или один столбец или одну строку то плохо
-        Else
-            msg = "first data set must be in row or column"
-            GoTo err1:
-        End If
-        
-        ' проверим что данные заданы в строке для вектора аргументов
-        If Y_Range.Rows.Count = 1 And Y_Range.Columns.Count > 1 Then
-            y_arr = Application.Transpose(Application.Transpose(Y_Range))
-        ' если не в строке, то проверим столбец
-        ElseIf Y_Range.Rows.Count > 1 And Y_Range.Columns.Count = 1 Then
-            y_arr = Application.Transpose(Y_Range)
-        ' если не удалось найти или один столбец или одну строку то плохо
-        Else
-            msg = "second data set must be in row or column"
-            GoTo err1:
-        End If
-        
-    Else
-        If IsArray(x_points) And IsArray(y_points) Then
-            check_x = (UBound(x_points, 1) > 1 And UBound(x_points, 2) = 0)
-            check_y = (UBound(y_points, 1) > 1 And UBound(y_points, 2) = 0)
-            If Not (check_x And check_y) Then GoTo err1:
-        End If
-    End If
-    ' Ожидаем, что веркторы одинаковой размерности
-    If Not (UBound(x_arr) = UBound(y_arr)) Then
-        msg = "vectors must be same dimension"
-        GoTo err1:
-    End If
-    
-    ' проверим искомое значение
-    If (IsObject(x_val)) Then
-        Set x_val_range = x_val
-        ' проверим что данные заданы в строке для вектора аргументов
-        If x_val_range.Rows.Count = 1 And x_val_range.Columns.Count > 1 Then
-            x_val_arr = Application.Transpose(Application.Transpose(x_val_range))
-            ReDim y_val_arr(1, UBound(x_val_arr))
-        ' если не в строке, то проверим столбец
-        ElseIf x_val_range.Rows.Count > 1 And x_val_range.Columns.Count = 1 Then
-            x_val_arr = Application.Transpose(x_val_range)
-            ReDim y_val_arr(UBound(x_val_arr), 1)
-        ' если не удалось найти или один столбец или одну строку то плохо
-        ElseIf x_val_range.Rows.Count = 1 And x_val_range.Columns.Count = 1 Then
-            ReDim x_val_arr(1)
-            x_val_arr(1) = x_val_range.Value2
-            ReDim y_val_arr(1, 1)
-        End If
-    Else
-        ReDim x_val_arr(1)
-        x_val_arr(1) = x_val
-        ReDim y_val_arr(1, 1)
-    End If
+    Call convert_to_array(x_points, x_arr)
+    Call convert_to_array(y_points, y_arr)
+    Call convert_to_array(x_val, x_val_arr)
+    ReDim y_val_arr(UBound(x_val_arr), 1)
     Exit Sub
 err1:
     ' унифицированная реакция на ошибочный ввод ключевых параметров класса
@@ -361,3 +429,129 @@ err1:
     crv_parametric_interpolation = "error"
     addLogMsg "Error:crv_interpolation:" & Err.Description
 End Function
+' =========================================================================================
+' далее функции с использованием alglib на основе наработок с сайта https://newtonexcelbach.com/
+' =========================================================================================
+Private Function crv_lin_spline_2D(XA As Variant, _
+                           YA As Variant, _
+                           FA As Variant, _
+                  Optional XYIA As Variant) As Variant
+                  
+    Dim LinResA() As Double, NumXcols As Long, NumYRows As Long, NumXYIrows As Long, i As Long, j As Long
+    Dim XAD() As Double, YAD() As Double, FAD() As Double, Rtn As Variant, Tbl() As Double, NumCells As Long
+    Dim C1 As Spline2DInterpolant
+    If IsMissing(XYIA) = True Then
+        Rtn = Get2DSplineData(XA, YA, FA, XAD, YAD, FAD, NumXcols, NumYRows)
+    Else
+        Rtn = Get2DSplineData(XA, YA, FA, XAD, YAD, FAD, NumXcols, NumYRows, XYIA, NumXYIrows)
+    End If
+    If Rtn <> 0 Then
+        crv_lin_spline_2D = Rtn
+        Exit Function
+    End If
+    Spline2DBuildBilinear XAD, YAD, FAD, NumYRows, NumXcols, C1
+    If IsMissing(XYIA) = True Then
+        NumCells = (NumXcols - 1) * (NumYRows - 1)
+        ReDim LinResA(1 To NumCells, 1 To 8)
+        Spline2DUnpack C1, NumYRows, NumXcols, Tbl
+        For i = 1 To NumCells
+            For j = 1 To 6
+                LinResA(i, j) = Tbl(i - 1, j - 1)
+            Next j
+            For j = 7 To 8
+                LinResA(i, j) = Tbl(i - 1, j + 1)
+            Next j
+        Next i
+    Else
+        ReDim LinResA(1 To NumXYIrows, 1 To 1)
+        For i = 1 To NumXYIrows
+            LinResA(i, 1) = Spline2DCalc(C1, XYIA(i, 1), XYIA(i, 2))
+        Next i
+    End If
+    crv_lin_spline_2D = LinResA
+End Function
+Private Function crv_cubic_spline_2D(XA As Variant, _
+                             YA As Variant, _
+                             FA As Variant, _
+                    Optional XYIA As Variant, _
+                    Optional out As Long = 1) As Variant
+                    
+' Out index: 1 = Y values, 2 = Y values and derivatives
+    Dim CubResA() As Double, NumXcols As Long, NumYRows As Long, NumXYIrows As Long, i As Long, j As Long
+    Dim XAD() As Double, YAD() As Double, FAD() As Double, Rtn As Variant, Tbl() As Double, NumCells As Long
+    Dim C1 As Spline2DInterpolant, F As Double, FX As Double, FY As Double, FXY As Double
+    If IsMissing(XYIA) = True Then
+        Rtn = Get2DSplineData(XA, YA, FA, XAD, YAD, FAD, NumXcols, NumYRows)
+    Else
+        Rtn = Get2DSplineData(XA, YA, FA, XAD, YAD, FAD, NumXcols, NumYRows, XYIA, NumXYIrows)
+    End If
+    If Rtn <> 0 Then
+        crv_cubic_spline_2D = Rtn
+        Exit Function
+    End If
+    Spline2DBuildBicubic XAD, YAD, FAD, NumYRows, NumXcols, C1
+    If IsMissing(XYIA) = True Then
+        NumCells = (NumXcols - 1) * (NumYRows - 1)
+        ReDim CubResA(1 To NumCells, 1 To 20)
+        Spline2DUnpack C1, NumXcols, NumYRows, Tbl
+        For i = 1 To NumCells
+            For j = 1 To 20
+                CubResA(i, j) = Tbl(i - 1, j - 1)
+            Next j
+        Next i
+    Else
+        If out = 1 Then
+            ReDim CubResA(1 To NumXYIrows, 1 To 1)
+            For i = 1 To NumXYIrows
+                CubResA(i, 1) = Spline2DCalc(C1, XYIA(i, 1), XYIA(i, 2))
+            Next i
+        Else
+            ReDim CubResA(1 To NumXYIrows, 1 To 4)
+            For i = 1 To NumXYIrows
+                Call Spline2DDiff(C1, XYIA(i, 1), XYIA(i, 2), F, FX, FY, FXY)
+                CubResA(i, 1) = F
+                CubResA(i, 2) = FX
+                CubResA(i, 3) = FY
+                CubResA(i, 4) = FXY
+            Next i
+        End If
+    End If
+    crv_cubic_spline_2D = CubResA
+End Function
+Private Function Get2DSplineData(XA As Variant, YA As Variant, FA As Variant, XAD() As Double, YAD() As Double, FAD() As Double, _
+                         NumXcols As Long, NumYRows As Long, Optional XYIA As Variant, Optional NumXYIrows As Long) As Variant
+    Dim NumFRows As Long, NumFCols As Long, i As Long, j As Long
+    If TypeName(XA) = "Range" Then XA = XA.Value2
+    If TypeName(YA) = "Range" Then YA = YA.Value2
+    If TypeName(FA) = "Range" Then FA = FA.Value2
+    If IsMissing(XYIA) = False Then
+        If TypeName(XYIA) = "Range" Then XYIA = XYIA.Value2
+        NumXYIrows = UBound(XYIA)
+    End If
+    NumXcols = UBound(XA, 2)
+    NumYRows = UBound(YA)
+    NumFRows = UBound(FA)
+    NumFCols = UBound(FA, 2)
+    If NumXcols <> NumFCols Or NumYRows <> NumFRows Then
+        Get2DSplineData = ("There must be one function value for each X,Y value")
+        Exit Function
+    End If
+    ReDim XAD(0 To NumXcols - 1)
+    ReDim YAD(0 To NumYRows - 1)
+    ReDim FAD(0 To NumYRows - 1, 0 To NumXcols - 1)
+    For i = 1 To NumXcols
+        XAD(i - 1) = XA(1, i)
+    Next i
+    For i = 1 To NumYRows
+        YAD(i - 1) = YA(i, 1)
+    Next i
+    For i = 1 To NumYRows
+        For j = 1 To NumXcols
+            FAD(i - 1, j - 1) = FA(i, j)
+        Next j
+    Next i
+End Function
+' ======================================
+'
+'
+' ======================================
