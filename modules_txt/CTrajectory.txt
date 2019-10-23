@@ -31,21 +31,21 @@ Private Type WELL_POINT_FULL
 End Type
 Private h_abs_init_m_ As New CInterpolation      ' исходный массив абсолютных глубин
 Private angle_init_deg_ As New CInterpolation    ' исходный массив углов
-Private angle_azimuth_init_deg_ As New CInterpolation ' значения азимутального угла
-Private angle_zenith_init_deg_ As New CInterpolation  ' значения зенитного угла
+'Private angle_azimuth_init_deg_ As New CInterpolation ' значения азимутального угла
+'Private angle_zenith_init_deg_ As New CInterpolation  ' значения зенитного угла
 Private d_cas_init_m_ As New CInterpolation  ' исходный массив значений диаметров эксплуатационных колонн
 Private d_tub_init_m_ As New CInterpolation  ' исходный массив значений диаметров НКТ
 Private tub_thickness_mm_ '           пока считаем что НКТ всегда имеет одинаковую толщину - потом можно будет учесть
 Private roughness_m_ '           пока также считаем, что шероховатость везде тоже одинакова
 Private well_trajctory_() As WELL_POINT_FULL   ' полная конструкция скважины пригодная для расчетов - итоговое свойство класса
-Private h_perf_m_ As Double    ' perforation depth aka reservoir depth
-Private h_tubing_m_ As Double  ' tubing setting depth - same as pump setting depth in most cases
+'Private h_perf_m_ As Double    ' perforation depth aka reservoir depth
+'Private h_tubing_m_ As Double  ' tubing setting depth - same as pump setting depth in most cases
 Private num_points_out_ As Integer   ' количество точек в выходном массиве
 Private length_between_points_m_ As Double  ' мин растояние между точками при генерации исходного массива
 Private construction_points_curve_ As New CInterpolation  ' точки которые должны быть добавлены (измеренная глубина - абсолютная глубина)
 Private h_points_curve_ As New CInterpolation    ' результирующие точки для заполнения массивов
-Private h_valve_GL_m_() As Double     ' массив глубин расположения газлифтных клапанов
-Private num_valves_ As Integer        ' количество клапанов газлифтных
+'Private h_valve_GL_m_() As Double     ' массив глубин расположения газлифтных клапанов
+'Private num_valves_ As Integer        ' количество клапанов газлифтных
 Private Sub Class_Initialize()
 ' установка значений по умолчанию
   tub_thickness_mm_ = 10
@@ -56,24 +56,27 @@ Private Sub Class_Initialize()
   d_cas_init_m_.isStepFunction = True   ' диаметры - ступенчатая функция
   d_tub_init_m_.isStepFunction = True   ' диаметры - ступенчатая функция
 End Sub
-Public Property Get num_valves() As Integer
-    num_valves = num_valves_
-End Property
-Public Sub clear_valves()
-    ReDim h_valve_GL_m_(0)
-    num_valves_ = 0
-End Sub
-Public Sub add_valve(Hvalve)
-    num_valves_ = num_valves_ + 1
-    ReDim Preserve h_valve_GL_m_(num_valves_)
-    h_valve_GL_m_(num_valves_) = Hvalve
-End Sub
+'Public Property Get num_valves() As Integer
+'    num_valves = num_valves_
+'End Property
+'
+'Public Sub clear_valves()
+'    ReDim h_valve_GL_m_(0)
+'    num_valves_ = 0
+'End Sub
+'Public Sub add_valve(Hvalve)
+'    num_valves_ = num_valves_ + 1
+'    ReDim Preserve h_valve_GL_m_(num_valves_)
+'    h_valve_GL_m_(num_valves_) = Hvalve
+'End Sub
 Public Sub init_trajectory_h_abs(ByVal HabsCurve_m As CInterpolation, _
                               ByVal DcasCurve_mm As CInterpolation, _
-                              ByVal DtubCurve_mm As CInterpolation, _
-                              ByVal h_perf_m As Double, _
-                              ByVal h_tubing_m As Double, _
-                              Optional ValveSet As CGLValveSet = Nothing)
+                              ByVal DtubCurve_mm As CInterpolation)
+                              ', _
+                              'ByVal h_perf_m As Double, _
+                              'ByVal h_tubing_m As Double)
+                              ', _
+                              'Optional ValveSet As CGLValveSet = Nothing)
 ' trajctory init based on vertical depth data (absolute depth)
 '
 '
@@ -85,29 +88,30 @@ Public Sub init_trajectory_h_abs(ByVal HabsCurve_m As CInterpolation, _
  Dim ang
  Dim sina As Double, cosa As Double
  
- h_perf_m_ = h_perf_m
- h_tubing_m_ = h_tubing_m
+' h_perf_m_ = h_perf_m
+' h_tubing_m_ = h_tubing_m
  angle_init_deg_.ClearPoints
  
  ' насос обязательно должен быть выше перфорации
- If h_tubing_m_ >= h_perf_m_ Then
-    h_tubing_m_ = h_perf_m_ '- const_ESP_length - 1   ' насос должен быть выше перфорации
- End If
+' If h_tubing_m_ >= h_perf_m_ Then
+'    h_tubing_m_ = h_perf_m_ '- const_ESP_length - 1   ' насос должен быть выше перфорации
+' End If
+'
  Set h_abs_init_m_ = HabsCurve_m
  Set d_tub_init_m_ = DtubCurve_mm.Transform(multY:=const_convert_mm_m)
  
  ' поправим кривую для НКТ - вставим принудительно точку глубины спука насоса и ниже ее диаметры занулим
  DtubCurve_mm.isStepFunction = True
- d_tub_init_m_.AddPoint h_tubing_m_, DtubCurve_mm.getPoint(h_tubing_m_)     ' добавляем значение глубины спуска НКТ в компоновку НКТ
- 
- ' check - if tubing goes below pump setting depth - make tubing diameter zero below Hpump
- If d_tub_init_m_.maxx > h_tubing_m_ Then
-    For i = 1 To d_tub_init_m_.num_points
-        If d_tub_init_m_.pointX(i) > h_tubing_m_ Then
-            d_tub_init_m_.AddPoint d_tub_init_m_.pointX(i), 0
-        End If
-    Next i
- End If
+' d_tub_init_m_.AddPoint h_tubing_m_, DtubCurve_mm.getPoint(h_tubing_m_)     ' добавляем значение глубины спуска НКТ в компоновку НКТ
+'
+' ' check - if tubing goes below pump setting depth - make tubing diameter zero below Hpump
+' If d_tub_init_m_.maxx > h_tubing_m_ Then
+'    For i = 1 To d_tub_init_m_.num_points
+'        If d_tub_init_m_.pointX(i) > h_tubing_m_ Then
+'            d_tub_init_m_.AddPoint d_tub_init_m_.pointX(i), 0
+'        End If
+'    Next i
+' End If
  
  Set d_cas_init_m_ = DcasCurve_mm.Transform(multY:=const_convert_mm_m)
  d_cas_init_m_.isStepFunction = True   ' диаметры - ступенчатая функция
@@ -127,7 +131,7 @@ Public Sub init_trajectory_h_abs(ByVal HabsCurve_m As CInterpolation, _
  calc_trajectory
  
 End Sub
-Public Function calc_trajectory() As Boolean
+Private Function calc_trajectory() As Boolean
 ' функция расчета траектории скважины - из исходных данных считает нормализованные выходные данные и готовит данные для скважины
  Dim i As Integer
  Dim allDone As Boolean
@@ -152,8 +156,8 @@ Public Function calc_trajectory() As Boolean
         Hmes = HmesNext
     End If
  
-    If Hmes >= h_perf_m_ Then
-        Hmes = h_perf_m_
+    If Hmes >= construction_points_curve_.maxx Then
+        Hmes = construction_points_curve_.maxx
         allDone = True
     End If
     h_points_curve_.AddPoint Hmes, h_abs_init_m_.getPoint(Hmes)   ' сохраняем измеренную и абсолютную глубины тут
@@ -185,8 +189,8 @@ Private Sub FillConstructionPoints()
     
     construction_points_curve_.ClearPoints
     construction_points_curve_.AddPoint 0, 0   ' на всякий случай добавим в конструкцию нулевую точку из которой стартуем
-    h = h_perf_m_:     construction_points_curve_.AddPoint h, h_abs_init_m_.getPoint(h)
-    h = h_tubing_m_:     construction_points_curve_.AddPoint h, h_abs_init_m_.getPoint(h)
+'    h = h_perf_m_:     construction_points_curve_.AddPoint h, h_abs_init_m_.getPoint(h)
+'    h = h_tubing_m_:     construction_points_curve_.AddPoint h, h_abs_init_m_.getPoint(h)
     For i = 1 To d_cas_init_m_.num_points
         h = d_cas_init_m_.pointX(i):      construction_points_curve_.AddPoint h, h_abs_init_m_.getPoint(h)
     Next i
@@ -197,15 +201,15 @@ Private Sub FillConstructionPoints()
     ' если надо тут надо добавить другие точки в конструкцию, например газлифтные клапана, глубины установки оборудования
     ' также тут хорошо бы проверить потенциальные ошибки - отсутствие точек и тому подобное
 End Sub
-Public Property Get h_tubing_m() As Double
-    h_tubing_m = h_tubing_m_
-End Property
-Public Property Get h_perf_m() As Double
-    h_perf_m = h_perf_m_
-End Property
-Public Property Get h_perf_vert_m() As Double
-    h_perf_vert_m = h_abs_hmes_m(h_perf_m_)
-End Property
+'Public Property Get h_tubing_m() As Double
+'    h_tubing_m = h_tubing_m_
+'End Property
+'Public Property Get h_perf_m() As Double
+'    h_perf_m = h_perf_m_
+'End Property
+'Public Property Get h_perf_vert_m() As Double
+'    h_perf_vert_m = h_abs_hmes_m(h_perf_m_)
+'End Property
 Public Property Get num_points() As Integer
     num_points = h_points_curve_.num_points
 End Property
