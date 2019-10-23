@@ -2160,6 +2160,26 @@ class API():
         self.f_crv_interpolation = self.book.macro("crv_interpolation")
         return self.f_crv_interpolation(x_points,y_points,x_val,type_interpolation)
 
+    def crv_interpolation_2D(self, XA,YA,FA,XYIA,out=1,type_interpolation=0):
+        """" функция поиска значения функции по двумерным табличным данным (интерполяция 2D)
+        
+                       xa - x значения исходных данных (строка значений или массив)    
+
+        ya - y значения исходных данных (столбец значений или массив)    
+
+        fa - табличные значения интерполируемой функции,  двумерная таблица или массив    
+
+        xyia - таблица значений для которой надо найти результат  два столбца значений (x,y) или массив с двумя колонками  если не заданы возвращаются кубические коэффициента для ка..см.мануал   
+
+        out - для интерполяции кубическими сплайнами  out = 0 возвращаются только значения  out = 1 возвращаются значения и производные    
+
+        type_interpolation - тип интерполяции  0 - линейная интерполяция  1 - кубическая интерполяция    )  
+
+        """
+
+        self.f_crv_interpolation_2D = self.book.macro("crv_interpolation_2D")
+        return self.f_crv_interpolation_2D(XA,YA,FA,XYIA,out,type_interpolation)
+
     def crv_solve(self, x_points,y_points,y_val):
         """" функция решения уравнения в табличном виде f(x) = y_val  ищется значение аргумента соответствующее заданному значению  используется линейная интерполяция  возможно несколько решений
         
@@ -2189,6 +2209,50 @@ class API():
 
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
+
+    def crv_splinefit_1D(self, XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
+        """" поиск пересечений для кривых заданных таблицами  используется линейная интерполяция  возможно несколько решений
+        
+                       xa - x значения исходных данных (строка значений или массив)    
+
+        ya - y значения исходных данных (столбец значений или массив)  м - количество точек для сплайна интерполяции    
+
+        должно быть четное для hermite = true    
+
+        xia - таблица выходных значений  столбц значений (x) или массив. значения в возрастающем порядке  если не заданы возвращаются кубические коэффициента для каждого сегмента    
+
+        wa - веса исходных данных    
+
+        xca - х значения матрицы ограничений (столбец или массив)    
+
+        yca - величина ограничения для заданного значения (столбец или массив)    
+
+        dca - тип ограничения. 0 - значение, 1 - наклон. (столбец или массив).  если хоть одно из ограничений не задано - они не учитываются    
+
+        должно быть четное для hermite = true  xia - таблица выходных значений  столбц значений (x) или массив. значения в возрастающем порядке  если не заданы возвращаются кубичес..см.мануал   )  
+
+        """
+
+        self.f_crv_splinefit_1D = self.book.macro("crv_splinefit_1D")
+        return self.f_crv_splinefit_1D(XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
+
+    def crv_linest(self, YA,XA,out,weight,constraints):
+        """"Аппроксимация данных линейной функцией. Решается задача min|XM-Y| ищется вектор M
+        
+                       ya - y вектор исходных данных [0..n-1] (столбец или массив)    
+
+        xa - x матрица исходных данных [0..n-1, 0..d-1] (таблица или массив)    
+
+        out - тип вывода, out=0 (по умолчанию) коэффициенты аппроксимации [0..d-1],  out=1 код ошибки подбора аппроксимации  out=2 отчет по подбору аппроксимации, avgerror, avgreler..см.мануал   
+
+        weight - вектор весов [0..n-1] для каждого параметра исходных данных    
+
+        constraints - матрица ограничений с [0..k-1, 0..d] такая что  c[i,0]*m[0] + ... + c[i,d-1]*c[d-1] = cmatrix[i,d]    )  
+
+        """
+
+        self.f_crv_linest = self.book.macro("crv_linest")
+        return self.f_crv_linest(YA,XA,out,weight,raints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """" интерполяция функции заданной параметрически (параметр номер значения)
@@ -2282,8 +2346,8 @@ class API():
         self.f_transient_pwf_radial_atma = self.book.macro("transient_pwf_radial_atma")
         return self.f_transient_pwf_radial_atma(t_day,qliq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,model)
 
-    def transient_cd(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
-        """" расчет безразмерного коэффициента влияния ствола скважины
+    def transient_def_cd(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+        """" расчет безразмерного коэффициента влияния ствола скважины (определение)
         
                        cs_1atm - коэффициент влияния ствола скважины, 1/атм    
 
@@ -2297,11 +2361,29 @@ class API():
 
         """
 
-        self.f_transient_cd = self.book.macro("transient_cd")
-        return self.f_transient_cd(cs_1atm,rw_m,h_m,porosity,ct_1atm)
+        self.f_transient_def_cd = self.book.macro("transient_def_cd")
+        return self.f_transient_def_cd(cs_1atm,rw_m,h_m,porosity,ct_1atm)
 
-    def transient_td(self, t_day,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
-        """" расчет безразмерного времени
+    def transient_def_cs_1atm(self, cd,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+        """" расчет коэффициента влияния ствола скважины (определение)
+        
+                  cd   
+
+        rw_m - радиус скважины, м    
+
+        h_m - толщина пласта, м    
+
+        porosity - пористость    
+
+        ct_1atm - общая сжимаемость системы в пласте, 1/атм    )  
+
+        """
+
+        self.f_transient_def_cs_1atm = self.book.macro("transient_def_cs_1atm")
+        return self.f_transient_def_cs_1atm(cd,rw_m,h_m,porosity,ct_1atm)
+
+    def transient_def_td(self, t_day,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+        """" расчет безразмерного времени (определение)
         
                        t_day - время для которого проводится расчет, сут    
 
@@ -2317,7 +2399,71 @@ class API():
 
         """
 
-        self.f_transient_td = self.book.macro("transient_td")
-        return self.f_transient_td(t_day,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+        self.f_transient_def_td = self.book.macro("transient_def_td")
+        return self.f_transient_def_td(t_day,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-#UniflocVBA = API(addin_name_str)
+    def transient_def_t_day(self, td,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+        """" расчет времени по безразмерному времени (определение)
+        
+                  td   
+
+        rw_m - радиус скважины, м    
+
+        k_md - проницаемость пласта, мд    
+
+        porosity - пористость    
+
+        mu_cp - вязкость флюида в пласте, сп    
+
+        ct_1atm - общая сжимаемость системы в пласте, 1/атм    )  
+
+        """
+
+        self.f_transient_def_t_day = self.book.macro("transient_def_t_day")
+        return self.f_transient_def_t_day(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+
+    def transient_def_pd(self, pwf_atma,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+        """" расчет безразмерного давления (определение)
+        
+                       pwf_atma - забойное давление, атма    
+
+        qliq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+
+        pi_atma - начальное пластовое давление, атма    
+
+        k_md - проницаемость пласта, мд    
+
+        h_m - толщина пласта, м    
+
+        mu_cp - вязкость флюида в пласте, сп    
+
+        b_m3m3 - объемный коэффициент нефти, м3/м3    )  
+
+        """
+
+        self.f_transient_def_pd = self.book.macro("transient_def_pd")
+        return self.f_transient_def_pd(pwf_atma,qliq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+
+    def transient_def_pwf_atma(self, pd,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+        """" расчет безразмерного давления (определение)
+        
+                  pd   
+
+        qliq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+
+        pi_atma - начальное пластовое давление, атма    
+
+        k_md - проницаемость пласта, мд    
+
+        h_m - толщина пласта, м    
+
+        mu_cp - вязкость флюида в пласте, сп    
+
+        b_m3m3 - объемный коэффициент нефти, м3/м3    )  
+
+        """
+
+        self.f_transient_def_pwf_atma = self.book.macro("transient_def_pwf_atma")
+        return self.f_transient_def_pwf_atma(pd,qliq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+
+UniflocVBA = API(addin_name_str)
