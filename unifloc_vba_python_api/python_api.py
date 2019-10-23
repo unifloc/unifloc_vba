@@ -2195,7 +2195,7 @@ class API():
         return self.f_crv_solve(x_points,y_points,y_val)
 
     def crv_intersection(self, x1_points,y1_points,x2_points,y2_points):
-        """" поиск пересечений для кривых заданных таблицами  используется линейная интерполяция  возможно несколько решений
+        """"Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений.
         
                        x1_points - таблица аргументов функции 1    
 
@@ -2210,8 +2210,8 @@ class API():
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
 
-    def crv_splinefit_1D(self, XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
-        """" поиск пересечений для кривых заданных таблицами  используется линейная интерполяция  возможно несколько решений
+    def crv_fit_spline_1D(self, XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
+        """"Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений.
         
                        xa - x значения исходных данных (строка значений или массив)    
 
@@ -2233,10 +2233,10 @@ class API():
 
         """
 
-        self.f_crv_splinefit_1D = self.book.macro("crv_splinefit_1D")
-        return self.f_crv_splinefit_1D(XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
+        self.f_crv_fit_spline_1D = self.book.macro("crv_fit_spline_1D")
+        return self.f_crv_fit_spline_1D(XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
 
-    def crv_linest(self, YA,XA,out,weight,constraints):
+    def crv_fit_linear(self, YA,XA,out,weight,constraints):
         """"Аппроксимация данных линейной функцией. Решается задача min|XM-Y| ищется вектор M
         
                        ya - y вектор исходных данных [0..n-1] (столбец или массив)    
@@ -2251,8 +2251,30 @@ class API():
 
         """
 
-        self.f_crv_linest = self.book.macro("crv_linest")
-        return self.f_crv_linest(YA,XA,out,weight,raints)
+        self.f_crv_fit_linear = self.book.macro("crv_fit_linear")
+        return self.f_crv_fit_linear(YA,XA,out,weight,raints)
+
+    def crv_fit_poly(self, YA,XA,M,out=0,XIA,weight,constraints):
+        """"Аппроксимация данных полиномом функцией. Решается задача min|XM-Y| ищется вектор M
+        
+                       ya - y вектор исходных данных [0..n-1] (столбец или массив)    
+
+        xa - х вектор исходных данных [0..n-1] (таблица или массив)    
+
+        m - степень полинома для аппроксимации    
+
+        out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации, avgerror, avgrelerror, maxerror, rms..см.мануал   
+
+        out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации, avgerror, avgrelerror, maxerror, rms..см.мануал   
+
+        weight - вектор весов [0..n-1] для каждого параметра исходных данных    
+
+        constraints - матрица ограничений с[0..k-1,0..2]. с[i,0] - значение x где задано ограничение  с[i,1] - велична ограничения, с[i,2] - тип ограничения (0 -значение,1 -производн..см.мануал   )  
+
+        """
+
+        self.f_crv_fit_poly = self.book.macro("crv_fit_poly")
+        return self.f_crv_fit_poly(YA,XA,M,out,XIA,weight,raints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """" интерполяция функции заданной параметрически (параметр номер значения)
