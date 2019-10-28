@@ -21,6 +21,8 @@ Public ambient_formation As New CAmbientFormation      ' порода за пределями скв
 Public curves As New CCurves                           ' все кривые планируется прятать тут
 Public curvesOut As New CCurves
 Public t_calc_C As Double                              ' начальная температура флюида для расчета с учетом эмисии тепла
+Public p_result_atma As Double                         ' давление - результат расчета для отчета
+Public t_result_C As Double                            ' температура - результат расчета для отчета
 Private param_ As PARAMCALC                               ' параметры расчета по трубе
 ' геометрия трубы заданная массивами
 Private h_mes_insert_m_ As CInterpolation              ' измеренная глубина которую надо вставить в расчет трубы
@@ -450,6 +452,7 @@ Public Function calc_dPipe(p_atma As Double, Optional saveCurve As CALC_RESULTS 
 ' если не надо рассчитывать эмисию тепла - то можно расчет делать только по давлению - это быстрее
 ' если температуру рассчитываем то решаем систему и по давлению и по температуре - медленнее
 ' если для расчета нужна стартовая температура флюида то берется из t_calc_C
+    Dim PTres As PTtype
     If fluid.gas_only Then
         correlation = Gas
     End If
@@ -458,11 +461,14 @@ Public Function calc_dPipe(p_atma As Double, Optional saveCurve As CALC_RESULTS 
         calc_dPipe.t_C = t_calc_C
     Else
         If param.temp_method = AmbientTemp Then
-            calc_dPipe = calc_dPipe_2d(p_atma, t_calc_C, saveCurve)
+            PTres = calc_dPipe_2d(p_atma, t_calc_C, saveCurve)
         Else
-            calc_dPipe = calc_dPipe_1d(p_atma, saveCurve)
+            PTres = calc_dPipe_1d(p_atma, saveCurve)
         End If
     End If
+    p_result_atma = PTres.p_atma
+    t_result_C = PTres.t_C
+    calc_dPipe = PTres
 End Function
 Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCurve As CALC_RESULTS = nocurves) As PTtype
 ' новая версия расчета перепада давления в трубе, сразу с учетом инклинометрии
@@ -665,7 +671,7 @@ Public Function calc_dPipeZNLF(pt As PTtype, Optional saveCurve As CALC_RESULTS 
     fluid.ZNLF = True
     calc_dPipeZNLF = calc_dPipe_1d(pt.p_atma, saveCurve)
 End Function
-Public Sub FillDetailedCurve()
+Private Sub FillDetailedCurve()
 ' функция расчета  детальных распределений параметров по длине трубы
 Dim i As Integer
 Dim M As Integer
@@ -712,7 +718,7 @@ End Sub
 Public Property Get p_curve() As CInterpolation
     Set p_curve = curves("c_P")
 End Property
-Public Function array_out(Optional ByVal num_points As Integer = 0)
+Public Function array_out(Optional ByVal num_points As Integer = 20)
 ' подготовка массива для вывода в Excel
 ' num_points - количество точек в выходных массивах для вывода
 '
@@ -725,17 +731,32 @@ Public Function array_out(Optional ByVal num_points As Integer = 0)
     offset = 2
     
     Dim crv1 As CInterpolation
-    Set crv1 = curves("c_P").ClonePointsToNum(20)
+    Set crv1 = curves("c_P").ClonePointsToNum(num_points)
     M = crv1.num_points
     
-    ReDim arr(M + offset, 5)
+    ReDim arr(M + offset, 6)
     
+    arr(0, 0) = p_result_atma
+    arr(0, 1) = t_result_C
+    arr(1, 0) = "p_result_atma"
+    arr(1, 1) = "t_result_C"
+    
+    arr(offset, 0) = "num"
     arr(offset, 1) = "h,m"
-    arr(offset, 2) = "p,atma"
+    arr(offset, 2) = "hvert,m"
+    arr(offset, 3) = "p,atma"
+    arr(offset, 4) = "t,C"
+    arr(offset, 5) = "Hl"
+    arr(offset, 6) = "fpat"
         
     For i = 1 To M
+        arr(offset + i, 0) = i
         arr(offset + i, 1) = crv1.pointX(i)
-        arr(offset + i, 2) = crv1.PointY(i)
+        arr(offset + i, 2) = curvesOut("c_Hvert").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 3) = crv1.PointY(i)
+        arr(offset + i, 4) = curves("c_T").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 5) = curvesOut("c_Hl").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 6) = curvesOut("c_fpat").ClonePointsToNum(num_points).PointY(i)
     Next i
     array_out = arr
 End Function
