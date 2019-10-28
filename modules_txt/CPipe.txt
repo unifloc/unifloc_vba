@@ -137,10 +137,10 @@ Property Get correlation() As H_CORRELATION
     correlation = param.correlation
 End Property
 Property Let temp_method(cor As TEMP_CALC_METHOD)
-    param.temp_method = cor
+    param_.temp_method = cor
 End Property
 Property Get temp_method() As TEMP_CALC_METHOD
-    temp_method = param.temp_method
+    temp_method = param_.temp_method
 End Property
     
 Public Sub InitTlinear(ByVal Tstart_C As Double, ByVal Tend_C As Double)
@@ -473,7 +473,7 @@ Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCur
 '             распределении температуры
 Dim Y0(1) As Double   ' начальные значения для проведения расчета
 Dim N, M As Long
-Dim x() As Double, Y() As Double     ' массив глубин для которых нужны значения
+Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim Step As Double
 Dim State As ODESolverState
@@ -521,14 +521,14 @@ On Error GoTo err1:
     i = 0
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
-        pfp = calc_grad(State.x, State.Y(0), State.Y(1))   ' Application.Run(FuncName, State.X, State.Y, CoeffA)
+        pfp = calc_grad(State.x, State.y(0), State.y(1), flow_along_coord:=param.FlowAlongCoord)    ' Application.Run(FuncName, State.X, State.Y, CoeffA)
         State.DY(0) = pfp.dp_dl
         State.DY(1) = pfp.dt_dl
         i = i + 1
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, Y, Rep)
+    Call ODESolverResults(State, M, x, y, Rep)
     ' If necessary convert the AlgLib output array(s) to
     ' a form suitable for Excel.  In this case YA2 is
     ' a 2D base 0 array, which may be assigned to the
@@ -537,8 +537,8 @@ On Error GoTo err1:
     ' ODE = YA2
     
     ' подговим выходные результаты функции
-    calc_dPipe_2d.p_atma = Y(M - 1, 0)
-    calc_dPipe_2d.t_C = Y(M - 1, 1)
+    calc_dPipe_2d.p_atma = y(M - 1, 0)
+    calc_dPipe_2d.t_C = y(M - 1, 1)
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         curves("c_P").ClearPoints
@@ -546,12 +546,12 @@ On Error GoTo err1:
         curves("c_Tamb").ClearPoints
         For i = 0 To M - 1
             stPt = i = 0 Or i = M - 1
-            curves("c_P").AddPoint x(i), Y(i, 0), stPt
-            curves("c_T").AddPoint x(i), Y(i, 1), stPt
+            curves("c_P").AddPoint x(i), y(i, 0), stPt
+            curves("c_T").AddPoint x(i), y(i, 1), stPt
             If param.temp_method = AmbientTemp Then
                 curves("c_Tamb").AddPoint x(i), ambient_formation.amb_temp_C(curves("c_Hvert").getPoint(x(i))), stPt
             Else
-                curves("c_Tamb").AddPoint x(i), Y(i, 1), stPt
+                curves("c_Tamb").AddPoint x(i), y(i, 1), stPt
             End If
         Next i
         If saveCurve > 1 Then
@@ -569,7 +569,7 @@ Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESU
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim Y0(0) As Double   ' начальные значения для проведения расчета
 Dim N, M As Long
-Dim x() As Double, Y() As Double     ' массив глубин для которых нужны значения
+Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim Step As Double
 Dim State As ODESolverState
@@ -613,20 +613,20 @@ On Error GoTo err1:
     i = 0
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
-        If State.Y(0) < const_minPpipe_atma Then
+        If State.y(0) < const_minPpipe_atma Then
         ' при расчете давления получили отрицательные значения
         ' может происходить про расчете в затрубе
         ' тогда имитируем правильное завершение работы цикла
             State.RepTerminationType = 2
             Rtn = False
         End If
-        pfp = calc_grad(State.x, State.Y(0), t_init_C(State.x), calc_dtdl:=False, flow_along_coord:=param.FlowAlongCoord)
+        pfp = calc_grad(State.x, State.y(0), t_init_C(State.x), calc_dtdl:=False, flow_along_coord:=param.FlowAlongCoord)
         State.DY(0) = pfp.dp_dl
         i = i + 1
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, Y, Rep)
+    Call ODESolverResults(State, M, x, y, Rep)
     ' If necessary convert the AlgLib output array(s) to
     ' a form suitable for Excel.  In this case YA2 is
     ' a 2D base 0 array, which may be assigned to the
@@ -635,7 +635,7 @@ On Error GoTo err1:
     ' ODE = YA2
     
     ' подговим выходные результаты функции
-    calc_dPipe_1d.p_atma = Y(M - 1, 0)
+    calc_dPipe_1d.p_atma = y(M - 1, 0)
     calc_dPipe_1d.t_C = t_init_C(x(M - 1))
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
@@ -644,7 +644,7 @@ On Error GoTo err1:
         curves("c_Tamb").ClearPoints
         For i = 0 To M - 1
             stPt = i = 0 Or i = M - 1
-            curves("c_P").AddPoint x(i), Y(i, 0), stPt
+            curves("c_P").AddPoint x(i), y(i, 0), stPt
             curves("c_T").AddPoint x(i), t_init_C(x(i)), stPt
             curves("c_Tamb").AddPoint x(i), t_init_C(x(i)), stPt
         Next i
@@ -712,6 +712,33 @@ End Sub
 Public Property Get p_curve() As CInterpolation
     Set p_curve = curves("c_P")
 End Property
+Public Function array_out(Optional ByVal num_points As Integer = 0)
+' подготовка массива для вывода в Excel
+' num_points - количество точек в выходных массивах для вывода
+'
+    Dim arr()
+    Dim M As Integer
+    Dim FlowParams_out As PIPE_FLOW_PARAMS
+    Dim offset As Integer
+    Dim i As Integer
+    
+    offset = 2
+    
+    Dim crv1 As CInterpolation
+    Set crv1 = curves("c_P").ClonePointsToNum(20)
+    M = crv1.num_points
+    
+    ReDim arr(M + offset, 5)
+    
+    arr(offset, 1) = "h,m"
+    arr(offset, 2) = "p,atma"
+        
+    For i = 1 To M
+        arr(offset + i, 1) = crv1.pointX(i)
+        arr(offset + i, 2) = crv1.PointY(i)
+    Next i
+    array_out = arr
+End Function
 'Private Sub fillcurves()
 'Dim i As Integer
 '    curvesOut("c_Hvert").ClearPoints

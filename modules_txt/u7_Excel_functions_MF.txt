@@ -6,6 +6,7 @@
 '=======================================================================================
 'функции для проведения расчетов из интерфейса Excel
 'многофазный поток в трубах и элементах инфраструктуры
+Option Explicit
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета коэффициента Джоуля Томсона
 Public Function MF_CJT_Katm( _
@@ -408,7 +409,7 @@ On Error GoTo err1:
     With pipe
         .param = set_calc_flow_param(calc_along_coord:=False, _
                                              flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
+                                             hcor:=hydr_corr, _
                                              temp_method:=StartEndTemp)
         .InitTlinear t_in_C, t_out_C
         .c_calibr_grav = c_calibr_grav
@@ -533,20 +534,22 @@ End Function
 '  расчет распределения давления и температуры в трубе
 '  с использованием многофазных корреляций
 Public Function MF_p_pipe_new_atma( _
-                ByVal qliq_sm3day As Double, _
-                ByVal fw_perc As Double, _
-                ByVal h_list_m As Variant, _
-                ByVal pcalc_atma As Double, _
-                ByVal calc_along_coord As Boolean, _
-                ByVal flow_along_coord As Boolean, _
-                Optional ByVal str_PVT As String = PVT_DEFAULT, _
-                Optional ByVal diam_list_mm As Variant, _
-                Optional ByVal hydr_corr As H_CORRELATION = 0, _
-                Optional ByVal temp_C As Variant, _
-                Optional ByVal c_calibr_grav = 1, _
-                Optional ByVal c_calibr_fric = 1, _
-                Optional ByVal roughness_m As Double = 0.0001, _
-                Optional ByVal q_gas_sm3day As Double = 0)
+                 ByVal qliq_sm3day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal h_list_m As Variant, _
+                 ByVal pcalc_atma As Double, _
+        Optional ByVal tcalc_C As Double = 50, _
+        Optional ByVal calc_along_coord As Boolean = False, _
+        Optional ByVal flow_along_coord As Boolean = False, _
+        Optional ByVal str_PVT As String = PVT_DEFAULT, _
+        Optional ByVal diam_list_mm As Variant, _
+        Optional ByVal hydr_corr As H_CORRELATION = 0, _
+        Optional ByVal temp_C As Variant, _
+        Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+        Optional ByVal c_calibr_grav = 1, _
+        Optional ByVal c_calibr_fric = 1, _
+        Optional ByVal roughness_m As Double = 0.0001, _
+        Optional ByVal q_gas_sm3day As Double = 0)
 ' Обязательные параметры
 ' qliq_sm3day - дебит жидкости в поверхностных условиях
 ' fw_perc     - обводненность
@@ -585,6 +588,8 @@ Public Function MF_p_pipe_new_atma( _
     Dim TM As TEMP_CALC_METHOD
     Dim angle As Double
     Dim tr As New CPipeTrajectory
+    Dim amb As New CAmbientFormation
+    Dim temp_crv As New CInterpolation
 On Error GoTo err1:
     
     
@@ -592,25 +597,37 @@ On Error GoTo err1:
     
     Call pipe.init_pipe_constr_by_trajectory(tr)
    
-    ' initialize PVT properties
-    Set PVT = PVT_decode_string(str_PVT)
-    ' set liquid rate and watercut
-    PVT.qliq_sm3day = qliq_sm3day
+    
+    Set PVT = PVT_decode_string(str_PVT) ' initialize PVT properties
+    
+    PVT.qliq_sm3day = qliq_sm3day ' set liquid rate and watercut
     PVT.fw_perc = fw_perc
     PVT.q_gas_free_sm3day = q_gas_sm3day
     Set pipe.fluid = PVT
     
     pipe.param = set_calc_flow_param(calc_along_coord, _
                                      flow_along_coord, _
-                                         hcor:=hydraulic_correlation, _
-                                         temp_method:=StartEndTemp)
-    pipe.InitTlinear tother_C, t_calc_C
+                                     hcor:=hydr_corr, _
+                                     temp_method:=StartEndTemp)
+    pipe.InitTlinear tcalc_C, tcalc_C
+    
+    If Not IsMissing(temp_C) Then
+        Call temp_crv.load_from_range(temp_C)
+        Set amb.amb_temp_curve = temp_crv
+        Set pipe.ambient_formation = amb
+        pipe.temp_method = temp_method
+    End If
+    
     ' set calibration properties
     pipe.c_calibr_grav = c_calibr_grav
     pipe.c_calibr_fric = c_calibr_fric
     ' calc pressure distribution
-    MF_p_pipe_new_atma = ArrayOut(pipe.calc_dPipe(pcalc_atma, nocurves))
+    Dim res(), res1()
+    res1 = ArrayOut(pipe.calc_dPipe(pcalc_atma, allCurves))
     
+    res = pipe.array_out
+    res(0, 0) = res1(0)
+    MF_p_pipe_new_atma = res
 '    ' length must be positive
 '    length_m = Abs(length_m)
 '    ' check trivial initial data
@@ -727,13 +744,13 @@ On Error GoTo err1:
     If calc_along_flow Then
         pipe.param = set_calc_flow_param(calc_along_coord:=False, _
                                      flow_along_coord:=False, _
-                                         hcor:=hydraulic_correlation, _
+                                         hcor:=hydr_corr, _
                                          temp_method:=StartEndTemp)
         pipe.InitTlinear tother_C, t_calc_C
     Else
         pipe.param = set_calc_flow_param(calc_along_coord:=False, _
                                      flow_along_coord:=False, _
-                                         hcor:=hydraulic_correlation, _
+                                         hcor:=hydr_corr, _
                                          temp_method:=StartEndTemp)
         pipe.InitTlinear t_calc_C, tother_C
     End If
@@ -841,13 +858,13 @@ On Error GoTo err1:
     If calc_along_flow Then
         pipe.param = set_calc_flow_param(calc_along_coord:=False, _
                                      flow_along_coord:=False, _
-                                         hcor:=hydraulic_correlation, _
+                                         hcor:=hydr_corr, _
                                          temp_method:=StartEndTemp)
         pipe.InitTlinear t_calc_C, tother_C
     Else
         pipe.param = set_calc_flow_param(calc_along_coord:=False, _
                                      flow_along_coord:=False, _
-                                         hcor:=hydraulic_correlation, _
+                                         hcor:=hydr_corr, _
                                          temp_method:=StartEndTemp)
         pipe.InitTlinear tother_C, t_calc_C
     End If
