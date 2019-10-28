@@ -171,6 +171,7 @@ Public Const const_Z_max = 5
 Public Const const_TGeoGrad_C100m = 3   ' геотермальный градиент в градусах на 100 м
 Public Const const_Heps_m = 0.001       ' дельта для корретировки кривой трубы, - примерно соответствует длине сочленения труб
 Public Const const_ESP_length = 1      ' длина УЭЦН по умолчанию
+Public Const const_pipe_diam_default_mm = 62
 ' набор констант для перевода единиц измерений в различных размерностях
 Public Const const_convert_atma_Pa = 101325
 Public Const const_convert_Pa_atma = 1 / const_convert_atma_Pa
@@ -260,30 +261,17 @@ Public Enum Z_CORRELATION
 End Enum
 ' pipe type for initialisation in well
 ' well effective diameter will depend on pipe type there
-Public Enum PIPE_TYPE
-    pipeTubing = 0
-    pipeCasing = 1
-    pipeAnnulus = 2
-End Enum
+'Public Enum PIPE_TYPE
+'    pipeTubing = 0
+'    pipeCasing = 1
+'    pipeAnnulus = 2
+'End Enum
 ' 0 - считаем от меньшего давления к наибольшему, по умолчанию.Например,
 ' от устьевого давления считаем против потока до забойного давления
 ' todo заменить объявление и использование
-'Public Enum ALONG_FLOW
-'    AgainstStream = 0   ' подсчет против потока
-'    AlongStream = 1     ' подсчет по потоку
-'    AlongStreamZNLF = 2 ' подсчет по потоку через неподвижную жидкость
-'End Enum
-Public Enum FLOW_DIRECTION
-    FlowAlongCoord = 1
-    FlowAgainstCoord = 0
-End Enum
-'Public Enum FLOW_DIRECTION_AT_START
-'    FlowInPipe = -1
-'    FlowOutPipe = 1
-'End Enum
-'Public Enum TEMP_DIRECTION
-'    TempDownAlongCoord = -1
-'    TempRaiseAlongCoord = 1
+'Public Enum FLOW_DIRECTION
+'    FlowAlongCoord = 1
+'    FlowAgainstCoord = 0
 'End Enum
 Public Enum TEMP_CALC_METHOD
     StartEndTemp = 0
@@ -308,11 +296,13 @@ Public Enum GLV_R1_PORT_SIZE
 End Enum
 ' настройки проведения расчетов для трубы и скважины
 Public Type PARAMCALC
- correlation As H_CORRELATION
- FlowDirection As FLOW_DIRECTION         '   показывает, как поток направлен относительно координат по длине
- 'FlowAtStart As FLOW_DIRECTION_AT_START  '   показывает, что точка начального давления соответвует потоку втекающему в трубу (забой)
- 'TempDirection As TEMP_DIRECTION         '   если  false  то значит в начальной точке поток вытекает из трубы (устье)
- temp_method As TEMP_CALC_METHOD          ' метод расчета температуры в трубе
+     correlation As H_CORRELATION
+    ' FlowDirection As FLOW_DIRECTION         '   показывает, как поток направлен относительно координат по длине
+     CalcAlongCoord As Boolean
+     FlowAlongCoord As Boolean
+     'FlowAtStart As FLOW_DIRECTION_AT_START  '   показывает, что точка начального давления соответвует потоку втекающему в трубу (забой)
+     'TempDirection As TEMP_DIRECTION         '   если  false  то значит в начальной точке поток вытекает из трубы (устье)
+     temp_method As TEMP_CALC_METHOD          ' метод расчета температуры в трубе
 End Type
 ' тип для описания термобарических условий  (для расчетов)
 ' используется для передачи данных. Поддерживает только один вариант размерности
@@ -424,16 +414,31 @@ Public Type WELL_DESCRIPTION_SIMPLE
      dchoke_mm As Double
      roughness_m As Double
 End Type
-Public Function param_calc_along_flow(Optional ByVal hcor As H_CORRELATION = Ansari, Optional TempMeth As TEMP_CALC_METHOD = StartEndTemp) As PARAMCALC
-    param_calc_along_flow.correlation = hcor
-    param_calc_along_flow.FlowDirection = FlowAlongCoord
-    param_calc_along_flow.temp_method = TempMeth
+Public Function set_calc_flow_param( _
+                Optional calc_along_coord As Boolean = False, _
+                Optional flow_along_coord As Boolean = False, _
+                Optional ByVal hcor As H_CORRELATION = Ansari, _
+                Optional temp_method As TEMP_CALC_METHOD = StartEndTemp) As PARAMCALC
+    Dim prm As PARAMCALC
+    prm.CalcAlongCoord = calc_along_coord
+    prm.FlowAlongCoord = flow_along_coord
+    prm.correlation = hcor
+    prm.temp_method = temp_method
+    set_calc_flow_param = prm
 End Function
-Public Function param_calc_against_flow(Optional ByVal hcor As H_CORRELATION = Ansari, Optional TempMeth As TEMP_CALC_METHOD = StartEndTemp) As PARAMCALC
-    param_calc_against_flow.correlation = hcor
-    param_calc_against_flow.FlowDirection = FlowAgainstCoord
-    param_calc_against_flow.temp_method = TempMeth
-End Function
+'Public Function param_calc_along_flow(Optional ByVal hcor As H_CORRELATION = Ansari, Optional TempMeth As TEMP_CALC_METHOD = StartEndTemp) As PARAMCALC
+'    param_calc_along_flow.correlation = hcor
+'    'param_calc_along_flow.FlowDirection = FlowAlongCoord
+'    param_calc_along_flow.FlowAlongCoord = True
+'    param_calc_along_flow.temp_method = TempMeth
+'End Function
+'
+'Public Function param_calc_against_flow(Optional ByVal hcor As H_CORRELATION = Ansari, Optional TempMeth As TEMP_CALC_METHOD = StartEndTemp) As PARAMCALC
+'    param_calc_against_flow.correlation = hcor
+'    'param_calc_against_flow.FlowDirection = FlowAgainstCoord
+'    param_calc_along_flow.FlowAlongCoord = False
+'    param_calc_against_flow.temp_method = TempMeth
+'End Function
 Public Function SumPT(PT1 As PTtype, PT2 As PTtype) As PTtype
     SumPT.p_atma = PT1.p_atma + PT2.p_atma
     SumPT.t_C = PT1.t_C + PT2.t_C
@@ -480,5 +485,8 @@ Public Function NewCPipe() As CPipe
 End Function
 Public Function NewTRFacade() As C_TR_Facade
     Set NewTRFacade = New C_TR_Facade
+End Function
+Public Function ArrayOut(pt As PTtype)
+    ArrayOut = Array(pt.p_atma, pt.t_C)
 End Function
 
