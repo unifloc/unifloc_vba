@@ -712,6 +712,7 @@ Private Sub calc_casing()
 '  результат расчет - распределение давление и значение динамического уровня
     Dim PT_cas__temp As PTtype
     Dim p_PTintgas_temp As PTtype
+    Dim p_PTcasgas_temp As PTtype
     Dim cas_crv As CInterpolation
     Dim num_Hd As Integer
 On Error GoTo err_casing:
@@ -723,10 +724,11 @@ On Error GoTo err_casing:
                                              temp_method:=temp_correlation)
         PT_cas__temp = pipe_WHeadHsp_Casing_.calc_dPipe(PT_int_.p_atma, maincurves)
         ' 2. для затруба считаем распределение давления в газовом столбе сверху вниз
-        pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=False, _
-                                             flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
+        pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=True, _
+                                             flow_along_coord:=True, _
+                                             hcor:=Gas, _
                                              temp_method:=temp_correlation)
+        'pipe_WHeadHsp_Casing_Gas_.fluid.gas_only = True
         p_PTintgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_cas_.p_atma, maincurves)
         ' 3. найдем пересечение  распределений газа и жидкости в затрубе по давлению
         Set cas_crv = pipe_WHeadHsp_Casing_.p_curve.SubtractCurve(pipe_WHeadHsp_Casing_Gas_.p_curve)
@@ -741,10 +743,20 @@ On Error GoTo err_casing:
             Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_.p_curve.CutByCurve(pipe_WHeadHsp_Casing_Gas_.p_curve)
         ElseIf num_Hd = 0 Then
         ' 5. если пересечение найти не удалось - то фиксируем крайние значения
-            If PT_cas_.p_atma >= PT_int_.p_atma Then
+            
+            pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=False, _
+                                         flow_along_coord:=False, _
+                                         hcor:=Gas, _
+                                         temp_method:=temp_correlation)
+            p_PTcasgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_int_.p_atma, maincurves)
+            If PT_cas_.p_atma >= p_PTcasgas_temp.p_atma Then
                 H_dyn_m_ = h_sp_m_
+                ' готовим кривую распределения давления в затрубе из двух - для жидкости и для газа
+                Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_Gas_.p_curve
             Else
                 H_dyn_m_ = 0
+                ' готовим кривую распределения давления в затрубе из двух - для жидкости и для газа
+                Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_.p_curve
             End If
         Else
         '6. если пересечений не одно, то пытаемся применить устаревший алгоритм без учета плотности газа
@@ -785,11 +797,16 @@ err_casing:
     RaiseEvent ReportProgress(err_str)
     Err.Raise Err.Number, Err.Source, err_str
  End Sub
-Private Sub add_crv(crv_name As String, crv_pipe_name As String, tub As Boolean, xnam As String, ynam As String)
-    If tub Then
-        Call curve(crv_name).AddPointsCurve(pipe_WHeadHsp_Tubing_.curves(crv_pipe_name), pipe_HspHvd_.curves(crv_pipe_name))
+Private Sub add_crv(crv_name As String, crv_pipe_name As String, tub As Boolean, xnam As String, ynam As String, _
+                    Optional crv_name2 As String)
+    If crv_name2 = "" Then
+        If tub Then
+            Call curve(crv_name).AddPointsCurve(pipe_WHeadHsp_Tubing_.curves(crv_pipe_name), pipe_HspHvd_.curves(crv_pipe_name))
+        Else
+            Call curve(crv_name).AddPointsCurve(pipe_WHeadHsp_Casing_.curves(crv_pipe_name), pipe_HspHvd_.curves(crv_pipe_name))
+        End If
     Else
-        Call curve(crv_name).AddPointsCurve(pipe_WHeadHsp_Casing_.curves(crv_pipe_name), pipe_HspHvd_.curves(crv_pipe_name))
+        Call curve(crv_name).AddPointsCurve(pipe_WHeadHsp_Casing_.curves(crv_name2), pipe_HspHvd_.curves(crv_pipe_name))
     End If
     curve(crv_name).xName = xnam
     curve(crv_name).yName = ynam
@@ -802,7 +819,8 @@ End Sub
         add_crv str_PtubHmes_curve, "c_P", tub:=True, xnam:="hmes_m", ynam:="p_tub_atma"
         add_crv str_TtubHmes_curve, "c_T", tub:=True, xnam:="hmes_m", ynam:="t_tub_C"
         add_crv str_TambHmes_curve, "c_Tamb", tub:=True, xnam:="hmes_m", ynam:="t_amb_C"
-        add_crv str_PcasHmes_curve, "c_P", tub:=False, xnam:="hmes_m", ynam:="p_cas_C"
+        add_crv str_PcasHmes_curve, "c_P", tub:=False, xnam:="hmes_m", ynam:="p_cas_atma"
+        add_crv "Pcas_Hd", "c_P", tub:=False, xnam:="hmes_m", ynam:="p_cas_atma", crv_name2:="Pcas_Hd"
         
         add_crv "c_Diam", "c_Diam", tub:=False, xnam:="hmes_m", ynam:="c_Diam"
         add_crv "c_Roughness", "c_Roughness", tub:=False, xnam:="hmes_m", ynam:="c_Roughness"
