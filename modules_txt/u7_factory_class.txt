@@ -1,0 +1,156 @@
+'=======================================================================================
+'Unifloc 7.12  Apodemus agrarius                                           khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
+'
+'=======================================================================================
+' class factory functions
+'
+' вспомогательные функции для генерации объектов и изменения объектов в разных ситуациях
+'
+Option Explicit
+' модуль для функций поддержки работы классов
+' содержит функции для того чтобы можно было создавать экземпляры классов из других файлов
+Public Function new_ESP_sys() As CESPsystemSimple
+    Set new_ESP_sys = New CESPsystemSimple
+End Function
+Public Function new_well() As CWellESP
+    Set new_well = New CWellESP
+End Function
+Public Function new_well_GL() As CWellGL
+    Set new_well_GL = New CWellGL
+End Function
+Public Function NewChoke() As Cchoke
+   Set NewChoke = New Cchoke
+End Function
+Public Function NewCPVT() As CPVT
+   Set NewCPVT = New CPVT
+End Function
+Public Function NewCurve() As CInterpolation
+   Set NewCurve = New CInterpolation
+End Function
+Public Function NewCPipe() As CPipe
+    Set NewCPipe = New CPipe
+End Function
+Public Function NewTRFacade() As C_TR_Facade
+    Set NewTRFacade = New C_TR_Facade
+End Function
+' генерация класса скважины с простыми свойствами
+Public Function new_well_factory( _
+                                h_perf_m As Double, _
+                 Optional ByVal h_tub_m As Double = 0, _
+                 Optional ByVal udl_m As Double = 0, _
+                 Optional ByVal d_cas_mm As Variant, _
+                 Optional ByVal d_tub_mm As Variant, _
+                 Optional ByVal well_type As Integer = 0, _
+                 Optional ByVal incl_h_mes_m As Variant, _
+                 Optional ByVal incl_h_vert_m As Variant, _
+                 Optional ByVal dcas_arr_hmes_m As Variant, _
+                 Optional ByVal dcas_arr_mm As Variant, _
+                 Optional ByVal dtub_arr_hmes_m As Variant, _
+                 Optional ByVal dtub_arr_mm As Variant, _
+                 Optional ByVal tr_cas As CPipeTrajectory, _
+                 Optional ByVal tr_tub As CPipeTrajectory _
+                                ) As Variant
+' универсальный метод генерации объетов скважины (как ESP так и GL)
+' можно задавать скважину несколькими вариантами
+'   1. минимальный набор просты чисел
+'           h_perf_m
+'           h_tub_m
+'           udl_m
+'           d_cas_mm
+'           d_tub_mm
+'           well_type
+'   2. расширенный набор с заданием инклинометрии и диаметров
+'           h_perf_m
+'           incl_h_mes_m
+'           incl_h_vert_m
+'           dcas_arr_hmes_m
+'           dcas_arr_mm
+'           dtub_arr_hmes_m
+'           dtub_arr_mm
+'           well_type
+'   3. генерация из готовых траекторий для обсадной колонны и НКТ
+'           h_perf_m
+'           tr_cas
+'           tr_tub
+'           well_type
+'
+    Dim habs_curve_m As New CInterpolation
+    Dim dcas_curve_mm As New CInterpolation
+    Dim dtub_curve_mm As New CInterpolation
+'    Dim wellESP As New CWellESP
+'    Dim wellGL As New CWellGL
+    Dim well As Variant
+    Dim errmsg As String
+    Dim rng As range
+On Error GoTo err1:
+    Select Case well_type
+        Case 0
+             Set well = New CWellESP
+        Case 1
+             Set well = New CWellGL
+    End Select
+    With well
+        If IsMissing(tr_cas) Or IsMissing(tr_tub) Then
+            ' проверим сначала конструкцию и инклинометрию скважины
+            ' не делаем лишних проверок - ожидаем что прочитать получится
+            If Not IsMissing(incl_h_mes_m) And IsMissing(incl_h_vert_m) Then
+                Call habs_curve_m.loadFromVertRange(incl_h_mes_m) ' читаем инклинометрию из одной таблицы
+            ElseIf Not IsMissing(incl_h_mes_m) And Not IsMissing(incl_h_vert_m) Then
+                Call habs_curve_m.loadFromVertRange(incl_h_mes_m, incl_h_vert_m) ' читаем инклинометрию из двух столбцов
+            ElseIf IsMissing(incl_h_mes_m) And IsMissing(incl_h_vert_m) Then
+                habs_curve_m.AddPoint 0, 0
+                habs_curve_m.AddPoint h_perf_m, h_perf_m - udl_m
+            End If
+            
+    
+            ' проверим диаметры эксплуатационной колонны
+            If Not IsMissing(d_cas_mm) And Not IsNumeric(d_cas_mm) Then
+                Call dcas_curve_mm.loadFromVertRange(d_cas_mm) ' читаем инклинометрию из одной таблицы
+            ElseIf Not IsMissing(dcas_arr_mm) And IsMissing(dcas_arr_hmes_m) Then
+                Call dcas_curve_mm.loadFromVertRange(dcas_arr_mm) ' читаем инклинометрию из одной таблицы
+            ElseIf Not IsMissing(dcas_arr_mm) And Not IsMissing(dcas_arr_hmes_m) Then
+                Call dcas_curve_mm.loadFromVertRange(dcas_arr_hmes_m, dcas_arr_mm) ' читаем инклинометрию из двух столбцов
+            ElseIf IsMissing(dcas_arr_mm) And IsMissing(dcas_arr_hmes_m) Then
+                dcas_curve_mm.AddPoint 0, d_cas_mm
+                dcas_curve_mm.AddPoint h_perf_m, d_cas_mm
+            End If
+            
+            ' проверим диаметры НКТ
+            If Not IsMissing(d_tub_mm) And Not IsNumeric(d_tub_mm) Then
+                Call dtub_curve_mm.loadFromVertRange(d_tub_mm) ' читаем инклинометрию из одной таблицы
+            ElseIf Not IsMissing(dtub_arr_mm) And IsMissing(dtub_arr_hmes_m) Then
+                Call dtub_curve_mm.loadFromVertRange(dtub_arr_mm) ' читаем инклинометрию из одной таблицы
+            ElseIf Not IsMissing(dtub_arr_mm) And Not IsMissing(dtub_arr_hmes_m) Then
+                Call dtub_curve_mm.loadFromVertRange(dtub_arr_hmes_m, dtub_arr_mm) ' читаем инклинометрию из двух столбцов
+            ElseIf IsMissing(dtub_arr_mm) And IsMissing(dtub_arr_hmes_m) Then
+                dtub_curve_mm.AddPoint 0, d_tub_mm
+                dtub_curve_mm.AddPoint h_tub_m, d_tub_mm
+            End If
+            Call .trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
+            Call .trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
+        Else
+            Set .trajectory_tub = tr_tub
+            Set .trajectory_cas = tr_cas
+        End If
+        .h_perf_m = h_perf_m
+        .h_tub_m = .trajectory_tub.bottom_m
+        
+        Call .FillWellConstructionTr
+    End With
+    Set new_well_factory = well
+    Exit Function
+err1:
+   errmsg = "new_well_factory: Ошибка простой инициализации скважины " & sDELIM & Err.Description
+   Err.Raise kErrInitCalc, Err.Source, errmsg
+    
+End Function
+Function test1(a, Optional b)
+    Dim rng As range
+    If Not IsNumeric(b) Then
+        Set rng = a
+        test1 = rng.Columns.Count
+    End If
+End Function
+

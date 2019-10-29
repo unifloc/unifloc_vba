@@ -19,7 +19,7 @@ Public ZeroCoordVert_m As Double                       ' начальная координата тр
 Public fluid As CPVT                                   ' базовый флюид в трубе. Определяет свойства и расходы и фазовый состав
 Public ambient_formation As New CAmbientFormation      ' порода за пределями скважины
 Public curves As New CCurves                           ' все кривые планируется прятать тут
-Public curvesOut As New CCurves
+'Public curves As New CCurves
 Public t_calc_C As Double                              ' начальная температура флюида для расчета с учетом эмисии тепла
 Public p_result_atma As Double                         ' давление - результат расчета для отчета
 Public t_result_C As Double                            ' температура - результат расчета для отчета
@@ -51,7 +51,7 @@ Private Sub Class_Initialize()
    ReDim flow_params_out_(0) As PIPE_FLOW_PARAMS
    curves("c_Roughness").isStepFunction = True ' шероховатость и диаметр трубы меняют ступенчато и не интерполируются
    curves("c_Diam").isStepFunction = True
-   curvesOut("c_fpat").isStepFunction = True
+   curves("c_fpat").isStepFunction = True
    Set fluid = New CPVT
    With param
        .correlation = Ansari
@@ -245,6 +245,11 @@ Public Sub init_pipe_constr_by_trajectory( _
             curves("c_Hvert").AddPoint h, tr.h_abs_hmes_m(h)
          End If
     Next i
+    curves("c_Diam").protected = True
+    curves("c_Roughness").protected = True
+    curves("c_Theta").protected = True
+    curves("c_Hvert").protected = True
+    
     legth_total_m_ = HmesEnd_m - HmesStart_m
     depth_vert_total_m_ = tr.h_abs_hmes_m(HmesEnd_m) - tr.h_abs_hmes_m(HmesStart_m)
     h_mes_insert_m_.ClearPoints
@@ -455,12 +460,18 @@ Public Function calc_dPipe(p_atma As Double, Optional saveCurve As CALC_RESULTS 
     Dim PTres As PTtype
     If fluid.gas_only Then
         correlation = Gas
+    ElseIf fluid.qliq_sm3day < const_ZNLF_rate Then
+        param.correlation = Ansari
+        fluid.ZNLF = True
     End If
+    
     If length_mes_m = 0 Then
         calc_dPipe.p_atma = p_atma
         calc_dPipe.t_C = t_calc_C
     Else
-        If param.temp_method = AmbientTemp Then
+        If param.temp_method = AmbientTemp And param.CalcAlongCoord = param.FlowAlongCoord Then
+            ' расчет температуры с учетом эмисиии тепла в окружающее пространство возможен
+            ' только если расчет делается по направлению потока
             PTres = calc_dPipe_2d(p_atma, t_calc_C, saveCurve)
         Else
             PTres = calc_dPipe_1d(p_atma, saveCurve)
@@ -478,7 +489,7 @@ Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCur
 ' Tother_C  - опциональное значение температуры на другом конце трубы, необходимо при линейном
 '             распределении температуры
 Dim Y0(1) As Double   ' начальные значения для проведения расчета
-Dim N, M As Long
+Dim n, M As Long
 Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim Step As Double
@@ -494,7 +505,7 @@ On Error GoTo err1:
     Step = 10
     Y0(0) = p_atma
     Y0(1) = t_C
-    N = 2                   ' размер системы  - две переменные - давление и температура
+    n = 2                   ' размер системы  - две переменные - давление и температура
     M = hm_curve_.num_points ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
@@ -517,7 +528,7 @@ On Error GoTo err1:
         
  '   Y = solve_ode("calc_grad_2d", Y0, x, coeffA, Eps)
     
-    Call ODESolverRKCK(Y0(), N, x, M, eps, Step, State)
+    Call ODESolverRKCK(Y0(), n, x, M, eps, Step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
@@ -560,6 +571,9 @@ On Error GoTo err1:
                 curves("c_Tamb").AddPoint x(i), y(i, 1), stPt
             End If
         Next i
+        curves("c_P").protected = True
+        curves("c_T").protected = True
+        curves("c_Tamb").protected = True
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -574,7 +588,7 @@ Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESU
 ' основан на применении ODEsolver
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim Y0(0) As Double   ' начальные значения для проведения расчета
-Dim N, M As Long
+Dim n, M As Long
 Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim Step As Double
@@ -590,7 +604,7 @@ On Error GoTo err1:
     Y0(0) = p_atma
     
 '    Y0(1) = PT.T_C
-    N = 1                   ' размер системы  - одна переменные - давление и температура
+    n = 1                   ' размер системы  - одна переменные - давление и температура
     M = hm_curve_.num_points ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
@@ -609,7 +623,7 @@ On Error GoTo err1:
 '    If fluid.qliq_sm3day = 0 Then
 '        Y0(1) = ambient_formation.amb_temp_C(X(0))
 '    End If
-    Call ODESolverRKCK(Y0(), N, x, M, eps, Step, State)
+    Call ODESolverRKCK(Y0(), n, x, M, eps, Step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
@@ -654,6 +668,9 @@ On Error GoTo err1:
             curves("c_T").AddPoint x(i), t_init_C(x(i)), stPt
             curves("c_Tamb").AddPoint x(i), t_init_C(x(i)), stPt
         Next i
+        curves("c_P").protected = True
+        curves("c_T").protected = True
+        curves("c_Tamb").protected = True
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -663,56 +680,57 @@ err1:
     addLogMsg ("CPipe.calc_dPipe_1d: ошибка какая то")
     Err.Raise Err.Number, Err.Source, Err.Description
 End Function
-Public Function calc_dPipeZNLF(pt As PTtype, Optional saveCurve As CALC_RESULTS = nocurves) As PTtype
-    ' расчет перепада давления в неподвижной колонне с газом
-    ' единственное отличие - флюид имеет флаг znlf что меняет дебит
-    ' для расчета должна применяться механистическая корреляция
-    param.correlation = Ansari
-    fluid.ZNLF = True
-    calc_dPipeZNLF = calc_dPipe_1d(pt.p_atma, saveCurve)
-End Function
+'Public Function calc_dPipeZNLF(pt As PTtype, Optional saveCurve As CALC_RESULTS = nocurves) As PTtype
+'
+'    ' расчет перепада давления в неподвижной колонне с газом
+'    ' единственное отличие - флюид имеет флаг znlf что меняет дебит
+'    ' для расчета должна применяться механистическая корреляция
+'    param.correlation = Ansari
+'    fluid.ZNLF = True
+'    calc_dPipeZNLF = calc_dPipe_1d(pt.p_atma, saveCurve)
+'End Function
 Private Sub FillDetailedCurve()
 ' функция расчета  детальных распределений параметров по длине трубы
-Dim i As Integer
-Dim M As Integer
-Dim FlowParams_out As PIPE_FLOW_PARAMS
+    Dim i As Integer
+    Dim M As Integer
+    Dim FlowParams_out As PIPE_FLOW_PARAMS
     M = curves("c_P").num_points
-    
-    curvesOut.ClearPoints
- 
+    Call curves.ClearPoints_unprotected
     For i = 1 To M
-     FlowParams_out = calc_grad(hm_curve_.pointX(i), curves("c_P").PointY(i), curves("c_T").PointY(i))
-     With FlowParams_out
-        curvesOut("c_Hvert").AddPoint .md_m, .vd_m
-        curvesOut("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
-        curvesOut("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
-        curvesOut("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
-        curvesOut("c_vsl").AddPoint .md_m, .v_sl_msec
-        curvesOut("c_vsg").AddPoint .md_m, .v_sg_msec
-        curvesOut("c_Hl").AddPoint .md_m, .h_l_d
-        curvesOut("c_fpat").AddPoint .md_m, .fpat
-        curvesOut("c_Theta").AddPoint .md_m, .thete_deg
-        curvesOut("c_Roughness").AddPoint .md_m, .roughness_m
-        curvesOut("c_Rs").AddPoint .md_m, .rs_m3m3
-        curvesOut("c_gasfrac").AddPoint .md_m, .gasfrac
-        curvesOut("c_muo").AddPoint .md_m, .mu_oil_cP
-        curvesOut("c_muw").AddPoint .md_m, .mu_wat_cP
-        curvesOut("c_mug").AddPoint .md_m, .mu_gas_cP
-        curvesOut("c_mumix").AddPoint .md_m, .mu_mix_cP
-        curvesOut("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
-        curvesOut("c_rhow").AddPoint .md_m, .Rhow_kgm3
-        curvesOut("c_rhol").AddPoint .md_m, .rhol_kgm3
-        curvesOut("c_rhog").AddPoint .md_m, .Rhog_kgm3
-        curvesOut("c_rhomix").AddPoint .md_m, .rhomix_kgm3
-        curvesOut("c_qo").AddPoint .md_m, .q_oil_m3day
-        curvesOut("c_qw").AddPoint .md_m, .qw_m3day
-        curvesOut("c_qg").AddPoint .md_m, .Qg_m3day
-        curvesOut("c_mo").AddPoint .md_m, .mo_kgsec
-        curvesOut("c_mw").AddPoint .md_m, .mw_kgsec
-        curvesOut("c_mg").AddPoint .md_m, .mg_kgsec
-        curvesOut("c_vl").AddPoint .md_m, .vl_msec
-        curvesOut("c_vg").AddPoint .md_m, .vg_msec
-     End With
+        FlowParams_out = calc_grad(curves("c_P").pointX(i), _
+                                    curves("c_P").PointY(i), _
+                                    curves("c_T").PointY(i))
+        With FlowParams_out
+            curves("c_udl_m").AddPoint .md_m, .md_m - .vd_m
+            curves("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
+            curves("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
+            curves("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
+            curves("c_vsl").AddPoint .md_m, .v_sl_msec
+            curves("c_vsg").AddPoint .md_m, .v_sg_msec
+            curves("c_Hl").AddPoint .md_m, .h_l_d
+            curves("c_fpat").AddPoint .md_m, .fpat
+            curves("c_Theta").AddPoint .md_m, .thete_deg
+            curves("c_Roughness").AddPoint .md_m, .roughness_m
+            curves("c_Rs").AddPoint .md_m, .rs_m3m3
+            curves("c_gasfrac").AddPoint .md_m, .gasfrac
+            curves("c_muo").AddPoint .md_m, .mu_oil_cP
+            curves("c_muw").AddPoint .md_m, .mu_wat_cP
+            curves("c_mug").AddPoint .md_m, .mu_gas_cP
+            curves("c_mumix").AddPoint .md_m, .mu_mix_cP
+            curves("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
+            curves("c_rhow").AddPoint .md_m, .Rhow_kgm3
+            curves("c_rhol").AddPoint .md_m, .rhol_kgm3
+            curves("c_rhog").AddPoint .md_m, .Rhog_kgm3
+            curves("c_rhomix").AddPoint .md_m, .rhomix_kgm3
+            curves("c_qo").AddPoint .md_m, .q_oil_m3day
+            curves("c_qw").AddPoint .md_m, .qw_m3day
+            curves("c_qg").AddPoint .md_m, .Qg_m3day
+            curves("c_mo").AddPoint .md_m, .mo_kgsec
+            curves("c_mw").AddPoint .md_m, .mw_kgsec
+            curves("c_mg").AddPoint .md_m, .mg_kgsec
+            curves("c_vl").AddPoint .md_m, .vl_msec
+            curves("c_vg").AddPoint .md_m, .vg_msec
+        End With
     Next i
 End Sub
 Public Property Get p_curve() As CInterpolation
@@ -729,7 +747,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     Dim i As Integer
     
     offset = 2
-    
+On Error Resume Next
     Dim crv1 As CInterpolation
     Set crv1 = curves("c_P").ClonePointsToNum(num_points)
     M = crv1.num_points
@@ -748,85 +766,84 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     arr(offset, 4) = "t,C"
     arr(offset, 5) = "Hl"
     arr(offset, 6) = "fpat"
-        
     For i = 1 To M
         arr(offset + i, 0) = i
         arr(offset + i, 1) = crv1.pointX(i)
-        arr(offset + i, 2) = curvesOut("c_Hvert").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 2) = curves("c_Hvert").ClonePointsToNum(num_points).PointY(i)
         arr(offset + i, 3) = crv1.PointY(i)
         arr(offset + i, 4) = curves("c_T").ClonePointsToNum(num_points).PointY(i)
-        arr(offset + i, 5) = curvesOut("c_Hl").ClonePointsToNum(num_points).PointY(i)
-        arr(offset + i, 6) = curvesOut("c_fpat").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 5) = curves("c_Hl").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 6) = curves("c_fpat").ClonePointsToNum(num_points).PointY(i)
     Next i
     array_out = arr
 End Function
 'Private Sub fillcurves()
 'Dim i As Integer
-'    curvesOut("c_Hvert").ClearPoints
-'    curvesOut("c_P").ClearPoints
-'    curvesOut("c_T").ClearPoints
-'    curvesOut("c_dpdl_g").ClearPoints
-'    curvesOut("c_dpdl_f").ClearPoints
-'    curvesOut("c_dpdl_a").ClearPoints
-'    curvesOut("c_vsl").ClearPoints
-'    curvesOut("c_vsg").ClearPoints
-'    curvesOut("c_Hl").ClearPoints
-'    curvesOut("c_fpat").ClearPoints
-'    curvesOut("c_Rs").ClearPoints
-'    curvesOut("c_gasfrac").ClearPoints
-'    curvesOut("c_muo").ClearPoints
-'    curvesOut("c_muw").ClearPoints
-'    curvesOut("c_mug").ClearPoints
-'    curvesOut("c_mumix").ClearPoints
-'    curvesOut("c_rhoo").ClearPoints
-'    curvesOut("c_rhow").ClearPoints
-'    curvesOut("c_rhol").ClearPoints
-'    curvesOut("c_rhog").ClearPoints
-'    curvesOut("c_rhomix").ClearPoints
-'    curvesOut("c_qo").ClearPoints
-'    curvesOut("c_qw").ClearPoints
-'    curvesOut("c_qg").ClearPoints
-'    curvesOut("c_mo").ClearPoints
-'    curvesOut("c_mw").ClearPoints
-'    curvesOut("c_mg").ClearPoints
-'    curvesOut("c_vl").ClearPoints
-'    curvesOut("c_vg").ClearPoints
+'    curves("c_Hvert").ClearPoints
+'    curves("c_P").ClearPoints
+'    curves("c_T").ClearPoints
+'    curves("c_dpdl_g").ClearPoints
+'    curves("c_dpdl_f").ClearPoints
+'    curves("c_dpdl_a").ClearPoints
+'    curves("c_vsl").ClearPoints
+'    curves("c_vsg").ClearPoints
+'    curves("c_Hl").ClearPoints
+'    curves("c_fpat").ClearPoints
+'    curves("c_Rs").ClearPoints
+'    curves("c_gasfrac").ClearPoints
+'    curves("c_muo").ClearPoints
+'    curves("c_muw").ClearPoints
+'    curves("c_mug").ClearPoints
+'    curves("c_mumix").ClearPoints
+'    curves("c_rhoo").ClearPoints
+'    curves("c_rhow").ClearPoints
+'    curves("c_rhol").ClearPoints
+'    curves("c_rhog").ClearPoints
+'    curves("c_rhomix").ClearPoints
+'    curves("c_qo").ClearPoints
+'    curves("c_qw").ClearPoints
+'    curves("c_qg").ClearPoints
+'    curves("c_mo").ClearPoints
+'    curves("c_mw").ClearPoints
+'    curves("c_mg").ClearPoints
+'    curves("c_vl").ClearPoints
+'    curves("c_vg").ClearPoints
 '
 '
 '    For i = LBound(flow_params_out_) To UBound(flow_params_out_)
 '     With flow_params_out_(i)
-'        curvesOut("c_Hvert").AddPoint .md_m, .vd_m
-'        curvesOut("c_P").AddPoint .md_m, .p_atma
-'        curvesOut("c_T").AddPoint .md_m, .T_C
-'        curvesOut("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
-'        curvesOut("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
-'        curvesOut("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
-'        curvesOut("c_vsl").AddPoint .md_m, .v_sl_msec
-'        curvesOut("c_vsg").AddPoint .md_m, .v_sg_msec
-'        curvesOut("c_Hl").AddPoint .md_m, .h_l_d
-'        curvesOut("c_fpat").AddPoint .md_m, .fpat
-'        curvesOut("c_Theta").AddPoint .md_m, .thete_deg
-'        curvesOut("c_Roughness").AddPoint .md_m, .roughness_m
+'        curves("c_Hvert").AddPoint .md_m, .vd_m
+'        curves("c_P").AddPoint .md_m, .p_atma
+'        curves("c_T").AddPoint .md_m, .T_C
+'        curves("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
+'        curves("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
+'        curves("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
+'        curves("c_vsl").AddPoint .md_m, .v_sl_msec
+'        curves("c_vsg").AddPoint .md_m, .v_sg_msec
+'        curves("c_Hl").AddPoint .md_m, .h_l_d
+'        curves("c_fpat").AddPoint .md_m, .fpat
+'        curves("c_Theta").AddPoint .md_m, .thete_deg
+'        curves("c_Roughness").AddPoint .md_m, .roughness_m
 '
-'        curvesOut("c_Rs").AddPoint .md_m, .rs_m3m3
-'        curvesOut("c_gasfrac").AddPoint .md_m, .gasfrac
-'        curvesOut("c_muo").AddPoint .md_m, .mu_oil_cP
-'        curvesOut("c_muw").AddPoint .md_m, .mu_wat_cP
-'        curvesOut("c_mug").AddPoint .md_m, .mu_gas_cP
-'        curvesOut("c_mumix").AddPoint .md_m, .mu_mix_cP
-'        curvesOut("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
-'        curvesOut("c_rhow").AddPoint .md_m, .Rhow_kgm3
-'        curvesOut("c_rhol").AddPoint .md_m, .rhol_kgm3
-'        curvesOut("c_rhog").AddPoint .md_m, .Rhog_kgm3
-'        curvesOut("c_rhomix").AddPoint .md_m, .rhomix_kgm3
-'        curvesOut("c_qo").AddPoint .md_m, .q_oil_m3day
-'        curvesOut("c_qw").AddPoint .md_m, .Qw_m3day
-'        curvesOut("c_qg").AddPoint .md_m, .Qg_m3day
-'        curvesOut("c_mo").AddPoint .md_m, .mo_kgsec
-'        curvesOut("c_mw").AddPoint .md_m, .mw_kgsec
-'        curvesOut("c_mg").AddPoint .md_m, .mg_kgsec
-'        curvesOut("c_vl").AddPoint .md_m, .vl_msec
-'        curvesOut("c_vg").AddPoint .md_m, .vg_msec
+'        curves("c_Rs").AddPoint .md_m, .rs_m3m3
+'        curves("c_gasfrac").AddPoint .md_m, .gasfrac
+'        curves("c_muo").AddPoint .md_m, .mu_oil_cP
+'        curves("c_muw").AddPoint .md_m, .mu_wat_cP
+'        curves("c_mug").AddPoint .md_m, .mu_gas_cP
+'        curves("c_mumix").AddPoint .md_m, .mu_mix_cP
+'        curves("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
+'        curves("c_rhow").AddPoint .md_m, .Rhow_kgm3
+'        curves("c_rhol").AddPoint .md_m, .rhol_kgm3
+'        curves("c_rhog").AddPoint .md_m, .Rhog_kgm3
+'        curves("c_rhomix").AddPoint .md_m, .rhomix_kgm3
+'        curves("c_qo").AddPoint .md_m, .q_oil_m3day
+'        curves("c_qw").AddPoint .md_m, .Qw_m3day
+'        curves("c_qg").AddPoint .md_m, .Qg_m3day
+'        curves("c_mo").AddPoint .md_m, .mo_kgsec
+'        curves("c_mw").AddPoint .md_m, .mw_kgsec
+'        curves("c_mg").AddPoint .md_m, .mg_kgsec
+'        curves("c_vl").AddPoint .md_m, .vl_msec
+'        curves("c_vg").AddPoint .md_m, .vg_msec
 '     End With
 '    Next i
 'End Sub
@@ -938,36 +955,36 @@ End Function
         '  curves("c_Diam")                    ' диаметр трубы от измеренной глубины
         '  curves("c_Tinit")                   ' распределение температуры по которой инициализировалась труба
         ' набор кривых с базовыми свойствами
-        '  curvesOut("c_P")                       ' кривая с давлениями
-        '  curvesOut("c_T")
-        '  curvesOut("c_Tamb")
-        '  curvesOut("c_dpdl_g")
-        '  curvesOut("c_dpdl_f")
-        '  curvesOut("c_dpdl_a")
-        '  curvesOut("c_vsl")
-        '  curvesOut("c_vsg")
-        '  curvesOut("c_Hl")
-        '  curvesOut("c_fpat")
+        '  curves("c_P")                       ' кривая с давлениями
+        '  curves("c_T")
+        '  curves("c_Tamb")
+        '  curves("c_dpdl_g")
+        '  curves("c_dpdl_f")
+        '  curves("c_dpdl_a")
+        '  curves("c_vsl")
+        '  curves("c_vsg")
+        '  curves("c_Hl")
+        '  curves("c_fpat")
         '   дополнительные выводные параметры по трубам
-        '  curvesOut("c_Rs")
-        '  curvesOut("c_gasfrac")
-        '  curvesOut("c_muo")
-        '  curvesOut("c_muw")
-        '  curvesOut("c_mug")
-        '  curvesOut("c_mumix")
-        '  curvesOut("c_rhoo")
-        '  curvesOut("c_rhow")
-        '  curvesOut("c_rhol")
-        '  curvesOut("c_rhog")
-        '  curvesOut("c_rhomix")
-        '  curvesOut("c_qo")
-        '  curvesOut("c_qw")
-        '  curvesOut("c_qg")
-        '  curvesOut("c_mo")
-        '  curvesOut("c_mw")
-        '  curvesOut("c_mg")
-        '  curvesOut("c_vl")
-        '  curvesOut("c_vg")
+        '  curves("c_Rs")
+        '  curves("c_gasfrac")
+        '  curves("c_muo")
+        '  curves("c_muw")
+        '  curves("c_mug")
+        '  curves("c_mumix")
+        '  curves("c_rhoo")
+        '  curves("c_rhow")
+        '  curves("c_rhol")
+        '  curves("c_rhog")
+        '  curves("c_rhomix")
+        '  curves("c_qo")
+        '  curves("c_qw")
+        '  curves("c_qg")
+        '  curves("c_mo")
+        '  curves("c_mw")
+        '  curves("c_mg")
+        '  curves("c_vl")
+        '  curves("c_vg")
 'Property Get t_calc_C() As Double
 '    t_calc_C = t_calc_C_
 'End Property
