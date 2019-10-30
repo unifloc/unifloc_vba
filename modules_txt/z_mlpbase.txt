@@ -1,0 +1,3055 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007-2008, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+Public Type MultiLayerPerceptron
+    StructInfo() As Long
+    Weights() As Double
+    ColumnMeans() As Double
+    ColumnSigmas() As Double
+    Neurons() As Double
+    DFDNET() As Double
+    DError() As Double
+    X() As Double
+    y() As Double
+    Chunks() As Double
+    NWBuf() As Double
+End Type
+'Global constants
+Private Const MLPVNum As Long = 7#
+Private Const NFieldWidth As Long = 4#
+Private Const ChunkSize As Long = 32#
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Creates  neural  network  with  NIn  inputs,  NOut outputs, without hidden
+'layers, with linear output layer. Network weights are  filled  with  small
+'random values.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreate0(ByVal NIn As Long, _
+         ByVal NOut As Long, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    LayersCount = 1# + 2#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same  as  MLPCreate0,  but  with  one  hidden  layer  (NHid  neurons) with
+'non-linear activation function. Output layer is linear.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreate1(ByVal NIn As Long, _
+         ByVal NHid As Long, _
+         ByVal NOut As Long, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    LayersCount = 1# + 3# + 2#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreate0, but with two hidden layers (NHid1 and  NHid2  neurons)
+'with non-linear activation function. Output layer is linear.
+' $ALL
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreate2(ByVal NIn As Long, _
+         ByVal NHid1 As Long, _
+         ByVal NHid2 As Long, _
+         ByVal NOut As Long, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    LayersCount = 1# + 3# + 3# + 2#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid1, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid2, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Creates  neural  network  with  NIn  inputs,  NOut outputs, without hidden
+'layers with non-linear output layer. Network weights are filled with small
+'random values.
+'
+'Activation function of the output layer takes values:
+'
+'    (B, +INF), if D>=0
+'
+'or
+'
+'    (-INF, B), if D<0.
+'
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateB0(ByVal NIn As Long, _
+         ByVal NOut As Long, _
+         ByVal B As Double, _
+         ByVal D As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    Dim i As Long
+    LayersCount = 1# + 3#
+    If D >= 0# Then
+        D = 1#
+    Else
+        D = -1#
+    End If
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(3#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+    
+    '
+    ' Turn on ouputs shift/scaling.
+    '
+    For i = NIn To NIn + NOut - 1# Step 1
+        Network.ColumnMeans(i) = B
+        Network.ColumnSigmas(i) = D
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreateB0 but with non-linear hidden layer.
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateB1(ByVal NIn As Long, _
+         ByVal NHid As Long, _
+         ByVal NOut As Long, _
+         ByVal B As Double, _
+         ByVal D As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    Dim i As Long
+    LayersCount = 1# + 3# + 3#
+    If D >= 0# Then
+        D = 1#
+    Else
+        D = -1#
+    End If
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(3#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+    
+    '
+    ' Turn on ouputs shift/scaling.
+    '
+    For i = NIn To NIn + NOut - 1# Step 1
+        Network.ColumnMeans(i) = B
+        Network.ColumnSigmas(i) = D
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreateB0 but with two non-linear hidden layers.
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateB2(ByVal NIn As Long, _
+         ByVal NHid1 As Long, _
+         ByVal NHid2 As Long, _
+         ByVal NOut As Long, _
+         ByVal B As Double, _
+         ByVal D As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    Dim i As Long
+    LayersCount = 1# + 3# + 3# + 3#
+    If D >= 0# Then
+        D = 1#
+    Else
+        D = -1#
+    End If
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid1, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid2, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(3#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+    
+    '
+    ' Turn on ouputs shift/scaling.
+    '
+    For i = NIn To NIn + NOut - 1# Step 1
+        Network.ColumnMeans(i) = B
+        Network.ColumnSigmas(i) = D
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Creates  neural  network  with  NIn  inputs,  NOut outputs, without hidden
+'layers with non-linear output layer. Network weights are filled with small
+'random values. Activation function of the output layer takes values [A,B].
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateR0(ByVal NIn As Long, _
+         ByVal NOut As Long, _
+         ByVal A As Double, _
+         ByVal B As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    Dim i As Long
+    LayersCount = 1# + 3#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+    
+    '
+    ' Turn on outputs shift/scaling.
+    '
+    For i = NIn To NIn + NOut - 1# Step 1
+        Network.ColumnMeans(i) = 0.5 * (A + B)
+        Network.ColumnSigmas(i) = 0.5 * (A - B)
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreateR0, but with non-linear hidden layer.
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateR1(ByVal NIn As Long, _
+         ByVal NHid As Long, _
+         ByVal NOut As Long, _
+         ByVal A As Double, _
+         ByVal B As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    Dim i As Long
+    LayersCount = 1# + 3# + 3#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+    
+    '
+    ' Turn on outputs shift/scaling.
+    '
+    For i = NIn To NIn + NOut - 1# Step 1
+        Network.ColumnMeans(i) = 0.5 * (A + B)
+        Network.ColumnSigmas(i) = 0.5 * (A - B)
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreateR0, but with two non-linear hidden layers.
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateR2(ByVal NIn As Long, _
+         ByVal NHid1 As Long, _
+         ByVal NHid2 As Long, _
+         ByVal NOut As Long, _
+         ByVal A As Double, _
+         ByVal B As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    Dim i As Long
+    LayersCount = 1# + 3# + 3# + 3#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid1, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid2, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, False, Network)
+    
+    '
+    ' Turn on outputs shift/scaling.
+    '
+    For i = NIn To NIn + NOut - 1# Step 1
+        Network.ColumnMeans(i) = 0.5 * (A + B)
+        Network.ColumnSigmas(i) = 0.5 * (A - B)
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Creates classifier network with NIn  inputs  and  NOut  possible  classes.
+'Network contains no hidden layers and linear output  layer  with  SOFTMAX-
+'normalization  (so  outputs  sums  up  to  1.0  and  converge to posterior
+'probabilities).
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateC0(ByVal NIn As Long, _
+         ByVal NOut As Long, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    LayersCount = 1# + 2# + 1#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut - 1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddZeroLayer(LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, True, Network)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreateC0, but with one non-linear hidden layer.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateC1(ByVal NIn As Long, _
+         ByVal NHid As Long, _
+         ByVal NOut As Long, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    LayersCount = 1# + 3# + 2# + 1#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut - 1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddZeroLayer(LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, True, Network)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as MLPCreateC0, but with two non-linear hidden layers.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCreateC2(ByVal NIn As Long, _
+         ByVal NHid1 As Long, _
+         ByVal NHid2 As Long, _
+         ByVal NOut As Long, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim LSizes() As Long
+    Dim LTypes() As Long
+    Dim LConnFirst() As Long
+    Dim LConnLast() As Long
+    Dim LayersCount As Long
+    Dim LastProc As Long
+    LayersCount = 1# + 3# + 3# + 2# + 1#
+    
+    '
+    ' Allocate arrays
+    '
+    ReDim LSizes(0# To LayersCount - 1#)
+    ReDim LTypes(0# To LayersCount - 1#)
+    ReDim LConnFirst(0# To LayersCount - 1#)
+    ReDim LConnLast(0# To LayersCount - 1#)
+    
+    '
+    ' Layers
+    '
+    Call AddInputLayer(NIn, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid1, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NHid2, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddActivationLayer(1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddBiasedSummatorLayer(NOut - 1#, LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    Call AddZeroLayer(LSizes, LTypes, LConnFirst, LConnLast, LastProc)
+    
+    '
+    ' Create
+    '
+    Call MLPCreate(NIn, NOut, LSizes, LTypes, LConnFirst, LConnLast, LayersCount, True, Network)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copying of neural network
+'
+'INPUT PARAMETERS:
+'    Network1 -   original
+'
+'OUTPUT PARAMETERS:
+'    Network2 -   copy
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPCopy(ByRef Network1 As MultiLayerPerceptron, _
+         ByRef Network2 As MultiLayerPerceptron)
+    Dim i As Long
+    Dim SSize As Long
+    Dim NTotal As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim i_ As Long
+    
+    '
+    ' Unload info
+    '
+    SSize = Network1.StructInfo(0#)
+    NIn = Network1.StructInfo(1#)
+    NOut = Network1.StructInfo(2#)
+    NTotal = Network1.StructInfo(3#)
+    WCount = Network1.StructInfo(4#)
+    
+    '
+    ' Allocate space
+    '
+    ReDim Network2.StructInfo(0# To SSize - 1#)
+    ReDim Network2.Weights(0# To WCount - 1#)
+    If MLPIsSoftmax(Network1) Then
+        ReDim Network2.ColumnMeans(0# To NIn - 1#)
+        ReDim Network2.ColumnSigmas(0# To NIn - 1#)
+    Else
+        ReDim Network2.ColumnMeans(0# To NIn + NOut - 1#)
+        ReDim Network2.ColumnSigmas(0# To NIn + NOut - 1#)
+    End If
+    ReDim Network2.Neurons(0# To NTotal - 1#)
+    ReDim Network2.Chunks(0# To 3# * NTotal, 0# To ChunkSize - 1#)
+    ReDim Network2.NWBuf(0# To MaxInt(WCount, 2# * NOut) - 1#)
+    ReDim Network2.DFDNET(0# To NTotal - 1#)
+    ReDim Network2.X(0# To NIn - 1#)
+    ReDim Network2.y(0# To NOut - 1#)
+    ReDim Network2.DError(0# To NTotal - 1#)
+    
+    '
+    ' Copy
+    '
+    For i = 0# To SSize - 1# Step 1
+        Network2.StructInfo(i) = Network1.StructInfo(i)
+    Next i
+    For i_ = 0# To WCount - 1# Step 1
+        Network2.Weights(i_) = Network1.Weights(i_)
+    Next i_
+    If MLPIsSoftmax(Network1) Then
+        For i_ = 0# To NIn - 1# Step 1
+            Network2.ColumnMeans(i_) = Network1.ColumnMeans(i_)
+        Next i_
+        For i_ = 0# To NIn - 1# Step 1
+            Network2.ColumnSigmas(i_) = Network1.ColumnSigmas(i_)
+        Next i_
+    Else
+        For i_ = 0# To NIn + NOut - 1# Step 1
+            Network2.ColumnMeans(i_) = Network1.ColumnMeans(i_)
+        Next i_
+        For i_ = 0# To NIn + NOut - 1# Step 1
+            Network2.ColumnSigmas(i_) = Network1.ColumnSigmas(i_)
+        Next i_
+    End If
+    For i_ = 0# To NTotal - 1# Step 1
+        Network2.Neurons(i_) = Network1.Neurons(i_)
+    Next i_
+    For i_ = 0# To NTotal - 1# Step 1
+        Network2.DFDNET(i_) = Network1.DFDNET(i_)
+    Next i_
+    For i_ = 0# To NIn - 1# Step 1
+        Network2.X(i_) = Network1.X(i_)
+    Next i_
+    For i_ = 0# To NOut - 1# Step 1
+        Network2.y(i_) = Network1.y(i_)
+    Next i_
+    For i_ = 0# To NTotal - 1# Step 1
+        Network2.DError(i_) = Network1.DError(i_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Serialization of MultiLayerPerceptron strucure
+'
+'INPUT PARAMETERS:
+'    Network -   original
+'
+'OUTPUT PARAMETERS:
+'    RA      -   array of real numbers which stores network,
+'                array[0..RLen-1]
+'    RLen    -   RA lenght
+'
+'  -- ALGLIB --
+'     Copyright 29.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPSerialize(ByRef Network As MultiLayerPerceptron, _
+         ByRef RA() As Double, _
+         ByRef RLen As Long)
+    Dim i As Long
+    Dim SSize As Long
+    Dim NTotal As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim SigmaLen As Long
+    Dim Offs As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Unload info
+    '
+    SSize = Network.StructInfo(0#)
+    NIn = Network.StructInfo(1#)
+    NOut = Network.StructInfo(2#)
+    NTotal = Network.StructInfo(3#)
+    WCount = Network.StructInfo(4#)
+    If MLPIsSoftmax(Network) Then
+        SigmaLen = NIn
+    Else
+        SigmaLen = NIn + NOut
+    End If
+    
+    '
+    '  RA format:
+    '      LEN         DESRC.
+    '      1           RLen
+    '      1           version (MLPVNum)
+    '      1           StructInfo size
+    '      SSize       StructInfo
+    '      WCount      Weights
+    '      SigmaLen    ColumnMeans
+    '      SigmaLen    ColumnSigmas
+    '
+    RLen = 3# + SSize + WCount + 2# * SigmaLen
+    ReDim RA(0# To RLen - 1#)
+    RA(0#) = RLen
+    RA(1#) = MLPVNum
+    RA(2#) = SSize
+    Offs = 3#
+    For i = 0# To SSize - 1# Step 1
+        RA(Offs + i) = Network.StructInfo(i)
+    Next i
+    Offs = Offs + SSize
+    i1_ = (0#) - (Offs)
+    For i_ = Offs To Offs + WCount - 1# Step 1
+        RA(i_) = Network.Weights(i_ + i1_)
+    Next i_
+    Offs = Offs + WCount
+    i1_ = (0#) - (Offs)
+    For i_ = Offs To Offs + SigmaLen - 1# Step 1
+        RA(i_) = Network.ColumnMeans(i_ + i1_)
+    Next i_
+    Offs = Offs + SigmaLen
+    i1_ = (0#) - (Offs)
+    For i_ = Offs To Offs + SigmaLen - 1# Step 1
+        RA(i_) = Network.ColumnSigmas(i_ + i1_)
+    Next i_
+    Offs = Offs + SigmaLen
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Unserialization of MultiLayerPerceptron strucure
+'
+'INPUT PARAMETERS:
+'    RA      -   real array which stores network
+'
+'OUTPUT PARAMETERS:
+'    Network -   restored network
+'
+'  -- ALGLIB --
+'     Copyright 29.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPUnserialize(ByRef RA() As Double, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim i As Long
+    Dim SSize As Long
+    Dim NTotal As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim SigmaLen As Long
+    Dim Offs As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Unload StructInfo from IA
+    '
+    Offs = 3#
+    SSize = Round(RA(2#))
+    ReDim Network.StructInfo(0# To SSize - 1#)
+    For i = 0# To SSize - 1# Step 1
+        Network.StructInfo(i) = Round(RA(Offs + i))
+    Next i
+    Offs = Offs + SSize
+    
+    '
+    ' Unload info from StructInfo
+    '
+    SSize = Network.StructInfo(0#)
+    NIn = Network.StructInfo(1#)
+    NOut = Network.StructInfo(2#)
+    NTotal = Network.StructInfo(3#)
+    WCount = Network.StructInfo(4#)
+    If Network.StructInfo(6#) = 0# Then
+        SigmaLen = NIn + NOut
+    Else
+        SigmaLen = NIn
+    End If
+    
+    '
+    ' Allocate space for other fields
+    '
+    ReDim Network.Weights(0# To WCount - 1#)
+    ReDim Network.ColumnMeans(0# To SigmaLen - 1#)
+    ReDim Network.ColumnSigmas(0# To SigmaLen - 1#)
+    ReDim Network.Neurons(0# To NTotal - 1#)
+    ReDim Network.Chunks(0# To 3# * NTotal, 0# To ChunkSize - 1#)
+    ReDim Network.NWBuf(0# To MaxInt(WCount, 2# * NOut) - 1#)
+    ReDim Network.DFDNET(0# To NTotal - 1#)
+    ReDim Network.X(0# To NIn - 1#)
+    ReDim Network.y(0# To NOut - 1#)
+    ReDim Network.DError(0# To NTotal - 1#)
+    
+    '
+    ' Copy parameters from RA
+    '
+    i1_ = (Offs) - (0#)
+    For i_ = 0# To WCount - 1# Step 1
+        Network.Weights(i_) = RA(i_ + i1_)
+    Next i_
+    Offs = Offs + WCount
+    i1_ = (Offs) - (0#)
+    For i_ = 0# To SigmaLen - 1# Step 1
+        Network.ColumnMeans(i_) = RA(i_ + i1_)
+    Next i_
+    Offs = Offs + SigmaLen
+    i1_ = (Offs) - (0#)
+    For i_ = 0# To SigmaLen - 1# Step 1
+        Network.ColumnSigmas(i_) = RA(i_ + i1_)
+    Next i_
+    Offs = Offs + SigmaLen
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Randomization of neural network weights
+'
+'  -- ALGLIB --
+'     Copyright 06.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPRandomize(ByRef Network As MultiLayerPerceptron)
+    Dim i As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    For i = 0# To WCount - 1# Step 1
+        Network.Weights(i) = Rnd() - 0.5
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Randomization of neural network weights and standartisator
+'
+'  -- ALGLIB --
+'     Copyright 10.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPRandomizeFull(ByRef Network As MultiLayerPerceptron)
+    Dim i As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim NTotal As Long
+    Dim IStart As Long
+    Dim Offs As Long
+    Dim NType As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    NTotal = Network.StructInfo(3#)
+    IStart = Network.StructInfo(5#)
+    
+    '
+    ' Process network
+    '
+    For i = 0# To WCount - 1# Step 1
+        Network.Weights(i) = Rnd() - 0.5
+    Next i
+    For i = 0# To NIn - 1# Step 1
+        Network.ColumnMeans(i) = 2# * Rnd() - 1#
+        Network.ColumnSigmas(i) = 1.5 * Rnd() + 0.5
+    Next i
+    If Not MLPIsSoftmax(Network) Then
+        For i = 0# To NOut - 1# Step 1
+            Offs = IStart + (NTotal - NOut + i) * NFieldWidth
+            NType = Network.StructInfo(Offs + 0#)
+            If NType = 0# Then
+                
+                '
+                ' Shifts are changed only for linear outputs neurons
+                '
+                Network.ColumnMeans(NIn + i) = 2# * Rnd() - 1#
+            End If
+            If NType = 0# Or NType = 3# Then
+                
+                '
+                ' Scales are changed only for linear or bounded outputs neurons.
+                ' Note that scale randomization preserves sign.
+                '
+                Network.ColumnSigmas(NIn + i) = Sgn(Network.ColumnSigmas(NIn + i)) * (1.5 * Rnd() + 0.5)
+            End If
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 30.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPInitPreprocessor(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim JMax As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim NTotal As Long
+    Dim IStart As Long
+    Dim Offs As Long
+    Dim NType As Long
+    Dim Means() As Double
+    Dim Sigmas() As Double
+    Dim S As Double
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    NTotal = Network.StructInfo(3#)
+    IStart = Network.StructInfo(5#)
+    
+    '
+    ' Means/Sigmas
+    '
+    If MLPIsSoftmax(Network) Then
+        JMax = NIn - 1#
+    Else
+        JMax = NIn + NOut - 1#
+    End If
+    ReDim Means(0# To JMax)
+    ReDim Sigmas(0# To JMax)
+    For j = 0# To JMax Step 1
+        Means(j) = 0#
+        For i = 0# To SSize - 1# Step 1
+            Means(j) = Means(j) + XY(i, j)
+        Next i
+        Means(j) = Means(j) / SSize
+        Sigmas(j) = 0#
+        For i = 0# To SSize - 1# Step 1
+            Sigmas(j) = Sigmas(j) + Square(XY(i, j) - Means(j))
+        Next i
+        Sigmas(j) = Sqr(Sigmas(j) / SSize)
+    Next j
+    
+    '
+    ' Inputs
+    '
+    For i = 0# To NIn - 1# Step 1
+        Network.ColumnMeans(i) = Means(i)
+        Network.ColumnSigmas(i) = Sigmas(i)
+        If Network.ColumnSigmas(i) = 0# Then
+            Network.ColumnSigmas(i) = 1#
+        End If
+    Next i
+    
+    '
+    ' Outputs
+    '
+    If Not MLPIsSoftmax(Network) Then
+        For i = 0# To NOut - 1# Step 1
+            Offs = IStart + (NTotal - NOut + i) * NFieldWidth
+            NType = Network.StructInfo(Offs + 0#)
+            
+            '
+            ' Linear outputs
+            '
+            If NType = 0# Then
+                Network.ColumnMeans(NIn + i) = Means(NIn + i)
+                Network.ColumnSigmas(NIn + i) = Sigmas(NIn + i)
+                If Network.ColumnSigmas(NIn + i) = 0# Then
+                    Network.ColumnSigmas(NIn + i) = 1#
+                End If
+            End If
+            
+            '
+            ' Bounded outputs (half-interval)
+            '
+            If NType = 3# Then
+                S = Means(NIn + i) - Network.ColumnMeans(NIn + i)
+                If S = 0# Then
+                    S = Sgn(Network.ColumnSigmas(NIn + i))
+                End If
+                If S = 0# Then
+                    S = 1#
+                End If
+                Network.ColumnSigmas(NIn + i) = Sgn(Network.ColumnSigmas(NIn + i)) * Abs(S)
+                If Network.ColumnSigmas(NIn + i) = 0# Then
+                    Network.ColumnSigmas(NIn + i) = 1#
+                End If
+            End If
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns information about initialized network: number of inputs, outputs,
+'weights.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPProperties(ByRef Network As MultiLayerPerceptron, _
+         ByRef NIn As Long, _
+         ByRef NOut As Long, _
+         ByRef WCount As Long)
+    NIn = Network.StructInfo(1#)
+    NOut = Network.StructInfo(2#)
+    WCount = Network.StructInfo(4#)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tells whether network is SOFTMAX-normalized (i.e. classifier) or not.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPIsSoftmax(ByRef Network As MultiLayerPerceptron) As Boolean
+    Dim Result As Boolean
+    Result = Network.StructInfo(6#) = 1#
+    MLPIsSoftmax = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Procesing
+'
+'INPUT PARAMETERS:
+'    Network -   neural network
+'    X       -   input vector,  array[0..NIn-1].
+'
+'OUTPUT PARAMETERS:
+'    Y       -   result. Regression estimate when solving regression  task,
+'                vector of posterior probabilities for classification task.
+'                Subroutine does not allocate memory for this vector, it is
+'                responsibility of a caller to allocate it. Array  must  be
+'                at least [0..NOut-1].
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPProcess(ByRef Network As MultiLayerPerceptron, _
+         ByRef X() As Double, _
+         ByRef y() As Double)
+    Call MLPInternalProcessVector(Network.StructInfo, Network.Weights, Network.ColumnMeans, Network.ColumnSigmas, Network.Neurons, Network.DFDNET, X, y)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Error function for neural network, internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPError(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim K As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim E As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    Result = 0#
+    For i = 0# To SSize - 1# Step 1
+        For i_ = 0# To NIn - 1# Step 1
+            Network.X(i_) = XY(i, i_)
+        Next i_
+        Call MLPProcess(Network, Network.X, Network.y)
+        If MLPIsSoftmax(Network) Then
+            
+            '
+            ' class labels outputs
+            '
+            K = Round(XY(i, NIn))
+            If K >= 0# And K < NOut Then
+                Network.y(K) = Network.y(K) - 1#
+            End If
+        Else
+            
+            '
+            ' real outputs
+            '
+            i1_ = (NIn) - (0#)
+            For i_ = 0# To NOut - 1# Step 1
+                Network.y(i_) = Network.y(i_) - XY(i, i_ + i1_)
+            Next i_
+        End If
+        E = 0#
+        For i_ = 0# To NOut - 1# Step 1
+            E = E + Network.y(i_) * Network.y(i_)
+        Next i_
+        Result = Result + E / 2#
+    Next i
+    MLPError = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Natural error function for neural network, internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPErrorN(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim K As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim E As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    Result = 0#
+    For i = 0# To SSize - 1# Step 1
+        
+        '
+        ' Process vector
+        '
+        For i_ = 0# To NIn - 1# Step 1
+            Network.X(i_) = XY(i, i_)
+        Next i_
+        Call MLPProcess(Network, Network.X, Network.y)
+        
+        '
+        ' Update error function
+        '
+        If Network.StructInfo(6#) = 0# Then
+            
+            '
+            ' Least squares error function
+            '
+            i1_ = (NIn) - (0#)
+            For i_ = 0# To NOut - 1# Step 1
+                Network.y(i_) = Network.y(i_) - XY(i, i_ + i1_)
+            Next i_
+            E = 0#
+            For i_ = 0# To NOut - 1# Step 1
+                E = E + Network.y(i_) * Network.y(i_)
+            Next i_
+            Result = Result + E / 2#
+        Else
+            
+            '
+            ' Cross-entropy error function
+            '
+            K = Round(XY(i, NIn))
+            If K >= 0# And K < NOut Then
+                Result = Result + SafeCrossEntropy(1#, Network.y(K))
+            End If
+        End If
+    Next i
+    MLPErrorN = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Classification error
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPClsError(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long) As Long
+    Dim Result As Long
+    Dim i As Long
+    Dim j As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim WorkX() As Double
+    Dim WorkY() As Double
+    Dim NN As Long
+    Dim NS As Long
+    Dim NMAX As Long
+    Dim i_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    ReDim WorkX(0# To NIn - 1#)
+    ReDim WorkY(0# To NOut - 1#)
+    Result = 0#
+    For i = 0# To SSize - 1# Step 1
+        
+        '
+        ' Process
+        '
+        For i_ = 0# To NIn - 1# Step 1
+            WorkX(i_) = XY(i, i_)
+        Next i_
+        Call MLPProcess(Network, WorkX, WorkY)
+        
+        '
+        ' Network version of the answer
+        '
+        NMAX = 0#
+        For j = 0# To NOut - 1# Step 1
+            If WorkY(j) > WorkY(NMAX) Then
+                NMAX = j
+            End If
+        Next j
+        NN = NMAX
+        
+        '
+        ' Right answer
+        '
+        If MLPIsSoftmax(Network) Then
+            NS = Round(XY(i, NIn))
+        Else
+            NMAX = 0#
+            For j = 0# To NOut - 1# Step 1
+                If XY(i, NIn + j) > XY(i, NIn + NMAX) Then
+                    NMAX = j
+                End If
+            Next j
+            NS = NMAX
+        End If
+        
+        '
+        ' compare
+        '
+        If NN <> NS Then
+            Result = Result + 1#
+        End If
+    Next i
+    MLPClsError = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Relative classification error on the test set
+'
+'INPUT PARAMETERS:
+'    Network -   network
+'    XY      -   test set
+'    NPoints -   test set size
+'
+'RESULT:
+'    percent of incorrectly classified cases. Works both for
+'    classifier networks and general purpose networks used as
+'    classifiers.
+'
+'  -- ALGLIB --
+'     Copyright 25.12.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPRelClsError(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long) As Double
+    Dim Result As Double
+    Result = MLPClsError(Network, XY, NPoints) / NPoints
+    MLPRelClsError = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Average cross-entropy (in bits per element) on the test set
+'
+'INPUT PARAMETERS:
+'    Network -   neural network
+'    XY      -   test set
+'    NPoints -   test set size
+'
+'RESULT:
+'    CrossEntropy/(NPoints*LN(2)).
+'    Zero if network solves regression task.
+'
+'  -- ALGLIB --
+'     Copyright 08.01.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPAvgCE(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long) As Double
+    Dim Result As Double
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    If MLPIsSoftmax(Network) Then
+        Call MLPProperties(Network, NIn, NOut, WCount)
+        Result = MLPErrorN(Network, XY, NPoints) / (NPoints * Log(2#))
+    Else
+        Result = 0#
+    End If
+    MLPAvgCE = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'RMS error on the test set
+'
+'INPUT PARAMETERS:
+'    Network -   neural network
+'    XY      -   test set
+'    NPoints -   test set size
+'
+'RESULT:
+'    root mean square error.
+'    Its meaning for regression task is obvious. As for
+'    classification task, RMS error means error when estimating posterior
+'    probabilities.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPRMSError(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long) As Double
+    Dim Result As Double
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    Result = Sqr(2# * MLPError(Network, XY, NPoints) / (NPoints * NOut))
+    MLPRMSError = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Average error on the test set
+'
+'INPUT PARAMETERS:
+'    Network -   neural network
+'    XY      -   test set
+'    NPoints -   test set size
+'
+'RESULT:
+'    Its meaning for regression task is obvious. As for
+'    classification task, it means average error when estimating posterior
+'    probabilities.
+'
+'  -- ALGLIB --
+'     Copyright 11.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPAvgError(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim i_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    Result = 0#
+    For i = 0# To NPoints - 1# Step 1
+        For i_ = 0# To NIn - 1# Step 1
+            Network.X(i_) = XY(i, i_)
+        Next i_
+        Call MLPProcess(Network, Network.X, Network.y)
+        If MLPIsSoftmax(Network) Then
+            
+            '
+            ' class labels
+            '
+            K = Round(XY(i, NIn))
+            For j = 0# To NOut - 1# Step 1
+                If j = K Then
+                    Result = Result + Abs(1# - Network.y(j))
+                Else
+                    Result = Result + Abs(Network.y(j))
+                End If
+            Next j
+        Else
+            
+            '
+            ' real outputs
+            '
+            For j = 0# To NOut - 1# Step 1
+                Result = Result + Abs(XY(i, NIn + j) - Network.y(j))
+            Next j
+        End If
+    Next i
+    Result = Result / (NPoints * NOut)
+    MLPAvgError = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Average relative error on the test set
+'
+'INPUT PARAMETERS:
+'    Network -   neural network
+'    XY      -   test set
+'    NPoints -   test set size
+'
+'RESULT:
+'    Its meaning for regression task is obvious. As for
+'    classification task, it means average relative error when estimating
+'    posterior probability of belonging to the correct class.
+'
+'  -- ALGLIB --
+'     Copyright 11.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function MLPAvgRelError(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim LK As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim i_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    Result = 0#
+    K = 0#
+    For i = 0# To NPoints - 1# Step 1
+        For i_ = 0# To NIn - 1# Step 1
+            Network.X(i_) = XY(i, i_)
+        Next i_
+        Call MLPProcess(Network, Network.X, Network.y)
+        If MLPIsSoftmax(Network) Then
+            
+            '
+            ' class labels
+            '
+            LK = Round(XY(i, NIn))
+            For j = 0# To NOut - 1# Step 1
+                If j = LK Then
+                    Result = Result + Abs(1# - Network.y(j))
+                    K = K + 1#
+                End If
+            Next j
+        Else
+            
+            '
+            ' real outputs
+            '
+            For j = 0# To NOut - 1# Step 1
+                If XY(i, NIn + j) <> 0# Then
+                    Result = Result + Abs(XY(i, NIn + j) - Network.y(j)) / Abs(XY(i, NIn + j))
+                    K = K + 1#
+                End If
+            Next j
+        End If
+    Next i
+    If K <> 0# Then
+        Result = Result / K
+    End If
+    MLPAvgRelError = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Gradient calculation. Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPGrad(ByRef Network As MultiLayerPerceptron, _
+         ByRef X() As Double, _
+         ByRef DesiredY() As Double, _
+         ByRef E As Double, _
+         ByRef Grad() As Double)
+    Dim i As Long
+    Dim NOut As Long
+    Dim NTotal As Long
+    
+    '
+    ' Prepare dError/dOut, internal structures
+    '
+    Call MLPProcess(Network, X, Network.y)
+    NOut = Network.StructInfo(2#)
+    NTotal = Network.StructInfo(3#)
+    E = 0#
+    For i = 0# To NTotal - 1# Step 1
+        Network.DError(i) = 0#
+    Next i
+    For i = 0# To NOut - 1# Step 1
+        Network.DError(NTotal - NOut + i) = Network.y(i) - DesiredY(i)
+        E = E + Square(Network.y(i) - DesiredY(i)) / 2#
+    Next i
+    
+    '
+    ' gradient
+    '
+    Call MLPInternalCalculateGradient(Network, Network.Neurons, Network.Weights, Network.DError, Grad, False)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Gradient calculation (natural error function). Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPGradN(ByRef Network As MultiLayerPerceptron, _
+         ByRef X() As Double, _
+         ByRef DesiredY() As Double, _
+         ByRef E As Double, _
+         ByRef Grad() As Double)
+    Dim S As Double
+    Dim i As Long
+    Dim NOut As Long
+    Dim NTotal As Long
+    
+    '
+    ' Prepare dError/dOut, internal structures
+    '
+    Call MLPProcess(Network, X, Network.y)
+    NOut = Network.StructInfo(2#)
+    NTotal = Network.StructInfo(3#)
+    For i = 0# To NTotal - 1# Step 1
+        Network.DError(i) = 0#
+    Next i
+    E = 0#
+    If Network.StructInfo(6#) = 0# Then
+        
+        '
+        ' Regression network, least squares
+        '
+        For i = 0# To NOut - 1# Step 1
+            Network.DError(NTotal - NOut + i) = Network.y(i) - DesiredY(i)
+            E = E + Square(Network.y(i) - DesiredY(i)) / 2#
+        Next i
+    Else
+        
+        '
+        ' Classification network, cross-entropy
+        '
+        S = 0#
+        For i = 0# To NOut - 1# Step 1
+            S = S + DesiredY(i)
+        Next i
+        For i = 0# To NOut - 1# Step 1
+            Network.DError(NTotal - NOut + i) = S * Network.y(i) - DesiredY(i)
+            E = E + SafeCrossEntropy(DesiredY(i), Network.y(i))
+        Next i
+    End If
+    
+    '
+    ' gradient
+    '
+    Call MLPInternalCalculateGradient(Network, Network.Neurons, Network.Weights, Network.DError, Grad, True)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Batch gradient calculation. Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPGradBatch(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long, _
+         ByRef E As Double, _
+         ByRef Grad() As Double)
+    Dim i As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    For i = 0# To WCount - 1# Step 1
+        Grad(i) = 0#
+    Next i
+    E = 0#
+    i = 0#
+    Do While i <= SSize - 1#
+        Call MLPChunkedGradient(Network, XY, i, MinInt(SSize, i + ChunkSize) - i, E, Grad, False)
+        i = i + ChunkSize
+    Loop
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Batch gradient calculation (natural error function). Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPGradNBatch(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long, _
+         ByRef E As Double, _
+         ByRef Grad() As Double)
+    Dim i As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    For i = 0# To WCount - 1# Step 1
+        Grad(i) = 0#
+    Next i
+    E = 0#
+    i = 0#
+    Do While i <= SSize - 1#
+        Call MLPChunkedGradient(Network, XY, i, MinInt(SSize, i + ChunkSize) - i, E, Grad, True)
+        i = i + ChunkSize
+    Loop
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Batch Hessian calculation (natural error function) using R-algorithm.
+'Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 26.01.2008 by Bochkanov Sergey.
+'
+'     Hessian calculation based on R-algorithm described in
+'     "Fast Exact Multiplication by the Hessian",
+'     B. A. Pearlmutter,
+'     Neural Computation, 1994.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPHessianNBatch(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long, _
+         ByRef E As Double, _
+         ByRef Grad() As Double, _
+         ByRef H() As Double)
+    Call MLPHessianBatchInternal(Network, XY, SSize, True, E, Grad, H)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Batch Hessian calculation using R-algorithm.
+'Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 26.01.2008 by Bochkanov Sergey.
+'
+'     Hessian calculation based on R-algorithm described in
+'     "Fast Exact Multiplication by the Hessian",
+'     B. A. Pearlmutter,
+'     Neural Computation, 1994.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPHessianBatch(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long, _
+         ByRef E As Double, _
+         ByRef Grad() As Double, _
+         ByRef H() As Double)
+    Call MLPHessianBatchInternal(Network, XY, SSize, False, E, Grad, H)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine, shouldn't be called by user.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPInternalProcessVector(ByRef StructInfo() As Long, _
+         ByRef Weights() As Double, _
+         ByRef ColumnMeans() As Double, _
+         ByRef ColumnSigmas() As Double, _
+         ByRef Neurons() As Double, _
+         ByRef DFDNET() As Double, _
+         ByRef X() As Double, _
+         ByRef y() As Double)
+    Dim i As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim W1 As Long
+    Dim W2 As Long
+    Dim NTotal As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim IStart As Long
+    Dim Offs As Long
+    Dim Net As Double
+    Dim F As Double
+    Dim DF As Double
+    Dim D2F As Double
+    Dim MX As Double
+    Dim PErr As Boolean
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Read network geometry
+    '
+    NIn = StructInfo(1#)
+    NOut = StructInfo(2#)
+    NTotal = StructInfo(3#)
+    IStart = StructInfo(5#)
+    
+    '
+    ' Inputs standartisation and putting in the network
+    '
+    For i = 0# To NIn - 1# Step 1
+        If ColumnSigmas(i) <> 0# Then
+            Neurons(i) = (X(i) - ColumnMeans(i)) / ColumnSigmas(i)
+        Else
+            Neurons(i) = X(i) - ColumnMeans(i)
+        End If
+    Next i
+    
+    '
+    ' Process network
+    '
+    For i = 0# To NTotal - 1# Step 1
+        Offs = IStart + i * NFieldWidth
+        If StructInfo(Offs + 0#) > 0# Then
+            
+            '
+            ' Activation function
+            '
+            Call MLPActivationFunction(Neurons(StructInfo(Offs + 2#)), StructInfo(Offs + 0#), F, DF, D2F)
+            Neurons(i) = F
+            DFDNET(i) = DF
+        End If
+        If StructInfo(Offs + 0#) = 0# Then
+            
+            '
+            ' Adaptive summator
+            '
+            N1 = StructInfo(Offs + 2#)
+            N2 = N1 + StructInfo(Offs + 1#) - 1#
+            W1 = StructInfo(Offs + 3#)
+            W2 = W1 + StructInfo(Offs + 1#) - 1#
+            i1_ = (N1) - (W1)
+            Net = 0#
+            For i_ = W1 To W2 Step 1
+                Net = Net + Weights(i_) * Neurons(i_ + i1_)
+            Next i_
+            Neurons(i) = Net
+            DFDNET(i) = 1#
+        End If
+        If StructInfo(Offs + 0#) < 0# Then
+            PErr = True
+            If StructInfo(Offs + 0#) = -2# Then
+                
+                '
+                ' input neuron, left unchanged
+                '
+                PErr = False
+            End If
+            If StructInfo(Offs + 0#) = -3# Then
+                
+                '
+                ' "-1" neuron
+                '
+                Neurons(i) = -1#
+                PErr = False
+            End If
+            If StructInfo(Offs + 0#) = -4# Then
+                
+                '
+                ' "0" neuron
+                '
+                Neurons(i) = 0#
+                PErr = False
+            End If
+        End If
+    Next i
+    
+    '
+    ' Extract result
+    '
+    i1_ = (NTotal - NOut) - (0#)
+    For i_ = 0# To NOut - 1# Step 1
+        y(i_) = Neurons(i_ + i1_)
+    Next i_
+    
+    '
+    ' Softmax post-processing or standardisation if needed
+    '
+    If StructInfo(6#) = 1# Then
+        
+        '
+        ' Softmax
+        '
+        MX = y(0#)
+        For i = 1# To NOut - 1# Step 1
+            MX = MaxReal(MX, y(i))
+        Next i
+        Net = 0#
+        For i = 0# To NOut - 1# Step 1
+            y(i) = Exp(y(i) - MX)
+            Net = Net + y(i)
+        Next i
+        For i = 0# To NOut - 1# Step 1
+            y(i) = y(i) / Net
+        Next i
+    Else
+        
+        '
+        ' Standardisation
+        '
+        For i = 0# To NOut - 1# Step 1
+            y(i) = y(i) * ColumnSigmas(NIn + i) + ColumnMeans(NIn + i)
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine: adding new input layer to network
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub AddInputLayer(ByVal NCount As Long, _
+         ByRef LSizes() As Long, _
+         ByRef LTypes() As Long, _
+         ByRef LConnFirst() As Long, _
+         ByRef LConnLast() As Long, _
+         ByRef LastProc As Long)
+    LSizes(0#) = NCount
+    LTypes(0#) = -2#
+    LConnFirst(0#) = 0#
+    LConnLast(0#) = 0#
+    LastProc = 0#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine: adding new summator layer to network
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub AddBiasedSummatorLayer(ByVal NCount As Long, _
+         ByRef LSizes() As Long, _
+         ByRef LTypes() As Long, _
+         ByRef LConnFirst() As Long, _
+         ByRef LConnLast() As Long, _
+         ByRef LastProc As Long)
+    LSizes(LastProc + 1#) = 1#
+    LTypes(LastProc + 1#) = -3#
+    LConnFirst(LastProc + 1#) = 0#
+    LConnLast(LastProc + 1#) = 0#
+    LSizes(LastProc + 2#) = NCount
+    LTypes(LastProc + 2#) = 0#
+    LConnFirst(LastProc + 2#) = LastProc
+    LConnLast(LastProc + 2#) = LastProc + 1#
+    LastProc = LastProc + 2#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine: adding new summator layer to network
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub AddActivationLayer(ByVal FuncType As Long, _
+         ByRef LSizes() As Long, _
+         ByRef LTypes() As Long, _
+         ByRef LConnFirst() As Long, _
+         ByRef LConnLast() As Long, _
+         ByRef LastProc As Long)
+    LSizes(LastProc + 1#) = LSizes(LastProc)
+    LTypes(LastProc + 1#) = FuncType
+    LConnFirst(LastProc + 1#) = LastProc
+    LConnLast(LastProc + 1#) = LastProc
+    LastProc = LastProc + 1#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine: adding new zero layer to network
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub AddZeroLayer(ByRef LSizes() As Long, _
+         ByRef LTypes() As Long, _
+         ByRef LConnFirst() As Long, _
+         ByRef LConnLast() As Long, _
+         ByRef LastProc As Long)
+    LSizes(LastProc + 1#) = 1#
+    LTypes(LastProc + 1#) = -4#
+    LConnFirst(LastProc + 1#) = 0#
+    LConnLast(LastProc + 1#) = 0#
+    LastProc = LastProc + 1#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPCreate(ByVal NIn As Long, _
+         ByVal NOut As Long, _
+         ByRef LSizes() As Long, _
+         ByRef LTypes() As Long, _
+         ByRef LConnFirst() As Long, _
+         ByRef LConnLast() As Long, _
+         ByVal LayersCount As Long, _
+         ByVal IsClsNet As Boolean, _
+         ByRef Network As MultiLayerPerceptron)
+    Dim i As Long
+    Dim j As Long
+    Dim SSize As Long
+    Dim NTotal As Long
+    Dim WCount As Long
+    Dim Offs As Long
+    Dim NProcessed As Long
+    Dim WAllocated As Long
+    Dim LocalTemp() As Long
+    Dim LNFirst() As Long
+    Dim LNSyn() As Long
+    
+    '
+    ' Check
+    '
+    For i = 0# To LayersCount - 1# Step 1
+    Next i
+    
+    '
+    ' Build network geometry
+    '
+    ReDim LNFirst(0# To LayersCount - 1#)
+    ReDim LNSyn(0# To LayersCount - 1#)
+    NTotal = 0#
+    WCount = 0#
+    For i = 0# To LayersCount - 1# Step 1
+        
+        '
+        ' Analyze connections.
+        ' This code must throw an assertion in case of unknown LTypes[I]
+        '
+        LNSyn(i) = -1#
+        If LTypes(i) >= 0# Then
+            LNSyn(i) = 0#
+            For j = LConnFirst(i) To LConnLast(i) Step 1
+                LNSyn(i) = LNSyn(i) + LSizes(j)
+            Next j
+        Else
+            If LTypes(i) = -2# Or LTypes(i) = -3# Or LTypes(i) = -4# Then
+                LNSyn(i) = 0#
+            End If
+        End If
+        
+        '
+        ' Other info
+        '
+        LNFirst(i) = NTotal
+        NTotal = NTotal + LSizes(i)
+        If LTypes(i) = 0# Then
+            WCount = WCount + LNSyn(i) * LSizes(i)
+        End If
+    Next i
+    SSize = 7# + NTotal * NFieldWidth
+    
+    '
+    ' Allocate
+    '
+    ReDim Network.StructInfo(0# To SSize - 1#)
+    ReDim Network.Weights(0# To WCount - 1#)
+    If IsClsNet Then
+        ReDim Network.ColumnMeans(0# To NIn - 1#)
+        ReDim Network.ColumnSigmas(0# To NIn - 1#)
+    Else
+        ReDim Network.ColumnMeans(0# To NIn + NOut - 1#)
+        ReDim Network.ColumnSigmas(0# To NIn + NOut - 1#)
+    End If
+    ReDim Network.Neurons(0# To NTotal - 1#)
+    ReDim Network.Chunks(0# To 3# * NTotal, 0# To ChunkSize - 1#)
+    ReDim Network.NWBuf(0# To MaxInt(WCount, 2# * NOut) - 1#)
+    ReDim Network.DFDNET(0# To NTotal - 1#)
+    ReDim Network.X(0# To NIn - 1#)
+    ReDim Network.y(0# To NOut - 1#)
+    ReDim Network.DError(0# To NTotal - 1#)
+    
+    '
+    ' Fill structure: global info
+    '
+    Network.StructInfo(0#) = SSize
+    Network.StructInfo(1#) = NIn
+    Network.StructInfo(2#) = NOut
+    Network.StructInfo(3#) = NTotal
+    Network.StructInfo(4#) = WCount
+    Network.StructInfo(5#) = 7#
+    If IsClsNet Then
+        Network.StructInfo(6#) = 1#
+    Else
+        Network.StructInfo(6#) = 0#
+    End If
+    
+    '
+    ' Fill structure: neuron connections
+    '
+    NProcessed = 0#
+    WAllocated = 0#
+    For i = 0# To LayersCount - 1# Step 1
+        For j = 0# To LSizes(i) - 1# Step 1
+            Offs = Network.StructInfo(5#) + NProcessed * NFieldWidth
+            Network.StructInfo(Offs + 0#) = LTypes(i)
+            If LTypes(i) = 0# Then
+                
+                '
+                ' Adaptive summator:
+                ' * connections with weights to previous neurons
+                '
+                Network.StructInfo(Offs + 1#) = LNSyn(i)
+                Network.StructInfo(Offs + 2#) = LNFirst(LConnFirst(i))
+                Network.StructInfo(Offs + 3#) = WAllocated
+                WAllocated = WAllocated + LNSyn(i)
+                NProcessed = NProcessed + 1#
+            End If
+            If LTypes(i) > 0# Then
+                
+                '
+                ' Activation layer:
+                ' * each neuron connected to one (only one) of previous neurons.
+                ' * no weights
+                '
+                Network.StructInfo(Offs + 1#) = 1#
+                Network.StructInfo(Offs + 2#) = LNFirst(LConnFirst(i)) + j
+                Network.StructInfo(Offs + 3#) = -1#
+                NProcessed = NProcessed + 1#
+            End If
+            If LTypes(i) = -2# Or LTypes(i) = -3# Or LTypes(i) = -4# Then
+                NProcessed = NProcessed + 1#
+            End If
+        Next j
+    Next i
+    
+    '
+    ' Fill weights by small random values
+    ' Initialize means and sigmas
+    '
+    For i = 0# To WCount - 1# Step 1
+        Network.Weights(i) = Rnd() - 0.5
+    Next i
+    For i = 0# To NIn - 1# Step 1
+        Network.ColumnMeans(i) = 0#
+        Network.ColumnSigmas(i) = 1#
+    Next i
+    If Not IsClsNet Then
+        For i = 0# To NOut - 1# Step 1
+            Network.ColumnMeans(NIn + i) = 0#
+            Network.ColumnSigmas(NIn + i) = 1#
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine
+'
+'  -- ALGLIB --
+'     Copyright 04.11.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPActivationFunction(ByVal Net As Double, _
+         ByVal K As Long, _
+         ByRef F As Double, _
+         ByRef DF As Double, _
+         ByRef D2F As Double)
+    Dim NET2 As Double
+    Dim ARG As Double
+    Dim ROOT As Double
+    Dim R As Double
+    F = 0#
+    DF = 0#
+    If K = 1# Then
+        
+        '
+        ' TanH activation function
+        '
+        If Abs(Net) < 100# Then
+            F = TanH(Net)
+        Else
+            F = Sgn(Net)
+        End If
+        DF = 1# - Square(F)
+        D2F = -(2# * F * DF)
+        Exit Sub
+    End If
+    If K = 3# Then
+        
+        '
+        ' EX activation function
+        '
+        If Net >= 0# Then
+            NET2 = Net * Net
+            ARG = NET2 + 1#
+            ROOT = Sqr(ARG)
+            F = Net + ROOT
+            R = Net / ROOT
+            DF = 1# + R
+            D2F = (ROOT - Net * R) / ARG
+        Else
+            F = Exp(Net)
+            DF = F
+            D2F = F
+        End If
+        Exit Sub
+    End If
+    If K = 2# Then
+        F = Exp(-Square(Net))
+        DF = -(2# * Net * F)
+        D2F = -(2# * (F + DF * Net))
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine for Hessian calculation.
+'
+'WARNING!!! Unspeakable math far beyong human capabilities :)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPHessianBatchInternal(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal SSize As Long, _
+         ByVal NaturalErr As Boolean, _
+         ByRef E As Double, _
+         ByRef Grad() As Double, _
+         ByRef H() As Double)
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim NTotal As Long
+    Dim IStart As Long
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim KL As Long
+    Dim Offs As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim W1 As Long
+    Dim W2 As Long
+    Dim S As Double
+    Dim T As Double
+    Dim V As Double
+    Dim ET As Double
+    Dim BFlag As Boolean
+    Dim F As Double
+    Dim DF As Double
+    Dim D2F As Double
+    Dim dEIdYJ As Double
+    Dim MX As Double
+    Dim q As Double
+    Dim z As Double
+    Dim S2 As Double
+    Dim ExpI As Double
+    Dim ExpJ As Double
+    Dim X() As Double
+    Dim DesiredY() As Double
+    Dim GT() As Double
+    Dim Zeros() As Double
+    Dim RX() As Double
+    Dim RY() As Double
+    Dim RDX() As Double
+    Dim RDY() As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    NTotal = Network.StructInfo(3#)
+    IStart = Network.StructInfo(5#)
+    
+    '
+    ' Prepare
+    '
+    ReDim X(0# To NIn - 1#)
+    ReDim DesiredY(0# To NOut - 1#)
+    ReDim Zeros(0# To WCount - 1#)
+    ReDim GT(0# To WCount - 1#)
+    ReDim RX(0# To NTotal + NOut - 1#, 0# To WCount - 1#)
+    ReDim RY(0# To NTotal + NOut - 1#, 0# To WCount - 1#)
+    ReDim RDX(0# To NTotal + NOut - 1#, 0# To WCount - 1#)
+    ReDim RDY(0# To NTotal + NOut - 1#, 0# To WCount - 1#)
+    E = 0#
+    For i = 0# To WCount - 1# Step 1
+        Zeros(i) = 0#
+    Next i
+    For i_ = 0# To WCount - 1# Step 1
+        Grad(i_) = Zeros(i_)
+    Next i_
+    For i = 0# To WCount - 1# Step 1
+        For i_ = 0# To WCount - 1# Step 1
+            H(i, i_) = Zeros(i_)
+        Next i_
+    Next i
+    
+    '
+    ' Process
+    '
+    For K = 0# To SSize - 1# Step 1
+        
+        '
+        ' Process vector with MLPGradN.
+        ' Now Neurons, DFDNET and DError contains results of the last run.
+        '
+        For i_ = 0# To NIn - 1# Step 1
+            X(i_) = XY(K, i_)
+        Next i_
+        If MLPIsSoftmax(Network) Then
+            
+            '
+            ' class labels outputs
+            '
+            KL = Round(XY(K, NIn))
+            For i = 0# To NOut - 1# Step 1
+                If i = KL Then
+                    DesiredY(i) = 1#
+                Else
+                    DesiredY(i) = 0#
+                End If
+            Next i
+        Else
+            
+            '
+            ' real outputs
+            '
+            i1_ = (NIn) - (0#)
+            For i_ = 0# To NOut - 1# Step 1
+                DesiredY(i_) = XY(K, i_ + i1_)
+            Next i_
+        End If
+        If NaturalErr Then
+            Call MLPGradN(Network, X, DesiredY, ET, GT)
+        Else
+            Call MLPGrad(Network, X, DesiredY, ET, GT)
+        End If
+        
+        '
+        ' grad, error
+        '
+        E = E + ET
+        For i_ = 0# To WCount - 1# Step 1
+            Grad(i_) = Grad(i_) + GT(i_)
+        Next i_
+        
+        '
+        ' Hessian.
+        ' Forward pass of the R-algorithm
+        '
+        For i = 0# To NTotal - 1# Step 1
+            Offs = IStart + i * NFieldWidth
+            For i_ = 0# To WCount - 1# Step 1
+                RX(i, i_) = Zeros(i_)
+            Next i_
+            For i_ = 0# To WCount - 1# Step 1
+                RY(i, i_) = Zeros(i_)
+            Next i_
+            If Network.StructInfo(Offs + 0#) > 0# Then
+                
+                '
+                ' Activation function
+                '
+                N1 = Network.StructInfo(Offs + 2#)
+                For i_ = 0# To WCount - 1# Step 1
+                    RX(i, i_) = RY(N1, i_)
+                Next i_
+                V = Network.DFDNET(i)
+                For i_ = 0# To WCount - 1# Step 1
+                    RY(i, i_) = V * RX(i, i_)
+                Next i_
+            End If
+            If Network.StructInfo(Offs + 0#) = 0# Then
+                
+                '
+                ' Adaptive summator
+                '
+                N1 = Network.StructInfo(Offs + 2#)
+                N2 = N1 + Network.StructInfo(Offs + 1#) - 1#
+                W1 = Network.StructInfo(Offs + 3#)
+                W2 = W1 + Network.StructInfo(Offs + 1#) - 1#
+                For j = N1 To N2 Step 1
+                    V = Network.Weights(W1 + j - N1)
+                    For i_ = 0# To WCount - 1# Step 1
+                        RX(i, i_) = RX(i, i_) + V * RY(j, i_)
+                    Next i_
+                    RX(i, W1 + j - N1) = RX(i, W1 + j - N1) + Network.Neurons(j)
+                Next j
+                For i_ = 0# To WCount - 1# Step 1
+                    RY(i, i_) = RX(i, i_)
+                Next i_
+            End If
+            If Network.StructInfo(Offs + 0#) < 0# Then
+                BFlag = True
+                If Network.StructInfo(Offs + 0#) = -2# Then
+                    
+                    '
+                    ' input neuron, left unchanged
+                    '
+                    BFlag = False
+                End If
+                If Network.StructInfo(Offs + 0#) = -3# Then
+                    
+                    '
+                    ' "-1" neuron, left unchanged
+                    '
+                    BFlag = False
+                End If
+                If Network.StructInfo(Offs + 0#) = -4# Then
+                    
+                    '
+                    ' "0" neuron, left unchanged
+                    '
+                    BFlag = False
+                End If
+            End If
+        Next i
+        
+        '
+        ' Hessian. Backward pass of the R-algorithm.
+        '
+        ' Stage 1. Initialize RDY
+        '
+        For i = 0# To NTotal + NOut - 1# Step 1
+            For i_ = 0# To WCount - 1# Step 1
+                RDY(i, i_) = Zeros(i_)
+            Next i_
+        Next i
+        If Network.StructInfo(6#) = 0# Then
+            
+            '
+            ' Standardisation.
+            '
+            ' In context of the Hessian calculation standardisation
+            ' is considered as additional layer with weightless
+            ' activation function:
+            '
+            ' F(NET) := Sigma*NET
+            '
+            ' So we add one more layer to forward pass, and
+            ' make forward/backward pass through this layer.
+            '
+            For i = 0# To NOut - 1# Step 1
+                N1 = NTotal - NOut + i
+                N2 = NTotal + i
+                
+                '
+                ' Forward pass from N1 to N2
+                '
+                For i_ = 0# To WCount - 1# Step 1
+                    RX(N2, i_) = RY(N1, i_)
+                Next i_
+                V = Network.ColumnSigmas(NIn + i)
+                For i_ = 0# To WCount - 1# Step 1
+                    RY(N2, i_) = V * RX(N2, i_)
+                Next i_
+                
+                '
+                ' Initialization of RDY
+                '
+                For i_ = 0# To WCount - 1# Step 1
+                    RDY(N2, i_) = RY(N2, i_)
+                Next i_
+                
+                '
+                ' Backward pass from N2 to N1:
+                ' 1. Calculate R(dE/dX).
+                ' 2. No R(dE/dWij) is needed since weight of activation neuron
+                '    is fixed to 1. So we can update R(dE/dY) for
+                '    the connected neuron (note that Vij=0, Wij=1)
+                '
+                DF = Network.ColumnSigmas(NIn + i)
+                For i_ = 0# To WCount - 1# Step 1
+                    RDX(N2, i_) = DF * RDY(N2, i_)
+                Next i_
+                For i_ = 0# To WCount - 1# Step 1
+                    RDY(N1, i_) = RDY(N1, i_) + RDX(N2, i_)
+                Next i_
+            Next i
+        Else
+            
+            '
+            ' Softmax.
+            '
+            ' Initialize RDY using generalized expression for ei'(yi)
+            ' (see expression (9) from p. 5 of "Fast Exact Multiplication by the Hessian").
+            '
+            ' When we are working with softmax network, generalized
+            ' expression for ei'(yi) is used because softmax
+            ' normalization leads to ei, which depends on all y's
+            '
+            If NaturalErr Then
+                
+                '
+                ' softmax + cross-entropy.
+                ' We have:
+                '
+                ' S = sum(exp(yk)),
+                ' ei = sum(trn)*exp(yi)/S-trn_i
+                '
+                ' j=i:   d(ei)/d(yj) = T*exp(yi)*(S-exp(yi))/S^2
+                ' j<>i:  d(ei)/d(yj) = -T*exp(yi)*exp(yj)/S^2
+                '
+                T = 0#
+                For i = 0# To NOut - 1# Step 1
+                    T = T + DesiredY(i)
+                Next i
+                MX = Network.Neurons(NTotal - NOut)
+                For i = 0# To NOut - 1# Step 1
+                    MX = MaxReal(MX, Network.Neurons(NTotal - NOut + i))
+                Next i
+                S = 0#
+                For i = 0# To NOut - 1# Step 1
+                    Network.NWBuf(i) = Exp(Network.Neurons(NTotal - NOut + i) - MX)
+                    S = S + Network.NWBuf(i)
+                Next i
+                For i = 0# To NOut - 1# Step 1
+                    For j = 0# To NOut - 1# Step 1
+                        If j = i Then
+                            dEIdYJ = T * Network.NWBuf(i) * (S - Network.NWBuf(i)) / Square(S)
+                            For i_ = 0# To WCount - 1# Step 1
+                                RDY(NTotal - NOut + i, i_) = RDY(NTotal - NOut + i, i_) + dEIdYJ * RY(NTotal - NOut + i, i_)
+                            Next i_
+                        Else
+                            dEIdYJ = -(T * Network.NWBuf(i) * Network.NWBuf(j) / Square(S))
+                            For i_ = 0# To WCount - 1# Step 1
+                                RDY(NTotal - NOut + i, i_) = RDY(NTotal - NOut + i, i_) + dEIdYJ * RY(NTotal - NOut + j, i_)
+                            Next i_
+                        End If
+                    Next j
+                Next i
+            Else
+                
+                '
+                ' For a softmax + squared error we have expression
+                ' far beyond human imagination so we dont even try
+                ' to comment on it. Just enjoy the code...
+                '
+                ' P.S. That's why "natural error" is called "natural" -
+                ' compact beatiful expressions, fast code....
+                '
+                MX = Network.Neurons(NTotal - NOut)
+                For i = 0# To NOut - 1# Step 1
+                    MX = MaxReal(MX, Network.Neurons(NTotal - NOut + i))
+                Next i
+                S = 0#
+                S2 = 0#
+                For i = 0# To NOut - 1# Step 1
+                    Network.NWBuf(i) = Exp(Network.Neurons(NTotal - NOut + i) - MX)
+                    S = S + Network.NWBuf(i)
+                    S2 = S2 + Square(Network.NWBuf(i))
+                Next i
+                q = 0#
+                For i = 0# To NOut - 1# Step 1
+                    q = q + (Network.y(i) - DesiredY(i)) * Network.NWBuf(i)
+                Next i
+                For i = 0# To NOut - 1# Step 1
+                    z = -q + (Network.y(i) - DesiredY(i)) * S
+                    ExpI = Network.NWBuf(i)
+                    For j = 0# To NOut - 1# Step 1
+                        ExpJ = Network.NWBuf(j)
+                        If j = i Then
+                            dEIdYJ = ExpI / Square(S) * ((z + ExpI) * (S - 2# * ExpI) / S + ExpI * S2 / Square(S))
+                        Else
+                            dEIdYJ = ExpI * ExpJ / Square(S) * (S2 / Square(S) - 2# * z / S - (ExpI + ExpJ) / S + (Network.y(i) - DesiredY(i)) - (Network.y(j) - DesiredY(j)))
+                        End If
+                        For i_ = 0# To WCount - 1# Step 1
+                            RDY(NTotal - NOut + i, i_) = RDY(NTotal - NOut + i, i_) + dEIdYJ * RY(NTotal - NOut + j, i_)
+                        Next i_
+                    Next j
+                Next i
+            End If
+        End If
+        
+        '
+        ' Hessian. Backward pass of the R-algorithm
+        '
+        ' Stage 2. Process.
+        '
+        For i = NTotal - 1# To 0# Step -1
+            
+            '
+            ' Possible variants:
+            ' 1. Activation function
+            ' 2. Adaptive summator
+            ' 3. Special neuron
+            '
+            Offs = IStart + i * NFieldWidth
+            If Network.StructInfo(Offs + 0#) > 0# Then
+                N1 = Network.StructInfo(Offs + 2#)
+                
+                '
+                ' First, calculate R(dE/dX).
+                '
+                Call MLPActivationFunction(Network.Neurons(N1), Network.StructInfo(Offs + 0#), F, DF, D2F)
+                V = D2F * Network.DError(i)
+                For i_ = 0# To WCount - 1# Step 1
+                    RDX(i, i_) = DF * RDY(i, i_)
+                Next i_
+                For i_ = 0# To WCount - 1# Step 1
+                    RDX(i, i_) = RDX(i, i_) + V * RX(i, i_)
+                Next i_
+                
+                '
+                ' No R(dE/dWij) is needed since weight of activation neuron
+                ' is fixed to 1.
+                '
+                ' So we can update R(dE/dY) for the connected neuron.
+                ' (note that Vij=0, Wij=1)
+                '
+                For i_ = 0# To WCount - 1# Step 1
+                    RDY(N1, i_) = RDY(N1, i_) + RDX(i, i_)
+                Next i_
+            End If
+            If Network.StructInfo(Offs + 0#) = 0# Then
+                
+                '
+                ' Adaptive summator
+                '
+                N1 = Network.StructInfo(Offs + 2#)
+                N2 = N1 + Network.StructInfo(Offs + 1#) - 1#
+                W1 = Network.StructInfo(Offs + 3#)
+                W2 = W1 + Network.StructInfo(Offs + 1#) - 1#
+                
+                '
+                ' First, calculate R(dE/dX).
+                '
+                For i_ = 0# To WCount - 1# Step 1
+                    RDX(i, i_) = RDY(i, i_)
+                Next i_
+                
+                '
+                ' Then, calculate R(dE/dWij)
+                '
+                For j = W1 To W2 Step 1
+                    V = Network.Neurons(N1 + j - W1)
+                    For i_ = 0# To WCount - 1# Step 1
+                        H(j, i_) = H(j, i_) + V * RDX(i, i_)
+                    Next i_
+                    V = Network.DError(i)
+                    For i_ = 0# To WCount - 1# Step 1
+                        H(j, i_) = H(j, i_) + V * RY(N1 + j - W1, i_)
+                    Next i_
+                Next j
+                
+                '
+                ' And finally, update R(dE/dY) for connected neurons.
+                '
+                For j = W1 To W2 Step 1
+                    V = Network.Weights(j)
+                    For i_ = 0# To WCount - 1# Step 1
+                        RDY(N1 + j - W1, i_) = RDY(N1 + j - W1, i_) + V * RDX(i, i_)
+                    Next i_
+                    RDY(N1 + j - W1, j) = RDY(N1 + j - W1, j) + Network.DError(i)
+                Next j
+            End If
+            If Network.StructInfo(Offs + 0#) < 0# Then
+                BFlag = False
+                If Network.StructInfo(Offs + 0#) = -2# Or Network.StructInfo(Offs + 0#) = -3# Or Network.StructInfo(Offs + 0#) = -4# Then
+                    
+                    '
+                    ' Special neuron type, no back-propagation required
+                    '
+                    BFlag = True
+                End If
+            End If
+        Next i
+    Next K
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine
+'
+'Network must be processed by MLPProcess on X
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPInternalCalculateGradient(ByRef Network As MultiLayerPerceptron, _
+         ByRef Neurons() As Double, _
+         ByRef Weights() As Double, _
+         ByRef DError() As Double, _
+         ByRef Grad() As Double, _
+         ByVal NaturalErrorFunc As Boolean)
+    Dim i As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim W1 As Long
+    Dim W2 As Long
+    Dim NTotal As Long
+    Dim IStart As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim Offs As Long
+    Dim dEdF As Double
+    Dim DFDNET As Double
+    Dim V As Double
+    Dim FOwn As Double
+    Dim DEOwn As Double
+    Dim Net As Double
+    Dim MX As Double
+    Dim BFlag As Boolean
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Read network geometry
+    '
+    NIn = Network.StructInfo(1#)
+    NOut = Network.StructInfo(2#)
+    NTotal = Network.StructInfo(3#)
+    IStart = Network.StructInfo(5#)
+    
+    '
+    ' Pre-processing of dError/dOut:
+    ' from dError/dOut(normalized) to dError/dOut(non-normalized)
+    '
+    If Network.StructInfo(6#) = 1# Then
+        
+        '
+        ' Softmax
+        '
+        If Not NaturalErrorFunc Then
+            MX = Network.Neurons(NTotal - NOut)
+            For i = 0# To NOut - 1# Step 1
+                MX = MaxReal(MX, Network.Neurons(NTotal - NOut + i))
+            Next i
+            Net = 0#
+            For i = 0# To NOut - 1# Step 1
+                Network.NWBuf(i) = Exp(Network.Neurons(NTotal - NOut + i) - MX)
+                Net = Net + Network.NWBuf(i)
+            Next i
+            i1_ = (0#) - (NTotal - NOut)
+            V = 0#
+            For i_ = NTotal - NOut To NTotal - 1# Step 1
+                V = V + Network.DError(i_) * Network.NWBuf(i_ + i1_)
+            Next i_
+            For i = 0# To NOut - 1# Step 1
+                FOwn = Network.NWBuf(i)
+                DEOwn = Network.DError(NTotal - NOut + i)
+                Network.NWBuf(NOut + i) = (-V + DEOwn * FOwn + DEOwn * (Net - FOwn)) * FOwn / Square(Net)
+            Next i
+            For i = 0# To NOut - 1# Step 1
+                Network.DError(NTotal - NOut + i) = Network.NWBuf(NOut + i)
+            Next i
+        End If
+    Else
+        
+        '
+        ' Un-standardisation
+        '
+        For i = 0# To NOut - 1# Step 1
+            Network.DError(NTotal - NOut + i) = Network.DError(NTotal - NOut + i) * Network.ColumnSigmas(NIn + i)
+        Next i
+    End If
+    
+    '
+    ' Backpropagation
+    '
+    For i = NTotal - 1# To 0# Step -1
+        
+        '
+        ' Extract info
+        '
+        Offs = IStart + i * NFieldWidth
+        If Network.StructInfo(Offs + 0#) > 0# Then
+            
+            '
+            ' Activation function
+            '
+            dEdF = Network.DError(i)
+            DFDNET = Network.DFDNET(i)
+            DError(Network.StructInfo(Offs + 2#)) = DError(Network.StructInfo(Offs + 2#)) + dEdF * DFDNET
+        End If
+        If Network.StructInfo(Offs + 0#) = 0# Then
+            
+            '
+            ' Adaptive summator
+            '
+            N1 = Network.StructInfo(Offs + 2#)
+            N2 = N1 + Network.StructInfo(Offs + 1#) - 1#
+            W1 = Network.StructInfo(Offs + 3#)
+            W2 = W1 + Network.StructInfo(Offs + 1#) - 1#
+            dEdF = Network.DError(i)
+            DFDNET = 1#
+            V = dEdF * DFDNET
+            i1_ = (N1) - (W1)
+            For i_ = W1 To W2 Step 1
+                Grad(i_) = V * Neurons(i_ + i1_)
+            Next i_
+            i1_ = (W1) - (N1)
+            For i_ = N1 To N2 Step 1
+                DError(i_) = DError(i_) + V * Weights(i_ + i1_)
+            Next i_
+        End If
+        If Network.StructInfo(Offs + 0#) < 0# Then
+            BFlag = False
+            If Network.StructInfo(Offs + 0#) = -2# Or Network.StructInfo(Offs + 0#) = -3# Or Network.StructInfo(Offs + 0#) = -4# Then
+                
+                '
+                ' Special neuron type, no back-propagation required
+                '
+                BFlag = True
+            End If
+        End If
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine, chunked gradient
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPChunkedGradient(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal CStart As Long, _
+         ByVal CSize As Long, _
+         ByRef E As Double, _
+         ByRef Grad() As Double, _
+         ByVal NaturalErrorFunc As Boolean)
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim KL As Long
+    Dim N1 As Long
+    Dim N2 As Long
+    Dim W1 As Long
+    Dim W2 As Long
+    Dim C1 As Long
+    Dim C2 As Long
+    Dim NTotal As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim Offs As Long
+    Dim F As Double
+    Dim DF As Double
+    Dim D2F As Double
+    Dim V As Double
+    Dim S As Double
+    Dim FOwn As Double
+    Dim DEOwn As Double
+    Dim Net As Double
+    Dim LnNET As Double
+    Dim MX As Double
+    Dim BFlag As Boolean
+    Dim IStart As Long
+    Dim INeurons As Long
+    Dim IDFDNET As Long
+    Dim IDError As Long
+    Dim IZeros As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Read network geometry, prepare data
+    '
+    NIn = Network.StructInfo(1#)
+    NOut = Network.StructInfo(2#)
+    NTotal = Network.StructInfo(3#)
+    IStart = Network.StructInfo(5#)
+    C1 = CStart
+    C2 = CStart + CSize - 1#
+    INeurons = 0#
+    IDFDNET = NTotal
+    IDError = 2# * NTotal
+    IZeros = 3# * NTotal
+    For j = 0# To CSize - 1# Step 1
+        Network.Chunks(IZeros, j) = 0#
+    Next j
+    
+    '
+    ' Forward pass:
+    ' 1. Load inputs from XY to Chunks[0:NIn-1,0:CSize-1]
+    ' 2. Forward pass
+    '
+    For i = 0# To NIn - 1# Step 1
+        For j = 0# To CSize - 1# Step 1
+            If Network.ColumnSigmas(i) <> 0# Then
+                Network.Chunks(i, j) = (XY(C1 + j, i) - Network.ColumnMeans(i)) / Network.ColumnSigmas(i)
+            Else
+                Network.Chunks(i, j) = XY(C1 + j, i) - Network.ColumnMeans(i)
+            End If
+        Next j
+    Next i
+    For i = 0# To NTotal - 1# Step 1
+        Offs = IStart + i * NFieldWidth
+        If Network.StructInfo(Offs + 0#) > 0# Then
+            
+            '
+            ' Activation function:
+            ' * calculate F vector, F(i) = F(NET(i))
+            '
+            N1 = Network.StructInfo(Offs + 2#)
+            For i_ = 0# To CSize - 1# Step 1
+                Network.Chunks(i, i_) = Network.Chunks(N1, i_)
+            Next i_
+            For j = 0# To CSize - 1# Step 1
+                Call MLPActivationFunction(Network.Chunks(i, j), Network.StructInfo(Offs + 0#), F, DF, D2F)
+                Network.Chunks(i, j) = F
+                Network.Chunks(IDFDNET + i, j) = DF
+            Next j
+        End If
+        If Network.StructInfo(Offs + 0#) = 0# Then
+            
+            '
+            ' Adaptive summator:
+            ' * calculate NET vector, NET(i) = SUM(W(j,i)*Neurons(j),j=N1..N2)
+            '
+            N1 = Network.StructInfo(Offs + 2#)
+            N2 = N1 + Network.StructInfo(Offs + 1#) - 1#
+            W1 = Network.StructInfo(Offs + 3#)
+            W2 = W1 + Network.StructInfo(Offs + 1#) - 1#
+            For i_ = 0# To CSize - 1# Step 1
+                Network.Chunks(i, i_) = Network.Chunks(IZeros, i_)
+            Next i_
+            For j = N1 To N2 Step 1
+                V = Network.Weights(W1 + j - N1)
+                For i_ = 0# To CSize - 1# Step 1
+                    Network.Chunks(i, i_) = Network.Chunks(i, i_) + V * Network.Chunks(j, i_)
+                Next i_
+            Next j
+        End If
+        If Network.StructInfo(Offs + 0#) < 0# Then
+            BFlag = False
+            If Network.StructInfo(Offs + 0#) = -2# Then
+                
+                '
+                ' input neuron, left unchanged
+                '
+                BFlag = True
+            End If
+            If Network.StructInfo(Offs + 0#) = -3# Then
+                
+                '
+                ' "-1" neuron
+                '
+                For K = 0# To CSize - 1# Step 1
+                    Network.Chunks(i, K) = -1#
+                Next K
+                BFlag = True
+            End If
+            If Network.StructInfo(Offs + 0#) = -4# Then
+                
+                '
+                ' "0" neuron
+                '
+                For K = 0# To CSize - 1# Step 1
+                    Network.Chunks(i, K) = 0#
+                Next K
+                BFlag = True
+            End If
+        End If
+    Next i
+    
+    '
+    ' Post-processing, error, dError/dOut
+    '
+    For i = 0# To NTotal - 1# Step 1
+        For i_ = 0# To CSize - 1# Step 1
+            Network.Chunks(IDError + i, i_) = Network.Chunks(IZeros, i_)
+        Next i_
+    Next i
+    If Network.StructInfo(6#) = 1# Then
+        
+        '
+        ' Softmax output, classification network.
+        '
+        ' For each K = 0..CSize-1 do:
+        ' 1. place exp(outputs[k]) to NWBuf[0:NOut-1]
+        ' 2. place sum(exp(..)) to NET
+        ' 3. calculate dError/dOut and place it to the second block of Chunks
+        '
+        For K = 0# To CSize - 1# Step 1
+            
+            '
+            ' Normalize
+            '
+            MX = Network.Chunks(NTotal - NOut, K)
+            For i = 1# To NOut - 1# Step 1
+                MX = MaxReal(MX, Network.Chunks(NTotal - NOut + i, K))
+            Next i
+            Net = 0#
+            For i = 0# To NOut - 1# Step 1
+                Network.NWBuf(i) = Exp(Network.Chunks(NTotal - NOut + i, K) - MX)
+                Net = Net + Network.NWBuf(i)
+            Next i
+            
+            '
+            ' Calculate error function and dError/dOut
+            '
+            If NaturalErrorFunc Then
+                
+                '
+                ' Natural error func.
+                '
+                '
+                S = 1#
+                LnNET = Log(Net)
+                KL = Round(XY(CStart + K, NIn))
+                For i = 0# To NOut - 1# Step 1
+                    If i = KL Then
+                        V = 1#
+                    Else
+                        V = 0#
+                    End If
+                    Network.Chunks(IDError + NTotal - NOut + i, K) = S * Network.NWBuf(i) / Net - V
+                    E = E + SafeCrossEntropy(V, Network.NWBuf(i) / Net)
+                Next i
+            Else
+                
+                '
+                ' Least squares error func
+                ' Error, dError/dOut(normalized)
+                '
+                KL = Round(XY(CStart + K, NIn))
+                For i = 0# To NOut - 1# Step 1
+                    If i = KL Then
+                        V = Network.NWBuf(i) / Net - 1#
+                    Else
+                        V = Network.NWBuf(i) / Net
+                    End If
+                    Network.NWBuf(NOut + i) = V
+                    E = E + Square(V) / 2#
+                Next i
+                
+                '
+                ' From dError/dOut(normalized) to dError/dOut(non-normalized)
+                '
+                i1_ = (0#) - (NOut)
+                V = 0#
+                For i_ = NOut To 2# * NOut - 1# Step 1
+                    V = V + Network.NWBuf(i_) * Network.NWBuf(i_ + i1_)
+                Next i_
+                For i = 0# To NOut - 1# Step 1
+                    FOwn = Network.NWBuf(i)
+                    DEOwn = Network.NWBuf(NOut + i)
+                    Network.Chunks(IDError + NTotal - NOut + i, K) = (-V + DEOwn * FOwn + DEOwn * (Net - FOwn)) * FOwn / Square(Net)
+                Next i
+            End If
+        Next K
+    Else
+        
+        '
+        ' Normal output, regression network
+        '
+        ' For each K = 0..CSize-1 do:
+        ' 1. calculate dError/dOut and place it to the second block of Chunks
+        '
+        For i = 0# To NOut - 1# Step 1
+            For j = 0# To CSize - 1# Step 1
+                V = Network.Chunks(NTotal - NOut + i, j) * Network.ColumnSigmas(NIn + i) + Network.ColumnMeans(NIn + i) - XY(CStart + j, NIn + i)
+                Network.Chunks(IDError + NTotal - NOut + i, j) = V * Network.ColumnSigmas(NIn + i)
+                E = E + Square(V) / 2#
+            Next j
+        Next i
+    End If
+    
+    '
+    ' Backpropagation
+    '
+    For i = NTotal - 1# To 0# Step -1
+        
+        '
+        ' Extract info
+        '
+        Offs = IStart + i * NFieldWidth
+        If Network.StructInfo(Offs + 0#) > 0# Then
+            
+            '
+            ' Activation function
+            '
+            N1 = Network.StructInfo(Offs + 2#)
+            For K = 0# To CSize - 1# Step 1
+                Network.Chunks(IDError + i, K) = Network.Chunks(IDError + i, K) * Network.Chunks(IDFDNET + i, K)
+            Next K
+            For i_ = 0# To CSize - 1# Step 1
+                Network.Chunks(IDError + N1, i_) = Network.Chunks(IDError + N1, i_) + Network.Chunks(IDError + i, i_)
+            Next i_
+        End If
+        If Network.StructInfo(Offs + 0#) = 0# Then
+            
+            '
+            ' "Normal" activation function
+            '
+            N1 = Network.StructInfo(Offs + 2#)
+            N2 = N1 + Network.StructInfo(Offs + 1#) - 1#
+            W1 = Network.StructInfo(Offs + 3#)
+            W2 = W1 + Network.StructInfo(Offs + 1#) - 1#
+            For j = W1 To W2 Step 1
+                V = 0#
+                For i_ = 0# To CSize - 1# Step 1
+                    V = V + Network.Chunks(N1 + j - W1, i_) * Network.Chunks(IDError + i, i_)
+                Next i_
+                Grad(j) = Grad(j) + V
+            Next j
+            For j = N1 To N2 Step 1
+                V = Network.Weights(W1 + j - N1)
+                For i_ = 0# To CSize - 1# Step 1
+                    Network.Chunks(IDError + j, i_) = Network.Chunks(IDError + j, i_) + V * Network.Chunks(IDError + i, i_)
+                Next i_
+            Next j
+        End If
+        If Network.StructInfo(Offs + 0#) < 0# Then
+            BFlag = False
+            If Network.StructInfo(Offs + 0#) = -2# Or Network.StructInfo(Offs + 0#) = -3# Or Network.StructInfo(Offs + 0#) = -4# Then
+                
+                '
+                ' Special neuron type, no back-propagation required
+                '
+                BFlag = True
+            End If
+        End If
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns T*Ln(T/Z), guarded against overflow/underflow.
+'Internal subroutine.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function SafeCrossEntropy(ByVal T As Double, _
+         ByVal z As Double) As Double
+    Dim Result As Double
+    Dim R As Double
+    If T = 0# Then
+        Result = 0#
+    Else
+        If Abs(z) > 1# Then
+            
+            '
+            ' Shouldn't be the case with softmax,
+            ' but we just want to be sure.
+            '
+            If T / z = 0# Then
+                R = MinRealNumber
+            Else
+                R = T / z
+            End If
+        Else
+            
+            '
+            ' Normal case
+            '
+            If z = 0# Or Abs(T) >= MaxRealNumber * Abs(z) Then
+                R = MaxRealNumber
+            Else
+                R = T / z
+            End If
+        End If
+        Result = T * Log(R)
+    End If
+    SafeCrossEntropy = Result
+End Function
+

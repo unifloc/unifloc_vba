@@ -1,0 +1,315 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 1992-2007 The University of Tennessee.  All rights reserved.
+'
+'Contributors:
+'    * Sergey Bochkanov (ALGLIB project). Translation from FORTRAN to
+'      pseudocode.
+'
+'See subroutines comments for additional copyrights.
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Matrix norm estimation
+'
+'The algorithm estimates the 1-norm of square matrix A  on  the  assumption
+'that the multiplication of matrix  A  by  the  vector  is  available  (the
+'iterative method is used). It is recommended to use this algorithm  if  it
+'is hard  to  calculate  matrix  elements  explicitly  (for  example,  when
+'estimating the inverse matrix norm).
+'
+'The algorithm uses back communication for multiplying the  vector  by  the
+'matrix.  If  KASE=0  after  returning from a subroutine, its execution was
+'completed successfully, otherwise it is required to multiply the  returned
+'vector by matrix A and call the subroutine again.
+'
+'The DemoIterativeEstimateNorm subroutine shows a simple example.
+'
+'Parameters:
+'    N       -   size of matrix A.
+'    V       -   vector.   It is initialized by the subroutine on the first
+'                call. It is then passed into it on repeated calls.
+'    X       -   if KASE<>0, it contains the vector to be replaced by:
+'                    A * X,      if KASE=1
+'                    A^T * X,    if KASE=2
+'                Array whose index ranges within [1..N].
+'    ISGN    -   vector. It is initialized by the subroutine on  the  first
+'                call. It is then passed into it on repeated calls.
+'    EST     -   if KASE=0, it contains the lower boundary of the matrix
+'                norm estimate.
+'    KASE    -   on the first call, it should be equal to 0. After the last
+'                return, it is equal to 0 (EST contains the  matrix  norm),
+'                on intermediate returns it can be equal to 1 or 2 depending
+'                on the operation to be performed on vector X.
+'
+'  -- LAPACK auxiliary routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     February 29, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub IterativeEstimate1Norm(ByVal N As Long, _
+         ByRef V() As Double, _
+         ByRef X() As Double, _
+         ByRef ISGN() As Long, _
+         ByRef EST As Double, _
+         ByRef KASE As Long)
+    Dim ITMAX As Long
+    Dim i As Long
+    Dim T As Double
+    Dim Flg As Boolean
+    Dim PosITER As Long
+    Dim PosJ As Long
+    Dim PosJLAST As Long
+    Dim PosJUMP As Long
+    Dim PosALTSGN As Long
+    Dim PosESTOLD As Long
+    Dim PosTEMP As Long
+    Dim i_ As Long
+    ITMAX = 5#
+    PosALTSGN = N + 1#
+    PosESTOLD = N + 2#
+    PosTEMP = N + 3#
+    PosITER = N + 1#
+    PosJ = N + 2#
+    PosJLAST = N + 3#
+    PosJUMP = N + 4#
+    If KASE = 0# Then
+        ReDim V(1# To N + 3#)
+        ReDim X(1# To N)
+        ReDim ISGN(1# To N + 4#)
+        T = 1# / N
+        For i = 1# To N Step 1
+            X(i) = T
+        Next i
+        KASE = 1#
+        ISGN(PosJUMP) = 1#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 1)
+    '     FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If ISGN(PosJUMP) = 1# Then
+        If N = 1# Then
+            V(1#) = X(1#)
+            EST = Abs(V(1#))
+            KASE = 0#
+            Exit Sub
+        End If
+        EST = 0#
+        For i = 1# To N Step 1
+            EST = EST + Abs(X(i))
+        Next i
+        For i = 1# To N Step 1
+            If X(i) >= 0# Then
+                X(i) = 1#
+            Else
+                X(i) = -1#
+            End If
+            ISGN(i) = Sgn(X(i))
+        Next i
+        KASE = 2#
+        ISGN(PosJUMP) = 2#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 2)
+    '     FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY TRANDPOSE(A)*X.
+    '
+    If ISGN(PosJUMP) = 2# Then
+        ISGN(PosJ) = 1#
+        For i = 2# To N Step 1
+            If Abs(X(i)) > Abs(X(ISGN(PosJ))) Then
+                ISGN(PosJ) = i
+            End If
+        Next i
+        ISGN(PosITER) = 2#
+        
+        '
+        ' MAIN LOOP - ITERATIONS 2,3,...,ITMAX.
+        '
+        For i = 1# To N Step 1
+            X(i) = 0#
+        Next i
+        X(ISGN(PosJ)) = 1#
+        KASE = 1#
+        ISGN(PosJUMP) = 3#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 3)
+    '     X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If ISGN(PosJUMP) = 3# Then
+        For i_ = 1# To N Step 1
+            V(i_) = X(i_)
+        Next i_
+        V(PosESTOLD) = EST
+        EST = 0#
+        For i = 1# To N Step 1
+            EST = EST + Abs(V(i))
+        Next i
+        Flg = False
+        For i = 1# To N Step 1
+            If X(i) >= 0# And ISGN(i) < 0# Or X(i) < 0# And ISGN(i) >= 0# Then
+                Flg = True
+            End If
+        Next i
+        
+        '
+        ' REPEATED SIGN VECTOR DETECTED, HENCE ALGORITHM HAS CONVERGED.
+        ' OR MAY BE CYCLING.
+        '
+        If Not Flg Or EST <= V(PosESTOLD) Then
+            V(PosALTSGN) = 1#
+            For i = 1# To N Step 1
+                X(i) = V(PosALTSGN) * (1# + (i - 1#) / (N - 1#))
+                V(PosALTSGN) = -V(PosALTSGN)
+            Next i
+            KASE = 1#
+            ISGN(PosJUMP) = 5#
+            Exit Sub
+        End If
+        For i = 1# To N Step 1
+            If X(i) >= 0# Then
+                X(i) = 1#
+                ISGN(i) = 1#
+            Else
+                X(i) = -1#
+                ISGN(i) = -1#
+            End If
+        Next i
+        KASE = 2#
+        ISGN(PosJUMP) = 4#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 4)
+    '     X HAS BEEN OVERWRITTEN BY TRANDPOSE(A)*X.
+    '
+    If ISGN(PosJUMP) = 4# Then
+        ISGN(PosJLAST) = ISGN(PosJ)
+        ISGN(PosJ) = 1#
+        For i = 2# To N Step 1
+            If Abs(X(i)) > Abs(X(ISGN(PosJ))) Then
+                ISGN(PosJ) = i
+            End If
+        Next i
+        If X(ISGN(PosJLAST)) <> Abs(X(ISGN(PosJ))) And ISGN(PosITER) < ITMAX Then
+            ISGN(PosITER) = ISGN(PosITER) + 1#
+            For i = 1# To N Step 1
+                X(i) = 0#
+            Next i
+            X(ISGN(PosJ)) = 1#
+            KASE = 1#
+            ISGN(PosJUMP) = 3#
+            Exit Sub
+        End If
+        
+        '
+        ' ITERATION COMPLETE.  FINAL STAGE.
+        '
+        V(PosALTSGN) = 1#
+        For i = 1# To N Step 1
+            X(i) = V(PosALTSGN) * (1# + (i - 1#) / (N - 1#))
+            V(PosALTSGN) = -V(PosALTSGN)
+        Next i
+        KASE = 1#
+        ISGN(PosJUMP) = 5#
+        Exit Sub
+    End If
+    
+    '
+    '     ................ ENTRY   (JUMP = 5)
+    '     X HAS BEEN OVERWRITTEN BY A*X.
+    '
+    If ISGN(PosJUMP) = 5# Then
+        V(PosTEMP) = 0#
+        For i = 1# To N Step 1
+            V(PosTEMP) = V(PosTEMP) + Abs(X(i))
+        Next i
+        V(PosTEMP) = 2# * V(PosTEMP) / (3# * N)
+        If V(PosTEMP) > EST Then
+            For i_ = 1# To N Step 1
+                V(i_) = X(i_)
+            Next i_
+            EST = V(PosTEMP)
+        End If
+        KASE = 0#
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Example of usage of an IterativeEstimateNorm subroutine
+'
+'Input parameters:
+'    A   -   matrix.
+'            Array whose indexes range within [1..N, 1..N].
+'
+'Return:
+'    Matrix norm estimated by the subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 2005 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function DemoIterativeEstimate1Norm(ByRef A() As Double, _
+         ByVal N As Long) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim S As Double
+    Dim X() As Double
+    Dim T() As Double
+    Dim V() As Double
+    Dim IV() As Long
+    Dim KASE As Long
+    Dim i_ As Long
+    KASE = 0#
+    ReDim T(1# To N)
+    Call IterativeEstimate1Norm(N, V, X, IV, Result, KASE)
+    Do While KASE <> 0#
+        If KASE = 1# Then
+            For i = 1# To N Step 1
+                S = 0#
+                For i_ = 1# To N Step 1
+                    S = S + A(i, i_) * X(i_)
+                Next i_
+                T(i) = S
+            Next i
+        Else
+            For i = 1# To N Step 1
+                S = 0#
+                For i_ = 1# To N Step 1
+                    S = S + A(i_, i) * X(i_)
+                Next i_
+                T(i) = S
+            Next i
+        End If
+        For i_ = 1# To N Step 1
+            X(i_) = T(i_)
+        Next i_
+        Call IterativeEstimate1Norm(N, V, X, IV, Result, KASE)
+    Loop
+    DemoIterativeEstimate1Norm = Result
+End Function
+

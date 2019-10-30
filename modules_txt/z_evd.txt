@@ -1,0 +1,5492 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2005-2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Finding the eigenvalues and eigenvectors of a symmetric matrix
+'
+'The algorithm finds eigen pairs of a symmetric matrix by reducing it to
+'tridiagonal form and using the QL/QR algorithm.
+'
+'Input parameters:
+'    A       -   symmetric matrix which is given by its upper or lower
+'                triangular part.
+'                Array whose indexes range within [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    IsUpper -   storage format.
+'    ZNeeded -   flag controlling whether the eigenvectors are needed or not.
+'                If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not returned;
+'                 * 1, the eigenvectors are returned.
+'
+'Output parameters:
+'    D       -   eigenvalues in ascending order.
+'                Array whose index ranges within [0..N-1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains the eigenvectors.
+'                Array whose indexes range within [0..N-1, 0..N-1].
+'                The eigenvectors are stored in the matrix columns.
+'
+'Result:
+'    True, if the algorithm has converged.
+'    False, if the algorithm hasn't converged (rare case).
+'
+'  -- ALGLIB --
+'     Copyright 2005-2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixEVD(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef D() As Double, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim A() As Double
+    Dim Tau() As Double
+    Dim E() As Double
+    A = A_
+    Call SMatrixTD(A, N, IsUpper, Tau, D, E)
+    If ZNeeded = 1# Then
+        Call SMatrixTDUnpackQ(A, N, IsUpper, Tau, z)
+    End If
+    Result = SMatrixTDEVD(D, E, N, ZNeeded, z)
+    SMatrixEVD = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine for finding the eigenvalues (and eigenvectors) of  a  symmetric
+'matrix  in  a  given half open interval (A, B] by using  a  bisection  and
+'inverse iteration
+'
+'Input parameters:
+'    A       -   symmetric matrix which is given by its upper or lower
+'                triangular part. Array [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    ZNeeded -   flag controlling whether the eigenvectors are needed or not.
+'                If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not returned;
+'                 * 1, the eigenvectors are returned.
+'    IsUpperA -  storage format of matrix A.
+'    B1, B2 -    half open interval (B1, B2] to search eigenvalues in.
+'
+'Output parameters:
+'    M       -   number of eigenvalues found in a given half-interval (M>=0).
+'    W       -   array of the eigenvalues found.
+'                Array whose index ranges within [0..M-1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains eigenvectors.
+'                Array whose indexes range within [0..N-1, 0..M-1].
+'                The eigenvectors are stored in the matrix columns.
+'
+'Result:
+'    True, if successful. M contains the number of eigenvalues in the given
+'    half-interval (could be equal to 0), W contains the eigenvalues,
+'    Z contains the eigenvectors (if needed).
+'
+'    False, if the bisection method subroutine wasn't able to find the
+'    eigenvalues in the given interval or if the inverse iteration subroutine
+'    wasn't able to find all the corresponding eigenvectors.
+'    In that case, the eigenvalues and eigenvectors are not returned,
+'    M is equal to 0.
+'
+'  -- ALGLIB --
+'     Copyright 07.01.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixEVDR(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal b1 As Double, _
+         ByVal b2 As Double, _
+         ByRef M As Long, _
+         ByRef w() As Double, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim A() As Double
+    Dim Tau() As Double
+    Dim E() As Double
+    A = A_
+    Call SMatrixTD(A, N, IsUpper, Tau, w, E)
+    If ZNeeded = 1# Then
+        Call SMatrixTDUnpackQ(A, N, IsUpper, Tau, z)
+    End If
+    Result = SMatrixTDEVDR(w, E, N, ZNeeded, b1, b2, M, z)
+    SMatrixEVDR = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine for finding the eigenvalues and  eigenvectors  of  a  symmetric
+'matrix with given indexes by using bisection and inverse iteration methods.
+'
+'Input parameters:
+'    A       -   symmetric matrix which is given by its upper or lower
+'                triangular part. Array whose indexes range within [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    ZNeeded -   flag controlling whether the eigenvectors are needed or not.
+'                If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not returned;
+'                 * 1, the eigenvectors are returned.
+'    IsUpperA -  storage format of matrix A.
+'    I1, I2 -    index interval for searching (from I1 to I2).
+'                0 <= I1 <= I2 <= N-1.
+'
+'Output parameters:
+'    W       -   array of the eigenvalues found.
+'                Array whose index ranges within [0..I2-I1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains eigenvectors.
+'                Array whose indexes range within [0..N-1, 0..I2-I1].
+'                In that case, the eigenvectors are stored in the matrix columns.
+'
+'Result:
+'    True, if successful. W contains the eigenvalues, Z contains the
+'    eigenvectors (if needed).
+'
+'    False, if the bisection method subroutine wasn't able to find the
+'    eigenvalues in the given interval or if the inverse iteration subroutine
+'    wasn't able to find all the corresponding eigenvectors.
+'    In that case, the eigenvalues and eigenvectors are not returned.
+'
+'  -- ALGLIB --
+'     Copyright 07.01.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixEVDI(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByRef w() As Double, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim A() As Double
+    Dim Tau() As Double
+    Dim E() As Double
+    A = A_
+    Call SMatrixTD(A, N, IsUpper, Tau, w, E)
+    If ZNeeded = 1# Then
+        Call SMatrixTDUnpackQ(A, N, IsUpper, Tau, z)
+    End If
+    Result = SMatrixTDEVDI(w, E, N, ZNeeded, I1, I2, z)
+    SMatrixEVDI = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Finding the eigenvalues and eigenvectors of a Hermitian matrix
+'
+'The algorithm finds eigen pairs of a Hermitian matrix by  reducing  it  to
+'real tridiagonal form and using the QL/QR algorithm.
+'
+'Input parameters:
+'    A       -   Hermitian matrix which is given  by  its  upper  or  lower
+'                triangular part.
+'                Array whose indexes range within [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    IsUpper -   storage format.
+'    ZNeeded -   flag controlling whether the eigenvectors  are  needed  or
+'                not. If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not returned;
+'                 * 1, the eigenvectors are returned.
+'
+'Output parameters:
+'    D       -   eigenvalues in ascending order.
+'                Array whose index ranges within [0..N-1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains the eigenvectors.
+'                Array whose indexes range within [0..N-1, 0..N-1].
+'                The eigenvectors are stored in the matrix columns.
+'
+'Result:
+'    True, if the algorithm has converged.
+'    False, if the algorithm hasn't converged (rare case).
+'
+'Note:
+'    eigenvectors of Hermitian matrix are defined up to  multiplication  by
+'    a complex number L, such that |L|=1.
+'
+'  -- ALGLIB --
+'     Copyright 2005, 23 March 2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HMatrixEVD(ByRef A_() As Complex, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef D() As Double, _
+         ByRef z() As Complex) As Boolean
+    Dim Result As Boolean
+    Dim A() As Complex
+    Dim Tau() As Complex
+    Dim E() As Double
+    Dim WORK() As Double
+    Dim T() As Double
+    Dim q() As Complex
+    Dim i As Long
+    Dim K As Long
+    Dim V As Double
+    Dim i_ As Long
+    A = A_
+    
+    '
+    ' Reduce to tridiagonal form
+    '
+    Call HMatrixTD(A, N, IsUpper, Tau, D, E)
+    If ZNeeded = 1# Then
+        Call HMatrixTDUnpackQ(A, N, IsUpper, Tau, q)
+        ZNeeded = 2#
+    End If
+    
+    '
+    ' TDEVD
+    '
+    Result = SMatrixTDEVD(D, E, N, ZNeeded, T)
+    
+    '
+    ' Eigenvectors are needed
+    ' Calculate Z = Q*T = Re(Q)*T + i*Im(Q)*T
+    '
+    If Result And ZNeeded <> 0# Then
+        ReDim WORK(0# To N - 1#)
+        ReDim z(0# To N - 1#, 0# To N - 1#)
+        For i = 0# To N - 1# Step 1
+            
+            '
+            ' Calculate real part
+            '
+            For K = 0# To N - 1# Step 1
+                WORK(K) = 0#
+            Next K
+            For K = 0# To N - 1# Step 1
+                V = q(i, K).X
+                For i_ = 0# To N - 1# Step 1
+                    WORK(i_) = WORK(i_) + V * T(K, i_)
+                Next i_
+            Next K
+            For K = 0# To N - 1# Step 1
+                z(i, K).X = WORK(K)
+            Next K
+            
+            '
+            ' Calculate imaginary part
+            '
+            For K = 0# To N - 1# Step 1
+                WORK(K) = 0#
+            Next K
+            For K = 0# To N - 1# Step 1
+                V = q(i, K).y
+                For i_ = 0# To N - 1# Step 1
+                    WORK(i_) = WORK(i_) + V * T(K, i_)
+                Next i_
+            Next K
+            For K = 0# To N - 1# Step 1
+                z(i, K).y = WORK(K)
+            Next K
+        Next i
+    End If
+    HMatrixEVD = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine for finding the eigenvalues (and eigenvectors) of  a  Hermitian
+'matrix  in  a  given half-interval (A, B] by using a bisection and inverse
+'iteration
+'
+'Input parameters:
+'    A       -   Hermitian matrix which is given  by  its  upper  or  lower
+'                triangular  part.  Array  whose   indexes   range   within
+'                [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    ZNeeded -   flag controlling whether the eigenvectors  are  needed  or
+'                not. If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not returned;
+'                 * 1, the eigenvectors are returned.
+'    IsUpperA -  storage format of matrix A.
+'    B1, B2 -    half-interval (B1, B2] to search eigenvalues in.
+'
+'Output parameters:
+'    M       -   number of eigenvalues found in a given half-interval, M>=0
+'    W       -   array of the eigenvalues found.
+'                Array whose index ranges within [0..M-1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains eigenvectors.
+'                Array whose indexes range within [0..N-1, 0..M-1].
+'                The eigenvectors are stored in the matrix columns.
+'
+'Result:
+'    True, if successful. M contains the number of eigenvalues in the given
+'    half-interval (could be equal to 0), W contains the eigenvalues,
+'    Z contains the eigenvectors (if needed).
+'
+'    False, if the bisection method subroutine  wasn't  able  to  find  the
+'    eigenvalues  in  the  given  interval  or  if  the  inverse  iteration
+'    subroutine  wasn't  able  to  find all the corresponding eigenvectors.
+'    In that case, the eigenvalues and eigenvectors are not returned, M  is
+'    equal to 0.
+'
+'Note:
+'    eigen vectors of Hermitian matrix are defined up to multiplication  by
+'    a complex number L, such as |L|=1.
+'
+'  -- ALGLIB --
+'     Copyright 07.01.2006, 24.03.2007 by Bochkanov Sergey.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HMatrixEVDR(ByRef A_() As Complex, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal b1 As Double, _
+         ByVal b2 As Double, _
+         ByRef M As Long, _
+         ByRef w() As Double, _
+         ByRef z() As Complex) As Boolean
+    Dim Result As Boolean
+    Dim A() As Complex
+    Dim q() As Complex
+    Dim T() As Double
+    Dim Tau() As Complex
+    Dim E() As Double
+    Dim WORK() As Double
+    Dim i As Long
+    Dim K As Long
+    Dim V As Double
+    Dim i_ As Long
+    A = A_
+    
+    '
+    ' Reduce to tridiagonal form
+    '
+    Call HMatrixTD(A, N, IsUpper, Tau, w, E)
+    If ZNeeded = 1# Then
+        Call HMatrixTDUnpackQ(A, N, IsUpper, Tau, q)
+        ZNeeded = 2#
+    End If
+    
+    '
+    ' Bisection and inverse iteration
+    '
+    Result = SMatrixTDEVDR(w, E, N, ZNeeded, b1, b2, M, T)
+    
+    '
+    ' Eigenvectors are needed
+    ' Calculate Z = Q*T = Re(Q)*T + i*Im(Q)*T
+    '
+    If Result And ZNeeded <> 0# And M <> 0# Then
+        ReDim WORK(0# To M - 1#)
+        ReDim z(0# To N - 1#, 0# To M - 1#)
+        For i = 0# To N - 1# Step 1
+            
+            '
+            ' Calculate real part
+            '
+            For K = 0# To M - 1# Step 1
+                WORK(K) = 0#
+            Next K
+            For K = 0# To N - 1# Step 1
+                V = q(i, K).X
+                For i_ = 0# To M - 1# Step 1
+                    WORK(i_) = WORK(i_) + V * T(K, i_)
+                Next i_
+            Next K
+            For K = 0# To M - 1# Step 1
+                z(i, K).X = WORK(K)
+            Next K
+            
+            '
+            ' Calculate imaginary part
+            '
+            For K = 0# To M - 1# Step 1
+                WORK(K) = 0#
+            Next K
+            For K = 0# To N - 1# Step 1
+                V = q(i, K).y
+                For i_ = 0# To M - 1# Step 1
+                    WORK(i_) = WORK(i_) + V * T(K, i_)
+                Next i_
+            Next K
+            For K = 0# To M - 1# Step 1
+                z(i, K).y = WORK(K)
+            Next K
+        Next i
+    End If
+    HMatrixEVDR = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine for finding the eigenvalues and  eigenvectors  of  a  Hermitian
+'matrix with given indexes by using bisection and inverse iteration methods
+'
+'Input parameters:
+'    A       -   Hermitian matrix which is given  by  its  upper  or  lower
+'                triangular part.
+'                Array whose indexes range within [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    ZNeeded -   flag controlling whether the eigenvectors  are  needed  or
+'                not. If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not returned;
+'                 * 1, the eigenvectors are returned.
+'    IsUpperA -  storage format of matrix A.
+'    I1, I2 -    index interval for searching (from I1 to I2).
+'                0 <= I1 <= I2 <= N-1.
+'
+'Output parameters:
+'    W       -   array of the eigenvalues found.
+'                Array whose index ranges within [0..I2-I1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains eigenvectors.
+'                Array whose indexes range within [0..N-1, 0..I2-I1].
+'                In  that  case,  the eigenvectors are stored in the matrix
+'                columns.
+'
+'Result:
+'    True, if successful. W contains the eigenvalues, Z contains the
+'    eigenvectors (if needed).
+'
+'    False, if the bisection method subroutine  wasn't  able  to  find  the
+'    eigenvalues  in  the  given  interval  or  if  the  inverse  iteration
+'    subroutine wasn't able to find  all  the  corresponding  eigenvectors.
+'    In that case, the eigenvalues and eigenvectors are not returned.
+'
+'Note:
+'    eigen vectors of Hermitian matrix are defined up to multiplication  by
+'    a complex number L, such as |L|=1.
+'
+'  -- ALGLIB --
+'     Copyright 07.01.2006, 24.03.2007 by Bochkanov Sergey.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HMatrixEVDI(ByRef A_() As Complex, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByRef w() As Double, _
+         ByRef z() As Complex) As Boolean
+    Dim Result As Boolean
+    Dim A() As Complex
+    Dim q() As Complex
+    Dim T() As Double
+    Dim Tau() As Complex
+    Dim E() As Double
+    Dim WORK() As Double
+    Dim i As Long
+    Dim K As Long
+    Dim V As Double
+    Dim M As Long
+    Dim i_ As Long
+    A = A_
+    
+    '
+    ' Reduce to tridiagonal form
+    '
+    Call HMatrixTD(A, N, IsUpper, Tau, w, E)
+    If ZNeeded = 1# Then
+        Call HMatrixTDUnpackQ(A, N, IsUpper, Tau, q)
+        ZNeeded = 2#
+    End If
+    
+    '
+    ' Bisection and inverse iteration
+    '
+    Result = SMatrixTDEVDI(w, E, N, ZNeeded, I1, I2, T)
+    
+    '
+    ' Eigenvectors are needed
+    ' Calculate Z = Q*T = Re(Q)*T + i*Im(Q)*T
+    '
+    M = I2 - I1 + 1#
+    If Result And ZNeeded <> 0# Then
+        ReDim WORK(0# To M - 1#)
+        ReDim z(0# To N - 1#, 0# To M - 1#)
+        For i = 0# To N - 1# Step 1
+            
+            '
+            ' Calculate real part
+            '
+            For K = 0# To M - 1# Step 1
+                WORK(K) = 0#
+            Next K
+            For K = 0# To N - 1# Step 1
+                V = q(i, K).X
+                For i_ = 0# To M - 1# Step 1
+                    WORK(i_) = WORK(i_) + V * T(K, i_)
+                Next i_
+            Next K
+            For K = 0# To M - 1# Step 1
+                z(i, K).X = WORK(K)
+            Next K
+            
+            '
+            ' Calculate imaginary part
+            '
+            For K = 0# To M - 1# Step 1
+                WORK(K) = 0#
+            Next K
+            For K = 0# To N - 1# Step 1
+                V = q(i, K).y
+                For i_ = 0# To M - 1# Step 1
+                    WORK(i_) = WORK(i_) + V * T(K, i_)
+                Next i_
+            Next K
+            For K = 0# To M - 1# Step 1
+                z(i, K).y = WORK(K)
+            Next K
+        Next i
+    End If
+    HMatrixEVDI = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Finding the eigenvalues and eigenvectors of a tridiagonal symmetric matrix
+'
+'The algorithm finds the eigen pairs of a tridiagonal symmetric matrix by
+'using an QL/QR algorithm with implicit shifts.
+'
+'Input parameters:
+'    D       -   the main diagonal of a tridiagonal matrix.
+'                Array whose index ranges within [0..N-1].
+'    E       -   the secondary diagonal of a tridiagonal matrix.
+'                Array whose index ranges within [0..N-2].
+'    N       -   size of matrix A.
+'    ZNeeded -   flag controlling whether the eigenvectors are needed or not.
+'                If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not needed;
+'                 * 1, the eigenvectors of a tridiagonal matrix
+'                   are multiplied by the square matrix Z. It is used if the
+'                   tridiagonal matrix is obtained by the similarity
+'                   transformation of a symmetric matrix;
+'                 * 2, the eigenvectors of a tridiagonal matrix replace the
+'                   square matrix Z;
+'                 * 3, matrix Z contains the first row of the eigenvectors
+'                   matrix.
+'    Z       -   if ZNeeded=1, Z contains the square matrix by which the
+'                eigenvectors are multiplied.
+'                Array whose indexes range within [0..N-1, 0..N-1].
+'
+'Output parameters:
+'    D       -   eigenvalues in ascending order.
+'                Array whose index ranges within [0..N-1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z hasn’t changed;
+'                 * 1, Z contains the product of a given matrix (from the left)
+'                   and the eigenvectors matrix (from the right);
+'                 * 2, Z contains the eigenvectors.
+'                 * 3, Z contains the first row of the eigenvectors matrix.
+'                If ZNeeded<3, Z is the array whose indexes range within [0..N-1, 0..N-1].
+'                In that case, the eigenvectors are stored in the matrix columns.
+'                If ZNeeded=3, Z is the array whose indexes range within [0..0, 0..N-1].
+'
+'Result:
+'    True, if the algorithm has converged.
+'    False, if the algorithm hasn't converged.
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     September 30, 1994
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixTDEVD(ByRef D() As Double, _
+         ByRef E_() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim E() As Double
+    Dim D1() As Double
+    Dim E1() As Double
+    Dim Z1() As Double
+    Dim i As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    E = E_
+    
+    '
+    ' Prepare 1-based task
+    '
+    ReDim D1(1# To N)
+    ReDim E1(1# To N)
+    i1_ = (0#) - (1#)
+    For i_ = 1# To N Step 1
+        D1(i_) = D(i_ + i1_)
+    Next i_
+    If N > 1# Then
+        i1_ = (0#) - (1#)
+        For i_ = 1# To N - 1# Step 1
+            E1(i_) = E(i_ + i1_)
+        Next i_
+    End If
+    If ZNeeded = 1# Then
+        ReDim Z1(1# To N, 1# To N)
+        For i = 1# To N Step 1
+            i1_ = (0#) - (1#)
+            For i_ = 1# To N Step 1
+                Z1(i, i_) = z(i - 1#, i_ + i1_)
+            Next i_
+        Next i
+    End If
+    
+    '
+    ' Solve 1-based task
+    '
+    Result = TridiagonalEVD(D1, E1, N, ZNeeded, Z1)
+    If Not Result Then
+        SMatrixTDEVD = Result
+        Exit Function
+    End If
+    
+    '
+    ' Convert back to 0-based result
+    '
+    i1_ = (1#) - (0#)
+    For i_ = 0# To N - 1# Step 1
+        D(i_) = D1(i_ + i1_)
+    Next i_
+    If ZNeeded <> 0# Then
+        If ZNeeded = 1# Then
+            For i = 1# To N Step 1
+                i1_ = (1#) - (0#)
+                For i_ = 0# To N - 1# Step 1
+                    z(i - 1#, i_) = Z1(i, i_ + i1_)
+                Next i_
+            Next i
+            SMatrixTDEVD = Result
+            Exit Function
+        End If
+        If ZNeeded = 2# Then
+            ReDim z(0# To N - 1#, 0# To N - 1#)
+            For i = 1# To N Step 1
+                i1_ = (1#) - (0#)
+                For i_ = 0# To N - 1# Step 1
+                    z(i - 1#, i_) = Z1(i, i_ + i1_)
+                Next i_
+            Next i
+            SMatrixTDEVD = Result
+            Exit Function
+        End If
+        If ZNeeded = 3# Then
+            ReDim z(0# To 0#, 0# To N - 1#)
+            i1_ = (1#) - (0#)
+            For i_ = 0# To N - 1# Step 1
+                z(0#, i_) = Z1(1#, i_ + i1_)
+            Next i_
+            SMatrixTDEVD = Result
+            Exit Function
+        End If
+    End If
+    SMatrixTDEVD = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine for finding the tridiagonal matrix eigenvalues/vectors in a
+'given half-interval (A, B] by using bisection and inverse iteration.
+'
+'Input parameters:
+'    D       -   the main diagonal of a tridiagonal matrix.
+'                Array whose index ranges within [0..N-1].
+'    E       -   the secondary diagonal of a tridiagonal matrix.
+'                Array whose index ranges within [0..N-2].
+'    N       -   size of matrix, N>=0.
+'    ZNeeded -   flag controlling whether the eigenvectors are needed or not.
+'                If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not needed;
+'                 * 1, the eigenvectors of a tridiagonal matrix are multiplied
+'                   by the square matrix Z. It is used if the tridiagonal
+'                   matrix is obtained by the similarity transformation
+'                   of a symmetric matrix.
+'                 * 2, the eigenvectors of a tridiagonal matrix replace matrix Z.
+'    A, B    -   half-interval (A, B] to search eigenvalues in.
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z isn't used and remains unchanged;
+'                 * 1, Z contains the square matrix (array whose indexes range
+'                   within [0..N-1, 0..N-1]) which reduces the given symmetric
+'                   matrix to tridiagonal form;
+'                 * 2, Z isn't used (but changed on the exit).
+'
+'Output parameters:
+'    D       -   array of the eigenvalues found.
+'                Array whose index ranges within [0..M-1].
+'    M       -   number of eigenvalues found in the given half-interval (M>=0).
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, doesn't contain any information;
+'                 * 1, contains the product of a given NxN matrix Z (from the
+'                   left) and NxM matrix of the eigenvectors found (from the
+'                   right). Array whose indexes range within [0..N-1, 0..M-1].
+'                 * 2, contains the matrix of the eigenvectors found.
+'                   Array whose indexes range within [0..N-1, 0..M-1].
+'
+'Result:
+'
+'    True, if successful. In that case, M contains the number of eigenvalues
+'    in the given half-interval (could be equal to 0), D contains the eigenvalues,
+'    Z contains the eigenvectors (if needed).
+'    It should be noted that the subroutine changes the size of arrays D and Z.
+'
+'    False, if the bisection method subroutine wasn't able to find the
+'    eigenvalues in the given interval or if the inverse iteration subroutine
+'    wasn't able to find all the corresponding eigenvectors. In that case,
+'    the eigenvalues and eigenvectors are not returned, M is equal to 0.
+'
+'  -- ALGLIB --
+'     Copyright 31.03.2008 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixTDEVDR(ByRef D() As Double, _
+         ByRef E() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal A As Double, _
+         ByVal B As Double, _
+         ByRef M As Long, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim ErrorCode As Long
+    Dim NSPLIT As Long
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim CR As Long
+    Dim IBLOCK() As Long
+    Dim ISPLIT() As Long
+    Dim IFAIL() As Long
+    Dim D1() As Double
+    Dim E1() As Double
+    Dim w() As Double
+    Dim Z2() As Double
+    Dim Z3() As Double
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Special cases
+    '
+    If B <= A Then
+        M = 0#
+        Result = True
+        SMatrixTDEVDR = Result
+        Exit Function
+    End If
+    If N <= 0# Then
+        M = 0#
+        Result = True
+        SMatrixTDEVDR = Result
+        Exit Function
+    End If
+    
+    '
+    ' Copy D,E to D1, E1
+    '
+    ReDim D1(1# To N)
+    i1_ = (0#) - (1#)
+    For i_ = 1# To N Step 1
+        D1(i_) = D(i_ + i1_)
+    Next i_
+    If N > 1# Then
+        ReDim E1(1# To N - 1#)
+        i1_ = (0#) - (1#)
+        For i_ = 1# To N - 1# Step 1
+            E1(i_) = E(i_ + i1_)
+        Next i_
+    End If
+    
+    '
+    ' No eigen vectors
+    '
+    If ZNeeded = 0# Then
+        Result = InternalBisectionEigenValues(D1, E1, N, 2#, 1#, A, B, 0#, 0#, -1#, w, M, NSPLIT, IBLOCK, ISPLIT, ErrorCode)
+        If Not Result Or M = 0# Then
+            M = 0#
+            SMatrixTDEVDR = Result
+            Exit Function
+        End If
+        ReDim D(0# To M - 1#)
+        i1_ = (1#) - (0#)
+        For i_ = 0# To M - 1# Step 1
+            D(i_) = w(i_ + i1_)
+        Next i_
+        SMatrixTDEVDR = Result
+        Exit Function
+    End If
+    
+    '
+    ' Eigen vectors are multiplied by Z
+    '
+    If ZNeeded = 1# Then
+        
+        '
+        ' Find eigen pairs
+        '
+        Result = InternalBisectionEigenValues(D1, E1, N, 2#, 2#, A, B, 0#, 0#, -1#, w, M, NSPLIT, IBLOCK, ISPLIT, ErrorCode)
+        If Not Result Or M = 0# Then
+            M = 0#
+            SMatrixTDEVDR = Result
+            Exit Function
+        End If
+        Call InternalDSTEIN(N, D1, E1, M, w, IBLOCK, ISPLIT, Z2, IFAIL, CR)
+        If CR <> 0# Then
+            M = 0#
+            Result = False
+            SMatrixTDEVDR = Result
+            Exit Function
+        End If
+        
+        '
+        ' Sort eigen values and vectors
+        '
+        For i = 1# To M Step 1
+            K = i
+            For j = i To M Step 1
+                If w(j) < w(K) Then
+                    K = j
+                End If
+            Next j
+            V = w(i)
+            w(i) = w(K)
+            w(K) = V
+            For j = 1# To N Step 1
+                V = Z2(j, i)
+                Z2(j, i) = Z2(j, K)
+                Z2(j, K) = V
+            Next j
+        Next i
+        
+        '
+        ' Transform Z2 and overwrite Z
+        '
+        ReDim Z3(1# To M, 1# To N)
+        For i = 1# To M Step 1
+            For i_ = 1# To N Step 1
+                Z3(i, i_) = Z2(i_, i)
+            Next i_
+        Next i
+        For i = 1# To N Step 1
+            For j = 1# To M Step 1
+                i1_ = (1#) - (0#)
+                V = 0#
+                For i_ = 0# To N - 1# Step 1
+                    V = V + z(i - 1#, i_) * Z3(j, i_ + i1_)
+                Next i_
+                Z2(i, j) = V
+            Next j
+        Next i
+        ReDim z(0# To N - 1#, 0# To M - 1#)
+        For i = 1# To M Step 1
+            i1_ = (1#) - (0#)
+            For i_ = 0# To N - 1# Step 1
+                z(i_, i - 1#) = Z2(i_ + i1_, i)
+            Next i_
+        Next i
+        
+        '
+        ' Store W
+        '
+        ReDim D(0# To M - 1#)
+        For i = 1# To M Step 1
+            D(i - 1#) = w(i)
+        Next i
+        SMatrixTDEVDR = Result
+        Exit Function
+    End If
+    
+    '
+    ' Eigen vectors are stored in Z
+    '
+    If ZNeeded = 2# Then
+        
+        '
+        ' Find eigen pairs
+        '
+        Result = InternalBisectionEigenValues(D1, E1, N, 2#, 2#, A, B, 0#, 0#, -1#, w, M, NSPLIT, IBLOCK, ISPLIT, ErrorCode)
+        If Not Result Or M = 0# Then
+            M = 0#
+            SMatrixTDEVDR = Result
+            Exit Function
+        End If
+        Call InternalDSTEIN(N, D1, E1, M, w, IBLOCK, ISPLIT, Z2, IFAIL, CR)
+        If CR <> 0# Then
+            M = 0#
+            Result = False
+            SMatrixTDEVDR = Result
+            Exit Function
+        End If
+        
+        '
+        ' Sort eigen values and vectors
+        '
+        For i = 1# To M Step 1
+            K = i
+            For j = i To M Step 1
+                If w(j) < w(K) Then
+                    K = j
+                End If
+            Next j
+            V = w(i)
+            w(i) = w(K)
+            w(K) = V
+            For j = 1# To N Step 1
+                V = Z2(j, i)
+                Z2(j, i) = Z2(j, K)
+                Z2(j, K) = V
+            Next j
+        Next i
+        
+        '
+        ' Store W
+        '
+        ReDim D(0# To M - 1#)
+        For i = 1# To M Step 1
+            D(i - 1#) = w(i)
+        Next i
+        ReDim z(0# To N - 1#, 0# To M - 1#)
+        For i = 1# To M Step 1
+            i1_ = (1#) - (0#)
+            For i_ = 0# To N - 1# Step 1
+                z(i_, i - 1#) = Z2(i_ + i1_, i)
+            Next i_
+        Next i
+        SMatrixTDEVDR = Result
+        Exit Function
+    End If
+    Result = False
+    SMatrixTDEVDR = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine for finding tridiagonal matrix eigenvalues/vectors with given
+'indexes (in ascending order) by using the bisection and inverse iteraion.
+'
+'Input parameters:
+'    D       -   the main diagonal of a tridiagonal matrix.
+'                Array whose index ranges within [0..N-1].
+'    E       -   the secondary diagonal of a tridiagonal matrix.
+'                Array whose index ranges within [0..N-2].
+'    N       -   size of matrix. N>=0.
+'    ZNeeded -   flag controlling whether the eigenvectors are needed or not.
+'                If ZNeeded is equal to:
+'                 * 0, the eigenvectors are not needed;
+'                 * 1, the eigenvectors of a tridiagonal matrix are multiplied
+'                   by the square matrix Z. It is used if the
+'                   tridiagonal matrix is obtained by the similarity transformation
+'                   of a symmetric matrix.
+'                 * 2, the eigenvectors of a tridiagonal matrix replace
+'                   matrix Z.
+'    I1, I2  -   index interval for searching (from I1 to I2).
+'                0 <= I1 <= I2 <= N-1.
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, Z isn't used and remains unchanged;
+'                 * 1, Z contains the square matrix (array whose indexes range within [0..N-1, 0..N-1])
+'                   which reduces the given symmetric matrix to  tridiagonal form;
+'                 * 2, Z isn't used (but changed on the exit).
+'
+'Output parameters:
+'    D       -   array of the eigenvalues found.
+'                Array whose index ranges within [0..I2-I1].
+'    Z       -   if ZNeeded is equal to:
+'                 * 0, doesn't contain any information;
+'                 * 1, contains the product of a given NxN matrix Z (from the left) and
+'                   Nx(I2-I1) matrix of the eigenvectors found (from the right).
+'                   Array whose indexes range within [0..N-1, 0..I2-I1].
+'                 * 2, contains the matrix of the eigenvalues found.
+'                   Array whose indexes range within [0..N-1, 0..I2-I1].
+'
+'
+'Result:
+'
+'    True, if successful. In that case, D contains the eigenvalues,
+'    Z contains the eigenvectors (if needed).
+'    It should be noted that the subroutine changes the size of arrays D and Z.
+'
+'    False, if the bisection method subroutine wasn't able to find the eigenvalues
+'    in the given interval or if the inverse iteration subroutine wasn't able
+'    to find all the corresponding eigenvectors. In that case, the eigenvalues
+'    and eigenvectors are not returned.
+'
+'  -- ALGLIB --
+'     Copyright 25.12.2005 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixTDEVDI(ByRef D() As Double, _
+         ByRef E() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByVal I1 As Long, _
+         ByVal I2 As Long, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim ErrorCode As Long
+    Dim NSPLIT As Long
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim M As Long
+    Dim CR As Long
+    Dim IBLOCK() As Long
+    Dim ISPLIT() As Long
+    Dim IFAIL() As Long
+    Dim w() As Double
+    Dim D1() As Double
+    Dim E1() As Double
+    Dim Z2() As Double
+    Dim Z3() As Double
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Copy D,E to D1, E1
+    '
+    ReDim D1(1# To N)
+    i1_ = (0#) - (1#)
+    For i_ = 1# To N Step 1
+        D1(i_) = D(i_ + i1_)
+    Next i_
+    If N > 1# Then
+        ReDim E1(1# To N - 1#)
+        i1_ = (0#) - (1#)
+        For i_ = 1# To N - 1# Step 1
+            E1(i_) = E(i_ + i1_)
+        Next i_
+    End If
+    
+    '
+    ' No eigen vectors
+    '
+    If ZNeeded = 0# Then
+        Result = InternalBisectionEigenValues(D1, E1, N, 3#, 1#, 0#, 0#, I1 + 1#, I2 + 1#, -1#, w, M, NSPLIT, IBLOCK, ISPLIT, ErrorCode)
+        If Not Result Then
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        If M <> I2 - I1 + 1# Then
+            Result = False
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        ReDim D(0# To M - 1#)
+        For i = 1# To M Step 1
+            D(i - 1#) = w(i)
+        Next i
+        SMatrixTDEVDI = Result
+        Exit Function
+    End If
+    
+    '
+    ' Eigen vectors are multiplied by Z
+    '
+    If ZNeeded = 1# Then
+        
+        '
+        ' Find eigen pairs
+        '
+        Result = InternalBisectionEigenValues(D1, E1, N, 3#, 2#, 0#, 0#, I1 + 1#, I2 + 1#, -1#, w, M, NSPLIT, IBLOCK, ISPLIT, ErrorCode)
+        If Not Result Then
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        If M <> I2 - I1 + 1# Then
+            Result = False
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        Call InternalDSTEIN(N, D1, E1, M, w, IBLOCK, ISPLIT, Z2, IFAIL, CR)
+        If CR <> 0# Then
+            Result = False
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        
+        '
+        ' Sort eigen values and vectors
+        '
+        For i = 1# To M Step 1
+            K = i
+            For j = i To M Step 1
+                If w(j) < w(K) Then
+                    K = j
+                End If
+            Next j
+            V = w(i)
+            w(i) = w(K)
+            w(K) = V
+            For j = 1# To N Step 1
+                V = Z2(j, i)
+                Z2(j, i) = Z2(j, K)
+                Z2(j, K) = V
+            Next j
+        Next i
+        
+        '
+        ' Transform Z2 and overwrite Z
+        '
+        ReDim Z3(1# To M, 1# To N)
+        For i = 1# To M Step 1
+            For i_ = 1# To N Step 1
+                Z3(i, i_) = Z2(i_, i)
+            Next i_
+        Next i
+        For i = 1# To N Step 1
+            For j = 1# To M Step 1
+                i1_ = (1#) - (0#)
+                V = 0#
+                For i_ = 0# To N - 1# Step 1
+                    V = V + z(i - 1#, i_) * Z3(j, i_ + i1_)
+                Next i_
+                Z2(i, j) = V
+            Next j
+        Next i
+        ReDim z(0# To N - 1#, 0# To M - 1#)
+        For i = 1# To M Step 1
+            i1_ = (1#) - (0#)
+            For i_ = 0# To N - 1# Step 1
+                z(i_, i - 1#) = Z2(i_ + i1_, i)
+            Next i_
+        Next i
+        
+        '
+        ' Store W
+        '
+        ReDim D(0# To M - 1#)
+        For i = 1# To M Step 1
+            D(i - 1#) = w(i)
+        Next i
+        SMatrixTDEVDI = Result
+        Exit Function
+    End If
+    
+    '
+    ' Eigen vectors are stored in Z
+    '
+    If ZNeeded = 2# Then
+        
+        '
+        ' Find eigen pairs
+        '
+        Result = InternalBisectionEigenValues(D1, E1, N, 3#, 2#, 0#, 0#, I1 + 1#, I2 + 1#, -1#, w, M, NSPLIT, IBLOCK, ISPLIT, ErrorCode)
+        If Not Result Then
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        If M <> I2 - I1 + 1# Then
+            Result = False
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        Call InternalDSTEIN(N, D1, E1, M, w, IBLOCK, ISPLIT, Z2, IFAIL, CR)
+        If CR <> 0# Then
+            Result = False
+            SMatrixTDEVDI = Result
+            Exit Function
+        End If
+        
+        '
+        ' Sort eigen values and vectors
+        '
+        For i = 1# To M Step 1
+            K = i
+            For j = i To M Step 1
+                If w(j) < w(K) Then
+                    K = j
+                End If
+            Next j
+            V = w(i)
+            w(i) = w(K)
+            w(K) = V
+            For j = 1# To N Step 1
+                V = Z2(j, i)
+                Z2(j, i) = Z2(j, K)
+                Z2(j, K) = V
+            Next j
+        Next i
+        
+        '
+        ' Store Z
+        '
+        ReDim z(0# To N - 1#, 0# To M - 1#)
+        For i = 1# To M Step 1
+            i1_ = (1#) - (0#)
+            For i_ = 0# To N - 1# Step 1
+                z(i_, i - 1#) = Z2(i_ + i1_, i)
+            Next i_
+        Next i
+        
+        '
+        ' Store W
+        '
+        ReDim D(0# To M - 1#)
+        For i = 1# To M Step 1
+            D(i - 1#) = w(i)
+        Next i
+        SMatrixTDEVDI = Result
+        Exit Function
+    End If
+    Result = False
+    SMatrixTDEVDI = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Finding eigenvalues and eigenvectors of a general matrix
+'
+'The algorithm finds eigenvalues and eigenvectors of a general matrix by
+'using the QR algorithm with multiple shifts. The algorithm can find
+'eigenvalues and both left and right eigenvectors.
+'
+'The right eigenvector is a vector x such that A*x = w*x, and the left
+'eigenvector is a vector y such that y'*A = w*y' (here y' implies a complex
+'conjugate transposition of vector y).
+'
+'Input parameters:
+'    A       -   matrix. Array whose indexes range within [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    VNeeded -   flag controlling whether eigenvectors are needed or not.
+'                If VNeeded is equal to:
+'                 * 0, eigenvectors are not returned;
+'                 * 1, right eigenvectors are returned;
+'                 * 2, left eigenvectors are returned;
+'                 * 3, both left and right eigenvectors are returned.
+'
+'Output parameters:
+'    WR      -   real parts of eigenvalues.
+'                Array whose index ranges within [0..N-1].
+'    WR      -   imaginary parts of eigenvalues.
+'                Array whose index ranges within [0..N-1].
+'    VL, VR  -   arrays of left and right eigenvectors (if they are needed).
+'                If WI[i]=0, the respective eigenvalue is a real number,
+'                and it corresponds to the column number I of matrices VL/VR.
+'                If WI[i]>0, we have a pair of complex conjugate numbers with
+'                positive and negative imaginary parts:
+'                    the first eigenvalue WR[i] + sqrt(-1)*WI[i];
+'                    the second eigenvalue WR[i+1] + sqrt(-1)*WI[i+1];
+'                    WI[i]>0
+'                    WI[i+1] = -WI[i] < 0
+'                In that case, the eigenvector  corresponding to the first
+'                eigenvalue is located in i and i+1 columns of matrices
+'                VL/VR (the column number i contains the real part, and the
+'                column number i+1 contains the imaginary part), and the vector
+'                corresponding to the second eigenvalue is a complex conjugate to
+'                the first vector.
+'                Arrays whose indexes range within [0..N-1, 0..N-1].
+'
+'Result:
+'    True, if the algorithm has converged.
+'    False, if the algorithm has not converged.
+'
+'Note 1:
+'    Some users may ask the following question: what if WI[N-1]>0?
+'    WI[N] must contain an eigenvalue which is complex conjugate to the
+'    N-th eigenvalue, but the array has only size N?
+'    The answer is as follows: such a situation cannot occur because the
+'    algorithm finds a pairs of eigenvalues, therefore, if WI[i]>0, I is
+'    strictly less than N-1.
+'
+'Note 2:
+'    The algorithm performance depends on the value of the internal parameter
+'    NS of the InternalSchurDecomposition subroutine which defines the number
+'    of shifts in the QR algorithm (similarly to the block width in block-matrix
+'    algorithms of linear algebra). If you require maximum performance
+'    on your machine, it is recommended to adjust this parameter manually.
+'
+'
+'See also the InternalTREVC subroutine.
+'
+'The algorithm is based on the LAPACK 3.0 library.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function RMatrixEVD(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal VNeeded As Long, _
+         ByRef WR() As Double, _
+         ByRef WI() As Double, _
+         ByRef VL() As Double, _
+         ByRef VR() As Double) As Boolean
+    Dim Result As Boolean
+    Dim A() As Double
+    Dim A1() As Double
+    Dim VL1() As Double
+    Dim VR1() As Double
+    Dim WR1() As Double
+    Dim WI1() As Double
+    Dim i As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    A = A_
+    ReDim A1(1# To N, 1# To N)
+    For i = 1# To N Step 1
+        i1_ = (0#) - (1#)
+        For i_ = 1# To N Step 1
+            A1(i, i_) = A(i - 1#, i_ + i1_)
+        Next i_
+    Next i
+    Result = NonSymmetricEVD(A1, N, VNeeded, WR1, WI1, VL1, VR1)
+    If Result Then
+        ReDim WR(0# To N - 1#)
+        ReDim WI(0# To N - 1#)
+        i1_ = (1#) - (0#)
+        For i_ = 0# To N - 1# Step 1
+            WR(i_) = WR1(i_ + i1_)
+        Next i_
+        i1_ = (1#) - (0#)
+        For i_ = 0# To N - 1# Step 1
+            WI(i_) = WI1(i_ + i1_)
+        Next i_
+        If VNeeded = 2# Or VNeeded = 3# Then
+            ReDim VL(0# To N - 1#, 0# To N - 1#)
+            For i = 0# To N - 1# Step 1
+                i1_ = (1#) - (0#)
+                For i_ = 0# To N - 1# Step 1
+                    VL(i, i_) = VL1(i + 1#, i_ + i1_)
+                Next i_
+            Next i
+        End If
+        If VNeeded = 1# Or VNeeded = 3# Then
+            ReDim VR(0# To N - 1#, 0# To N - 1#)
+            For i = 0# To N - 1# Step 1
+                i1_ = (1#) - (0#)
+                For i_ = 0# To N - 1# Step 1
+                    VR(i, i_) = VR1(i + 1#, i_ + i1_)
+                Next i_
+            Next i
+        End If
+    End If
+    RMatrixEVD = Result
+End Function
+Public Function InternalBisectionEigenValues(ByRef D_() As Double, _
+         ByRef E_() As Double, _
+         ByVal N As Long, _
+         ByVal IRANGE As Long, _
+         ByVal IORDER As Long, _
+         ByVal VL As Double, _
+         ByVal VU As Double, _
+         ByVal IL As Long, _
+         ByVal IU As Long, _
+         ByVal ABSTOL As Double, _
+         ByRef w() As Double, _
+         ByRef M As Long, _
+         ByRef NSPLIT As Long, _
+         ByRef IBLOCK() As Long, _
+         ByRef ISPLIT() As Long, _
+         ByRef ErrorCode As Long) As Boolean
+    Dim Result As Boolean
+    Dim D() As Double
+    Dim E() As Double
+    Dim FUDGE As Double
+    Dim RELFAC As Double
+    Dim NCNVRG As Boolean
+    Dim TOOFEW As Boolean
+    Dim IB As Long
+    Dim IBEGIN As Long
+    Dim IDISCL As Long
+    Dim IDISCU As Long
+    Dim IE As Long
+    Dim IEND As Long
+    Dim IINFO As Long
+    Dim IM As Long
+    Dim IIN As Long
+    Dim IOFF As Long
+    Dim IOUT As Long
+    Dim ITMAX As Long
+    Dim IW As Long
+    Dim IWOFF As Long
+    Dim j As Long
+    Dim ITMP1 As Long
+    Dim JB As Long
+    Dim JDISC As Long
+    Dim JE As Long
+    Dim NWL As Long
+    Dim NWU As Long
+    Dim ATOLI As Double
+    Dim BNorm As Double
+    Dim GL As Double
+    Dim GU As Double
+    Dim PIVMIN As Double
+    Dim RTOLI As Double
+    Dim SAFEMN As Double
+    Dim TMP1 As Double
+    Dim Tmp2 As Double
+    Dim TNORM As Double
+    Dim Ulp As Double
+    Dim WKILL As Double
+    Dim WL As Double
+    Dim WLU As Double
+    Dim WU As Double
+    Dim WUL As Double
+    Dim ScaleFactor As Double
+    Dim T As Double
+    Dim IDUMMA() As Long
+    Dim WORK() As Double
+    Dim IWORK() As Long
+    Dim IA1S2() As Long
+    Dim RA1S2() As Double
+    Dim RA1S2X2() As Double
+    Dim IA1S2X2() As Long
+    Dim RA1SIIN() As Double
+    Dim RA2SIIN() As Double
+    Dim RA3SIIN() As Double
+    Dim RA4SIIN() As Double
+    Dim RA1SIINX2() As Double
+    Dim IA1SIINX2() As Long
+    Dim IWORKSPACE() As Long
+    Dim RWORKSPACE() As Double
+    Dim TmpI As Long
+    D = D_
+    E = E_
+    
+    '
+    ' Quick return if possible
+    '
+    M = 0#
+    If N = 0# Then
+        Result = True
+        InternalBisectionEigenValues = Result
+        Exit Function
+    End If
+    
+    '
+    ' Get machine constants
+    ' NB is the minimum vector length for vector bisection, or 0
+    ' if only scalar is to be done.
+    '
+    FUDGE = 2#
+    RELFAC = 2#
+    SAFEMN = MinRealNumber
+    Ulp = 2# * MachineEpsilon
+    RTOLI = Ulp * RELFAC
+    ReDim IDUMMA(1# To 1#)
+    ReDim WORK(1# To 4# * N)
+    ReDim IWORK(1# To 3# * N)
+    ReDim w(1# To N)
+    ReDim IBLOCK(1# To N)
+    ReDim ISPLIT(1# To N)
+    ReDim IA1S2(1# To 2#)
+    ReDim RA1S2(1# To 2#)
+    ReDim RA1S2X2(1# To 2#, 1# To 2#)
+    ReDim IA1S2X2(1# To 2#, 1# To 2#)
+    ReDim RA1SIIN(1# To N)
+    ReDim RA2SIIN(1# To N)
+    ReDim RA3SIIN(1# To N)
+    ReDim RA4SIIN(1# To N)
+    ReDim RA1SIINX2(1# To N, 1# To 2#)
+    ReDim IA1SIINX2(1# To N, 1# To 2#)
+    ReDim IWORKSPACE(1# To N)
+    ReDim RWORKSPACE(1# To N)
+    
+    '
+    ' Check for Errors
+    '
+    Result = False
+    ErrorCode = 0#
+    If IRANGE <= 0# Or IRANGE >= 4# Then
+        ErrorCode = -4#
+    End If
+    If IORDER <= 0# Or IORDER >= 3# Then
+        ErrorCode = -5#
+    End If
+    If N < 0# Then
+        ErrorCode = -3#
+    End If
+    If IRANGE = 2# And VL >= VU Then
+        ErrorCode = -6#
+    End If
+    If IRANGE = 3# And (IL < 1# Or IL > MaxInt(1#, N)) Then
+        ErrorCode = -8#
+    End If
+    If IRANGE = 3# And (IU < MinInt(N, IL) Or IU > N) Then
+        ErrorCode = -9#
+    End If
+    If ErrorCode <> 0# Then
+        InternalBisectionEigenValues = Result
+        Exit Function
+    End If
+    
+    '
+    ' Initialize error flags
+    '
+    NCNVRG = False
+    TOOFEW = False
+    
+    '
+    ' Simplifications:
+    '
+    If IRANGE = 3# And IL = 1# And IU = N Then
+        IRANGE = 1#
+    End If
+    
+    '
+    ' Special Case when N=1
+    '
+    If N = 1# Then
+        NSPLIT = 1#
+        ISPLIT(1#) = 1#
+        If IRANGE = 2# And (VL >= D(1#) Or VU < D(1#)) Then
+            M = 0#
+        Else
+            w(1#) = D(1#)
+            IBLOCK(1#) = 1#
+            M = 1#
+        End If
+        Result = True
+        InternalBisectionEigenValues = Result
+        Exit Function
+    End If
+    
+    '
+    ' Scaling
+    '
+    T = Abs(D(N))
+    For j = 1# To N - 1# Step 1
+        T = MaxReal(T, Abs(D(j)))
+        T = MaxReal(T, Abs(E(j)))
+    Next j
+    ScaleFactor = 1#
+    If T <> 0# Then
+        If T > Sqr(Sqr(MinRealNumber)) * Sqr(MaxRealNumber) Then
+            ScaleFactor = T
+        End If
+        If T < Sqr(Sqr(MaxRealNumber)) * Sqr(MinRealNumber) Then
+            ScaleFactor = T
+        End If
+        For j = 1# To N - 1# Step 1
+            D(j) = D(j) / ScaleFactor
+            E(j) = E(j) / ScaleFactor
+        Next j
+        D(N) = D(N) / ScaleFactor
+    End If
+    
+    '
+    ' Compute Splitting Points
+    '
+    NSPLIT = 1#
+    WORK(N) = 0#
+    PIVMIN = 1#
+    For j = 2# To N Step 1
+        TMP1 = Square(E(j - 1#))
+        If Abs(D(j) * D(j - 1#)) * Square(Ulp) + SAFEMN > TMP1 Then
+            ISPLIT(NSPLIT) = j - 1#
+            NSPLIT = NSPLIT + 1#
+            WORK(j - 1#) = 0#
+        Else
+            WORK(j - 1#) = TMP1
+            PIVMIN = MaxReal(PIVMIN, TMP1)
+        End If
+    Next j
+    ISPLIT(NSPLIT) = N
+    PIVMIN = PIVMIN * SAFEMN
+    
+    '
+    ' Compute Interval and ATOLI
+    '
+    If IRANGE = 3# Then
+        
+        '
+        ' RANGE='I': Compute the interval containing eigenvalues
+        '     IL through IU.
+        '
+        ' Compute Gershgorin interval for entire (split) matrix
+        ' and use it as the initial interval
+        '
+        GU = D(1#)
+        GL = D(1#)
+        TMP1 = 0#
+        For j = 1# To N - 1# Step 1
+            Tmp2 = Sqr(WORK(j))
+            GU = MaxReal(GU, D(j) + TMP1 + Tmp2)
+            GL = MinReal(GL, D(j) - TMP1 - Tmp2)
+            TMP1 = Tmp2
+        Next j
+        GU = MaxReal(GU, D(N) + TMP1)
+        GL = MinReal(GL, D(N) - TMP1)
+        TNORM = MaxReal(Abs(GL), Abs(GU))
+        GL = GL - FUDGE * TNORM * Ulp * N - FUDGE * 2# * PIVMIN
+        GU = GU + FUDGE * TNORM * Ulp * N + FUDGE * PIVMIN
+        
+        '
+        ' Compute Iteration parameters
+        '
+        ITMAX = Ceil((Log(TNORM + PIVMIN) - Log(PIVMIN)) / Log(2#)) + 2#
+        If ABSTOL <= 0# Then
+            ATOLI = Ulp * TNORM
+        Else
+            ATOLI = ABSTOL
+        End If
+        WORK(N + 1#) = GL
+        WORK(N + 2#) = GL
+        WORK(N + 3#) = GU
+        WORK(N + 4#) = GU
+        WORK(N + 5#) = GL
+        WORK(N + 6#) = GU
+        IWORK(1#) = -1#
+        IWORK(2#) = -1#
+        IWORK(3#) = N + 1#
+        IWORK(4#) = N + 1#
+        IWORK(5#) = IL - 1#
+        IWORK(6#) = IU
+        
+        '
+        ' Calling DLAEBZ
+        '
+        ' DLAEBZ( 3, ITMAX, N, 2, 2, NB, ATOLI, RTOLI, PIVMIN, D, E,
+        '    WORK, IWORK( 5 ), WORK( N+1 ), WORK( N+5 ), IOUT,
+        '    IWORK, W, IBLOCK, IINFO )
+        '
+        IA1S2(1#) = IWORK(5#)
+        IA1S2(2#) = IWORK(6#)
+        RA1S2(1#) = WORK(N + 5#)
+        RA1S2(2#) = WORK(N + 6#)
+        RA1S2X2(1#, 1#) = WORK(N + 1#)
+        RA1S2X2(2#, 1#) = WORK(N + 2#)
+        RA1S2X2(1#, 2#) = WORK(N + 3#)
+        RA1S2X2(2#, 2#) = WORK(N + 4#)
+        IA1S2X2(1#, 1#) = IWORK(1#)
+        IA1S2X2(2#, 1#) = IWORK(2#)
+        IA1S2X2(1#, 2#) = IWORK(3#)
+        IA1S2X2(2#, 2#) = IWORK(4#)
+        Call InternalDLAEBZ(3#, ITMAX, N, 2#, 2#, ATOLI, RTOLI, PIVMIN, D, E, WORK, IA1S2, RA1S2X2, RA1S2, IOUT, IA1S2X2, w, IBLOCK, IINFO)
+        IWORK(5#) = IA1S2(1#)
+        IWORK(6#) = IA1S2(2#)
+        WORK(N + 5#) = RA1S2(1#)
+        WORK(N + 6#) = RA1S2(2#)
+        WORK(N + 1#) = RA1S2X2(1#, 1#)
+        WORK(N + 2#) = RA1S2X2(2#, 1#)
+        WORK(N + 3#) = RA1S2X2(1#, 2#)
+        WORK(N + 4#) = RA1S2X2(2#, 2#)
+        IWORK(1#) = IA1S2X2(1#, 1#)
+        IWORK(2#) = IA1S2X2(2#, 1#)
+        IWORK(3#) = IA1S2X2(1#, 2#)
+        IWORK(4#) = IA1S2X2(2#, 2#)
+        If IWORK(6#) = IU Then
+            WL = WORK(N + 1#)
+            WLU = WORK(N + 3#)
+            NWL = IWORK(1#)
+            WU = WORK(N + 4#)
+            WUL = WORK(N + 2#)
+            NWU = IWORK(4#)
+        Else
+            WL = WORK(N + 2#)
+            WLU = WORK(N + 4#)
+            NWL = IWORK(2#)
+            WU = WORK(N + 3#)
+            WUL = WORK(N + 1#)
+            NWU = IWORK(3#)
+        End If
+        If NWL < 0# Or NWL >= N Or NWU < 1# Or NWU > N Then
+            ErrorCode = 4#
+            Result = False
+            InternalBisectionEigenValues = Result
+            Exit Function
+        End If
+    Else
+        
+        '
+        ' RANGE='A' or 'V' -- Set ATOLI
+        '
+        TNORM = MaxReal(Abs(D(1#)) + Abs(E(1#)), Abs(D(N)) + Abs(E(N - 1#)))
+        For j = 2# To N - 1# Step 1
+            TNORM = MaxReal(TNORM, Abs(D(j)) + Abs(E(j - 1#)) + Abs(E(j)))
+        Next j
+        If ABSTOL <= 0# Then
+            ATOLI = Ulp * TNORM
+        Else
+            ATOLI = ABSTOL
+        End If
+        If IRANGE = 2# Then
+            WL = VL
+            WU = VU
+        Else
+            WL = 0#
+            WU = 0#
+        End If
+    End If
+    
+    '
+    ' Find Eigenvalues -- Loop Over Blocks and recompute NWL and NWU.
+    ' NWL accumulates the number of eigenvalues .le. WL,
+    ' NWU accumulates the number of eigenvalues .le. WU
+    '
+    M = 0#
+    IEND = 0#
+    ErrorCode = 0#
+    NWL = 0#
+    NWU = 0#
+    For JB = 1# To NSPLIT Step 1
+        IOFF = IEND
+        IBEGIN = IOFF + 1#
+        IEND = ISPLIT(JB)
+        IIN = IEND - IOFF
+        If IIN = 1# Then
+            
+            '
+            ' Special Case -- IIN=1
+            '
+            If IRANGE = 1# Or WL >= D(IBEGIN) - PIVMIN Then
+                NWL = NWL + 1#
+            End If
+            If IRANGE = 1# Or WU >= D(IBEGIN) - PIVMIN Then
+                NWU = NWU + 1#
+            End If
+            If IRANGE = 1# Or WL < D(IBEGIN) - PIVMIN And WU >= D(IBEGIN) - PIVMIN Then
+                M = M + 1#
+                w(M) = D(IBEGIN)
+                IBLOCK(M) = JB
+            End If
+        Else
+            
+            '
+            ' General Case -- IIN > 1
+            '
+            ' Compute Gershgorin Interval
+            ' and use it as the initial interval
+            '
+            GU = D(IBEGIN)
+            GL = D(IBEGIN)
+            TMP1 = 0#
+            For j = IBEGIN To IEND - 1# Step 1
+                Tmp2 = Abs(E(j))
+                GU = MaxReal(GU, D(j) + TMP1 + Tmp2)
+                GL = MinReal(GL, D(j) - TMP1 - Tmp2)
+                TMP1 = Tmp2
+            Next j
+            GU = MaxReal(GU, D(IEND) + TMP1)
+            GL = MinReal(GL, D(IEND) - TMP1)
+            BNorm = MaxReal(Abs(GL), Abs(GU))
+            GL = GL - FUDGE * BNorm * Ulp * IIN - FUDGE * PIVMIN
+            GU = GU + FUDGE * BNorm * Ulp * IIN + FUDGE * PIVMIN
+            
+            '
+            ' Compute ATOLI for the current submatrix
+            '
+            If ABSTOL <= 0# Then
+                ATOLI = Ulp * MaxReal(Abs(GL), Abs(GU))
+            Else
+                ATOLI = ABSTOL
+            End If
+            If IRANGE > 1# Then
+                If GU < WL Then
+                    NWL = NWL + IIN
+                    NWU = NWU + IIN
+                    GoTo Cont_6
+                End If
+                GL = MaxReal(GL, WL)
+                GU = MinReal(GU, WU)
+                If GL >= GU Then
+                    GoTo Cont_6
+                End If
+            End If
+            
+            '
+            ' Set Up Initial Interval
+            '
+            WORK(N + 1#) = GL
+            WORK(N + IIN + 1#) = GU
+            
+            '
+            ' Calling DLAEBZ
+            '
+            ' CALL DLAEBZ( 1, 0, IN, IN, 1, NB, ATOLI, RTOLI, PIVMIN,
+            '    D( IBEGIN ), E( IBEGIN ), WORK( IBEGIN ),
+            '    IDUMMA, WORK( N+1 ), WORK( N+2*IN+1 ), IM,
+            '    IWORK, W( M+1 ), IBLOCK( M+1 ), IINFO )
+            '
+            For TmpI = 1# To IIN Step 1
+                RA1SIIN(TmpI) = D(IBEGIN - 1# + TmpI)
+                If IBEGIN - 1# + TmpI < N Then
+                    RA2SIIN(TmpI) = E(IBEGIN - 1# + TmpI)
+                End If
+                RA3SIIN(TmpI) = WORK(IBEGIN - 1# + TmpI)
+                RA1SIINX2(TmpI, 1#) = WORK(N + TmpI)
+                RA1SIINX2(TmpI, 2#) = WORK(N + TmpI + IIN)
+                RA4SIIN(TmpI) = WORK(N + 2# * IIN + TmpI)
+                RWORKSPACE(TmpI) = w(M + TmpI)
+                IWORKSPACE(TmpI) = IBLOCK(M + TmpI)
+                IA1SIINX2(TmpI, 1#) = IWORK(TmpI)
+                IA1SIINX2(TmpI, 2#) = IWORK(TmpI + IIN)
+            Next TmpI
+            Call InternalDLAEBZ(1#, 0#, IIN, IIN, 1#, ATOLI, RTOLI, PIVMIN, RA1SIIN, RA2SIIN, RA3SIIN, IDUMMA, RA1SIINX2, RA4SIIN, IM, IA1SIINX2, RWORKSPACE, IWORKSPACE, IINFO)
+            For TmpI = 1# To IIN Step 1
+                WORK(N + TmpI) = RA1SIINX2(TmpI, 1#)
+                WORK(N + TmpI + IIN) = RA1SIINX2(TmpI, 2#)
+                WORK(N + 2# * IIN + TmpI) = RA4SIIN(TmpI)
+                w(M + TmpI) = RWORKSPACE(TmpI)
+                IBLOCK(M + TmpI) = IWORKSPACE(TmpI)
+                IWORK(TmpI) = IA1SIINX2(TmpI, 1#)
+                IWORK(TmpI + IIN) = IA1SIINX2(TmpI, 2#)
+            Next TmpI
+            NWL = NWL + IWORK(1#)
+            NWU = NWU + IWORK(IIN + 1#)
+            IWOFF = M - IWORK(1#)
+            
+            '
+            ' Compute Eigenvalues
+            '
+            ITMAX = Ceil((Log(GU - GL + PIVMIN) - Log(PIVMIN)) / Log(2#)) + 2#
+            
+            '
+            ' Calling DLAEBZ
+            '
+            'CALL DLAEBZ( 2, ITMAX, IN, IN, 1, NB, ATOLI, RTOLI, PIVMIN,
+            '    D( IBEGIN ), E( IBEGIN ), WORK( IBEGIN ),
+            '    IDUMMA, WORK( N+1 ), WORK( N+2*IN+1 ), IOUT,
+            '    IWORK, W( M+1 ), IBLOCK( M+1 ), IINFO )
+            '
+            For TmpI = 1# To IIN Step 1
+                RA1SIIN(TmpI) = D(IBEGIN - 1# + TmpI)
+                If IBEGIN - 1# + TmpI < N Then
+                    RA2SIIN(TmpI) = E(IBEGIN - 1# + TmpI)
+                End If
+                RA3SIIN(TmpI) = WORK(IBEGIN - 1# + TmpI)
+                RA1SIINX2(TmpI, 1#) = WORK(N + TmpI)
+                RA1SIINX2(TmpI, 2#) = WORK(N + TmpI + IIN)
+                RA4SIIN(TmpI) = WORK(N + 2# * IIN + TmpI)
+                RWORKSPACE(TmpI) = w(M + TmpI)
+                IWORKSPACE(TmpI) = IBLOCK(M + TmpI)
+                IA1SIINX2(TmpI, 1#) = IWORK(TmpI)
+                IA1SIINX2(TmpI, 2#) = IWORK(TmpI + IIN)
+            Next TmpI
+            Call InternalDLAEBZ(2#, ITMAX, IIN, IIN, 1#, ATOLI, RTOLI, PIVMIN, RA1SIIN, RA2SIIN, RA3SIIN, IDUMMA, RA1SIINX2, RA4SIIN, IOUT, IA1SIINX2, RWORKSPACE, IWORKSPACE, IINFO)
+            For TmpI = 1# To IIN Step 1
+                WORK(N + TmpI) = RA1SIINX2(TmpI, 1#)
+                WORK(N + TmpI + IIN) = RA1SIINX2(TmpI, 2#)
+                WORK(N + 2# * IIN + TmpI) = RA4SIIN(TmpI)
+                w(M + TmpI) = RWORKSPACE(TmpI)
+                IBLOCK(M + TmpI) = IWORKSPACE(TmpI)
+                IWORK(TmpI) = IA1SIINX2(TmpI, 1#)
+                IWORK(TmpI + IIN) = IA1SIINX2(TmpI, 2#)
+            Next TmpI
+            
+            '
+            ' Copy Eigenvalues Into W and IBLOCK
+            ' Use -JB for block number for unconverged eigenvalues.
+            '
+            For j = 1# To IOUT Step 1
+                TMP1 = 0.5 * (WORK(j + N) + WORK(j + IIN + N))
+                
+                '
+                ' Flag non-convergence.
+                '
+                If j > IOUT - IINFO Then
+                    NCNVRG = True
+                    IB = -JB
+                Else
+                    IB = JB
+                End If
+                For JE = IWORK(j) + 1# + IWOFF To IWORK(j + IIN) + IWOFF Step 1
+                    w(JE) = TMP1
+                    IBLOCK(JE) = IB
+                Next JE
+            Next j
+            M = M + IM
+        End If
+Cont_6:
+    Next JB
+    
+    '
+    ' If RANGE='I', then (WL,WU) contains eigenvalues NWL+1,...,NWU
+    ' If NWL+1 < IL or NWU > IU, discard extra eigenvalues.
+    '
+    If IRANGE = 3# Then
+        IM = 0#
+        IDISCL = IL - 1# - NWL
+        IDISCU = NWU - IU
+        If IDISCL > 0# Or IDISCU > 0# Then
+            For JE = 1# To M Step 1
+                If w(JE) <= WLU And IDISCL > 0# Then
+                    IDISCL = IDISCL - 1#
+                Else
+                    If w(JE) >= WUL And IDISCU > 0# Then
+                        IDISCU = IDISCU - 1#
+                    Else
+                        IM = IM + 1#
+                        w(IM) = w(JE)
+                        IBLOCK(IM) = IBLOCK(JE)
+                    End If
+                End If
+            Next JE
+            M = IM
+        End If
+        If IDISCL > 0# Or IDISCU > 0# Then
+            
+            '
+            ' Code to deal with effects of bad arithmetic:
+            ' Some low eigenvalues to be discarded are not in (WL,WLU],
+            ' or high eigenvalues to be discarded are not in (WUL,WU]
+            ' so just kill off the smallest IDISCL/largest IDISCU
+            ' eigenvalues, by simply finding the smallest/largest
+            ' eigenvalue(s).
+            '
+            ' (If N(w) is monotone non-decreasing, this should never
+            '  happen.)
+            '
+            If IDISCL > 0# Then
+                WKILL = WU
+                For JDISC = 1# To IDISCL Step 1
+                    IW = 0#
+                    For JE = 1# To M Step 1
+                        If IBLOCK(JE) <> 0# And (w(JE) < WKILL Or IW = 0#) Then
+                            IW = JE
+                            WKILL = w(JE)
+                        End If
+                    Next JE
+                    IBLOCK(IW) = 0#
+                Next JDISC
+            End If
+            If IDISCU > 0# Then
+                WKILL = WL
+                For JDISC = 1# To IDISCU Step 1
+                    IW = 0#
+                    For JE = 1# To M Step 1
+                        If IBLOCK(JE) <> 0# And (w(JE) > WKILL Or IW = 0#) Then
+                            IW = JE
+                            WKILL = w(JE)
+                        End If
+                    Next JE
+                    IBLOCK(IW) = 0#
+                Next JDISC
+            End If
+            IM = 0#
+            For JE = 1# To M Step 1
+                If IBLOCK(JE) <> 0# Then
+                    IM = IM + 1#
+                    w(IM) = w(JE)
+                    IBLOCK(IM) = IBLOCK(JE)
+                End If
+            Next JE
+            M = IM
+        End If
+        If IDISCL < 0# Or IDISCU < 0# Then
+            TOOFEW = True
+        End If
+    End If
+    
+    '
+    ' If ORDER='B', do nothing -- the eigenvalues are already sorted
+    '    by block.
+    ' If ORDER='E', sort the eigenvalues from smallest to largest
+    '
+    If IORDER = 1# And NSPLIT > 1# Then
+        For JE = 1# To M - 1# Step 1
+            IE = 0#
+            TMP1 = w(JE)
+            For j = JE + 1# To M Step 1
+                If w(j) < TMP1 Then
+                    IE = j
+                    TMP1 = w(j)
+                End If
+            Next j
+            If IE <> 0# Then
+                ITMP1 = IBLOCK(IE)
+                w(IE) = w(JE)
+                IBLOCK(IE) = IBLOCK(JE)
+                w(JE) = TMP1
+                IBLOCK(JE) = ITMP1
+            End If
+        Next JE
+    End If
+    For j = 1# To M Step 1
+        w(j) = w(j) * ScaleFactor
+    Next j
+    ErrorCode = 0#
+    If NCNVRG Then
+        ErrorCode = ErrorCode + 1#
+    End If
+    If TOOFEW Then
+        ErrorCode = ErrorCode + 2#
+    End If
+    Result = ErrorCode = 0#
+    InternalBisectionEigenValues = Result
+End Function
+Public Sub InternalDSTEIN(ByRef N As Long, _
+         ByRef D() As Double, _
+         ByRef E_() As Double, _
+         ByRef M As Long, _
+         ByRef W_() As Double, _
+         ByRef IBLOCK() As Long, _
+         ByRef ISPLIT() As Long, _
+         ByRef z() As Double, _
+         ByRef IFAIL() As Long, _
+         ByRef Info As Long)
+    Dim E() As Double
+    Dim w() As Double
+    Dim MaxIts As Long
+    Dim EXTRA As Long
+    Dim b1 As Long
+    Dim BLKSIZ As Long
+    Dim BN As Long
+    Dim GPIND As Long
+    Dim i As Long
+    Dim IINFO As Long
+    Dim ITS As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim JBLK As Long
+    Dim JMax As Long
+    Dim NBLK As Long
+    Dim NRMCHK As Long
+    Dim DTPCRT As Double
+    Dim Eps As Double
+    Dim EPS1 As Double
+    Dim Nrm As Double
+    Dim ONENRM As Double
+    Dim ORTOL As Double
+    Dim PERTOL As Double
+    Dim SCL As Double
+    Dim SEP As Double
+    Dim TOL As Double
+    Dim XJ As Double
+    Dim XJM As Double
+    Dim ZTR As Double
+    Dim WORK1() As Double
+    Dim WORK2() As Double
+    Dim WORK3() As Double
+    Dim WORK4() As Double
+    Dim WORK5() As Double
+    Dim IWORK() As Long
+    Dim TmpCriterion As Boolean
+    Dim TI As Long
+    Dim I1 As Long
+    Dim I2 As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    E = E_
+    w = W_
+    MaxIts = 5#
+    EXTRA = 2#
+    ReDim WORK1(1# To MaxInt(N, 1#))
+    ReDim WORK2(1# To MaxInt(N - 1#, 1#))
+    ReDim WORK3(1# To MaxInt(N, 1#))
+    ReDim WORK4(1# To MaxInt(N, 1#))
+    ReDim WORK5(1# To MaxInt(N, 1#))
+    ReDim IWORK(1# To MaxInt(N, 1#))
+    ReDim IFAIL(1# To MaxInt(M, 1#))
+    ReDim z(1# To MaxInt(N, 1#), 1# To MaxInt(M, 1#))
+    
+    '
+    ' Test the input parameters.
+    '
+    Info = 0#
+    For i = 1# To M Step 1
+        IFAIL(i) = 0#
+    Next i
+    If N < 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    If M < 0# Or M > N Then
+        Info = -4#
+        Exit Sub
+    End If
+    For j = 2# To M Step 1
+        If IBLOCK(j) < IBLOCK(j - 1#) Then
+            Info = -6#
+            Exit For
+        End If
+        If IBLOCK(j) = IBLOCK(j - 1#) And w(j) < w(j - 1#) Then
+            Info = -5#
+            Exit For
+        End If
+    Next j
+    If Info <> 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Quick return if possible
+    '
+    If N = 0# Or M = 0# Then
+        Exit Sub
+    End If
+    If N = 1# Then
+        z(1#, 1#) = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Some preparations
+    '
+    TI = N - 1#
+    For i_ = 1# To TI Step 1
+        WORK1(i_) = E(i_)
+    Next i_
+    ReDim E(1# To N)
+    For i_ = 1# To TI Step 1
+        E(i_) = WORK1(i_)
+    Next i_
+    For i_ = 1# To M Step 1
+        WORK1(i_) = w(i_)
+    Next i_
+    ReDim w(1# To N)
+    For i_ = 1# To M Step 1
+        w(i_) = WORK1(i_)
+    Next i_
+    
+    '
+    ' Get machine constants.
+    '
+    Eps = MachineEpsilon
+    
+    '
+    ' Compute eigenvectors of matrix blocks.
+    '
+    J1 = 1#
+    For NBLK = 1# To IBLOCK(M) Step 1
+        
+        '
+        ' Find starting and ending indices of block nblk.
+        '
+        If NBLK = 1# Then
+            b1 = 1#
+        Else
+            b1 = ISPLIT(NBLK - 1#) + 1#
+        End If
+        BN = ISPLIT(NBLK)
+        BLKSIZ = BN - b1 + 1#
+        If BLKSIZ <> 1# Then
+            
+            '
+            ' Compute reorthogonalization criterion and stopping criterion.
+            '
+            GPIND = b1
+            ONENRM = Abs(D(b1)) + Abs(E(b1))
+            ONENRM = MaxReal(ONENRM, Abs(D(BN)) + Abs(E(BN - 1#)))
+            For i = b1 + 1# To BN - 1# Step 1
+                ONENRM = MaxReal(ONENRM, Abs(D(i)) + Abs(E(i - 1#)) + Abs(E(i)))
+            Next i
+            ORTOL = 0.001 * ONENRM
+            DTPCRT = Sqr(0.1 / BLKSIZ)
+        End If
+        
+        '
+        ' Loop through eigenvalues of block nblk.
+        '
+        JBLK = 0#
+        For j = J1 To M Step 1
+            If IBLOCK(j) <> NBLK Then
+                J1 = j
+                Exit For
+            End If
+            JBLK = JBLK + 1#
+            XJ = w(j)
+            If BLKSIZ = 1# Then
+                
+                '
+                ' Skip all the work if the block size is one.
+                '
+                WORK1(1#) = 1#
+            Else
+                
+                '
+                ' If eigenvalues j and j-1 are too close, add a relatively
+                ' small perturbation.
+                '
+                If JBLK > 1# Then
+                    EPS1 = Abs(Eps * XJ)
+                    PERTOL = 10# * EPS1
+                    SEP = XJ - XJM
+                    If SEP < PERTOL Then
+                        XJ = XJM + PERTOL
+                    End If
+                End If
+                ITS = 0#
+                NRMCHK = 0#
+                
+                '
+                ' Get random starting vector.
+                '
+                For TI = 1# To BLKSIZ Step 1
+                    WORK1(TI) = 2# * Rnd() - 1#
+                Next TI
+                
+                '
+                ' Copy the matrix T so it won't be destroyed in factorization.
+                '
+                For TI = 1# To BLKSIZ - 1# Step 1
+                    WORK2(TI) = E(b1 + TI - 1#)
+                    WORK3(TI) = E(b1 + TI - 1#)
+                    WORK4(TI) = D(b1 + TI - 1#)
+                Next TI
+                WORK4(BLKSIZ) = D(b1 + BLKSIZ - 1#)
+                
+                '
+                ' Compute LU factors with partial pivoting  ( PT = LU )
+                '
+                TOL = 0#
+                Call TDINInternalDLAGTF(BLKSIZ, WORK4, XJ, WORK2, WORK3, TOL, WORK5, IWORK, IINFO)
+                
+                '
+                ' Update iteration count.
+                '
+                Do
+                    ITS = ITS + 1#
+                    If ITS > MaxIts Then
+                        
+                        '
+                        ' If stopping criterion was not satisfied, update info and
+                        ' store eigenvector number in array ifail.
+                        '
+                        Info = Info + 1#
+                        IFAIL(Info) = j
+                        Exit Do
+                    End If
+                    
+                    '
+                    ' Normalize and scale the righthand side vector Pb.
+                    '
+                    V = 0#
+                    For TI = 1# To BLKSIZ Step 1
+                        V = V + Abs(WORK1(TI))
+                    Next TI
+                    SCL = BLKSIZ * ONENRM * MaxReal(Eps, Abs(WORK4(BLKSIZ))) / V
+                    For i_ = 1# To BLKSIZ Step 1
+                        WORK1(i_) = SCL * WORK1(i_)
+                    Next i_
+                    
+                    '
+                    ' Solve the system LU = Pb.
+                    '
+                    Call TDINInternalDLAGTS(BLKSIZ, WORK4, WORK2, WORK3, WORK5, IWORK, WORK1, TOL, IINFO)
+                    
+                    '
+                    ' Reorthogonalize by modified Gram-Schmidt if eigenvalues are
+                    ' close enough.
+                    '
+                    If JBLK <> 1# Then
+                        If Abs(XJ - XJM) > ORTOL Then
+                            GPIND = j
+                        End If
+                        If GPIND <> j Then
+                            For i = GPIND To j - 1# Step 1
+                                I1 = b1
+                                I2 = b1 + BLKSIZ - 1#
+                                i1_ = (I1) - (1#)
+                                ZTR = 0#
+                                For i_ = 1# To BLKSIZ Step 1
+                                    ZTR = ZTR + WORK1(i_) * z(i_ + i1_, i)
+                                Next i_
+                                i1_ = (I1) - (1#)
+                                For i_ = 1# To BLKSIZ Step 1
+                                    WORK1(i_) = WORK1(i_) - ZTR * z(i_ + i1_, i)
+                                Next i_
+                            Next i
+                        End If
+                    End If
+                    
+                    '
+                    ' Check the infinity norm of the iterate.
+                    '
+                    JMax = VectorIdxAbsMax(WORK1, 1#, BLKSIZ)
+                    Nrm = Abs(WORK1(JMax))
+                    
+                    '
+                    ' Continue for additional iterations after norm reaches
+                    ' stopping criterion.
+                    '
+                    TmpCriterion = False
+                    If Nrm < DTPCRT Then
+                        TmpCriterion = True
+                    Else
+                        NRMCHK = NRMCHK + 1#
+                        If NRMCHK < EXTRA + 1# Then
+                            TmpCriterion = True
+                        End If
+                    End If
+                Loop Until Not TmpCriterion
+                
+                '
+                ' Accept iterate as jth eigenvector.
+                '
+                SCL = 1# / VectorNorm2(WORK1, 1#, BLKSIZ)
+                JMax = VectorIdxAbsMax(WORK1, 1#, BLKSIZ)
+                If WORK1(JMax) < 0# Then
+                    SCL = -SCL
+                End If
+                For i_ = 1# To BLKSIZ Step 1
+                    WORK1(i_) = SCL * WORK1(i_)
+                Next i_
+            End If
+            For i = 1# To N Step 1
+                z(i, j) = 0#
+            Next i
+            For i = 1# To BLKSIZ Step 1
+                z(b1 + i - 1#, j) = WORK1(i)
+            Next i
+            
+            '
+            ' Save the shift to check eigenvalue spacing at next
+            ' iteration.
+            '
+            XJM = XJ
+        Next j
+    Next NBLK
+End Sub
+Private Function TridiagonalEVD(ByRef D() As Double, _
+         ByRef E_() As Double, _
+         ByVal N As Long, _
+         ByVal ZNeeded As Long, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim E() As Double
+    Dim MAXIT As Long
+    Dim i As Long
+    Dim II As Long
+    Dim ISCALE As Long
+    Dim j As Long
+    Dim JTOT As Long
+    Dim K As Long
+    Dim T As Long
+    Dim L As Long
+    Dim L1 As Long
+    Dim LEND As Long
+    Dim LENDM1 As Long
+    Dim LENDP1 As Long
+    Dim LENDSV As Long
+    Dim LM1 As Long
+    Dim LSV As Long
+    Dim M As Long
+    Dim MM As Long
+    Dim MM1 As Long
+    Dim NM1 As Long
+    Dim NMAXIT As Long
+    Dim TmpInt As Long
+    Dim ANORM As Double
+    Dim B As Double
+    Dim C As Double
+    Dim Eps As Double
+    Dim EPS2 As Double
+    Dim F As Double
+    Dim G As Double
+    Dim p As Double
+    Dim R As Double
+    Dim RT1 As Double
+    Dim RT2 As Double
+    Dim S As Double
+    Dim SAFMAX As Double
+    Dim SAFMIN As Double
+    Dim SSFMAX As Double
+    Dim SSFMIN As Double
+    Dim TST As Double
+    Dim Tmp As Double
+    Dim WORK1() As Double
+    Dim WORK2() As Double
+    Dim WORKC() As Double
+    Dim WORKS() As Double
+    Dim WTemp() As Double
+    Dim GotoFlag As Boolean
+    Dim ZRows As Long
+    Dim WasTranspose As Boolean
+    Dim i_ As Long
+    E = E_
+    
+    '
+    ' Quick return if possible
+    '
+    If ZNeeded < 0# Or ZNeeded > 3# Then
+        Result = False
+        TridiagonalEVD = Result
+        Exit Function
+    End If
+    Result = True
+    If N = 0# Then
+        TridiagonalEVD = Result
+        Exit Function
+    End If
+    If N = 1# Then
+        If ZNeeded = 2# Or ZNeeded = 3# Then
+            ReDim z(1# To 1#, 1# To 1#)
+            z(1#, 1#) = 1#
+        End If
+        TridiagonalEVD = Result
+        Exit Function
+    End If
+    MAXIT = 30#
+    
+    '
+    ' Initialize arrays
+    '
+    ReDim WTemp(1# To N)
+    ReDim WORK1(1# To N - 1#)
+    ReDim WORK2(1# To N - 1#)
+    ReDim WORKC(1# To N)
+    ReDim WORKS(1# To N)
+    
+    '
+    ' Determine the unit roundoff and over/underflow thresholds.
+    '
+    Eps = MachineEpsilon
+    EPS2 = Square(Eps)
+    SAFMIN = MinRealNumber
+    SAFMAX = MaxRealNumber
+    SSFMAX = Sqr(SAFMAX) / 3#
+    SSFMIN = Sqr(SAFMIN) / EPS2
+    
+    '
+    ' Prepare Z
+    '
+    ' Here we are using transposition to get rid of column operations
+    '
+    '
+    WasTranspose = False
+    If ZNeeded = 0# Then
+        ZRows = 0#
+    End If
+    If ZNeeded = 1# Then
+        ZRows = N
+    End If
+    If ZNeeded = 2# Then
+        ZRows = N
+    End If
+    If ZNeeded = 3# Then
+        ZRows = 1#
+    End If
+    If ZNeeded = 1# Then
+        WasTranspose = True
+        Call InplaceTranspose(z, 1#, N, 1#, N, WTemp)
+    End If
+    If ZNeeded = 2# Then
+        WasTranspose = True
+        ReDim z(1# To N, 1# To N)
+        For i = 1# To N Step 1
+            For j = 1# To N Step 1
+                If i = j Then
+                    z(i, j) = 1#
+                Else
+                    z(i, j) = 0#
+                End If
+            Next j
+        Next i
+    End If
+    If ZNeeded = 3# Then
+        WasTranspose = False
+        ReDim z(1# To 1#, 1# To N)
+        For j = 1# To N Step 1
+            If j = 1# Then
+                z(1#, j) = 1#
+            Else
+                z(1#, j) = 0#
+            End If
+        Next j
+    End If
+    NMAXIT = N * MAXIT
+    JTOT = 0#
+    
+    '
+    ' Determine where the matrix splits and choose QL or QR iteration
+    ' for each block, according to whether top or bottom diagonal
+    ' element is smaller.
+    '
+    L1 = 1#
+    NM1 = N - 1#
+    Do While True
+        If L1 > N Then
+            Exit Do
+        End If
+        If L1 > 1# Then
+            E(L1 - 1#) = 0#
+        End If
+        GotoFlag = False
+        If L1 <= NM1 Then
+            For M = L1 To NM1 Step 1
+                TST = Abs(E(M))
+                If TST = 0# Then
+                    GotoFlag = True
+                    Exit For
+                End If
+                If TST <= Sqr(Abs(D(M))) * Sqr(Abs(D(M + 1#))) * Eps Then
+                    E(M) = 0#
+                    GotoFlag = True
+                    Exit For
+                End If
+            Next M
+        End If
+        If Not GotoFlag Then
+            M = N
+        End If
+        
+        '
+        ' label 30:
+        '
+        L = L1
+        LSV = L
+        LEND = M
+        LENDSV = LEND
+        L1 = M + 1#
+        If LEND = L Then
+            GoTo Cont_4
+        End If
+        
+        '
+        ' Scale submatrix in rows and columns L to LEND
+        '
+        If L = LEND Then
+            ANORM = Abs(D(L))
+        Else
+            ANORM = MaxReal(Abs(D(L)) + Abs(E(L)), Abs(E(LEND - 1#)) + Abs(D(LEND)))
+            For i = L + 1# To LEND - 1# Step 1
+                ANORM = MaxReal(ANORM, Abs(D(i)) + Abs(E(i)) + Abs(E(i - 1#)))
+            Next i
+        End If
+        ISCALE = 0#
+        If ANORM = 0# Then
+            GoTo Cont_4
+        End If
+        If ANORM > SSFMAX Then
+            ISCALE = 1#
+            Tmp = SSFMAX / ANORM
+            TmpInt = LEND - 1#
+            For i_ = L To LEND Step 1
+                D(i_) = Tmp * D(i_)
+            Next i_
+            For i_ = L To TmpInt Step 1
+                E(i_) = Tmp * E(i_)
+            Next i_
+        End If
+        If ANORM < SSFMIN Then
+            ISCALE = 2#
+            Tmp = SSFMIN / ANORM
+            TmpInt = LEND - 1#
+            For i_ = L To LEND Step 1
+                D(i_) = Tmp * D(i_)
+            Next i_
+            For i_ = L To TmpInt Step 1
+                E(i_) = Tmp * E(i_)
+            Next i_
+        End If
+        
+        '
+        ' Choose between QL and QR iteration
+        '
+        If Abs(D(LEND)) < Abs(D(L)) Then
+            LEND = LSV
+            L = LENDSV
+        End If
+        If LEND > L Then
+            
+            '
+            ' QL Iteration
+            '
+            ' Look for small subdiagonal element.
+            '
+            Do While True
+                GotoFlag = False
+                If L <> LEND Then
+                    LENDM1 = LEND - 1#
+                    For M = L To LENDM1 Step 1
+                        TST = Square(Abs(E(M)))
+                        If TST <= EPS2 * Abs(D(M)) * Abs(D(M + 1#)) + SAFMIN Then
+                            GotoFlag = True
+                            Exit For
+                        End If
+                    Next M
+                End If
+                If Not GotoFlag Then
+                    M = LEND
+                End If
+                If M < LEND Then
+                    E(M) = 0#
+                End If
+                p = D(L)
+                If M <> L Then
+                    
+                    '
+                    ' If remaining matrix is 2-by-2, use DLAE2 or SLAEV2
+                    ' to compute its eigensystem.
+                    '
+                    If M = L + 1# Then
+                        If ZNeeded > 0# Then
+                            Call TdEVDEV2(D(L), E(L), D(L + 1#), RT1, RT2, C, S)
+                            WORK1(L) = C
+                            WORK2(L) = S
+                            WORKC(1#) = WORK1(L)
+                            WORKS(1#) = WORK2(L)
+                            If Not WasTranspose Then
+                                Call ApplyRotationsFromTheRight(False, 1#, ZRows, L, L + 1#, WORKC, WORKS, z, WTemp)
+                            Else
+                                Call ApplyRotationsFromTheLeft(False, L, L + 1#, 1#, ZRows, WORKC, WORKS, z, WTemp)
+                            End If
+                        Else
+                            Call TdEVDE2(D(L), E(L), D(L + 1#), RT1, RT2)
+                        End If
+                        D(L) = RT1
+                        D(L + 1#) = RT2
+                        E(L) = 0#
+                        L = L + 2#
+                        If L <= LEND Then
+                            GoTo Cont_7
+                        End If
+                        
+                        '
+                        ' GOTO 140
+                        '
+                        Exit Do
+                    End If
+                    If JTOT = NMAXIT Then
+                        
+                        '
+                        ' GOTO 140
+                        '
+                        Exit Do
+                    End If
+                    JTOT = JTOT + 1#
+                    
+                    '
+                    ' Form shift.
+                    '
+                    G = (D(L + 1#) - p) / (2# * E(L))
+                    R = TdEVDPythag(G, 1#)
+                    G = D(M) - p + E(L) / (G + TdEVDExtSign(R, G))
+                    S = 1#
+                    C = 1#
+                    p = 0#
+                    
+                    '
+                    ' Inner loop
+                    '
+                    MM1 = M - 1#
+                    For i = MM1 To L Step -1
+                        F = S * E(i)
+                        B = C * E(i)
+                        Call GenerateRotation(G, F, C, S, R)
+                        If i <> M - 1# Then
+                            E(i + 1#) = R
+                        End If
+                        G = D(i + 1#) - p
+                        R = (D(i) - G) * S + 2# * C * B
+                        p = S * R
+                        D(i + 1#) = G + p
+                        G = C * R - B
+                        
+                        '
+                        ' If eigenvectors are desired, then save rotations.
+                        '
+                        If ZNeeded > 0# Then
+                            WORK1(i) = C
+                            WORK2(i) = -S
+                        End If
+                    Next i
+                    
+                    '
+                    ' If eigenvectors are desired, then apply saved rotations.
+                    '
+                    If ZNeeded > 0# Then
+                        For i = L To M - 1# Step 1
+                            WORKC(i - L + 1#) = WORK1(i)
+                            WORKS(i - L + 1#) = WORK2(i)
+                        Next i
+                        If Not WasTranspose Then
+                            Call ApplyRotationsFromTheRight(False, 1#, ZRows, L, M, WORKC, WORKS, z, WTemp)
+                        Else
+                            Call ApplyRotationsFromTheLeft(False, L, M, 1#, ZRows, WORKC, WORKS, z, WTemp)
+                        End If
+                    End If
+                    D(L) = D(L) - p
+                    E(L) = G
+                    GoTo Cont_7
+                End If
+                
+                '
+                ' Eigenvalue found.
+                '
+                D(L) = p
+                L = L + 1#
+                If L <= LEND Then
+                    GoTo Cont_7
+                End If
+                Exit Do
+Cont_7:
+            Loop
+        Else
+            
+            '
+            ' QR Iteration
+            '
+            ' Look for small superdiagonal element.
+            '
+            Do While True
+                GotoFlag = False
+                If L <> LEND Then
+                    LENDP1 = LEND + 1#
+                    For M = L To LENDP1 Step -1
+                        TST = Square(Abs(E(M - 1#)))
+                        If TST <= EPS2 * Abs(D(M)) * Abs(D(M - 1#)) + SAFMIN Then
+                            GotoFlag = True
+                            Exit For
+                        End If
+                    Next M
+                End If
+                If Not GotoFlag Then
+                    M = LEND
+                End If
+                If M > LEND Then
+                    E(M - 1#) = 0#
+                End If
+                p = D(L)
+                If M <> L Then
+                    
+                    '
+                    ' If remaining matrix is 2-by-2, use DLAE2 or SLAEV2
+                    ' to compute its eigensystem.
+                    '
+                    If M = L - 1# Then
+                        If ZNeeded > 0# Then
+                            Call TdEVDEV2(D(L - 1#), E(L - 1#), D(L), RT1, RT2, C, S)
+                            WORK1(M) = C
+                            WORK2(M) = S
+                            WORKC(1#) = C
+                            WORKS(1#) = S
+                            If Not WasTranspose Then
+                                Call ApplyRotationsFromTheRight(True, 1#, ZRows, L - 1#, L, WORKC, WORKS, z, WTemp)
+                            Else
+                                Call ApplyRotationsFromTheLeft(True, L - 1#, L, 1#, ZRows, WORKC, WORKS, z, WTemp)
+                            End If
+                        Else
+                            Call TdEVDE2(D(L - 1#), E(L - 1#), D(L), RT1, RT2)
+                        End If
+                        D(L - 1#) = RT1
+                        D(L) = RT2
+                        E(L - 1#) = 0#
+                        L = L - 2#
+                        If L >= LEND Then
+                            GoTo Cont_11
+                        End If
+                        Exit Do
+                    End If
+                    If JTOT = NMAXIT Then
+                        Exit Do
+                    End If
+                    JTOT = JTOT + 1#
+                    
+                    '
+                    ' Form shift.
+                    '
+                    G = (D(L - 1#) - p) / (2# * E(L - 1#))
+                    R = TdEVDPythag(G, 1#)
+                    G = D(M) - p + E(L - 1#) / (G + TdEVDExtSign(R, G))
+                    S = 1#
+                    C = 1#
+                    p = 0#
+                    
+                    '
+                    ' Inner loop
+                    '
+                    LM1 = L - 1#
+                    For i = M To LM1 Step 1
+                        F = S * E(i)
+                        B = C * E(i)
+                        Call GenerateRotation(G, F, C, S, R)
+                        If i <> M Then
+                            E(i - 1#) = R
+                        End If
+                        G = D(i) - p
+                        R = (D(i + 1#) - G) * S + 2# * C * B
+                        p = S * R
+                        D(i) = G + p
+                        G = C * R - B
+                        
+                        '
+                        ' If eigenvectors are desired, then save rotations.
+                        '
+                        If ZNeeded > 0# Then
+                            WORK1(i) = C
+                            WORK2(i) = S
+                        End If
+                    Next i
+                    
+                    '
+                    ' If eigenvectors are desired, then apply saved rotations.
+                    '
+                    If ZNeeded > 0# Then
+                        MM = L - M + 1#
+                        For i = M To L - 1# Step 1
+                            WORKC(i - M + 1#) = WORK1(i)
+                            WORKS(i - M + 1#) = WORK2(i)
+                        Next i
+                        If Not WasTranspose Then
+                            Call ApplyRotationsFromTheRight(True, 1#, ZRows, M, L, WORKC, WORKS, z, WTemp)
+                        Else
+                            Call ApplyRotationsFromTheLeft(True, M, L, 1#, ZRows, WORKC, WORKS, z, WTemp)
+                        End If
+                    End If
+                    D(L) = D(L) - p
+                    E(LM1) = G
+                    GoTo Cont_11
+                End If
+                
+                '
+                ' Eigenvalue found.
+                '
+                D(L) = p
+                L = L - 1#
+                If L >= LEND Then
+                    GoTo Cont_11
+                End If
+                Exit Do
+Cont_11:
+            Loop
+        End If
+        
+        '
+        ' Undo scaling if necessary
+        '
+        If ISCALE = 1# Then
+            Tmp = ANORM / SSFMAX
+            TmpInt = LENDSV - 1#
+            For i_ = LSV To LENDSV Step 1
+                D(i_) = Tmp * D(i_)
+            Next i_
+            For i_ = LSV To TmpInt Step 1
+                E(i_) = Tmp * E(i_)
+            Next i_
+        End If
+        If ISCALE = 2# Then
+            Tmp = ANORM / SSFMIN
+            TmpInt = LENDSV - 1#
+            For i_ = LSV To LENDSV Step 1
+                D(i_) = Tmp * D(i_)
+            Next i_
+            For i_ = LSV To TmpInt Step 1
+                E(i_) = Tmp * E(i_)
+            Next i_
+        End If
+        
+        '
+        ' Check for no convergence to an eigenvalue after a total
+        ' of N*MAXIT iterations.
+        '
+        If JTOT >= NMAXIT Then
+            Result = False
+            If WasTranspose Then
+                Call InplaceTranspose(z, 1#, N, 1#, N, WTemp)
+            End If
+            TridiagonalEVD = Result
+            Exit Function
+        End If
+Cont_4:
+    Loop
+    
+    '
+    ' Order eigenvalues and eigenvectors.
+    '
+    If ZNeeded = 0# Then
+        
+        '
+        ' Sort
+        '
+        If N = 1# Then
+            TridiagonalEVD = Result
+            Exit Function
+        End If
+        If N = 2# Then
+            If D(1#) > D(2#) Then
+                Tmp = D(1#)
+                D(1#) = D(2#)
+                D(2#) = Tmp
+            End If
+            TridiagonalEVD = Result
+            Exit Function
+        End If
+        i = 2#
+        Do
+            T = i
+            Do While T <> 1#
+                K = T \ 2#
+                If D(K) >= D(T) Then
+                    T = 1#
+                Else
+                    Tmp = D(K)
+                    D(K) = D(T)
+                    D(T) = Tmp
+                    T = K
+                End If
+            Loop
+            i = i + 1#
+        Loop Until Not i <= N
+        i = N - 1#
+        Do
+            Tmp = D(i + 1#)
+            D(i + 1#) = D(1#)
+            D(1#) = Tmp
+            T = 1#
+            Do While T <> 0#
+                K = 2# * T
+                If K > i Then
+                    T = 0#
+                Else
+                    If K < i Then
+                        If D(K + 1#) > D(K) Then
+                            K = K + 1#
+                        End If
+                    End If
+                    If D(T) >= D(K) Then
+                        T = 0#
+                    Else
+                        Tmp = D(K)
+                        D(K) = D(T)
+                        D(T) = Tmp
+                        T = K
+                    End If
+                End If
+            Loop
+            i = i - 1#
+        Loop Until Not i >= 1#
+    Else
+        
+        '
+        ' Use Selection Sort to minimize swaps of eigenvectors
+        '
+        For II = 2# To N Step 1
+            i = II - 1#
+            K = i
+            p = D(i)
+            For j = II To N Step 1
+                If D(j) < p Then
+                    K = j
+                    p = D(j)
+                End If
+            Next j
+            If K <> i Then
+                D(K) = D(i)
+                D(i) = p
+                If WasTranspose Then
+                    For i_ = 1# To N Step 1
+                        WTemp(i_) = z(i, i_)
+                    Next i_
+                    For i_ = 1# To N Step 1
+                        z(i, i_) = z(K, i_)
+                    Next i_
+                    For i_ = 1# To N Step 1
+                        z(K, i_) = WTemp(i_)
+                    Next i_
+                Else
+                    For i_ = 1# To ZRows Step 1
+                        WTemp(i_) = z(i_, i)
+                    Next i_
+                    For i_ = 1# To ZRows Step 1
+                        z(i_, i) = z(i_, K)
+                    Next i_
+                    For i_ = 1# To ZRows Step 1
+                        z(i_, K) = WTemp(i_)
+                    Next i_
+                End If
+            End If
+        Next II
+        If WasTranspose Then
+            Call InplaceTranspose(z, 1#, N, 1#, N, WTemp)
+        End If
+    End If
+    TridiagonalEVD = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'DLAE2  computes the eigenvalues of a 2-by-2 symmetric matrix
+'   [  A   B  ]
+'   [  B   C  ].
+'On return, RT1 is the eigenvalue of larger absolute value, and RT2
+'is the eigenvalue of smaller absolute value.
+'
+'  -- LAPACK auxiliary routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     October 31, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub TdEVDE2(ByRef A As Double, _
+         ByRef B As Double, _
+         ByRef C As Double, _
+         ByRef RT1 As Double, _
+         ByRef RT2 As Double)
+    Dim AB As Double
+    Dim ACMN As Double
+    Dim ACMX As Double
+    Dim ADF As Double
+    Dim DF As Double
+    Dim RT As Double
+    Dim SM As Double
+    Dim TB As Double
+    SM = A + C
+    DF = A - C
+    ADF = Abs(DF)
+    TB = B + B
+    AB = Abs(TB)
+    If Abs(A) > Abs(C) Then
+        ACMX = A
+        ACMN = C
+    Else
+        ACMX = C
+        ACMN = A
+    End If
+    If ADF > AB Then
+        RT = ADF * Sqr(1# + Square(AB / ADF))
+    Else
+        If ADF < AB Then
+            RT = AB * Sqr(1# + Square(ADF / AB))
+        Else
+            
+            '
+            ' Includes case AB=ADF=0
+            '
+            RT = AB * Sqr(2#)
+        End If
+    End If
+    If SM < 0# Then
+        RT1 = 0.5 * (SM - RT)
+        
+        '
+        ' Order of execution important.
+        ' To get fully accurate smaller eigenvalue,
+        ' next line needs to be executed in higher precision.
+        '
+        RT2 = ACMX / RT1 * ACMN - B / RT1 * B
+    Else
+        If SM > 0# Then
+            RT1 = 0.5 * (SM + RT)
+            
+            '
+            ' Order of execution important.
+            ' To get fully accurate smaller eigenvalue,
+            ' next line needs to be executed in higher precision.
+            '
+            RT2 = ACMX / RT1 * ACMN - B / RT1 * B
+        Else
+            
+            '
+            ' Includes case RT1 = RT2 = 0
+            '
+            RT1 = 0.5 * RT
+            RT2 = -(0.5 * RT)
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'DLAEV2 computes the eigendecomposition of a 2-by-2 symmetric matrix
+'
+'   [  A   B  ]
+'   [  B   C  ].
+'
+'On return, RT1 is the eigenvalue of larger absolute value, RT2 is the
+'eigenvalue of smaller absolute value, and (CS1,SN1) is the unit right
+'eigenvector for RT1, giving the decomposition
+'
+'   [ CS1  SN1 ] [  A   B  ] [ CS1 -SN1 ]  =  [ RT1  0  ]
+'   [-SN1  CS1 ] [  B   C  ] [ SN1  CS1 ]     [  0  RT2 ].
+'
+'
+'  -- LAPACK auxiliary routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     October 31, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub TdEVDEV2(ByRef A As Double, _
+         ByRef B As Double, _
+         ByRef C As Double, _
+         ByRef RT1 As Double, _
+         ByRef RT2 As Double, _
+         ByRef CS1 As Double, _
+         ByRef SN1 As Double)
+    Dim SGN1 As Long
+    Dim SGN2 As Long
+    Dim AB As Double
+    Dim ACMN As Double
+    Dim ACMX As Double
+    Dim ACS As Double
+    Dim ADF As Double
+    Dim CS As Double
+    Dim CT As Double
+    Dim DF As Double
+    Dim RT As Double
+    Dim SM As Double
+    Dim TB As Double
+    Dim TN As Double
+    
+    '
+    ' Compute the eigenvalues
+    '
+    SM = A + C
+    DF = A - C
+    ADF = Abs(DF)
+    TB = B + B
+    AB = Abs(TB)
+    If Abs(A) > Abs(C) Then
+        ACMX = A
+        ACMN = C
+    Else
+        ACMX = C
+        ACMN = A
+    End If
+    If ADF > AB Then
+        RT = ADF * Sqr(1# + Square(AB / ADF))
+    Else
+        If ADF < AB Then
+            RT = AB * Sqr(1# + Square(ADF / AB))
+        Else
+            
+            '
+            ' Includes case AB=ADF=0
+            '
+            RT = AB * Sqr(2#)
+        End If
+    End If
+    If SM < 0# Then
+        RT1 = 0.5 * (SM - RT)
+        SGN1 = -1#
+        
+        '
+        ' Order of execution important.
+        ' To get fully accurate smaller eigenvalue,
+        ' next line needs to be executed in higher precision.
+        '
+        RT2 = ACMX / RT1 * ACMN - B / RT1 * B
+    Else
+        If SM > 0# Then
+            RT1 = 0.5 * (SM + RT)
+            SGN1 = 1#
+            
+            '
+            ' Order of execution important.
+            ' To get fully accurate smaller eigenvalue,
+            ' next line needs to be executed in higher precision.
+            '
+            RT2 = ACMX / RT1 * ACMN - B / RT1 * B
+        Else
+            
+            '
+            ' Includes case RT1 = RT2 = 0
+            '
+            RT1 = 0.5 * RT
+            RT2 = -(0.5 * RT)
+            SGN1 = 1#
+        End If
+    End If
+    
+    '
+    ' Compute the eigenvector
+    '
+    If DF >= 0# Then
+        CS = DF + RT
+        SGN2 = 1#
+    Else
+        CS = DF - RT
+        SGN2 = -1#
+    End If
+    ACS = Abs(CS)
+    If ACS > AB Then
+        CT = -(TB / CS)
+        SN1 = 1# / Sqr(1# + CT * CT)
+        CS1 = CT * SN1
+    Else
+        If AB = 0# Then
+            CS1 = 1#
+            SN1 = 0#
+        Else
+            TN = -(CS / TB)
+            CS1 = 1# / Sqr(1# + TN * TN)
+            SN1 = TN * CS1
+        End If
+    End If
+    If SGN1 = SGN2 Then
+        TN = CS1
+        CS1 = -SN1
+        SN1 = TN
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal routine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function TdEVDPythag(ByVal A As Double, ByVal B As Double) As Double
+    Dim Result As Double
+    If Abs(A) < Abs(B) Then
+        Result = Abs(B) * Sqr(1# + Square(A / B))
+    Else
+        Result = Abs(A) * Sqr(1# + Square(B / A))
+    End If
+    TdEVDPythag = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal routine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function TdEVDExtSign(ByVal A As Double, ByVal B As Double) As Double
+    Dim Result As Double
+    If B >= 0# Then
+        Result = Abs(A)
+    Else
+        Result = -Abs(A)
+    End If
+    TdEVDExtSign = Result
+End Function
+Private Sub TDINInternalDLAGTF(ByRef N As Long, _
+         ByRef A() As Double, _
+         ByRef Lambda As Double, _
+         ByRef B() As Double, _
+         ByRef C() As Double, _
+         ByRef TOL As Double, _
+         ByRef D() As Double, _
+         ByRef IIN() As Long, _
+         ByRef Info As Long)
+    Dim K As Long
+    Dim Eps As Double
+    Dim MULT As Double
+    Dim PIV1 As Double
+    Dim PIV2 As Double
+    Dim SCALE1 As Double
+    Dim SCALE2 As Double
+    Dim temp As Double
+    Dim TL As Double
+    Info = 0#
+    If N < 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    If N = 0# Then
+        Exit Sub
+    End If
+    A(1#) = A(1#) - Lambda
+    IIN(N) = 0#
+    If N = 1# Then
+        If A(1#) = 0# Then
+            IIN(1#) = 1#
+        End If
+        Exit Sub
+    End If
+    Eps = MachineEpsilon
+    TL = MaxReal(TOL, Eps)
+    SCALE1 = Abs(A(1#)) + Abs(B(1#))
+    For K = 1# To N - 1# Step 1
+        A(K + 1#) = A(K + 1#) - Lambda
+        SCALE2 = Abs(C(K)) + Abs(A(K + 1#))
+        If K < N - 1# Then
+            SCALE2 = SCALE2 + Abs(B(K + 1#))
+        End If
+        If A(K) = 0# Then
+            PIV1 = 0#
+        Else
+            PIV1 = Abs(A(K)) / SCALE1
+        End If
+        If C(K) = 0# Then
+            IIN(K) = 0#
+            PIV2 = 0#
+            SCALE1 = SCALE2
+            If K < N - 1# Then
+                D(K) = 0#
+            End If
+        Else
+            PIV2 = Abs(C(K)) / SCALE2
+            If PIV2 <= PIV1 Then
+                IIN(K) = 0#
+                SCALE1 = SCALE2
+                C(K) = C(K) / A(K)
+                A(K + 1#) = A(K + 1#) - C(K) * B(K)
+                If K < N - 1# Then
+                    D(K) = 0#
+                End If
+            Else
+                IIN(K) = 1#
+                MULT = A(K) / C(K)
+                A(K) = C(K)
+                temp = A(K + 1#)
+                A(K + 1#) = B(K) - MULT * temp
+                If K < N - 1# Then
+                    D(K) = B(K + 1#)
+                    B(K + 1#) = -(MULT * D(K))
+                End If
+                B(K) = temp
+                C(K) = MULT
+            End If
+        End If
+        If MaxReal(PIV1, PIV2) <= TL And IIN(N) = 0# Then
+            IIN(N) = K
+        End If
+    Next K
+    If Abs(A(N)) <= SCALE1 * TL And IIN(N) = 0# Then
+        IIN(N) = N
+    End If
+End Sub
+Private Sub TDINInternalDLAGTS(ByRef N As Long, _
+         ByRef A() As Double, _
+         ByRef B() As Double, _
+         ByRef C() As Double, _
+         ByRef D() As Double, _
+         ByRef IIN() As Long, _
+         ByRef y() As Double, _
+         ByRef TOL As Double, _
+         ByRef Info As Long)
+    Dim K As Long
+    Dim ABSAK As Double
+    Dim AK As Double
+    Dim BIGNUM As Double
+    Dim Eps As Double
+    Dim PERT As Double
+    Dim SFMIN As Double
+    Dim temp As Double
+    Info = 0#
+    If N < 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    If N = 0# Then
+        Exit Sub
+    End If
+    Eps = MachineEpsilon
+    SFMIN = MinRealNumber
+    BIGNUM = 1# / SFMIN
+    If TOL <= 0# Then
+        TOL = Abs(A(1#))
+        If N > 1# Then
+            TOL = MaxReal(TOL, MaxReal(Abs(A(2#)), Abs(B(1#))))
+        End If
+        For K = 3# To N Step 1
+            TOL = MaxReal(TOL, MaxReal(Abs(A(K)), MaxReal(Abs(B(K - 1#)), Abs(D(K - 2#)))))
+        Next K
+        TOL = TOL * Eps
+        If TOL = 0# Then
+            TOL = Eps
+        End If
+    End If
+    For K = 2# To N Step 1
+        If IIN(K - 1#) = 0# Then
+            y(K) = y(K) - C(K - 1#) * y(K - 1#)
+        Else
+            temp = y(K - 1#)
+            y(K - 1#) = y(K)
+            y(K) = temp - C(K - 1#) * y(K)
+        End If
+    Next K
+    For K = N To 1# Step -1
+        If K <= N - 2# Then
+            temp = y(K) - B(K) * y(K + 1#) - D(K) * y(K + 2#)
+        Else
+            If K = N - 1# Then
+                temp = y(K) - B(K) * y(K + 1#)
+            Else
+                temp = y(K)
+            End If
+        End If
+        AK = A(K)
+        PERT = Abs(TOL)
+        If AK < 0# Then
+            PERT = -PERT
+        End If
+        Do While True
+            ABSAK = Abs(AK)
+            If ABSAK < 1# Then
+                If ABSAK < SFMIN Then
+                    If ABSAK = 0# Or Abs(temp) * SFMIN > ABSAK Then
+                        AK = AK + PERT
+                        PERT = 2# * PERT
+                        GoTo Cont_4
+                    Else
+                        temp = temp * BIGNUM
+                        AK = AK * BIGNUM
+                    End If
+                Else
+                    If Abs(temp) > ABSAK * BIGNUM Then
+                        AK = AK + PERT
+                        PERT = 2# * PERT
+                        GoTo Cont_4
+                    End If
+                End If
+            End If
+            Exit Do
+Cont_4:
+        Loop
+        y(K) = temp / AK
+    Next K
+End Sub
+Private Sub InternalDLAEBZ(ByRef IJOB As Long, _
+         ByRef NITMAX As Long, _
+         ByRef N As Long, _
+         ByRef MMAX As Long, _
+         ByRef MINP As Long, _
+         ByRef ABSTOL As Double, _
+         ByRef RELTOL As Double, _
+         ByRef PIVMIN As Double, _
+         ByRef D() As Double, _
+         ByRef E() As Double, _
+         ByRef E2() As Double, _
+         ByRef NVAL() As Long, _
+         ByRef AB() As Double, _
+         ByRef C() As Double, _
+         ByRef MOUT As Long, _
+         ByRef NAB() As Long, _
+         ByRef WORK() As Double, _
+         ByRef IWORK() As Long, _
+         ByRef Info As Long)
+    Dim ITMP1 As Long
+    Dim ITMP2 As Long
+    Dim j As Long
+    Dim JI As Long
+    Dim JIT As Long
+    Dim JP As Long
+    Dim KF As Long
+    Dim KFNEW As Long
+    Dim KL As Long
+    Dim KLNEW As Long
+    Dim TMP1 As Double
+    Dim Tmp2 As Double
+    Info = 0#
+    If IJOB < 1# Or IJOB > 3# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' Initialize NAB
+    '
+    If IJOB = 1# Then
+        
+        '
+        ' Compute the number of eigenvalues in the initial intervals.
+        '
+        MOUT = 0#
+        
+        '
+        'DIR$ NOVECTOR
+        '
+        For JI = 1# To MINP Step 1
+            For JP = 1# To 2# Step 1
+                TMP1 = D(1#) - AB(JI, JP)
+                If Abs(TMP1) < PIVMIN Then
+                    TMP1 = -PIVMIN
+                End If
+                NAB(JI, JP) = 0#
+                If TMP1 <= 0# Then
+                    NAB(JI, JP) = 1#
+                End If
+                For j = 2# To N Step 1
+                    TMP1 = D(j) - E2(j - 1#) / TMP1 - AB(JI, JP)
+                    If Abs(TMP1) < PIVMIN Then
+                        TMP1 = -PIVMIN
+                    End If
+                    If TMP1 <= 0# Then
+                        NAB(JI, JP) = NAB(JI, JP) + 1#
+                    End If
+                Next j
+            Next JP
+            MOUT = MOUT + NAB(JI, 2#) - NAB(JI, 1#)
+        Next JI
+        Exit Sub
+    End If
+    
+    '
+    ' Initialize for loop
+    '
+    ' KF and KL have the following meaning:
+    '   Intervals 1,...,KF-1 have converged.
+    '   Intervals KF,...,KL  still need to be refined.
+    '
+    KF = 1#
+    KL = MINP
+    
+    '
+    ' If IJOB=2, initialize C.
+    ' If IJOB=3, use the user-supplied starting point.
+    '
+    If IJOB = 2# Then
+        For JI = 1# To MINP Step 1
+            C(JI) = 0.5 * (AB(JI, 1#) + AB(JI, 2#))
+        Next JI
+    End If
+    
+    '
+    ' Iteration loop
+    '
+    For JIT = 1# To NITMAX Step 1
+        
+        '
+        ' Loop over intervals
+        '
+        '
+        ' Serial Version of the loop
+        '
+        KLNEW = KL
+        For JI = KF To KL Step 1
+            
+            '
+            ' Compute N(w), the number of eigenvalues less than w
+            '
+            TMP1 = C(JI)
+            Tmp2 = D(1#) - TMP1
+            ITMP1 = 0#
+            If Tmp2 <= PIVMIN Then
+                ITMP1 = 1#
+                Tmp2 = MinReal(Tmp2, -PIVMIN)
+            End If
+            
+            '
+            ' A series of compiler directives to defeat vectorization
+            ' for the next loop
+            '
+            '*$PL$ CMCHAR=' '
+            'CDIR$          NEXTSCALAR
+            'C$DIR          SCALAR
+            'CDIR$          NEXT SCALAR
+            'CVD$L          NOVECTOR
+            'CDEC$          NOVECTOR
+            'CVD$           NOVECTOR
+            '*VDIR          NOVECTOR
+            '*VOCL          LOOP,SCALAR
+            'CIBM           PREFER SCALAR
+            '*$PL$ CMCHAR='*'
+            '
+            For j = 2# To N Step 1
+                Tmp2 = D(j) - E2(j - 1#) / Tmp2 - TMP1
+                If Tmp2 <= PIVMIN Then
+                    ITMP1 = ITMP1 + 1#
+                    Tmp2 = MinReal(Tmp2, -PIVMIN)
+                End If
+            Next j
+            If IJOB <= 2# Then
+                
+                '
+                ' IJOB=2: Choose all intervals containing eigenvalues.
+                '
+                ' Insure that N(w) is monotone
+                '
+                ITMP1 = MinInt(NAB(JI, 2#), MaxInt(NAB(JI, 1#), ITMP1))
+                
+                '
+                ' Update the Queue -- add intervals if both halves
+                ' contain eigenvalues.
+                '
+                If ITMP1 = NAB(JI, 2#) Then
+                    
+                    '
+                    ' No eigenvalue in the upper interval:
+                    ' just use the lower interval.
+                    '
+                    AB(JI, 2#) = TMP1
+                Else
+                    If ITMP1 = NAB(JI, 1#) Then
+                        
+                        '
+                        ' No eigenvalue in the lower interval:
+                        ' just use the upper interval.
+                        '
+                        AB(JI, 1#) = TMP1
+                    Else
+                        If KLNEW < MMAX Then
+                            
+                            '
+                            ' Eigenvalue in both intervals -- add upper to queue.
+                            '
+                            KLNEW = KLNEW + 1#
+                            AB(KLNEW, 2#) = AB(JI, 2#)
+                            NAB(KLNEW, 2#) = NAB(JI, 2#)
+                            AB(KLNEW, 1#) = TMP1
+                            NAB(KLNEW, 1#) = ITMP1
+                            AB(JI, 2#) = TMP1
+                            NAB(JI, 2#) = ITMP1
+                        Else
+                            Info = MMAX + 1#
+                            Exit Sub
+                        End If
+                    End If
+                End If
+            Else
+                
+                '
+                ' IJOB=3: Binary search.  Keep only the interval
+                ' containing  w  s.t. N(w) = NVAL
+                '
+                If ITMP1 <= NVAL(JI) Then
+                    AB(JI, 1#) = TMP1
+                    NAB(JI, 1#) = ITMP1
+                End If
+                If ITMP1 >= NVAL(JI) Then
+                    AB(JI, 2#) = TMP1
+                    NAB(JI, 2#) = ITMP1
+                End If
+            End If
+        Next JI
+        KL = KLNEW
+        
+        '
+        ' Check for convergence
+        '
+        KFNEW = KF
+        For JI = KF To KL Step 1
+            TMP1 = Abs(AB(JI, 2#) - AB(JI, 1#))
+            Tmp2 = MaxReal(Abs(AB(JI, 2#)), Abs(AB(JI, 1#)))
+            If TMP1 < MaxReal(ABSTOL, MaxReal(PIVMIN, RELTOL * Tmp2)) Or NAB(JI, 1#) >= NAB(JI, 2#) Then
+                
+                '
+                ' Converged -- Swap with position KFNEW,
+                ' then increment KFNEW
+                '
+                If JI > KFNEW Then
+                    TMP1 = AB(JI, 1#)
+                    Tmp2 = AB(JI, 2#)
+                    ITMP1 = NAB(JI, 1#)
+                    ITMP2 = NAB(JI, 2#)
+                    AB(JI, 1#) = AB(KFNEW, 1#)
+                    AB(JI, 2#) = AB(KFNEW, 2#)
+                    NAB(JI, 1#) = NAB(KFNEW, 1#)
+                    NAB(JI, 2#) = NAB(KFNEW, 2#)
+                    AB(KFNEW, 1#) = TMP1
+                    AB(KFNEW, 2#) = Tmp2
+                    NAB(KFNEW, 1#) = ITMP1
+                    NAB(KFNEW, 2#) = ITMP2
+                    If IJOB = 3# Then
+                        ITMP1 = NVAL(JI)
+                        NVAL(JI) = NVAL(KFNEW)
+                        NVAL(KFNEW) = ITMP1
+                    End If
+                End If
+                KFNEW = KFNEW + 1#
+            End If
+        Next JI
+        KF = KFNEW
+        
+        '
+        ' Choose Midpoints
+        '
+        For JI = KF To KL Step 1
+            C(JI) = 0.5 * (AB(JI, 1#) + AB(JI, 2#))
+        Next JI
+        
+        '
+        ' If no more intervals to refine, quit.
+        '
+        If KF > KL Then
+            Exit For
+        End If
+    Next JIT
+    
+    '
+    ' Converged
+    '
+    Info = MaxInt(KL + 1# - KF, 0#)
+    MOUT = KL
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     June 30, 1999
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub InternalTREVC(ByRef T() As Double, _
+         ByVal N As Long, _
+         ByVal SIDE As Long, _
+         ByVal HOWMNY As Long, _
+         ByRef VSELECT_() As Boolean, _
+         ByRef VL() As Double, _
+         ByRef VR() As Double, _
+         ByRef M As Long, _
+         ByRef Info As Long)
+    Dim VSELECT() As Boolean
+    Dim ALLV As Boolean
+    Dim BOTHV As Boolean
+    Dim LEFTV As Boolean
+    Dim OVER As Boolean
+    Dim PAIR As Boolean
+    Dim RIGHTV As Boolean
+    Dim SOMEV As Boolean
+    Dim i As Long
+    Dim IERR As Long
+    Dim II As Long
+    Dim IP As Long
+    Dim IIS As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim JNXT As Long
+    Dim K As Long
+    Dim KI As Long
+    Dim N2 As Long
+    Dim Beta As Double
+    Dim BIGNUM As Double
+    Dim EMAX As Double
+    Dim OVFL As Double
+    Dim REC As Double
+    Dim REMAX As Double
+    Dim SCL As Double
+    Dim SMIN As Double
+    Dim SMLNUM As Double
+    Dim Ulp As Double
+    Dim UNFL As Double
+    Dim VCRIT As Double
+    Dim VMax As Double
+    Dim WI As Double
+    Dim WR As Double
+    Dim XNorm As Double
+    Dim X() As Double
+    Dim WORK() As Double
+    Dim temp() As Double
+    Dim TEMP11() As Double
+    Dim TEMP22() As Double
+    Dim TEMP11B() As Double
+    Dim TEMP21B() As Double
+    Dim TEMP12B() As Double
+    Dim TEMP22B() As Double
+    Dim SkipFlag As Boolean
+    Dim K1 As Long
+    Dim K2 As Long
+    Dim k3 As Long
+    Dim k4 As Long
+    Dim VT As Double
+    Dim RSWAP4() As Boolean
+    Dim ZSWAP4() As Boolean
+    Dim IPIVOT44() As Long
+    Dim CIV4() As Double
+    Dim CRV4() As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    VSELECT = VSELECT_
+    ReDim X(1# To 2#, 1# To 2#)
+    ReDim TEMP11(1# To 1#, 1# To 1#)
+    ReDim TEMP11B(1# To 1#, 1# To 1#)
+    ReDim TEMP21B(1# To 2#, 1# To 1#)
+    ReDim TEMP12B(1# To 1#, 1# To 2#)
+    ReDim TEMP22B(1# To 2#, 1# To 2#)
+    ReDim TEMP22(1# To 2#, 1# To 2#)
+    ReDim WORK(1# To 3# * N)
+    ReDim temp(1# To N)
+    ReDim RSWAP4(1# To 4#)
+    ReDim ZSWAP4(1# To 4#)
+    ReDim IPIVOT44(1# To 4#, 1# To 4#)
+    ReDim CIV4(1# To 4#)
+    ReDim CRV4(1# To 4#)
+    If HOWMNY <> 1# Then
+        If SIDE = 1# Or SIDE = 3# Then
+            ReDim VR(1# To N, 1# To N)
+        End If
+        If SIDE = 2# Or SIDE = 3# Then
+            ReDim VL(1# To N, 1# To N)
+        End If
+    End If
+    
+    '
+    ' Decode and test the input parameters
+    '
+    BOTHV = SIDE = 3#
+    RIGHTV = SIDE = 1# Or BOTHV
+    LEFTV = SIDE = 2# Or BOTHV
+    ALLV = HOWMNY = 2#
+    OVER = HOWMNY = 1#
+    SOMEV = HOWMNY = 3#
+    Info = 0#
+    If N < 0# Then
+        Info = -2#
+        Exit Sub
+    End If
+    If Not RIGHTV And Not LEFTV Then
+        Info = -3#
+        Exit Sub
+    End If
+    If Not ALLV And Not OVER And Not SOMEV Then
+        Info = -4#
+        Exit Sub
+    End If
+    
+    '
+    ' Set M to the number of columns required to store the selected
+    ' eigenvectors, standardize the array SELECT if necessary, and
+    ' test MM.
+    '
+    If SOMEV Then
+        M = 0#
+        PAIR = False
+        For j = 1# To N Step 1
+            If PAIR Then
+                PAIR = False
+                VSELECT(j) = False
+            Else
+                If j < N Then
+                    If T(j + 1#, j) = 0# Then
+                        If VSELECT(j) Then
+                            M = M + 1#
+                        End If
+                    Else
+                        PAIR = True
+                        If VSELECT(j) Or VSELECT(j + 1#) Then
+                            VSELECT(j) = True
+                            M = M + 2#
+                        End If
+                    End If
+                Else
+                    If VSELECT(N) Then
+                        M = M + 1#
+                    End If
+                End If
+            End If
+        Next j
+    Else
+        M = N
+    End If
+    
+    '
+    ' Quick return if possible.
+    '
+    If N = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Set the constants to control overflow.
+    '
+    UNFL = MinRealNumber
+    OVFL = 1# / UNFL
+    Ulp = MachineEpsilon
+    SMLNUM = UNFL * (N / Ulp)
+    BIGNUM = (1# - Ulp) / SMLNUM
+    
+    '
+    ' Compute 1-norm of each column of strictly upper triangular
+    ' part of T to control overflow in triangular solver.
+    '
+    WORK(1#) = 0#
+    For j = 2# To N Step 1
+        WORK(j) = 0#
+        For i = 1# To j - 1# Step 1
+            WORK(j) = WORK(j) + Abs(T(i, j))
+        Next i
+    Next j
+    
+    '
+    ' Index IP is used to specify the real or complex eigenvalue:
+    ' IP = 0, real eigenvalue,
+    '      1, first of conjugate complex pair: (wr,wi)
+    '     -1, second of conjugate complex pair: (wr,wi)
+    '
+    N2 = 2# * N
+    If RIGHTV Then
+        
+        '
+        ' Compute right eigenvectors.
+        '
+        IP = 0#
+        IIS = M
+        For KI = N To 1# Step -1
+            SkipFlag = False
+            If IP = 1# Then
+                SkipFlag = True
+            Else
+                If KI <> 1# Then
+                    If T(KI, KI - 1#) <> 0# Then
+                        IP = -1#
+                    End If
+                End If
+                If SOMEV Then
+                    If IP = 0# Then
+                        If Not VSELECT(KI) Then
+                            SkipFlag = True
+                        End If
+                    Else
+                        If Not VSELECT(KI - 1#) Then
+                            SkipFlag = True
+                        End If
+                    End If
+                End If
+            End If
+            If Not SkipFlag Then
+                
+                '
+                ' Compute the KI-th eigenvalue (WR,WI).
+                '
+                WR = T(KI, KI)
+                WI = 0#
+                If IP <> 0# Then
+                    WI = Sqr(Abs(T(KI, KI - 1#))) * Sqr(Abs(T(KI - 1#, KI)))
+                End If
+                SMIN = MaxReal(Ulp * (Abs(WR) + Abs(WI)), SMLNUM)
+                If IP = 0# Then
+                    
+                    '
+                    ' Real right eigenvector
+                    '
+                    WORK(KI + N) = 1#
+                    
+                    '
+                    ' Form right-hand side
+                    '
+                    For K = 1# To KI - 1# Step 1
+                        WORK(K + N) = -T(K, KI)
+                    Next K
+                    
+                    '
+                    ' Solve the upper quasi-triangular system:
+                    '   (T(1:KI-1,1:KI-1) - WR)*X = SCALE*WORK.
+                    '
+                    JNXT = KI - 1#
+                    For j = KI - 1# To 1# Step -1
+                        If j > JNXT Then
+                            GoTo Cont_6
+                        End If
+                        J1 = j
+                        J2 = j
+                        JNXT = j - 1#
+                        If j > 1# Then
+                            If T(j, j - 1#) <> 0# Then
+                                J1 = j - 1#
+                                JNXT = j - 2#
+                            End If
+                        End If
+                        If J1 = J2 Then
+                            
+                            '
+                            ' 1-by-1 diagonal block
+                            '
+                            TEMP11(1#, 1#) = T(j, j)
+                            TEMP11B(1#, 1#) = WORK(j + N)
+                            Call InternalHSEVDLALN2(False, 1#, 1#, SMIN, 1#, TEMP11, 1#, 1#, TEMP11B, WR, 0#, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale X(1,1) to avoid overflow when updating
+                            ' the right-hand side.
+                            '
+                            If XNorm > 1# Then
+                                If WORK(j) > BIGNUM / XNorm Then
+                                    X(1#, 1#) = X(1#, 1#) / XNorm
+                                    SCL = SCL / XNorm
+                                End If
+                            End If
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                K1 = N + 1#
+                                K2 = N + KI
+                                For i_ = K1 To K2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j + N) = X(1#, 1#)
+                            
+                            '
+                            ' Update right-hand side
+                            '
+                            K1 = 1# + N
+                            K2 = j - 1# + N
+                            k3 = j - 1#
+                            VT = -X(1#, 1#)
+                            i1_ = (1#) - (K1)
+                            For i_ = K1 To K2 Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j)
+                            Next i_
+                        Else
+                            
+                            '
+                            ' 2-by-2 diagonal block
+                            '
+                            TEMP22(1#, 1#) = T(j - 1#, j - 1#)
+                            TEMP22(1#, 2#) = T(j - 1#, j)
+                            TEMP22(2#, 1#) = T(j, j - 1#)
+                            TEMP22(2#, 2#) = T(j, j)
+                            TEMP21B(1#, 1#) = WORK(j - 1# + N)
+                            TEMP21B(2#, 1#) = WORK(j + N)
+                            Call InternalHSEVDLALN2(False, 2#, 1#, SMIN, 1#, TEMP22, 1#, 1#, TEMP21B, WR, 0#, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale X(1,1) and X(2,1) to avoid overflow when
+                            ' updating the right-hand side.
+                            '
+                            If XNorm > 1# Then
+                                Beta = MaxReal(WORK(j - 1#), WORK(j))
+                                If Beta > BIGNUM / XNorm Then
+                                    X(1#, 1#) = X(1#, 1#) / XNorm
+                                    X(2#, 1#) = X(2#, 1#) / XNorm
+                                    SCL = SCL / XNorm
+                                End If
+                            End If
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                K1 = 1# + N
+                                K2 = KI + N
+                                For i_ = K1 To K2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j - 1# + N) = X(1#, 1#)
+                            WORK(j + N) = X(2#, 1#)
+                            
+                            '
+                            ' Update right-hand side
+                            '
+                            K1 = 1# + N
+                            K2 = j - 2# + N
+                            k3 = j - 2#
+                            k4 = j - 1#
+                            VT = -X(1#, 1#)
+                            i1_ = (1#) - (K1)
+                            For i_ = K1 To K2 Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, k4)
+                            Next i_
+                            VT = -X(2#, 1#)
+                            i1_ = (1#) - (K1)
+                            For i_ = K1 To K2 Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j)
+                            Next i_
+                        End If
+Cont_6:
+                    Next j
+                    
+                    '
+                    ' Copy the vector x or Q*x to VR and normalize.
+                    '
+                    If Not OVER Then
+                        K1 = 1# + N
+                        K2 = KI + N
+                        i1_ = (K1) - (1#)
+                        For i_ = 1# To KI Step 1
+                            VR(i_, IIS) = WORK(i_ + i1_)
+                        Next i_
+                        II = ColumnIdxAbsMax(VR, 1#, KI, IIS)
+                        REMAX = 1# / Abs(VR(II, IIS))
+                        For i_ = 1# To KI Step 1
+                            VR(i_, IIS) = REMAX * VR(i_, IIS)
+                        Next i_
+                        For K = KI + 1# To N Step 1
+                            VR(K, IIS) = 0#
+                        Next K
+                    Else
+                        If KI > 1# Then
+                            For i_ = 1# To N Step 1
+                                temp(i_) = VR(i_, KI)
+                            Next i_
+                            Call MatrixVectorMultiply(VR, 1#, N, 1#, KI - 1#, False, WORK, 1# + N, KI - 1# + N, 1#, temp, 1#, N, WORK(KI + N))
+                            For i_ = 1# To N Step 1
+                                VR(i_, KI) = temp(i_)
+                            Next i_
+                        End If
+                        II = ColumnIdxAbsMax(VR, 1#, N, KI)
+                        REMAX = 1# / Abs(VR(II, KI))
+                        For i_ = 1# To N Step 1
+                            VR(i_, KI) = REMAX * VR(i_, KI)
+                        Next i_
+                    End If
+                Else
+                    
+                    '
+                    ' Complex right eigenvector.
+                    '
+                    ' Initial solve
+                    '     [ (T(KI-1,KI-1) T(KI-1,KI) ) - (WR + I* WI)]*X = 0.
+                    '     [ (T(KI,KI-1)   T(KI,KI)   )               ]
+                    '
+                    If Abs(T(KI - 1#, KI)) >= Abs(T(KI, KI - 1#)) Then
+                        WORK(KI - 1# + N) = 1#
+                        WORK(KI + N2) = WI / T(KI - 1#, KI)
+                    Else
+                        WORK(KI - 1# + N) = -(WI / T(KI, KI - 1#))
+                        WORK(KI + N2) = 1#
+                    End If
+                    WORK(KI + N) = 0#
+                    WORK(KI - 1# + N2) = 0#
+                    
+                    '
+                    ' Form right-hand side
+                    '
+                    For K = 1# To KI - 2# Step 1
+                        WORK(K + N) = -(WORK(KI - 1# + N) * T(K, KI - 1#))
+                        WORK(K + N2) = -(WORK(KI + N2) * T(K, KI))
+                    Next K
+                    
+                    '
+                    ' Solve upper quasi-triangular system:
+                    ' (T(1:KI-2,1:KI-2) - (WR+i*WI))*X = SCALE*(WORK+i*WORK2)
+                    '
+                    JNXT = KI - 2#
+                    For j = KI - 2# To 1# Step -1
+                        If j > JNXT Then
+                            GoTo Cont_9
+                        End If
+                        J1 = j
+                        J2 = j
+                        JNXT = j - 1#
+                        If j > 1# Then
+                            If T(j, j - 1#) <> 0# Then
+                                J1 = j - 1#
+                                JNXT = j - 2#
+                            End If
+                        End If
+                        If J1 = J2 Then
+                            
+                            '
+                            ' 1-by-1 diagonal block
+                            '
+                            TEMP11(1#, 1#) = T(j, j)
+                            TEMP12B(1#, 1#) = WORK(j + N)
+                            TEMP12B(1#, 2#) = WORK(j + N + N)
+                            Call InternalHSEVDLALN2(False, 1#, 2#, SMIN, 1#, TEMP11, 1#, 1#, TEMP12B, WR, WI, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale X(1,1) and X(1,2) to avoid overflow when
+                            ' updating the right-hand side.
+                            '
+                            If XNorm > 1# Then
+                                If WORK(j) > BIGNUM / XNorm Then
+                                    X(1#, 1#) = X(1#, 1#) / XNorm
+                                    X(1#, 2#) = X(1#, 2#) / XNorm
+                                    SCL = SCL / XNorm
+                                End If
+                            End If
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                K1 = 1# + N
+                                K2 = KI + N
+                                For i_ = K1 To K2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                                K1 = 1# + N2
+                                K2 = KI + N2
+                                For i_ = K1 To K2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j + N) = X(1#, 1#)
+                            WORK(j + N2) = X(1#, 2#)
+                            
+                            '
+                            ' Update the right-hand side
+                            '
+                            K1 = 1# + N
+                            K2 = j - 1# + N
+                            k3 = 1#
+                            k4 = j - 1#
+                            VT = -X(1#, 1#)
+                            i1_ = (k3) - (K1)
+                            For i_ = K1 To K2 Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j)
+                            Next i_
+                            K1 = 1# + N2
+                            K2 = j - 1# + N2
+                            k3 = 1#
+                            k4 = j - 1#
+                            VT = -X(1#, 2#)
+                            i1_ = (k3) - (K1)
+                            For i_ = K1 To K2 Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j)
+                            Next i_
+                        Else
+                            
+                            '
+                            ' 2-by-2 diagonal block
+                            '
+                            TEMP22(1#, 1#) = T(j - 1#, j - 1#)
+                            TEMP22(1#, 2#) = T(j - 1#, j)
+                            TEMP22(2#, 1#) = T(j, j - 1#)
+                            TEMP22(2#, 2#) = T(j, j)
+                            TEMP22B(1#, 1#) = WORK(j - 1# + N)
+                            TEMP22B(1#, 2#) = WORK(j - 1# + N + N)
+                            TEMP22B(2#, 1#) = WORK(j + N)
+                            TEMP22B(2#, 2#) = WORK(j + N + N)
+                            Call InternalHSEVDLALN2(False, 2#, 2#, SMIN, 1#, TEMP22, 1#, 1#, TEMP22B, WR, WI, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale X to avoid overflow when updating
+                            ' the right-hand side.
+                            '
+                            If XNorm > 1# Then
+                                Beta = MaxReal(WORK(j - 1#), WORK(j))
+                                If Beta > BIGNUM / XNorm Then
+                                    REC = 1# / XNorm
+                                    X(1#, 1#) = X(1#, 1#) * REC
+                                    X(1#, 2#) = X(1#, 2#) * REC
+                                    X(2#, 1#) = X(2#, 1#) * REC
+                                    X(2#, 2#) = X(2#, 2#) * REC
+                                    SCL = SCL * REC
+                                End If
+                            End If
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                For i_ = 1# + N To KI + N Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                                For i_ = 1# + N2 To KI + N2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j - 1# + N) = X(1#, 1#)
+                            WORK(j + N) = X(2#, 1#)
+                            WORK(j - 1# + N2) = X(1#, 2#)
+                            WORK(j + N2) = X(2#, 2#)
+                            
+                            '
+                            ' Update the right-hand side
+                            '
+                            VT = -X(1#, 1#)
+                            i1_ = (1#) - (N + 1#)
+                            For i_ = N + 1# To N + j - 2# Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j - 1#)
+                            Next i_
+                            VT = -X(2#, 1#)
+                            i1_ = (1#) - (N + 1#)
+                            For i_ = N + 1# To N + j - 2# Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j)
+                            Next i_
+                            VT = -X(1#, 2#)
+                            i1_ = (1#) - (N2 + 1#)
+                            For i_ = N2 + 1# To N2 + j - 2# Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j - 1#)
+                            Next i_
+                            VT = -X(2#, 2#)
+                            i1_ = (1#) - (N2 + 1#)
+                            For i_ = N2 + 1# To N2 + j - 2# Step 1
+                                WORK(i_) = WORK(i_) + VT * T(i_ + i1_, j)
+                            Next i_
+                        End If
+Cont_9:
+                    Next j
+                    
+                    '
+                    ' Copy the vector x or Q*x to VR and normalize.
+                    '
+                    If Not OVER Then
+                        i1_ = (N + 1#) - (1#)
+                        For i_ = 1# To KI Step 1
+                            VR(i_, IIS - 1#) = WORK(i_ + i1_)
+                        Next i_
+                        i1_ = (N2 + 1#) - (1#)
+                        For i_ = 1# To KI Step 1
+                            VR(i_, IIS) = WORK(i_ + i1_)
+                        Next i_
+                        EMAX = 0#
+                        For K = 1# To KI Step 1
+                            EMAX = MaxReal(EMAX, Abs(VR(K, IIS - 1#)) + Abs(VR(K, IIS)))
+                        Next K
+                        REMAX = 1# / EMAX
+                        For i_ = 1# To KI Step 1
+                            VR(i_, IIS - 1#) = REMAX * VR(i_, IIS - 1#)
+                        Next i_
+                        For i_ = 1# To KI Step 1
+                            VR(i_, IIS) = REMAX * VR(i_, IIS)
+                        Next i_
+                        For K = KI + 1# To N Step 1
+                            VR(K, IIS - 1#) = 0#
+                            VR(K, IIS) = 0#
+                        Next K
+                    Else
+                        If KI > 2# Then
+                            For i_ = 1# To N Step 1
+                                temp(i_) = VR(i_, KI - 1#)
+                            Next i_
+                            Call MatrixVectorMultiply(VR, 1#, N, 1#, KI - 2#, False, WORK, 1# + N, KI - 2# + N, 1#, temp, 1#, N, WORK(KI - 1# + N))
+                            For i_ = 1# To N Step 1
+                                VR(i_, KI - 1#) = temp(i_)
+                            Next i_
+                            For i_ = 1# To N Step 1
+                                temp(i_) = VR(i_, KI)
+                            Next i_
+                            Call MatrixVectorMultiply(VR, 1#, N, 1#, KI - 2#, False, WORK, 1# + N2, KI - 2# + N2, 1#, temp, 1#, N, WORK(KI + N2))
+                            For i_ = 1# To N Step 1
+                                VR(i_, KI) = temp(i_)
+                            Next i_
+                        Else
+                            VT = WORK(KI - 1# + N)
+                            For i_ = 1# To N Step 1
+                                VR(i_, KI - 1#) = VT * VR(i_, KI - 1#)
+                            Next i_
+                            VT = WORK(KI + N2)
+                            For i_ = 1# To N Step 1
+                                VR(i_, KI) = VT * VR(i_, KI)
+                            Next i_
+                        End If
+                        EMAX = 0#
+                        For K = 1# To N Step 1
+                            EMAX = MaxReal(EMAX, Abs(VR(K, KI - 1#)) + Abs(VR(K, KI)))
+                        Next K
+                        REMAX = 1# / EMAX
+                        For i_ = 1# To N Step 1
+                            VR(i_, KI - 1#) = REMAX * VR(i_, KI - 1#)
+                        Next i_
+                        For i_ = 1# To N Step 1
+                            VR(i_, KI) = REMAX * VR(i_, KI)
+                        Next i_
+                    End If
+                End If
+                IIS = IIS - 1#
+                If IP <> 0# Then
+                    IIS = IIS - 1#
+                End If
+            End If
+            If IP = 1# Then
+                IP = 0#
+            End If
+            If IP = -1# Then
+                IP = 1#
+            End If
+        Next KI
+    End If
+    If LEFTV Then
+        
+        '
+        ' Compute left eigenvectors.
+        '
+        IP = 0#
+        IIS = 1#
+        For KI = 1# To N Step 1
+            SkipFlag = False
+            If IP = -1# Then
+                SkipFlag = True
+            Else
+                If KI <> N Then
+                    If T(KI + 1#, KI) <> 0# Then
+                        IP = 1#
+                    End If
+                End If
+                If SOMEV Then
+                    If Not VSELECT(KI) Then
+                        SkipFlag = True
+                    End If
+                End If
+            End If
+            If Not SkipFlag Then
+                
+                '
+                ' Compute the KI-th eigenvalue (WR,WI).
+                '
+                WR = T(KI, KI)
+                WI = 0#
+                If IP <> 0# Then
+                    WI = Sqr(Abs(T(KI, KI + 1#))) * Sqr(Abs(T(KI + 1#, KI)))
+                End If
+                SMIN = MaxReal(Ulp * (Abs(WR) + Abs(WI)), SMLNUM)
+                If IP = 0# Then
+                    
+                    '
+                    ' Real left eigenvector.
+                    '
+                    WORK(KI + N) = 1#
+                    
+                    '
+                    ' Form right-hand side
+                    '
+                    For K = KI + 1# To N Step 1
+                        WORK(K + N) = -T(KI, K)
+                    Next K
+                    
+                    '
+                    ' Solve the quasi-triangular system:
+                    ' (T(KI+1:N,KI+1:N) - WR)'*X = SCALE*WORK
+                    '
+                    VMax = 1#
+                    VCRIT = BIGNUM
+                    JNXT = KI + 1#
+                    For j = KI + 1# To N Step 1
+                        If j < JNXT Then
+                            GoTo Cont_15
+                        End If
+                        J1 = j
+                        J2 = j
+                        JNXT = j + 1#
+                        If j < N Then
+                            If T(j + 1#, j) <> 0# Then
+                                J2 = j + 1#
+                                JNXT = j + 2#
+                            End If
+                        End If
+                        If J1 = J2 Then
+                            
+                            '
+                            ' 1-by-1 diagonal block
+                            '
+                            ' Scale if necessary to avoid overflow when forming
+                            ' the right-hand side.
+                            '
+                            If WORK(j) > VCRIT Then
+                                REC = 1# / VMax
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = REC * WORK(i_)
+                                Next i_
+                                VMax = 1#
+                                VCRIT = BIGNUM
+                            End If
+                            i1_ = (KI + 1# + N) - (KI + 1#)
+                            VT = 0#
+                            For i_ = KI + 1# To j - 1# Step 1
+                                VT = VT + T(i_, j) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + N) = WORK(j + N) - VT
+                            
+                            '
+                            ' Solve (T(J,J)-WR)'*X = WORK
+                            '
+                            TEMP11(1#, 1#) = T(j, j)
+                            TEMP11B(1#, 1#) = WORK(j + N)
+                            Call InternalHSEVDLALN2(False, 1#, 1#, SMIN, 1#, TEMP11, 1#, 1#, TEMP11B, WR, 0#, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j + N) = X(1#, 1#)
+                            VMax = MaxReal(Abs(WORK(j + N)), VMax)
+                            VCRIT = BIGNUM / VMax
+                        Else
+                            
+                            '
+                            ' 2-by-2 diagonal block
+                            '
+                            ' Scale if necessary to avoid overflow when forming
+                            ' the right-hand side.
+                            '
+                            Beta = MaxReal(WORK(j), WORK(j + 1#))
+                            If Beta > VCRIT Then
+                                REC = 1# / VMax
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = REC * WORK(i_)
+                                Next i_
+                                VMax = 1#
+                                VCRIT = BIGNUM
+                            End If
+                            i1_ = (KI + 1# + N) - (KI + 1#)
+                            VT = 0#
+                            For i_ = KI + 1# To j - 1# Step 1
+                                VT = VT + T(i_, j) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + N) = WORK(j + N) - VT
+                            i1_ = (KI + 1# + N) - (KI + 1#)
+                            VT = 0#
+                            For i_ = KI + 1# To j - 1# Step 1
+                                VT = VT + T(i_, j + 1#) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + 1# + N) = WORK(j + 1# + N) - VT
+                            
+                            '
+                            ' Solve
+                            '    [T(J,J)-WR   T(J,J+1)     ]'* X = SCALE*( WORK1 )
+                            '    [T(J+1,J)    T(J+1,J+1)-WR]             ( WORK2 )
+                            '
+                            TEMP22(1#, 1#) = T(j, j)
+                            TEMP22(1#, 2#) = T(j, j + 1#)
+                            TEMP22(2#, 1#) = T(j + 1#, j)
+                            TEMP22(2#, 2#) = T(j + 1#, j + 1#)
+                            TEMP21B(1#, 1#) = WORK(j + N)
+                            TEMP21B(2#, 1#) = WORK(j + 1# + N)
+                            Call InternalHSEVDLALN2(True, 2#, 1#, SMIN, 1#, TEMP22, 1#, 1#, TEMP21B, WR, 0#, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j + N) = X(1#, 1#)
+                            WORK(j + 1# + N) = X(2#, 1#)
+                            VMax = MaxReal(Abs(WORK(j + N)), MaxReal(Abs(WORK(j + 1# + N)), VMax))
+                            VCRIT = BIGNUM / VMax
+                        End If
+Cont_15:
+                    Next j
+                    
+                    '
+                    ' Copy the vector x or Q*x to VL and normalize.
+                    '
+                    If Not OVER Then
+                        i1_ = (KI + N) - (KI)
+                        For i_ = KI To N Step 1
+                            VL(i_, IIS) = WORK(i_ + i1_)
+                        Next i_
+                        II = ColumnIdxAbsMax(VL, KI, N, IIS)
+                        REMAX = 1# / Abs(VL(II, IIS))
+                        For i_ = KI To N Step 1
+                            VL(i_, IIS) = REMAX * VL(i_, IIS)
+                        Next i_
+                        For K = 1# To KI - 1# Step 1
+                            VL(K, IIS) = 0#
+                        Next K
+                    Else
+                        If KI < N Then
+                            For i_ = 1# To N Step 1
+                                temp(i_) = VL(i_, KI)
+                            Next i_
+                            Call MatrixVectorMultiply(VL, 1#, N, KI + 1#, N, False, WORK, KI + 1# + N, N + N, 1#, temp, 1#, N, WORK(KI + N))
+                            For i_ = 1# To N Step 1
+                                VL(i_, KI) = temp(i_)
+                            Next i_
+                        End If
+                        II = ColumnIdxAbsMax(VL, 1#, N, KI)
+                        REMAX = 1# / Abs(VL(II, KI))
+                        For i_ = 1# To N Step 1
+                            VL(i_, KI) = REMAX * VL(i_, KI)
+                        Next i_
+                    End If
+                Else
+                    
+                    '
+                    ' Complex left eigenvector.
+                    '
+                    ' Initial solve:
+                    '   ((T(KI,KI)    T(KI,KI+1) )' - (WR - I* WI))*X = 0.
+                    '   ((T(KI+1,KI) T(KI+1,KI+1))                )
+                    '
+                    If Abs(T(KI, KI + 1#)) >= Abs(T(KI + 1#, KI)) Then
+                        WORK(KI + N) = WI / T(KI, KI + 1#)
+                        WORK(KI + 1# + N2) = 1#
+                    Else
+                        WORK(KI + N) = 1#
+                        WORK(KI + 1# + N2) = -(WI / T(KI + 1#, KI))
+                    End If
+                    WORK(KI + 1# + N) = 0#
+                    WORK(KI + N2) = 0#
+                    
+                    '
+                    ' Form right-hand side
+                    '
+                    For K = KI + 2# To N Step 1
+                        WORK(K + N) = -(WORK(KI + N) * T(KI, K))
+                        WORK(K + N2) = -(WORK(KI + 1# + N2) * T(KI + 1#, K))
+                    Next K
+                    
+                    '
+                    ' Solve complex quasi-triangular system:
+                    ' ( T(KI+2,N:KI+2,N) - (WR-i*WI) )*X = WORK1+i*WORK2
+                    '
+                    VMax = 1#
+                    VCRIT = BIGNUM
+                    JNXT = KI + 2#
+                    For j = KI + 2# To N Step 1
+                        If j < JNXT Then
+                            GoTo Cont_18
+                        End If
+                        J1 = j
+                        J2 = j
+                        JNXT = j + 1#
+                        If j < N Then
+                            If T(j + 1#, j) <> 0# Then
+                                J2 = j + 1#
+                                JNXT = j + 2#
+                            End If
+                        End If
+                        If J1 = J2 Then
+                            
+                            '
+                            ' 1-by-1 diagonal block
+                            '
+                            ' Scale if necessary to avoid overflow when
+                            ' forming the right-hand side elements.
+                            '
+                            If WORK(j) > VCRIT Then
+                                REC = 1# / VMax
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = REC * WORK(i_)
+                                Next i_
+                                For i_ = KI + N2 To N + N2 Step 1
+                                    WORK(i_) = REC * WORK(i_)
+                                Next i_
+                                VMax = 1#
+                                VCRIT = BIGNUM
+                            End If
+                            i1_ = (KI + 2# + N) - (KI + 2#)
+                            VT = 0#
+                            For i_ = KI + 2# To j - 1# Step 1
+                                VT = VT + T(i_, j) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + N) = WORK(j + N) - VT
+                            i1_ = (KI + 2# + N2) - (KI + 2#)
+                            VT = 0#
+                            For i_ = KI + 2# To j - 1# Step 1
+                                VT = VT + T(i_, j) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + N2) = WORK(j + N2) - VT
+                            
+                            '
+                            ' Solve (T(J,J)-(WR-i*WI))*(X11+i*X12)= WK+I*WK2
+                            '
+                            TEMP11(1#, 1#) = T(j, j)
+                            TEMP12B(1#, 1#) = WORK(j + N)
+                            TEMP12B(1#, 2#) = WORK(j + N + N)
+                            Call InternalHSEVDLALN2(False, 1#, 2#, SMIN, 1#, TEMP11, 1#, 1#, TEMP12B, WR, -WI, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                                For i_ = KI + N2 To N + N2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j + N) = X(1#, 1#)
+                            WORK(j + N2) = X(1#, 2#)
+                            VMax = MaxReal(Abs(WORK(j + N)), MaxReal(Abs(WORK(j + N2)), VMax))
+                            VCRIT = BIGNUM / VMax
+                        Else
+                            
+                            '
+                            ' 2-by-2 diagonal block
+                            '
+                            ' Scale if necessary to avoid overflow when forming
+                            ' the right-hand side elements.
+                            '
+                            Beta = MaxReal(WORK(j), WORK(j + 1#))
+                            If Beta > VCRIT Then
+                                REC = 1# / VMax
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = REC * WORK(i_)
+                                Next i_
+                                For i_ = KI + N2 To N + N2 Step 1
+                                    WORK(i_) = REC * WORK(i_)
+                                Next i_
+                                VMax = 1#
+                                VCRIT = BIGNUM
+                            End If
+                            i1_ = (KI + 2# + N) - (KI + 2#)
+                            VT = 0#
+                            For i_ = KI + 2# To j - 1# Step 1
+                                VT = VT + T(i_, j) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + N) = WORK(j + N) - VT
+                            i1_ = (KI + 2# + N2) - (KI + 2#)
+                            VT = 0#
+                            For i_ = KI + 2# To j - 1# Step 1
+                                VT = VT + T(i_, j) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + N2) = WORK(j + N2) - VT
+                            i1_ = (KI + 2# + N) - (KI + 2#)
+                            VT = 0#
+                            For i_ = KI + 2# To j - 1# Step 1
+                                VT = VT + T(i_, j + 1#) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + 1# + N) = WORK(j + 1# + N) - VT
+                            i1_ = (KI + 2# + N2) - (KI + 2#)
+                            VT = 0#
+                            For i_ = KI + 2# To j - 1# Step 1
+                                VT = VT + T(i_, j + 1#) * WORK(i_ + i1_)
+                            Next i_
+                            WORK(j + 1# + N2) = WORK(j + 1# + N2) - VT
+                            
+                            '
+                            ' Solve 2-by-2 complex linear equation
+                            '   ([T(j,j)   T(j,j+1)  ]'-(wr-i*wi)*I)*X = SCALE*B
+                            '   ([T(j+1,j) T(j+1,j+1)]             )
+                            '
+                            TEMP22(1#, 1#) = T(j, j)
+                            TEMP22(1#, 2#) = T(j, j + 1#)
+                            TEMP22(2#, 1#) = T(j + 1#, j)
+                            TEMP22(2#, 2#) = T(j + 1#, j + 1#)
+                            TEMP22B(1#, 1#) = WORK(j + N)
+                            TEMP22B(1#, 2#) = WORK(j + N + N)
+                            TEMP22B(2#, 1#) = WORK(j + 1# + N)
+                            TEMP22B(2#, 2#) = WORK(j + 1# + N + N)
+                            Call InternalHSEVDLALN2(True, 2#, 2#, SMIN, 1#, TEMP22, 1#, 1#, TEMP22B, WR, -WI, RSWAP4, ZSWAP4, IPIVOT44, CIV4, CRV4, X, SCL, XNorm, IERR)
+                            
+                            '
+                            ' Scale if necessary
+                            '
+                            If SCL <> 1# Then
+                                For i_ = KI + N To N + N Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                                For i_ = KI + N2 To N + N2 Step 1
+                                    WORK(i_) = SCL * WORK(i_)
+                                Next i_
+                            End If
+                            WORK(j + N) = X(1#, 1#)
+                            WORK(j + N2) = X(1#, 2#)
+                            WORK(j + 1# + N) = X(2#, 1#)
+                            WORK(j + 1# + N2) = X(2#, 2#)
+                            VMax = MaxReal(Abs(X(1#, 1#)), VMax)
+                            VMax = MaxReal(Abs(X(1#, 2#)), VMax)
+                            VMax = MaxReal(Abs(X(2#, 1#)), VMax)
+                            VMax = MaxReal(Abs(X(2#, 2#)), VMax)
+                            VCRIT = BIGNUM / VMax
+                        End If
+Cont_18:
+                    Next j
+                    
+                    '
+                    ' Copy the vector x or Q*x to VL and normalize.
+                    '
+                    If Not OVER Then
+                        i1_ = (KI + N) - (KI)
+                        For i_ = KI To N Step 1
+                            VL(i_, IIS) = WORK(i_ + i1_)
+                        Next i_
+                        i1_ = (KI + N2) - (KI)
+                        For i_ = KI To N Step 1
+                            VL(i_, IIS + 1#) = WORK(i_ + i1_)
+                        Next i_
+                        EMAX = 0#
+                        For K = KI To N Step 1
+                            EMAX = MaxReal(EMAX, Abs(VL(K, IIS)) + Abs(VL(K, IIS + 1#)))
+                        Next K
+                        REMAX = 1# / EMAX
+                        For i_ = KI To N Step 1
+                            VL(i_, IIS) = REMAX * VL(i_, IIS)
+                        Next i_
+                        For i_ = KI To N Step 1
+                            VL(i_, IIS + 1#) = REMAX * VL(i_, IIS + 1#)
+                        Next i_
+                        For K = 1# To KI - 1# Step 1
+                            VL(K, IIS) = 0#
+                            VL(K, IIS + 1#) = 0#
+                        Next K
+                    Else
+                        If KI < N - 1# Then
+                            For i_ = 1# To N Step 1
+                                temp(i_) = VL(i_, KI)
+                            Next i_
+                            Call MatrixVectorMultiply(VL, 1#, N, KI + 2#, N, False, WORK, KI + 2# + N, N + N, 1#, temp, 1#, N, WORK(KI + N))
+                            For i_ = 1# To N Step 1
+                                VL(i_, KI) = temp(i_)
+                            Next i_
+                            For i_ = 1# To N Step 1
+                                temp(i_) = VL(i_, KI + 1#)
+                            Next i_
+                            Call MatrixVectorMultiply(VL, 1#, N, KI + 2#, N, False, WORK, KI + 2# + N2, N + N2, 1#, temp, 1#, N, WORK(KI + 1# + N2))
+                            For i_ = 1# To N Step 1
+                                VL(i_, KI + 1#) = temp(i_)
+                            Next i_
+                        Else
+                            VT = WORK(KI + N)
+                            For i_ = 1# To N Step 1
+                                VL(i_, KI) = VT * VL(i_, KI)
+                            Next i_
+                            VT = WORK(KI + 1# + N2)
+                            For i_ = 1# To N Step 1
+                                VL(i_, KI + 1#) = VT * VL(i_, KI + 1#)
+                            Next i_
+                        End If
+                        EMAX = 0#
+                        For K = 1# To N Step 1
+                            EMAX = MaxReal(EMAX, Abs(VL(K, KI)) + Abs(VL(K, KI + 1#)))
+                        Next K
+                        REMAX = 1# / EMAX
+                        For i_ = 1# To N Step 1
+                            VL(i_, KI) = REMAX * VL(i_, KI)
+                        Next i_
+                        For i_ = 1# To N Step 1
+                            VL(i_, KI + 1#) = REMAX * VL(i_, KI + 1#)
+                        Next i_
+                    End If
+                End If
+                IIS = IIS + 1#
+                If IP <> 0# Then
+                    IIS = IIS + 1#
+                End If
+            End If
+            If IP = -1# Then
+                IP = 0#
+            End If
+            If IP = 1# Then
+                IP = -1#
+            End If
+        Next KI
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'DLALN2 solves a system of the form  (ca A - w D ) X = s B
+'or (ca A' - w D) X = s B   with possible scaling ("s") and
+'perturbation of A.  (A' means A-transpose.)
+'
+'A is an NA x NA real matrix, ca is a real scalar, D is an NA x NA
+'real diagonal matrix, w is a real or complex value, and X and B are
+'NA x 1 matrices -- real if w is real, complex if w is complex.  NA
+'may be 1 or 2.
+'
+'If w is complex, X and B are represented as NA x 2 matrices,
+'the first column of each being the real part and the second
+'being the imaginary part.
+'
+'"s" is a scaling factor (.LE. 1), computed by DLALN2, which is
+'so chosen that X can be computed without overflow.  X is further
+'scaled if necessary to assure that norm(ca A - w D)*norm(X) is less
+'than overflow.
+'
+'If both singular values of (ca A - w D) are less than SMIN,
+'SMIN*identity will be used instead of (ca A - w D).  If only one
+'singular value is less than SMIN, one element of (ca A - w D) will be
+'perturbed enough to make the smallest singular value roughly SMIN.
+'If both singular values are at least SMIN, (ca A - w D) will not be
+'perturbed.  In any case, the perturbation will be at most some small
+'multiple of max( SMIN, ulp*norm(ca A - w D) ).  The singular values
+'are computed by infinity-norm approximations, and thus will only be
+'correct to a factor of 2 or so.
+'
+'Note: all input quantities are assumed to be smaller than overflow
+'by a reasonable factor.  (See BIGNUM.)
+'
+'  -- LAPACK auxiliary routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     October 31, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub InternalHSEVDLALN2(ByRef LTRANS As Boolean, _
+         ByRef NA As Long, _
+         ByRef NW As Long, _
+         ByRef SMIN As Double, _
+         ByRef CA As Double, _
+         ByRef A() As Double, _
+         ByRef D1 As Double, _
+         ByRef D2 As Double, _
+         ByRef B() As Double, _
+         ByRef WR As Double, _
+         ByRef WI As Double, _
+         ByRef RSWAP4() As Boolean, _
+         ByRef ZSWAP4() As Boolean, _
+         ByRef IPIVOT44() As Long, _
+         ByRef CIV4() As Double, _
+         ByRef CRV4() As Double, _
+         ByRef X() As Double, _
+         ByRef SCL As Double, _
+         ByRef XNorm As Double, _
+         ByRef Info As Long)
+    Dim ICMAX As Long
+    Dim j As Long
+    Dim BBND As Double
+    Dim BI1 As Double
+    Dim BI2 As Double
+    Dim BIGNUM As Double
+    Dim BNorm As Double
+    Dim BR1 As Double
+    Dim BR2 As Double
+    Dim CI21 As Double
+    Dim CI22 As Double
+    Dim CMAX As Double
+    Dim CNORM As Double
+    Dim CR21 As Double
+    Dim CR22 As Double
+    Dim CSI As Double
+    Dim CSR As Double
+    Dim LI21 As Double
+    Dim LR21 As Double
+    Dim SMINI As Double
+    Dim SMLNUM As Double
+    Dim temp As Double
+    Dim U22ABS As Double
+    Dim UI11 As Double
+    Dim UI11R As Double
+    Dim UI12 As Double
+    Dim UI12S As Double
+    Dim UI22 As Double
+    Dim UR11 As Double
+    Dim UR11R As Double
+    Dim UR12 As Double
+    Dim UR12S As Double
+    Dim UR22 As Double
+    Dim XI1 As Double
+    Dim XI2 As Double
+    Dim XR1 As Double
+    Dim XR2 As Double
+    Dim TMP1 As Double
+    Dim Tmp2 As Double
+    ZSWAP4(1#) = False
+    ZSWAP4(2#) = False
+    ZSWAP4(3#) = True
+    ZSWAP4(4#) = True
+    RSWAP4(1#) = False
+    RSWAP4(2#) = True
+    RSWAP4(3#) = False
+    RSWAP4(4#) = True
+    IPIVOT44(1#, 1#) = 1#
+    IPIVOT44(2#, 1#) = 2#
+    IPIVOT44(3#, 1#) = 3#
+    IPIVOT44(4#, 1#) = 4#
+    IPIVOT44(1#, 2#) = 2#
+    IPIVOT44(2#, 2#) = 1#
+    IPIVOT44(3#, 2#) = 4#
+    IPIVOT44(4#, 2#) = 3#
+    IPIVOT44(1#, 3#) = 3#
+    IPIVOT44(2#, 3#) = 4#
+    IPIVOT44(3#, 3#) = 1#
+    IPIVOT44(4#, 3#) = 2#
+    IPIVOT44(1#, 4#) = 4#
+    IPIVOT44(2#, 4#) = 3#
+    IPIVOT44(3#, 4#) = 2#
+    IPIVOT44(4#, 4#) = 1#
+    SMLNUM = 2# * MinRealNumber
+    BIGNUM = 1# / SMLNUM
+    SMINI = MaxReal(SMIN, SMLNUM)
+    
+    '
+    ' Don't check for input errors
+    '
+    Info = 0#
+    
+    '
+    ' Standard Initializations
+    '
+    SCL = 1#
+    If NA = 1# Then
+        
+        '
+        ' 1 x 1  (i.e., scalar) system   C X = B
+        '
+        If NW = 1# Then
+            
+            '
+            ' Real 1x1 system.
+            '
+            ' C = ca A - w D
+            '
+            CSR = CA * A(1#, 1#) - WR * D1
+            CNORM = Abs(CSR)
+            
+            '
+            ' If | C | < SMINI, use C = SMINI
+            '
+            If CNORM < SMINI Then
+                CSR = SMINI
+                CNORM = SMINI
+                Info = 1#
+            End If
+            
+            '
+            ' Check scaling for  X = B / C
+            '
+            BNorm = Abs(B(1#, 1#))
+            If CNORM < 1# And BNorm > 1# Then
+                If BNorm > BIGNUM * CNORM Then
+                    SCL = 1# / BNorm
+                End If
+            End If
+            
+            '
+            ' Compute X
+            '
+            X(1#, 1#) = B(1#, 1#) * SCL / CSR
+            XNorm = Abs(X(1#, 1#))
+        Else
+            
+            '
+            ' Complex 1x1 system (w is complex)
+            '
+            ' C = ca A - w D
+            '
+            CSR = CA * A(1#, 1#) - WR * D1
+            CSI = -(WI * D1)
+            CNORM = Abs(CSR) + Abs(CSI)
+            
+            '
+            ' If | C | < SMINI, use C = SMINI
+            '
+            If CNORM < SMINI Then
+                CSR = SMINI
+                CSI = 0#
+                CNORM = SMINI
+                Info = 1#
+            End If
+            
+            '
+            ' Check scaling for  X = B / C
+            '
+            BNorm = Abs(B(1#, 1#)) + Abs(B(1#, 2#))
+            If CNORM < 1# And BNorm > 1# Then
+                If BNorm > BIGNUM * CNORM Then
+                    SCL = 1# / BNorm
+                End If
+            End If
+            
+            '
+            ' Compute X
+            '
+            Call InternalHSEVDLADIV(SCL * B(1#, 1#), SCL * B(1#, 2#), CSR, CSI, TMP1, Tmp2)
+            X(1#, 1#) = TMP1
+            X(1#, 2#) = Tmp2
+            XNorm = Abs(X(1#, 1#)) + Abs(X(1#, 2#))
+        End If
+    Else
+        
+        '
+        ' 2x2 System
+        '
+        ' Compute the real part of  C = ca A - w D  (or  ca A' - w D )
+        '
+        CRV4(1# + 0#) = CA * A(1#, 1#) - WR * D1
+        CRV4(2# + 2#) = CA * A(2#, 2#) - WR * D2
+        If LTRANS Then
+            CRV4(1# + 2#) = CA * A(2#, 1#)
+            CRV4(2# + 0#) = CA * A(1#, 2#)
+        Else
+            CRV4(2# + 0#) = CA * A(2#, 1#)
+            CRV4(1# + 2#) = CA * A(1#, 2#)
+        End If
+        If NW = 1# Then
+            
+            '
+            ' Real 2x2 system  (w is real)
+            '
+            ' Find the largest element in C
+            '
+            CMAX = 0#
+            ICMAX = 0#
+            For j = 1# To 4# Step 1
+                If Abs(CRV4(j)) > CMAX Then
+                    CMAX = Abs(CRV4(j))
+                    ICMAX = j
+                End If
+            Next j
+            
+            '
+            ' If norm(C) < SMINI, use SMINI*identity.
+            '
+            If CMAX < SMINI Then
+                BNorm = MaxReal(Abs(B(1#, 1#)), Abs(B(2#, 1#)))
+                If SMINI < 1# And BNorm > 1# Then
+                    If BNorm > BIGNUM * SMINI Then
+                        SCL = 1# / BNorm
+                    End If
+                End If
+                temp = SCL / SMINI
+                X(1#, 1#) = temp * B(1#, 1#)
+                X(2#, 1#) = temp * B(2#, 1#)
+                XNorm = temp * BNorm
+                Info = 1#
+                Exit Sub
+            End If
+            
+            '
+            ' Gaussian elimination with complete pivoting.
+            '
+            UR11 = CRV4(ICMAX)
+            CR21 = CRV4(IPIVOT44(2#, ICMAX))
+            UR12 = CRV4(IPIVOT44(3#, ICMAX))
+            CR22 = CRV4(IPIVOT44(4#, ICMAX))
+            UR11R = 1# / UR11
+            LR21 = UR11R * CR21
+            UR22 = CR22 - UR12 * LR21
+            
+            '
+            ' If smaller pivot < SMINI, use SMINI
+            '
+            If Abs(UR22) < SMINI Then
+                UR22 = SMINI
+                Info = 1#
+            End If
+            If RSWAP4(ICMAX) Then
+                BR1 = B(2#, 1#)
+                BR2 = B(1#, 1#)
+            Else
+                BR1 = B(1#, 1#)
+                BR2 = B(2#, 1#)
+            End If
+            BR2 = BR2 - LR21 * BR1
+            BBND = MaxReal(Abs(BR1 * (UR22 * UR11R)), Abs(BR2))
+            If BBND > 1# And Abs(UR22) < 1# Then
+                If BBND >= BIGNUM * Abs(UR22) Then
+                    SCL = 1# / BBND
+                End If
+            End If
+            XR2 = BR2 * SCL / UR22
+            XR1 = SCL * BR1 * UR11R - XR2 * (UR11R * UR12)
+            If ZSWAP4(ICMAX) Then
+                X(1#, 1#) = XR2
+                X(2#, 1#) = XR1
+            Else
+                X(1#, 1#) = XR1
+                X(2#, 1#) = XR2
+            End If
+            XNorm = MaxReal(Abs(XR1), Abs(XR2))
+            
+            '
+            ' Further scaling if  norm(A) norm(X) > overflow
+            '
+            If XNorm > 1# And CMAX > 1# Then
+                If XNorm > BIGNUM / CMAX Then
+                    temp = CMAX / BIGNUM
+                    X(1#, 1#) = temp * X(1#, 1#)
+                    X(2#, 1#) = temp * X(2#, 1#)
+                    XNorm = temp * XNorm
+                    SCL = temp * SCL
+                End If
+            End If
+        Else
+            
+            '
+            ' Complex 2x2 system  (w is complex)
+            '
+            ' Find the largest element in C
+            '
+            CIV4(1# + 0#) = -(WI * D1)
+            CIV4(2# + 0#) = 0#
+            CIV4(1# + 2#) = 0#
+            CIV4(2# + 2#) = -(WI * D2)
+            CMAX = 0#
+            ICMAX = 0#
+            For j = 1# To 4# Step 1
+                If Abs(CRV4(j)) + Abs(CIV4(j)) > CMAX Then
+                    CMAX = Abs(CRV4(j)) + Abs(CIV4(j))
+                    ICMAX = j
+                End If
+            Next j
+            
+            '
+            ' If norm(C) < SMINI, use SMINI*identity.
+            '
+            If CMAX < SMINI Then
+                BNorm = MaxReal(Abs(B(1#, 1#)) + Abs(B(1#, 2#)), Abs(B(2#, 1#)) + Abs(B(2#, 2#)))
+                If SMINI < 1# And BNorm > 1# Then
+                    If BNorm > BIGNUM * SMINI Then
+                        SCL = 1# / BNorm
+                    End If
+                End If
+                temp = SCL / SMINI
+                X(1#, 1#) = temp * B(1#, 1#)
+                X(2#, 1#) = temp * B(2#, 1#)
+                X(1#, 2#) = temp * B(1#, 2#)
+                X(2#, 2#) = temp * B(2#, 2#)
+                XNorm = temp * BNorm
+                Info = 1#
+                Exit Sub
+            End If
+            
+            '
+            ' Gaussian elimination with complete pivoting.
+            '
+            UR11 = CRV4(ICMAX)
+            UI11 = CIV4(ICMAX)
+            CR21 = CRV4(IPIVOT44(2#, ICMAX))
+            CI21 = CIV4(IPIVOT44(2#, ICMAX))
+            UR12 = CRV4(IPIVOT44(3#, ICMAX))
+            UI12 = CIV4(IPIVOT44(3#, ICMAX))
+            CR22 = CRV4(IPIVOT44(4#, ICMAX))
+            CI22 = CIV4(IPIVOT44(4#, ICMAX))
+            If ICMAX = 1# Or ICMAX = 4# Then
+                
+                '
+                ' Code when off-diagonals of pivoted C are real
+                '
+                If Abs(UR11) > Abs(UI11) Then
+                    temp = UI11 / UR11
+                    UR11R = 1# / (UR11 * (1# + Square(temp)))
+                    UI11R = -(temp * UR11R)
+                Else
+                    temp = UR11 / UI11
+                    UI11R = -(1# / (UI11 * (1# + Square(temp))))
+                    UR11R = -(temp * UI11R)
+                End If
+                LR21 = CR21 * UR11R
+                LI21 = CR21 * UI11R
+                UR12S = UR12 * UR11R
+                UI12S = UR12 * UI11R
+                UR22 = CR22 - UR12 * LR21
+                UI22 = CI22 - UR12 * LI21
+            Else
+                
+                '
+                ' Code when diagonals of pivoted C are real
+                '
+                UR11R = 1# / UR11
+                UI11R = 0#
+                LR21 = CR21 * UR11R
+                LI21 = CI21 * UR11R
+                UR12S = UR12 * UR11R
+                UI12S = UI12 * UR11R
+                UR22 = CR22 - UR12 * LR21 + UI12 * LI21
+                UI22 = -(UR12 * LI21) - UI12 * LR21
+            End If
+            U22ABS = Abs(UR22) + Abs(UI22)
+            
+            '
+            ' If smaller pivot < SMINI, use SMINI
+            '
+            If U22ABS < SMINI Then
+                UR22 = SMINI
+                UI22 = 0#
+                Info = 1#
+            End If
+            If RSWAP4(ICMAX) Then
+                BR2 = B(1#, 1#)
+                BR1 = B(2#, 1#)
+                BI2 = B(1#, 2#)
+                BI1 = B(2#, 2#)
+            Else
+                BR1 = B(1#, 1#)
+                BR2 = B(2#, 1#)
+                BI1 = B(1#, 2#)
+                BI2 = B(2#, 2#)
+            End If
+            BR2 = BR2 - LR21 * BR1 + LI21 * BI1
+            BI2 = BI2 - LI21 * BR1 - LR21 * BI1
+            BBND = MaxReal((Abs(BR1) + Abs(BI1)) * (U22ABS * (Abs(UR11R) + Abs(UI11R))), Abs(BR2) + Abs(BI2))
+            If BBND > 1# And U22ABS < 1# Then
+                If BBND >= BIGNUM * U22ABS Then
+                    SCL = 1# / BBND
+                    BR1 = SCL * BR1
+                    BI1 = SCL * BI1
+                    BR2 = SCL * BR2
+                    BI2 = SCL * BI2
+                End If
+            End If
+            Call InternalHSEVDLADIV(BR2, BI2, UR22, UI22, XR2, XI2)
+            XR1 = UR11R * BR1 - UI11R * BI1 - UR12S * XR2 + UI12S * XI2
+            XI1 = UI11R * BR1 + UR11R * BI1 - UI12S * XR2 - UR12S * XI2
+            If ZSWAP4(ICMAX) Then
+                X(1#, 1#) = XR2
+                X(2#, 1#) = XR1
+                X(1#, 2#) = XI2
+                X(2#, 2#) = XI1
+            Else
+                X(1#, 1#) = XR1
+                X(2#, 1#) = XR2
+                X(1#, 2#) = XI1
+                X(2#, 2#) = XI2
+            End If
+            XNorm = MaxReal(Abs(XR1) + Abs(XI1), Abs(XR2) + Abs(XI2))
+            
+            '
+            ' Further scaling if  norm(A) norm(X) > overflow
+            '
+            If XNorm > 1# And CMAX > 1# Then
+                If XNorm > BIGNUM / CMAX Then
+                    temp = CMAX / BIGNUM
+                    X(1#, 1#) = temp * X(1#, 1#)
+                    X(2#, 1#) = temp * X(2#, 1#)
+                    X(1#, 2#) = temp * X(1#, 2#)
+                    X(2#, 2#) = temp * X(2#, 2#)
+                    XNorm = temp * XNorm
+                    SCL = temp * SCL
+                End If
+            End If
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'performs complex division in  real arithmetic
+'
+'                        a + i*b
+'             p + i*q = ---------
+'                        c + i*d
+'
+'The algorithm is due to Robert L. Smith and can be found
+'in D. Knuth, The art of Computer Programming, Vol.2, p.195
+'
+'  -- LAPACK auxiliary routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     October 31, 1992
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub InternalHSEVDLADIV(ByRef A As Double, _
+         ByRef B As Double, _
+         ByRef C As Double, _
+         ByRef D As Double, _
+         ByRef p As Double, _
+         ByRef q As Double)
+    Dim E As Double
+    Dim F As Double
+    If Abs(D) < Abs(C) Then
+        E = D / C
+        F = C + D * E
+        p = (A + B * E) / F
+        q = (B - A * E) / F
+    Else
+        E = C / D
+        F = D + C * E
+        p = (B + A * E) / F
+        q = (-A + B * E) / F
+    End If
+End Sub
+Private Function NonSymmetricEVD(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal VNeeded As Long, _
+         ByRef WR() As Double, _
+         ByRef WI() As Double, _
+         ByRef VL() As Double, _
+         ByRef VR() As Double) As Boolean
+    Dim Result As Boolean
+    Dim A() As Double
+    Dim S() As Double
+    Dim Tau() As Double
+    Dim SEL() As Boolean
+    Dim i As Long
+    Dim Info As Long
+    Dim M As Long
+    Dim i_ As Long
+    A = A_
+    If VNeeded = 0# Then
+        
+        '
+        ' Eigen values only
+        '
+        Call ToUpperHessenberg(A, N, Tau)
+        Call InternalSchurDecomposition(A, N, 0#, 0#, WR, WI, S, Info)
+        Result = Info = 0#
+        NonSymmetricEVD = Result
+        Exit Function
+    End If
+    
+    '
+    ' Eigen values and vectors
+    '
+    Call ToUpperHessenberg(A, N, Tau)
+    Call UnpackQFromUpperHessenberg(A, N, Tau, S)
+    Call InternalSchurDecomposition(A, N, 1#, 1#, WR, WI, S, Info)
+    Result = Info = 0#
+    If Not Result Then
+        NonSymmetricEVD = Result
+        Exit Function
+    End If
+    If VNeeded = 1# Or VNeeded = 3# Then
+        ReDim VR(1# To N, 1# To N)
+        For i = 1# To N Step 1
+            For i_ = 1# To N Step 1
+                VR(i, i_) = S(i, i_)
+            Next i_
+        Next i
+    End If
+    If VNeeded = 2# Or VNeeded = 3# Then
+        ReDim VL(1# To N, 1# To N)
+        For i = 1# To N Step 1
+            For i_ = 1# To N Step 1
+                VL(i, i_) = S(i, i_)
+            Next i_
+        Next i
+    End If
+    Call InternalTREVC(A, N, VNeeded, 1#, SEL, VL, VR, M, Info)
+    Result = Info = 0#
+    NonSymmetricEVD = Result
+End Function
+Private Sub ToUpperHessenberg(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByRef Tau() As Double)
+    Dim i As Long
+    Dim IP1 As Long
+    Dim NMI As Long
+    Dim V As Double
+    Dim T() As Double
+    Dim WORK() As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Quick return if possible
+    '
+    If N <= 1# Then
+        Exit Sub
+    End If
+    ReDim Tau(1# To N - 1#)
+    ReDim T(1# To N)
+    ReDim WORK(1# To N)
+    For i = 1# To N - 1# Step 1
+        
+        '
+        ' Compute elementary reflector H(i) to annihilate A(i+2:ihi,i)
+        '
+        IP1 = i + 1#
+        NMI = N - i
+        i1_ = (IP1) - (1#)
+        For i_ = 1# To NMI Step 1
+            T(i_) = A(i_ + i1_, i)
+        Next i_
+        Call GenerateReflection(T, NMI, V)
+        i1_ = (1#) - (IP1)
+        For i_ = IP1 To N Step 1
+            A(i_, i) = T(i_ + i1_)
+        Next i_
+        Tau(i) = V
+        T(1#) = 1#
+        
+        '
+        ' Apply H(i) to A(1:ihi,i+1:ihi) from the right
+        '
+        Call ApplyReflectionFromTheRight(A, V, T, 1#, N, i + 1#, N, WORK)
+        
+        '
+        ' Apply H(i) to A(i+1:ihi,i+1:n) from the left
+        '
+        Call ApplyReflectionFromTheLeft(A, V, T, i + 1#, N, i + 1#, N, WORK)
+    Next i
+End Sub
+Private Sub UnpackQFromUpperHessenberg(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByRef Tau() As Double, _
+         ByRef q() As Double)
+    Dim i As Long
+    Dim j As Long
+    Dim V() As Double
+    Dim WORK() As Double
+    Dim IP1 As Long
+    Dim NMI As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    If N = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' init
+    '
+    ReDim q(1# To N, 1# To N)
+    ReDim V(1# To N)
+    ReDim WORK(1# To N)
+    For i = 1# To N Step 1
+        For j = 1# To N Step 1
+            If i = j Then
+                q(i, j) = 1#
+            Else
+                q(i, j) = 0#
+            End If
+        Next j
+    Next i
+    
+    '
+    ' unpack Q
+    '
+    For i = 1# To N - 1# Step 1
+        
+        '
+        ' Apply H(i)
+        '
+        IP1 = i + 1#
+        NMI = N - i
+        i1_ = (IP1) - (1#)
+        For i_ = 1# To NMI Step 1
+            V(i_) = A(i_ + i1_, i)
+        Next i_
+        V(1#) = 1#
+        Call ApplyReflectionFromTheRight(q, Tau(i), V, 1#, N, i + 1#, N, WORK)
+    Next i
+End Sub
+Private Sub UnpackHFromUpperHessenberg(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByRef Tau() As Double, _
+         ByRef H() As Double)
+    Dim i As Long
+    Dim j As Long
+    Dim V() As Double
+    Dim WORK() As Double
+    Dim i_ As Long
+    If N = 0# Then
+        Exit Sub
+    End If
+    ReDim H(1# To N, 1# To N)
+    For i = 1# To N Step 1
+        For j = 1# To i - 2# Step 1
+            H(i, j) = 0#
+        Next j
+        j = MaxInt(1#, i - 1#)
+        For i_ = j To N Step 1
+            H(i, i_) = A(i, i_)
+        Next i_
+    Next i
+End Sub
+

@@ -1,0 +1,472 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2005-2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Algorithm for solving the following generalized symmetric positive-definite
+'eigenproblem:
+'    A*x = lambda*B*x (1) or
+'    A*B*x = lambda*x (2) or
+'    B*A*x = lambda*x (3).
+'where A is a symmetric matrix, B - symmetric positive-definite matrix.
+'The problem is solved by reducing it to an ordinary  symmetric  eigenvalue
+'problem.
+'
+'Input parameters:
+'    A           -   symmetric matrix which is given by its upper or lower
+'                    triangular part.
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'    N           -   size of matrices A and B.
+'    IsUpperA    -   storage format of matrix A.
+'    B           -   symmetric positive-definite matrix which is given by
+'                    its upper or lower triangular part.
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'    IsUpperB    -   storage format of matrix B.
+'    ZNeeded     -   if ZNeeded is equal to:
+'                     * 0, the eigenvectors are not returned;
+'                     * 1, the eigenvectors are returned.
+'    ProblemType -   if ProblemType is equal to:
+'                     * 1, the following problem is solved: A*x = lambda*B*x;
+'                     * 2, the following problem is solved: A*B*x = lambda*x;
+'                     * 3, the following problem is solved: B*A*x = lambda*x.
+'
+'Output parameters:
+'    D           -   eigenvalues in ascending order.
+'                    Array whose index ranges within [0..N-1].
+'    Z           -   if ZNeeded is equal to:
+'                     * 0, Z hasn’t changed;
+'                     * 1, Z contains eigenvectors.
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'                    The eigenvectors are stored in matrix columns. It should
+'                    be noted that the eigenvectors in such problems do not
+'                    form an orthogonal system.
+'
+'Result:
+'    True, if the problem was solved successfully.
+'    False, if the error occurred during the Cholesky decomposition of matrix
+'    B (the matrix isn’t positive-definite) or during the work of the iterative
+'    algorithm for solving the symmetric eigenproblem.
+'
+'See also the GeneralizedSymmetricDefiniteEVDReduce subroutine.
+'
+'  -- ALGLIB --
+'     Copyright 1.28.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixGEVD(ByRef A_() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpperA As Boolean, _
+         ByRef B() As Double, _
+         ByVal IsUpperB As Boolean, _
+         ByVal ZNeeded As Long, _
+         ByVal ProblemType As Long, _
+         ByRef D() As Double, _
+         ByRef z() As Double) As Boolean
+    Dim Result As Boolean
+    Dim A() As Double
+    Dim R() As Double
+    Dim T() As Double
+    Dim IsUpperR As Boolean
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim J1INC As Long
+    Dim J2INC As Long
+    Dim i As Long
+    Dim j As Long
+    Dim V As Double
+    Dim i_ As Long
+    A = A_
+    
+    '
+    ' Reduce and solve
+    '
+    Result = SMatrixGEVDReduce(A, N, IsUpperA, B, IsUpperB, ProblemType, R, IsUpperR)
+    If Not Result Then
+        SMatrixGEVD = Result
+        Exit Function
+    End If
+    Result = SMatrixEVD(A, N, ZNeeded, IsUpperA, D, T)
+    If Not Result Then
+        SMatrixGEVD = Result
+        Exit Function
+    End If
+    
+    '
+    ' Transform eigenvectors if needed
+    '
+    If ZNeeded <> 0# Then
+        
+        '
+        ' fill Z with zeros
+        '
+        ReDim z(0# To N - 1#, 0# To N - 1#)
+        For j = 0# To N - 1# Step 1
+            z(0#, j) = 0#
+        Next j
+        For i = 1# To N - 1# Step 1
+            For i_ = 0# To N - 1# Step 1
+                z(i, i_) = z(0#, i_)
+            Next i_
+        Next i
+        
+        '
+        ' Setup R properties
+        '
+        If IsUpperR Then
+            J1 = 0#
+            J2 = N - 1#
+            J1INC = 1#
+            J2INC = 0#
+        Else
+            J1 = 0#
+            J2 = 0#
+            J1INC = 0#
+            J2INC = 1#
+        End If
+        
+        '
+        ' Calculate R*Z
+        '
+        For i = 0# To N - 1# Step 1
+            For j = J1 To J2 Step 1
+                V = R(i, j)
+                For i_ = 0# To N - 1# Step 1
+                    z(i, i_) = z(i, i_) + V * T(j, i_)
+                Next i_
+            Next j
+            J1 = J1 + J1INC
+            J2 = J2 + J2INC
+        Next i
+    End If
+    SMatrixGEVD = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Algorithm for reduction of the following generalized symmetric positive-
+'definite eigenvalue problem:
+'    A*x = lambda*B*x (1) or
+'    A*B*x = lambda*x (2) or
+'    B*A*x = lambda*x (3)
+'to the symmetric eigenvalues problem C*y = lambda*y (eigenvalues of this and
+'the given problems are the same, and the eigenvectors of the given problem
+'could be obtained by multiplying the obtained eigenvectors by the
+'transformation matrix x = R*y).
+'
+'Here A is a symmetric matrix, B - symmetric positive-definite matrix.
+'
+'Input parameters:
+'    A           -   symmetric matrix which is given by its upper or lower
+'                    triangular part.
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'    N           -   size of matrices A and B.
+'    IsUpperA    -   storage format of matrix A.
+'    B           -   symmetric positive-definite matrix which is given by
+'                    its upper or lower triangular part.
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'    IsUpperB    -   storage format of matrix B.
+'    ProblemType -   if ProblemType is equal to:
+'                     * 1, the following problem is solved: A*x = lambda*B*x;
+'                     * 2, the following problem is solved: A*B*x = lambda*x;
+'                     * 3, the following problem is solved: B*A*x = lambda*x.
+'
+'Output parameters:
+'    A           -   symmetric matrix which is given by its upper or lower
+'                    triangle depending on IsUpperA. Contains matrix C.
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'    R           -   upper triangular or low triangular transformation matrix
+'                    which is used to obtain the eigenvectors of a given problem
+'                    as the product of eigenvectors of C (from the right) and
+'                    matrix R (from the left). If the matrix is upper
+'                    triangular, the elements below the main diagonal
+'                    are equal to 0 (and vice versa). Thus, we can perform
+'                    the multiplication without taking into account the
+'                    internal structure (which is an easier though less
+'                    effective way).
+'                    Array whose indexes range within [0..N-1, 0..N-1].
+'    IsUpperR    -   type of matrix R (upper or lower triangular).
+'
+'Result:
+'    True, if the problem was reduced successfully.
+'    False, if the error occurred during the Cholesky decomposition of
+'        matrix B (the matrix is not positive-definite).
+'
+'  -- ALGLIB --
+'     Copyright 1.28.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixGEVDReduce(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpperA As Boolean, _
+         ByRef B() As Double, _
+         ByVal IsUpperB As Boolean, _
+         ByVal ProblemType As Long, _
+         ByRef R() As Double, _
+         ByRef IsUpperR As Boolean) As Boolean
+    Dim Result As Boolean
+    Dim T() As Double
+    Dim W1() As Double
+    Dim W2() As Double
+    Dim W3() As Double
+    Dim i As Long
+    Dim j As Long
+    Dim V As Double
+    Dim Rep As MatInvReport
+    Dim Info As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    Result = True
+    
+    '
+    ' Problem 1:  A*x = lambda*B*x
+    '
+    ' Reducing to:
+    '     C*y = lambda*y
+    '     C = L^(-1) * A * L^(-T)
+    '     x = L^(-T) * y
+    '
+    If ProblemType = 1# Then
+        
+        '
+        ' Factorize B in T: B = LL'
+        '
+        ReDim T(0# To N - 1#, 0# To N - 1#)
+        If IsUpperB Then
+            For i = 0# To N - 1# Step 1
+                For i_ = i To N - 1# Step 1
+                    T(i_, i) = B(i, i_)
+                Next i_
+            Next i
+        Else
+            For i = 0# To N - 1# Step 1
+                For i_ = 0# To i Step 1
+                    T(i, i_) = B(i, i_)
+                Next i_
+            Next i
+        End If
+        If Not SPDMatrixCholesky(T, N, False) Then
+            Result = False
+            SMatrixGEVDReduce = Result
+            Exit Function
+        End If
+        
+        '
+        ' Invert L in T
+        '
+        Call RMatrixTRInverse(T, N, False, False, Info, Rep)
+        If Info <= 0# Then
+            Result = False
+            SMatrixGEVDReduce = Result
+            Exit Function
+        End If
+        
+        '
+        ' Build L^(-1) * A * L^(-T) in R
+        '
+        ReDim W1(1# To N)
+        ReDim W2(1# To N)
+        ReDim R(0# To N - 1#, 0# To N - 1#)
+        For j = 1# To N Step 1
+            
+            '
+            ' Form w2 = A * l'(j) (here l'(j) is j-th column of L^(-T))
+            '
+            i1_ = (0#) - (1#)
+            For i_ = 1# To j Step 1
+                W1(i_) = T(j - 1#, i_ + i1_)
+            Next i_
+            Call SymmetricMatrixVectorMultiply(A, IsUpperA, 0#, j - 1#, W1, 1#, W2)
+            If IsUpperA Then
+                Call MatrixVectorMultiply(A, 0#, j - 1#, j, N - 1#, True, W1, 1#, j, 1#, W2, j + 1#, N, 0#)
+            Else
+                Call MatrixVectorMultiply(A, j, N - 1#, 0#, j - 1#, False, W1, 1#, j, 1#, W2, j + 1#, N, 0#)
+            End If
+            
+            '
+            ' Form l(i)*w2 (here l(i) is i-th row of L^(-1))
+            '
+            For i = 1# To N Step 1
+                i1_ = (1#) - (0#)
+                V = 0#
+                For i_ = 0# To i - 1# Step 1
+                    V = V + T(i - 1#, i_) * W2(i_ + i1_)
+                Next i_
+                R(i - 1#, j - 1#) = V
+            Next i
+        Next j
+        
+        '
+        ' Copy R to A
+        '
+        For i = 0# To N - 1# Step 1
+            For i_ = 0# To N - 1# Step 1
+                A(i, i_) = R(i, i_)
+            Next i_
+        Next i
+        
+        '
+        ' Copy L^(-1) from T to R and transpose
+        '
+        IsUpperR = True
+        For i = 0# To N - 1# Step 1
+            For j = 0# To i - 1# Step 1
+                R(i, j) = 0#
+            Next j
+        Next i
+        For i = 0# To N - 1# Step 1
+            For i_ = i To N - 1# Step 1
+                R(i, i_) = T(i_, i)
+            Next i_
+        Next i
+        SMatrixGEVDReduce = Result
+        Exit Function
+    End If
+    
+    '
+    ' Problem 2:  A*B*x = lambda*x
+    ' or
+    ' problem 3:  B*A*x = lambda*x
+    '
+    ' Reducing to:
+    '     C*y = lambda*y
+    '     C = U * A * U'
+    '     B = U'* U
+    '
+    If ProblemType = 2# Or ProblemType = 3# Then
+        
+        '
+        ' Factorize B in T: B = U'*U
+        '
+        ReDim T(0# To N - 1#, 0# To N - 1#)
+        If IsUpperB Then
+            For i = 0# To N - 1# Step 1
+                For i_ = i To N - 1# Step 1
+                    T(i, i_) = B(i, i_)
+                Next i_
+            Next i
+        Else
+            For i = 0# To N - 1# Step 1
+                For i_ = i To N - 1# Step 1
+                    T(i, i_) = B(i_, i)
+                Next i_
+            Next i
+        End If
+        If Not SPDMatrixCholesky(T, N, True) Then
+            Result = False
+            SMatrixGEVDReduce = Result
+            Exit Function
+        End If
+        
+        '
+        ' Build U * A * U' in R
+        '
+        ReDim W1(1# To N)
+        ReDim W2(1# To N)
+        ReDim W3(1# To N)
+        ReDim R(0# To N - 1#, 0# To N - 1#)
+        For j = 1# To N Step 1
+            
+            '
+            ' Form w2 = A * u'(j) (here u'(j) is j-th column of U')
+            '
+            i1_ = (j - 1#) - (1#)
+            For i_ = 1# To N - j + 1# Step 1
+                W1(i_) = T(j - 1#, i_ + i1_)
+            Next i_
+            Call SymmetricMatrixVectorMultiply(A, IsUpperA, j - 1#, N - 1#, W1, 1#, W3)
+            i1_ = (1#) - (j)
+            For i_ = j To N Step 1
+                W2(i_) = W3(i_ + i1_)
+            Next i_
+            i1_ = (j - 1#) - (j)
+            For i_ = j To N Step 1
+                W1(i_) = T(j - 1#, i_ + i1_)
+            Next i_
+            If IsUpperA Then
+                Call MatrixVectorMultiply(A, 0#, j - 2#, j - 1#, N - 1#, False, W1, j, N, 1#, W2, 1#, j - 1#, 0#)
+            Else
+                Call MatrixVectorMultiply(A, j - 1#, N - 1#, 0#, j - 2#, True, W1, j, N, 1#, W2, 1#, j - 1#, 0#)
+            End If
+            
+            '
+            ' Form u(i)*w2 (here u(i) is i-th row of U)
+            '
+            For i = 1# To N Step 1
+                i1_ = (i) - (i - 1#)
+                V = 0#
+                For i_ = i - 1# To N - 1# Step 1
+                    V = V + T(i - 1#, i_) * W2(i_ + i1_)
+                Next i_
+                R(i - 1#, j - 1#) = V
+            Next i
+        Next j
+        
+        '
+        ' Copy R to A
+        '
+        For i = 0# To N - 1# Step 1
+            For i_ = 0# To N - 1# Step 1
+                A(i, i_) = R(i, i_)
+            Next i_
+        Next i
+        If ProblemType = 2# Then
+            
+            '
+            ' Invert U in T
+            '
+            Call RMatrixTRInverse(T, N, True, False, Info, Rep)
+            If Info <= 0# Then
+                Result = False
+                SMatrixGEVDReduce = Result
+                Exit Function
+            End If
+            
+            '
+            ' Copy U^-1 from T to R
+            '
+            IsUpperR = True
+            For i = 0# To N - 1# Step 1
+                For j = 0# To i - 1# Step 1
+                    R(i, j) = 0#
+                Next j
+            Next i
+            For i = 0# To N - 1# Step 1
+                For i_ = i To N - 1# Step 1
+                    R(i, i_) = T(i, i_)
+                Next i_
+            Next i
+        Else
+            
+            '
+            ' Copy U from T to R and transpose
+            '
+            IsUpperR = False
+            For i = 0# To N - 1# Step 1
+                For j = i + 1# To N - 1# Step 1
+                    R(i, j) = 0#
+                Next j
+            Next i
+            For i = 0# To N - 1# Step 1
+                For i_ = i To N - 1# Step 1
+                    R(i_, i) = T(i, i_)
+                Next i_
+            Next i
+        End If
+    End If
+    SMatrixGEVDReduce = Result
+End Function
+

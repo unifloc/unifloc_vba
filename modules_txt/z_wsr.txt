@@ -1,0 +1,4781 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Wilcoxon signed-rank test
+'
+'This test checks three hypotheses about the median  of  the  given sample.
+'The following tests are performed:
+'    * two-tailed test (null hypothesis - the median is equal to the  given
+'      value)
+'    * left-tailed test (null hypothesis - the median is  greater  than  or
+'      equal to the given value)
+'    * right-tailed test (null hypothesis  -  the  median  is  less than or
+'      equal to the given value)
+'
+'Requirements:
+'    * the scale of measurement should be ordinal, interval or  ratio (i.e.
+'      the test could not be applied to nominal variables).
+'    * the distribution should be continuous and symmetric relative to  its
+'      median.
+'    * number of distinct values in the X array should be greater than 4
+'
+'The test is non-parametric and doesn't require distribution X to be normal
+'
+'Input parameters:
+'    X       -   sample. Array whose index goes from 0 to N-1.
+'    N       -   size of the sample.
+'    Median  -   assumed median value.
+'
+'Output parameters:
+'    BothTails   -   p-value for two-tailed test.
+'                    If BothTails is less than the given significance level
+'                    the null hypothesis is rejected.
+'    LeftTail    -   p-value for left-tailed test.
+'                    If LeftTail is less than the given significance level,
+'                    the null hypothesis is rejected.
+'    RightTail   -   p-value for right-tailed test.
+'                    If RightTail is less than the given significance level
+'                    the null hypothesis is rejected.
+'
+'To calculate p-values, special approximation is used. This method lets  us
+'calculate p-values with two decimal places in interval [0.0001, 1].
+'
+'"Two decimal places" does not sound very impressive, but in  practice  the
+'relative error of less than 1% is enough to make a decision.
+'
+'There is no approximation outside the [0.0001, 1] interval. Therefore,  if
+'the significance level outlies this interval, the test returns 0.0001.
+'
+'  -- ALGLIB --
+'     Copyright 08.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub WilcoxonSignedRankTest(ByRef X_() As Double, _
+         ByVal N As Long, _
+         ByVal E As Double, _
+         ByRef BothTails As Double, _
+         ByRef LeftTail As Double, _
+         ByRef RightTail As Double)
+    Dim X() As Double
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim T As Long
+    Dim Tmp As Double
+    Dim TmpI As Long
+    Dim NS As Long
+    Dim R() As Double
+    Dim C() As Long
+    Dim w As Double
+    Dim p As Double
+    Dim MP As Double
+    Dim S As Double
+    Dim Sigma As Double
+    Dim Mu As Double
+    X = X_
+    
+    '
+    ' Prepare
+    '
+    If N < 5# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    NS = 0#
+    For i = 0# To N - 1# Step 1
+        If X(i) = E Then
+            GoTo Cont_1
+        End If
+        X(NS) = X(i)
+        NS = NS + 1#
+Cont_1:
+    Next i
+    If NS < 5# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    ReDim R(0# To NS - 1#)
+    ReDim C(0# To NS - 1#)
+    For i = 0# To NS - 1# Step 1
+        R(i) = Abs(X(i) - E)
+        C(i) = i
+    Next i
+    
+    '
+    ' sort {R, C}
+    '
+    If NS <> 1# Then
+        i = 2#
+        Do
+            T = i
+            Do While T <> 1#
+                K = T \ 2#
+                If R(K - 1#) >= R(T - 1#) Then
+                    T = 1#
+                Else
+                    Tmp = R(K - 1#)
+                    R(K - 1#) = R(T - 1#)
+                    R(T - 1#) = Tmp
+                    TmpI = C(K - 1#)
+                    C(K - 1#) = C(T - 1#)
+                    C(T - 1#) = TmpI
+                    T = K
+                End If
+            Loop
+            i = i + 1#
+        Loop Until Not i <= NS
+        i = NS - 1#
+        Do
+            Tmp = R(i)
+            R(i) = R(0#)
+            R(0#) = Tmp
+            TmpI = C(i)
+            C(i) = C(0#)
+            C(0#) = TmpI
+            T = 1#
+            Do While T <> 0#
+                K = 2# * T
+                If K > i Then
+                    T = 0#
+                Else
+                    If K < i Then
+                        If R(K) > R(K - 1#) Then
+                            K = K + 1#
+                        End If
+                    End If
+                    If R(T - 1#) >= R(K - 1#) Then
+                        T = 0#
+                    Else
+                        Tmp = R(K - 1#)
+                        R(K - 1#) = R(T - 1#)
+                        R(T - 1#) = Tmp
+                        TmpI = C(K - 1#)
+                        C(K - 1#) = C(T - 1#)
+                        C(T - 1#) = TmpI
+                        T = K
+                    End If
+                End If
+            Loop
+            i = i - 1#
+        Loop Until Not i >= 1#
+    End If
+    
+    '
+    ' compute tied ranks
+    '
+    i = 0#
+    Do While i <= NS - 1#
+        j = i + 1#
+        Do While j <= NS - 1#
+            If R(j) <> R(i) Then
+                Exit Do
+            End If
+            j = j + 1#
+        Loop
+        For K = i To j - 1# Step 1
+            R(K) = 1# + (i + j - 1#) / 2#
+        Next K
+        i = j
+    Loop
+    
+    '
+    ' Compute W+
+    '
+    w = 0#
+    For i = 0# To NS - 1# Step 1
+        If X(C(i)) > E Then
+            w = w + R(i)
+        End If
+    Next i
+    
+    '
+    ' Result
+    '
+    Mu = NS * (NS + 1#) / 4#
+    Sigma = Sqr(NS * (NS + 1#) * (2# * NS + 1#) / 24#)
+    S = (w - Mu) / Sigma
+    If S <= 0# Then
+        p = Exp(WSigma(-((w - Mu) / Sigma), NS))
+        MP = 1# - Exp(WSigma(-((w - 1# - Mu) / Sigma), NS))
+    Else
+        MP = Exp(WSigma((w - Mu) / Sigma, NS))
+        p = 1# - Exp(WSigma((w + 1# - Mu) / Sigma, NS))
+    End If
+    BothTails = MaxReal(2# * MinReal(p, MP), 0.0001)
+    LeftTail = MaxReal(p, 0.0001)
+    RightTail = MaxReal(MP, 0.0001)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Sequential Chebyshev interpolation.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub WCheb(ByVal X As Double, _
+         ByVal C As Double, _
+         ByRef TJ As Double, _
+         ByRef TJ1 As Double, _
+         ByRef R As Double)
+    Dim T As Double
+    R = R + C * TJ
+    T = 2# * X * TJ1 - TJ
+    TJ = TJ1
+    TJ1 = T
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 5)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W5(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(3.708099 * S) + 7.5)
+    If w >= 7# Then
+        R = -0.6931
+    End If
+    If w = 6# Then
+        R = -0.9008
+    End If
+    If w = 5# Then
+        R = -1.163
+    End If
+    If w = 4# Then
+        R = -1.52
+    End If
+    If w = 3# Then
+        R = -1.856
+    End If
+    If w = 2# Then
+        R = -2.367
+    End If
+    If w = 1# Then
+        R = -2.773
+    End If
+    If w <= 0# Then
+        R = -3.466
+    End If
+    Result = R
+    W5 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 6)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W6(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(4.769696 * S) + 10.5)
+    If w >= 10# Then
+        R = -0.6931
+    End If
+    If w = 9# Then
+        R = -0.863
+    End If
+    If w = 8# Then
+        R = -1.068
+    End If
+    If w = 7# Then
+        R = -1.269
+    End If
+    If w = 6# Then
+        R = -1.52
+    End If
+    If w = 5# Then
+        R = -1.856
+    End If
+    If w = 4# Then
+        R = -2.213
+    End If
+    If w = 3# Then
+        R = -2.549
+    End If
+    If w = 2# Then
+        R = -3.06
+    End If
+    If w = 1# Then
+        R = -3.466
+    End If
+    If w <= 0# Then
+        R = -4.159
+    End If
+    Result = R
+    W6 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 7)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W7(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(5.91608 * S) + 14#)
+    If w >= 14# Then
+        R = -0.6325
+    End If
+    If w = 13# Then
+        R = -0.7577
+    End If
+    If w = 12# Then
+        R = -0.9008
+    End If
+    If w = 11# Then
+        R = -1.068
+    End If
+    If w = 10# Then
+        R = -1.241
+    End If
+    If w = 9# Then
+        R = -1.451
+    End If
+    If w = 8# Then
+        R = -1.674
+    End If
+    If w = 7# Then
+        R = -1.908
+    End If
+    If w = 6# Then
+        R = -2.213
+    End If
+    If w = 5# Then
+        R = -2.549
+    End If
+    If w = 4# Then
+        R = -2.906
+    End If
+    If w = 3# Then
+        R = -3.243
+    End If
+    If w = 2# Then
+        R = -3.753
+    End If
+    If w = 1# Then
+        R = -4.159
+    End If
+    If w <= 0# Then
+        R = -4.852
+    End If
+    Result = R
+    W7 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 8)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W8(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(7.141428 * S) + 18#)
+    If w >= 18# Then
+        R = -0.6399
+    End If
+    If w = 17# Then
+        R = -0.7494
+    End If
+    If w = 16# Then
+        R = -0.863
+    End If
+    If w = 15# Then
+        R = -0.9913
+    End If
+    If w = 14# Then
+        R = -1.138
+    End If
+    If w = 13# Then
+        R = -1.297
+    End If
+    If w = 12# Then
+        R = -1.468
+    End If
+    If w = 11# Then
+        R = -1.653
+    End If
+    If w = 10# Then
+        R = -1.856
+    End If
+    If w = 9# Then
+        R = -2.079
+    End If
+    If w = 8# Then
+        R = -2.326
+    End If
+    If w = 7# Then
+        R = -2.601
+    End If
+    If w = 6# Then
+        R = -2.906
+    End If
+    If w = 5# Then
+        R = -3.243
+    End If
+    If w = 4# Then
+        R = -3.599
+    End If
+    If w = 3# Then
+        R = -3.936
+    End If
+    If w = 2# Then
+        R = -4.447
+    End If
+    If w = 1# Then
+        R = -4.852
+    End If
+    If w <= 0# Then
+        R = -5.545
+    End If
+    Result = R
+    W8 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 9)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W9(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(8.440972 * S) + 22.5)
+    If w >= 22# Then
+        R = -0.6931
+    End If
+    If w = 21# Then
+        R = -0.7873
+    End If
+    If w = 20# Then
+        R = -0.8912
+    End If
+    If w = 19# Then
+        R = -1.002
+    End If
+    If w = 18# Then
+        R = -1.12
+    End If
+    If w = 17# Then
+        R = -1.255
+    End If
+    If w = 16# Then
+        R = -1.394
+    End If
+    If w = 15# Then
+        R = -1.547
+    End If
+    If w = 14# Then
+        R = -1.717
+    End If
+    If w = 13# Then
+        R = -1.895
+    End If
+    If w = 12# Then
+        R = -2.079
+    End If
+    If w = 11# Then
+        R = -2.287
+    End If
+    If w = 10# Then
+        R = -2.501
+    End If
+    If w = 9# Then
+        R = -2.742
+    End If
+    If w = 8# Then
+        R = -3.019
+    End If
+    If w = 7# Then
+        R = -3.294
+    End If
+    If w = 6# Then
+        R = -3.599
+    End If
+    If w = 5# Then
+        R = -3.936
+    End If
+    If w = 4# Then
+        R = -4.292
+    End If
+    If w = 3# Then
+        R = -4.629
+    End If
+    If w = 2# Then
+        R = -5.14
+    End If
+    If w = 1# Then
+        R = -5.545
+    End If
+    If w <= 0# Then
+        R = -6.238
+    End If
+    Result = R
+    W9 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 10)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W10(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(9.810708 * S) + 27.5)
+    If w >= 27# Then
+        R = -0.6931
+    End If
+    If w = 26# Then
+        R = -0.7745
+    End If
+    If w = 25# Then
+        R = -0.8607
+    End If
+    If w = 24# Then
+        R = -0.9551
+    End If
+    If w = 23# Then
+        R = -1.057
+    End If
+    If w = 22# Then
+        R = -1.163
+    End If
+    If w = 21# Then
+        R = -1.279
+    End If
+    If w = 20# Then
+        R = -1.402
+    End If
+    If w = 19# Then
+        R = -1.533
+    End If
+    If w = 18# Then
+        R = -1.674
+    End If
+    If w = 17# Then
+        R = -1.826
+    End If
+    If w = 16# Then
+        R = -1.983
+    End If
+    If w = 15# Then
+        R = -2.152
+    End If
+    If w = 14# Then
+        R = -2.336
+    End If
+    If w = 13# Then
+        R = -2.525
+    End If
+    If w = 12# Then
+        R = -2.727
+    End If
+    If w = 11# Then
+        R = -2.942
+    End If
+    If w = 10# Then
+        R = -3.17
+    End If
+    If w = 9# Then
+        R = -3.435
+    End If
+    If w = 8# Then
+        R = -3.713
+    End If
+    If w = 7# Then
+        R = -3.987
+    End If
+    If w = 6# Then
+        R = -4.292
+    End If
+    If w = 5# Then
+        R = -4.629
+    End If
+    If w = 4# Then
+        R = -4.986
+    End If
+    If w = 3# Then
+        R = -5.322
+    End If
+    If w = 2# Then
+        R = -5.833
+    End If
+    If w = 1# Then
+        R = -6.238
+    End If
+    If w <= 0# Then
+        R = -6.931
+    End If
+    Result = R
+    W10 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 11)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W11(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(11.24722 * S) + 33#)
+    If w >= 33# Then
+        R = -0.6595
+    End If
+    If w = 32# Then
+        R = -0.7279
+    End If
+    If w = 31# Then
+        R = -0.8002
+    End If
+    If w = 30# Then
+        R = -0.8782
+    End If
+    If w = 29# Then
+        R = -0.9615
+    End If
+    If w = 28# Then
+        R = -1.05
+    End If
+    If w = 27# Then
+        R = -1.143
+    End If
+    If w = 26# Then
+        R = -1.243
+    End If
+    If w = 25# Then
+        R = -1.348
+    End If
+    If w = 24# Then
+        R = -1.459
+    End If
+    If w = 23# Then
+        R = -1.577
+    End If
+    If w = 22# Then
+        R = -1.7
+    End If
+    If w = 21# Then
+        R = -1.832
+    End If
+    If w = 20# Then
+        R = -1.972
+    End If
+    If w = 19# Then
+        R = -2.119
+    End If
+    If w = 18# Then
+        R = -2.273
+    End If
+    If w = 17# Then
+        R = -2.437
+    End If
+    If w = 16# Then
+        R = -2.607
+    End If
+    If w = 15# Then
+        R = -2.788
+    End If
+    If w = 14# Then
+        R = -2.98
+    End If
+    If w = 13# Then
+        R = -3.182
+    End If
+    If w = 12# Then
+        R = -3.391
+    End If
+    If w = 11# Then
+        R = -3.617
+    End If
+    If w = 10# Then
+        R = -3.863
+    End If
+    If w = 9# Then
+        R = -4.128
+    End If
+    If w = 8# Then
+        R = -4.406
+    End If
+    If w = 7# Then
+        R = -4.68
+    End If
+    If w = 6# Then
+        R = -4.986
+    End If
+    If w = 5# Then
+        R = -5.322
+    End If
+    If w = 4# Then
+        R = -5.679
+    End If
+    If w = 3# Then
+        R = -6.015
+    End If
+    If w = 2# Then
+        R = -6.526
+    End If
+    If w = 1# Then
+        R = -6.931
+    End If
+    If w <= 0# Then
+        R = -7.625
+    End If
+    Result = R
+    W11 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 12)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W12(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(12.74755 * S) + 39#)
+    If w >= 39# Then
+        R = -0.6633
+    End If
+    If w = 38# Then
+        R = -0.7239
+    End If
+    If w = 37# Then
+        R = -0.7878
+    End If
+    If w = 36# Then
+        R = -0.8556
+    End If
+    If w = 35# Then
+        R = -0.9276
+    End If
+    If w = 34# Then
+        R = -1.003
+    End If
+    If w = 33# Then
+        R = -1.083
+    End If
+    If w = 32# Then
+        R = -1.168
+    End If
+    If w = 31# Then
+        R = -1.256
+    End If
+    If w = 30# Then
+        R = -1.35
+    End If
+    If w = 29# Then
+        R = -1.449
+    End If
+    If w = 28# Then
+        R = -1.552
+    End If
+    If w = 27# Then
+        R = -1.66
+    End If
+    If w = 26# Then
+        R = -1.774
+    End If
+    If w = 25# Then
+        R = -1.893
+    End If
+    If w = 24# Then
+        R = -2.017
+    End If
+    If w = 23# Then
+        R = -2.148
+    End If
+    If w = 22# Then
+        R = -2.285
+    End If
+    If w = 21# Then
+        R = -2.429
+    End If
+    If w = 20# Then
+        R = -2.581
+    End If
+    If w = 19# Then
+        R = -2.738
+    End If
+    If w = 18# Then
+        R = -2.902
+    End If
+    If w = 17# Then
+        R = -3.076
+    End If
+    If w = 16# Then
+        R = -3.255
+    End If
+    If w = 15# Then
+        R = -3.443
+    End If
+    If w = 14# Then
+        R = -3.645
+    End If
+    If w = 13# Then
+        R = -3.852
+    End If
+    If w = 12# Then
+        R = -4.069
+    End If
+    If w = 11# Then
+        R = -4.31
+    End If
+    If w = 10# Then
+        R = -4.557
+    End If
+    If w = 9# Then
+        R = -4.821
+    End If
+    If w = 8# Then
+        R = -5.099
+    End If
+    If w = 7# Then
+        R = -5.373
+    End If
+    If w = 6# Then
+        R = -5.679
+    End If
+    If w = 5# Then
+        R = -6.015
+    End If
+    If w = 4# Then
+        R = -6.372
+    End If
+    If w = 3# Then
+        R = -6.708
+    End If
+    If w = 2# Then
+        R = -7.219
+    End If
+    If w = 1# Then
+        R = -7.625
+    End If
+    If w <= 0# Then
+        R = -8.318
+    End If
+    Result = R
+    W12 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 13)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W13(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(14.30909 * S) + 45.5)
+    If w >= 45# Then
+        R = -0.6931
+    End If
+    If w = 44# Then
+        R = -0.7486
+    End If
+    If w = 43# Then
+        R = -0.8068
+    End If
+    If w = 42# Then
+        R = -0.8683
+    End If
+    If w = 41# Then
+        R = -0.9328
+    End If
+    If w = 40# Then
+        R = -1.001
+    End If
+    If w = 39# Then
+        R = -1.072
+    End If
+    If w = 38# Then
+        R = -1.146
+    End If
+    If w = 37# Then
+        R = -1.224
+    End If
+    If w = 36# Then
+        R = -1.306
+    End If
+    If w = 35# Then
+        R = -1.392
+    End If
+    If w = 34# Then
+        R = -1.481
+    End If
+    If w = 33# Then
+        R = -1.574
+    End If
+    If w = 32# Then
+        R = -1.672
+    End If
+    If w = 31# Then
+        R = -1.773
+    End If
+    If w = 30# Then
+        R = -1.879
+    End If
+    If w = 29# Then
+        R = -1.99
+    End If
+    If w = 28# Then
+        R = -2.104
+    End If
+    If w = 27# Then
+        R = -2.224
+    End If
+    If w = 26# Then
+        R = -2.349
+    End If
+    If w = 25# Then
+        R = -2.479
+    End If
+    If w = 24# Then
+        R = -2.614
+    End If
+    If w = 23# Then
+        R = -2.755
+    End If
+    If w = 22# Then
+        R = -2.902
+    End If
+    If w = 21# Then
+        R = -3.055
+    End If
+    If w = 20# Then
+        R = -3.215
+    End If
+    If w = 19# Then
+        R = -3.38
+    End If
+    If w = 18# Then
+        R = -3.551
+    End If
+    If w = 17# Then
+        R = -3.733
+    End If
+    If w = 16# Then
+        R = -3.917
+    End If
+    If w = 15# Then
+        R = -4.113
+    End If
+    If w = 14# Then
+        R = -4.32
+    End If
+    If w = 13# Then
+        R = -4.534
+    End If
+    If w = 12# Then
+        R = -4.762
+    End If
+    If w = 11# Then
+        R = -5.004
+    End If
+    If w = 10# Then
+        R = -5.25
+    End If
+    If w = 9# Then
+        R = -5.514
+    End If
+    If w = 8# Then
+        R = -5.792
+    End If
+    If w = 7# Then
+        R = -6.066
+    End If
+    If w = 6# Then
+        R = -6.372
+    End If
+    If w = 5# Then
+        R = -6.708
+    End If
+    If w = 4# Then
+        R = -7.065
+    End If
+    If w = 3# Then
+        R = -7.401
+    End If
+    If w = 2# Then
+        R = -7.912
+    End If
+    If w = 1# Then
+        R = -8.318
+    End If
+    If w <= 0# Then
+        R = -9.011
+    End If
+    Result = R
+    W13 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 14)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W14(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(15.92953 * S) + 52.5)
+    If w >= 52# Then
+        R = -0.6931
+    End If
+    If w = 51# Then
+        R = -0.7428
+    End If
+    If w = 50# Then
+        R = -0.795
+    End If
+    If w = 49# Then
+        R = -0.8495
+    End If
+    If w = 48# Then
+        R = -0.9067
+    End If
+    If w = 47# Then
+        R = -0.9664
+    End If
+    If w = 46# Then
+        R = -1.029
+    End If
+    If w = 45# Then
+        R = -1.094
+    End If
+    If w = 44# Then
+        R = -1.162
+    End If
+    If w = 43# Then
+        R = -1.233
+    End If
+    If w = 42# Then
+        R = -1.306
+    End If
+    If w = 41# Then
+        R = -1.383
+    End If
+    If w = 40# Then
+        R = -1.463
+    End If
+    If w = 39# Then
+        R = -1.546
+    End If
+    If w = 38# Then
+        R = -1.632
+    End If
+    If w = 37# Then
+        R = -1.722
+    End If
+    If w = 36# Then
+        R = -1.815
+    End If
+    If w = 35# Then
+        R = -1.911
+    End If
+    If w = 34# Then
+        R = -2.011
+    End If
+    If w = 33# Then
+        R = -2.115
+    End If
+    If w = 32# Then
+        R = -2.223
+    End If
+    If w = 31# Then
+        R = -2.334
+    End If
+    If w = 30# Then
+        R = -2.45
+    End If
+    If w = 29# Then
+        R = -2.57
+    End If
+    If w = 28# Then
+        R = -2.694
+    End If
+    If w = 27# Then
+        R = -2.823
+    End If
+    If w = 26# Then
+        R = -2.956
+    End If
+    If w = 25# Then
+        R = -3.095
+    End If
+    If w = 24# Then
+        R = -3.238
+    End If
+    If w = 23# Then
+        R = -3.387
+    End If
+    If w = 22# Then
+        R = -3.541
+    End If
+    If w = 21# Then
+        R = -3.7
+    End If
+    If w = 20# Then
+        R = -3.866
+    End If
+    If w = 19# Then
+        R = -4.038
+    End If
+    If w = 18# Then
+        R = -4.215
+    End If
+    If w = 17# Then
+        R = -4.401
+    End If
+    If w = 16# Then
+        R = -4.592
+    End If
+    If w = 15# Then
+        R = -4.791
+    End If
+    If w = 14# Then
+        R = -5.004
+    End If
+    If w = 13# Then
+        R = -5.227
+    End If
+    If w = 12# Then
+        R = -5.456
+    End If
+    If w = 11# Then
+        R = -5.697
+    End If
+    If w = 10# Then
+        R = -5.943
+    End If
+    If w = 9# Then
+        R = -6.208
+    End If
+    If w = 8# Then
+        R = -6.485
+    End If
+    If w = 7# Then
+        R = -6.76
+    End If
+    If w = 6# Then
+        R = -7.065
+    End If
+    If w = 5# Then
+        R = -7.401
+    End If
+    If w = 4# Then
+        R = -7.758
+    End If
+    If w = 3# Then
+        R = -8.095
+    End If
+    If w = 2# Then
+        R = -8.605
+    End If
+    If w = 1# Then
+        R = -9.011
+    End If
+    If w <= 0# Then
+        R = -9.704
+    End If
+    Result = R
+    W14 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 15)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W15(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(17.60682 * S) + 60#)
+    If w >= 60# Then
+        R = -0.6714
+    End If
+    If w = 59# Then
+        R = -0.7154
+    End If
+    If w = 58# Then
+        R = -0.7613
+    End If
+    If w = 57# Then
+        R = -0.8093
+    End If
+    If w = 56# Then
+        R = -0.8593
+    End If
+    If w = 55# Then
+        R = -0.9114
+    End If
+    If w = 54# Then
+        R = -0.9656
+    End If
+    If w = 53# Then
+        R = -1.022
+    End If
+    If w = 52# Then
+        R = -1.081
+    End If
+    If w = 51# Then
+        R = -1.142
+    End If
+    If w = 50# Then
+        R = -1.205
+    End If
+    If w = 49# Then
+        R = -1.27
+    End If
+    If w = 48# Then
+        R = -1.339
+    End If
+    If w = 47# Then
+        R = -1.409
+    End If
+    If w = 46# Then
+        R = -1.482
+    End If
+    If w = 45# Then
+        R = -1.558
+    End If
+    If w = 44# Then
+        R = -1.636
+    End If
+    If w = 43# Then
+        R = -1.717
+    End If
+    If w = 42# Then
+        R = -1.801
+    End If
+    If w = 41# Then
+        R = -1.888
+    End If
+    If w = 40# Then
+        R = -1.977
+    End If
+    If w = 39# Then
+        R = -2.07
+    End If
+    If w = 38# Then
+        R = -2.166
+    End If
+    If w = 37# Then
+        R = -2.265
+    End If
+    If w = 36# Then
+        R = -2.366
+    End If
+    If w = 35# Then
+        R = -2.472
+    End If
+    If w = 34# Then
+        R = -2.581
+    End If
+    If w = 33# Then
+        R = -2.693
+    End If
+    If w = 32# Then
+        R = -2.809
+    End If
+    If w = 31# Then
+        R = -2.928
+    End If
+    If w = 30# Then
+        R = -3.051
+    End If
+    If w = 29# Then
+        R = -3.179
+    End If
+    If w = 28# Then
+        R = -3.31
+    End If
+    If w = 27# Then
+        R = -3.446
+    End If
+    If w = 26# Then
+        R = -3.587
+    End If
+    If w = 25# Then
+        R = -3.732
+    End If
+    If w = 24# Then
+        R = -3.881
+    End If
+    If w = 23# Then
+        R = -4.036
+    End If
+    If w = 22# Then
+        R = -4.195
+    End If
+    If w = 21# Then
+        R = -4.359
+    End If
+    If w = 20# Then
+        R = -4.531
+    End If
+    If w = 19# Then
+        R = -4.707
+    End If
+    If w = 18# Then
+        R = -4.888
+    End If
+    If w = 17# Then
+        R = -5.079
+    End If
+    If w = 16# Then
+        R = -5.273
+    End If
+    If w = 15# Then
+        R = -5.477
+    End If
+    If w = 14# Then
+        R = -5.697
+    End If
+    If w = 13# Then
+        R = -5.92
+    End If
+    If w = 12# Then
+        R = -6.149
+    End If
+    If w = 11# Then
+        R = -6.39
+    End If
+    If w = 10# Then
+        R = -6.636
+    End If
+    If w = 9# Then
+        R = -6.901
+    End If
+    If w = 8# Then
+        R = -7.178
+    End If
+    If w = 7# Then
+        R = -7.453
+    End If
+    If w = 6# Then
+        R = -7.758
+    End If
+    If w = 5# Then
+        R = -8.095
+    End If
+    If w = 4# Then
+        R = -8.451
+    End If
+    If w = 3# Then
+        R = -8.788
+    End If
+    If w = 2# Then
+        R = -9.299
+    End If
+    If w = 1# Then
+        R = -9.704
+    End If
+    If w <= 0# Then
+        R = -10.4
+    End If
+    Result = R
+    W15 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 16)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W16(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(19.33908 * S) + 68#)
+    If w >= 68# Then
+        R = -0.6733
+    End If
+    If w = 67# Then
+        R = -0.7134
+    End If
+    If w = 66# Then
+        R = -0.7551
+    End If
+    If w = 65# Then
+        R = -0.7986
+    End If
+    If w = 64# Then
+        R = -0.8437
+    End If
+    If w = 63# Then
+        R = -0.8905
+    End If
+    If w = 62# Then
+        R = -0.9391
+    End If
+    If w = 61# Then
+        R = -0.9895
+    End If
+    If w = 60# Then
+        R = -1.042
+    End If
+    If w = 59# Then
+        R = -1.096
+    End If
+    If w = 58# Then
+        R = -1.152
+    End If
+    If w = 57# Then
+        R = -1.21
+    End If
+    If w = 56# Then
+        R = -1.27
+    End If
+    If w = 55# Then
+        R = -1.331
+    End If
+    If w = 54# Then
+        R = -1.395
+    End If
+    If w = 53# Then
+        R = -1.462
+    End If
+    If w = 52# Then
+        R = -1.53
+    End If
+    If w = 51# Then
+        R = -1.6
+    End If
+    If w = 50# Then
+        R = -1.673
+    End If
+    If w = 49# Then
+        R = -1.748
+    End If
+    If w = 48# Then
+        R = -1.825
+    End If
+    If w = 47# Then
+        R = -1.904
+    End If
+    If w = 46# Then
+        R = -1.986
+    End If
+    If w = 45# Then
+        R = -2.071
+    End If
+    If w = 44# Then
+        R = -2.158
+    End If
+    If w = 43# Then
+        R = -2.247
+    End If
+    If w = 42# Then
+        R = -2.339
+    End If
+    If w = 41# Then
+        R = -2.434
+    End If
+    If w = 40# Then
+        R = -2.532
+    End If
+    If w = 39# Then
+        R = -2.632
+    End If
+    If w = 38# Then
+        R = -2.735
+    End If
+    If w = 37# Then
+        R = -2.842
+    End If
+    If w = 36# Then
+        R = -2.951
+    End If
+    If w = 35# Then
+        R = -3.064
+    End If
+    If w = 34# Then
+        R = -3.179
+    End If
+    If w = 33# Then
+        R = -3.298
+    End If
+    If w = 32# Then
+        R = -3.42
+    End If
+    If w = 31# Then
+        R = -3.546
+    End If
+    If w = 30# Then
+        R = -3.676
+    End If
+    If w = 29# Then
+        R = -3.81
+    End If
+    If w = 28# Then
+        R = -3.947
+    End If
+    If w = 27# Then
+        R = -4.088
+    End If
+    If w = 26# Then
+        R = -4.234
+    End If
+    If w = 25# Then
+        R = -4.383
+    End If
+    If w = 24# Then
+        R = -4.538
+    End If
+    If w = 23# Then
+        R = -4.697
+    End If
+    If w = 22# Then
+        R = -4.86
+    End If
+    If w = 21# Then
+        R = -5.029
+    End If
+    If w = 20# Then
+        R = -5.204
+    End If
+    If w = 19# Then
+        R = -5.383
+    End If
+    If w = 18# Then
+        R = -5.569
+    End If
+    If w = 17# Then
+        R = -5.762
+    End If
+    If w = 16# Then
+        R = -5.96
+    End If
+    If w = 15# Then
+        R = -6.17
+    End If
+    If w = 14# Then
+        R = -6.39
+    End If
+    If w = 13# Then
+        R = -6.613
+    End If
+    If w = 12# Then
+        R = -6.842
+    End If
+    If w = 11# Then
+        R = -7.083
+    End If
+    If w = 10# Then
+        R = -7.329
+    End If
+    If w = 9# Then
+        R = -7.594
+    End If
+    If w = 8# Then
+        R = -7.871
+    End If
+    If w = 7# Then
+        R = -8.146
+    End If
+    If w = 6# Then
+        R = -8.451
+    End If
+    If w = 5# Then
+        R = -8.788
+    End If
+    If w = 4# Then
+        R = -9.144
+    End If
+    If w = 3# Then
+        R = -9.481
+    End If
+    If w = 2# Then
+        R = -9.992
+    End If
+    If w = 1# Then
+        R = -10.4
+    End If
+    If w <= 0# Then
+        R = -11.09
+    End If
+    Result = R
+    W16 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 17)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W17(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(21.12463 * S) + 76.5)
+    If w >= 76# Then
+        R = -0.6931
+    End If
+    If w = 75# Then
+        R = -0.7306
+    End If
+    If w = 74# Then
+        R = -0.7695
+    End If
+    If w = 73# Then
+        R = -0.8097
+    End If
+    If w = 72# Then
+        R = -0.8514
+    End If
+    If w = 71# Then
+        R = -0.8946
+    End If
+    If w = 70# Then
+        R = -0.9392
+    End If
+    If w = 69# Then
+        R = -0.9853
+    End If
+    If w = 68# Then
+        R = -1.033
+    End If
+    If w = 67# Then
+        R = -1.082
+    End If
+    If w = 66# Then
+        R = -1.133
+    End If
+    If w = 65# Then
+        R = -1.185
+    End If
+    If w = 64# Then
+        R = -1.24
+    End If
+    If w = 63# Then
+        R = -1.295
+    End If
+    If w = 62# Then
+        R = -1.353
+    End If
+    If w = 61# Then
+        R = -1.412
+    End If
+    If w = 60# Then
+        R = -1.473
+    End If
+    If w = 59# Then
+        R = -1.536
+    End If
+    If w = 58# Then
+        R = -1.6
+    End If
+    If w = 57# Then
+        R = -1.666
+    End If
+    If w = 56# Then
+        R = -1.735
+    End If
+    If w = 55# Then
+        R = -1.805
+    End If
+    If w = 54# Then
+        R = -1.877
+    End If
+    If w = 53# Then
+        R = -1.951
+    End If
+    If w = 52# Then
+        R = -2.028
+    End If
+    If w = 51# Then
+        R = -2.106
+    End If
+    If w = 50# Then
+        R = -2.186
+    End If
+    If w = 49# Then
+        R = -2.269
+    End If
+    If w = 48# Then
+        R = -2.353
+    End If
+    If w = 47# Then
+        R = -2.44
+    End If
+    If w = 46# Then
+        R = -2.53
+    End If
+    If w = 45# Then
+        R = -2.621
+    End If
+    If w = 44# Then
+        R = -2.715
+    End If
+    If w = 43# Then
+        R = -2.812
+    End If
+    If w = 42# Then
+        R = -2.911
+    End If
+    If w = 41# Then
+        R = -3.012
+    End If
+    If w = 40# Then
+        R = -3.116
+    End If
+    If w = 39# Then
+        R = -3.223
+    End If
+    If w = 38# Then
+        R = -3.332
+    End If
+    If w = 37# Then
+        R = -3.445
+    End If
+    If w = 36# Then
+        R = -3.56
+    End If
+    If w = 35# Then
+        R = -3.678
+    End If
+    If w = 34# Then
+        R = -3.799
+    End If
+    If w = 33# Then
+        R = -3.924
+    End If
+    If w = 32# Then
+        R = -4.052
+    End If
+    If w = 31# Then
+        R = -4.183
+    End If
+    If w = 30# Then
+        R = -4.317
+    End If
+    If w = 29# Then
+        R = -4.456
+    End If
+    If w = 28# Then
+        R = -4.597
+    End If
+    If w = 27# Then
+        R = -4.743
+    End If
+    If w = 26# Then
+        R = -4.893
+    End If
+    If w = 25# Then
+        R = -5.047
+    End If
+    If w = 24# Then
+        R = -5.204
+    End If
+    If w = 23# Then
+        R = -5.367
+    End If
+    If w = 22# Then
+        R = -5.534
+    End If
+    If w = 21# Then
+        R = -5.706
+    End If
+    If w = 20# Then
+        R = -5.884
+    End If
+    If w = 19# Then
+        R = -6.066
+    End If
+    If w = 18# Then
+        R = -6.254
+    End If
+    If w = 17# Then
+        R = -6.451
+    End If
+    If w = 16# Then
+        R = -6.654
+    End If
+    If w = 15# Then
+        R = -6.864
+    End If
+    If w = 14# Then
+        R = -7.083
+    End If
+    If w = 13# Then
+        R = -7.306
+    End If
+    If w = 12# Then
+        R = -7.535
+    End If
+    If w = 11# Then
+        R = -7.776
+    End If
+    If w = 10# Then
+        R = -8.022
+    End If
+    If w = 9# Then
+        R = -8.287
+    End If
+    If w = 8# Then
+        R = -8.565
+    End If
+    If w = 7# Then
+        R = -8.839
+    End If
+    If w = 6# Then
+        R = -9.144
+    End If
+    If w = 5# Then
+        R = -9.481
+    End If
+    If w = 4# Then
+        R = -9.838
+    End If
+    If w = 3# Then
+        R = -10.17
+    End If
+    If w = 2# Then
+        R = -10.68
+    End If
+    If w = 1# Then
+        R = -11.09
+    End If
+    If w <= 0# Then
+        R = -11.78
+    End If
+    Result = R
+    W17 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 18)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W18(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(22.96193 * S) + 85.5)
+    If w >= 85# Then
+        R = -0.6931
+    End If
+    If w = 84# Then
+        R = -0.7276
+    End If
+    If w = 83# Then
+        R = -0.7633
+    End If
+    If w = 82# Then
+        R = -0.8001
+    End If
+    If w = 81# Then
+        R = -0.8381
+    End If
+    If w = 80# Then
+        R = -0.8774
+    End If
+    If w = 79# Then
+        R = -0.9179
+    End If
+    If w = 78# Then
+        R = -0.9597
+    End If
+    If w = 77# Then
+        R = -1.003
+    End If
+    If w = 76# Then
+        R = -1.047
+    End If
+    If w = 75# Then
+        R = -1.093
+    End If
+    If w = 74# Then
+        R = -1.14
+    End If
+    If w = 73# Then
+        R = -1.188
+    End If
+    If w = 72# Then
+        R = -1.238
+    End If
+    If w = 71# Then
+        R = -1.289
+    End If
+    If w = 70# Then
+        R = -1.342
+    End If
+    If w = 69# Then
+        R = -1.396
+    End If
+    If w = 68# Then
+        R = -1.452
+    End If
+    If w = 67# Then
+        R = -1.509
+    End If
+    If w = 66# Then
+        R = -1.568
+    End If
+    If w = 65# Then
+        R = -1.628
+    End If
+    If w = 64# Then
+        R = -1.69
+    End If
+    If w = 63# Then
+        R = -1.753
+    End If
+    If w = 62# Then
+        R = -1.818
+    End If
+    If w = 61# Then
+        R = -1.885
+    End If
+    If w = 60# Then
+        R = -1.953
+    End If
+    If w = 59# Then
+        R = -2.023
+    End If
+    If w = 58# Then
+        R = -2.095
+    End If
+    If w = 57# Then
+        R = -2.168
+    End If
+    If w = 56# Then
+        R = -2.244
+    End If
+    If w = 55# Then
+        R = -2.321
+    End If
+    If w = 54# Then
+        R = -2.4
+    End If
+    If w = 53# Then
+        R = -2.481
+    End If
+    If w = 52# Then
+        R = -2.564
+    End If
+    If w = 51# Then
+        R = -2.648
+    End If
+    If w = 50# Then
+        R = -2.735
+    End If
+    If w = 49# Then
+        R = -2.824
+    End If
+    If w = 48# Then
+        R = -2.915
+    End If
+    If w = 47# Then
+        R = -3.008
+    End If
+    If w = 46# Then
+        R = -3.104
+    End If
+    If w = 45# Then
+        R = -3.201
+    End If
+    If w = 44# Then
+        R = -3.301
+    End If
+    If w = 43# Then
+        R = -3.403
+    End If
+    If w = 42# Then
+        R = -3.508
+    End If
+    If w = 41# Then
+        R = -3.615
+    End If
+    If w = 40# Then
+        R = -3.724
+    End If
+    If w = 39# Then
+        R = -3.836
+    End If
+    If w = 38# Then
+        R = -3.95
+    End If
+    If w = 37# Then
+        R = -4.068
+    End If
+    If w = 36# Then
+        R = -4.188
+    End If
+    If w = 35# Then
+        R = -4.311
+    End If
+    If w = 34# Then
+        R = -4.437
+    End If
+    If w = 33# Then
+        R = -4.565
+    End If
+    If w = 32# Then
+        R = -4.698
+    End If
+    If w = 31# Then
+        R = -4.833
+    End If
+    If w = 30# Then
+        R = -4.971
+    End If
+    If w = 29# Then
+        R = -5.113
+    End If
+    If w = 28# Then
+        R = -5.258
+    End If
+    If w = 27# Then
+        R = -5.408
+    End If
+    If w = 26# Then
+        R = -5.561
+    End If
+    If w = 25# Then
+        R = -5.717
+    End If
+    If w = 24# Then
+        R = -5.878
+    End If
+    If w = 23# Then
+        R = -6.044
+    End If
+    If w = 22# Then
+        R = -6.213
+    End If
+    If w = 21# Then
+        R = -6.388
+    End If
+    If w = 20# Then
+        R = -6.569
+    End If
+    If w = 19# Then
+        R = -6.753
+    End If
+    If w = 18# Then
+        R = -6.943
+    End If
+    If w = 17# Then
+        R = -7.144
+    End If
+    If w = 16# Then
+        R = -7.347
+    End If
+    If w = 15# Then
+        R = -7.557
+    End If
+    If w = 14# Then
+        R = -7.776
+    End If
+    If w = 13# Then
+        R = -7.999
+    End If
+    If w = 12# Then
+        R = -8.228
+    End If
+    If w = 11# Then
+        R = -8.469
+    End If
+    If w = 10# Then
+        R = -8.715
+    End If
+    If w = 9# Then
+        R = -8.98
+    End If
+    If w = 8# Then
+        R = -9.258
+    End If
+    If w = 7# Then
+        R = -9.532
+    End If
+    If w = 6# Then
+        R = -9.838
+    End If
+    If w = 5# Then
+        R = -10.17
+    End If
+    If w = 4# Then
+        R = -10.53
+    End If
+    If w = 3# Then
+        R = -10.87
+    End If
+    If w = 2# Then
+        R = -11.38
+    End If
+    If w = 1# Then
+        R = -11.78
+    End If
+    If w <= 0# Then
+        R = -12.48
+    End If
+    Result = R
+    W18 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 19)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W19(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(24.84955 * S) + 95#)
+    If w >= 95# Then
+        R = -0.6776
+    End If
+    If w = 94# Then
+        R = -0.7089
+    End If
+    If w = 93# Then
+        R = -0.7413
+    End If
+    If w = 92# Then
+        R = -0.7747
+    End If
+    If w = 91# Then
+        R = -0.809
+    End If
+    If w = 90# Then
+        R = -0.8445
+    End If
+    If w = 89# Then
+        R = -0.8809
+    End If
+    If w = 88# Then
+        R = -0.9185
+    End If
+    If w = 87# Then
+        R = -0.9571
+    End If
+    If w = 86# Then
+        R = -0.9968
+    End If
+    If w = 85# Then
+        R = -1.038
+    End If
+    If w = 84# Then
+        R = -1.08
+    End If
+    If w = 83# Then
+        R = -1.123
+    End If
+    If w = 82# Then
+        R = -1.167
+    End If
+    If w = 81# Then
+        R = -1.213
+    End If
+    If w = 80# Then
+        R = -1.259
+    End If
+    If w = 79# Then
+        R = -1.307
+    End If
+    If w = 78# Then
+        R = -1.356
+    End If
+    If w = 77# Then
+        R = -1.407
+    End If
+    If w = 76# Then
+        R = -1.458
+    End If
+    If w = 75# Then
+        R = -1.511
+    End If
+    If w = 74# Then
+        R = -1.565
+    End If
+    If w = 73# Then
+        R = -1.621
+    End If
+    If w = 72# Then
+        R = -1.678
+    End If
+    If w = 71# Then
+        R = -1.736
+    End If
+    If w = 70# Then
+        R = -1.796
+    End If
+    If w = 69# Then
+        R = -1.857
+    End If
+    If w = 68# Then
+        R = -1.919
+    End If
+    If w = 67# Then
+        R = -1.983
+    End If
+    If w = 66# Then
+        R = -2.048
+    End If
+    If w = 65# Then
+        R = -2.115
+    End If
+    If w = 64# Then
+        R = -2.183
+    End If
+    If w = 63# Then
+        R = -2.253
+    End If
+    If w = 62# Then
+        R = -2.325
+    End If
+    If w = 61# Then
+        R = -2.398
+    End If
+    If w = 60# Then
+        R = -2.472
+    End If
+    If w = 59# Then
+        R = -2.548
+    End If
+    If w = 58# Then
+        R = -2.626
+    End If
+    If w = 57# Then
+        R = -2.706
+    End If
+    If w = 56# Then
+        R = -2.787
+    End If
+    If w = 55# Then
+        R = -2.87
+    End If
+    If w = 54# Then
+        R = -2.955
+    End If
+    If w = 53# Then
+        R = -3.042
+    End If
+    If w = 52# Then
+        R = -3.13
+    End If
+    If w = 51# Then
+        R = -3.22
+    End If
+    If w = 50# Then
+        R = -3.313
+    End If
+    If w = 49# Then
+        R = -3.407
+    End If
+    If w = 48# Then
+        R = -3.503
+    End If
+    If w = 47# Then
+        R = -3.601
+    End If
+    If w = 46# Then
+        R = -3.702
+    End If
+    If w = 45# Then
+        R = -3.804
+    End If
+    If w = 44# Then
+        R = -3.909
+    End If
+    If w = 43# Then
+        R = -4.015
+    End If
+    If w = 42# Then
+        R = -4.125
+    End If
+    If w = 41# Then
+        R = -4.236
+    End If
+    If w = 40# Then
+        R = -4.35
+    End If
+    If w = 39# Then
+        R = -4.466
+    End If
+    If w = 38# Then
+        R = -4.585
+    End If
+    If w = 37# Then
+        R = -4.706
+    End If
+    If w = 36# Then
+        R = -4.83
+    End If
+    If w = 35# Then
+        R = -4.957
+    End If
+    If w = 34# Then
+        R = -5.086
+    End If
+    If w = 33# Then
+        R = -5.219
+    End If
+    If w = 32# Then
+        R = -5.355
+    End If
+    If w = 31# Then
+        R = -5.493
+    End If
+    If w = 30# Then
+        R = -5.634
+    End If
+    If w = 29# Then
+        R = -5.78
+    End If
+    If w = 28# Then
+        R = -5.928
+    End If
+    If w = 27# Then
+        R = -6.08
+    End If
+    If w = 26# Then
+        R = -6.235
+    End If
+    If w = 25# Then
+        R = -6.394
+    End If
+    If w = 24# Then
+        R = -6.558
+    End If
+    If w = 23# Then
+        R = -6.726
+    End If
+    If w = 22# Then
+        R = -6.897
+    End If
+    If w = 21# Then
+        R = -7.074
+    End If
+    If w = 20# Then
+        R = -7.256
+    End If
+    If w = 19# Then
+        R = -7.443
+    End If
+    If w = 18# Then
+        R = -7.636
+    End If
+    If w = 17# Then
+        R = -7.837
+    End If
+    If w = 16# Then
+        R = -8.04
+    End If
+    If w = 15# Then
+        R = -8.25
+    End If
+    If w = 14# Then
+        R = -8.469
+    End If
+    If w = 13# Then
+        R = -8.692
+    End If
+    If w = 12# Then
+        R = -8.921
+    End If
+    If w = 11# Then
+        R = -9.162
+    End If
+    If w = 10# Then
+        R = -9.409
+    End If
+    If w = 9# Then
+        R = -9.673
+    End If
+    If w = 8# Then
+        R = -9.951
+    End If
+    If w = 7# Then
+        R = -10.23
+    End If
+    If w = 6# Then
+        R = -10.53
+    End If
+    If w = 5# Then
+        R = -10.87
+    End If
+    If w = 4# Then
+        R = -11.22
+    End If
+    If w = 3# Then
+        R = -11.56
+    End If
+    If w = 2# Then
+        R = -12.07
+    End If
+    If w = 1# Then
+        R = -12.48
+    End If
+    If w <= 0# Then
+        R = -13.17
+    End If
+    Result = R
+    W19 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 20)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W20(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(26.78619 * S) + 105#)
+    If w >= 105# Then
+        R = -0.6787
+    End If
+    If w = 104# Then
+        R = -0.7078
+    End If
+    If w = 103# Then
+        R = -0.7378
+    End If
+    If w = 102# Then
+        R = -0.7686
+    End If
+    If w = 101# Then
+        R = -0.8004
+    End If
+    If w = 100# Then
+        R = -0.833
+    End If
+    If w = 99# Then
+        R = -0.8665
+    End If
+    If w = 98# Then
+        R = -0.901
+    End If
+    If w = 97# Then
+        R = -0.9363
+    End If
+    If w = 96# Then
+        R = -0.9726
+    End If
+    If w = 95# Then
+        R = -1.01
+    End If
+    If w = 94# Then
+        R = -1.048
+    End If
+    If w = 93# Then
+        R = -1.087
+    End If
+    If w = 92# Then
+        R = -1.128
+    End If
+    If w = 91# Then
+        R = -1.169
+    End If
+    If w = 90# Then
+        R = -1.211
+    End If
+    If w = 89# Then
+        R = -1.254
+    End If
+    If w = 88# Then
+        R = -1.299
+    End If
+    If w = 87# Then
+        R = -1.344
+    End If
+    If w = 86# Then
+        R = -1.39
+    End If
+    If w = 85# Then
+        R = -1.438
+    End If
+    If w = 84# Then
+        R = -1.486
+    End If
+    If w = 83# Then
+        R = -1.536
+    End If
+    If w = 82# Then
+        R = -1.587
+    End If
+    If w = 81# Then
+        R = -1.639
+    End If
+    If w = 80# Then
+        R = -1.692
+    End If
+    If w = 79# Then
+        R = -1.746
+    End If
+    If w = 78# Then
+        R = -1.802
+    End If
+    If w = 77# Then
+        R = -1.859
+    End If
+    If w = 76# Then
+        R = -1.916
+    End If
+    If w = 75# Then
+        R = -1.976
+    End If
+    If w = 74# Then
+        R = -2.036
+    End If
+    If w = 73# Then
+        R = -2.098
+    End If
+    If w = 72# Then
+        R = -2.161
+    End If
+    If w = 71# Then
+        R = -2.225
+    End If
+    If w = 70# Then
+        R = -2.29
+    End If
+    If w = 69# Then
+        R = -2.357
+    End If
+    If w = 68# Then
+        R = -2.426
+    End If
+    If w = 67# Then
+        R = -2.495
+    End If
+    If w = 66# Then
+        R = -2.566
+    End If
+    If w = 65# Then
+        R = -2.639
+    End If
+    If w = 64# Then
+        R = -2.713
+    End If
+    If w = 63# Then
+        R = -2.788
+    End If
+    If w = 62# Then
+        R = -2.865
+    End If
+    If w = 61# Then
+        R = -2.943
+    End If
+    If w = 60# Then
+        R = -3.023
+    End If
+    If w = 59# Then
+        R = -3.104
+    End If
+    If w = 58# Then
+        R = -3.187
+    End If
+    If w = 57# Then
+        R = -3.272
+    End If
+    If w = 56# Then
+        R = -3.358
+    End If
+    If w = 55# Then
+        R = -3.446
+    End If
+    If w = 54# Then
+        R = -3.536
+    End If
+    If w = 53# Then
+        R = -3.627
+    End If
+    If w = 52# Then
+        R = -3.721
+    End If
+    If w = 51# Then
+        R = -3.815
+    End If
+    If w = 50# Then
+        R = -3.912
+    End If
+    If w = 49# Then
+        R = -4.011
+    End If
+    If w = 48# Then
+        R = -4.111
+    End If
+    If w = 47# Then
+        R = -4.214
+    End If
+    If w = 46# Then
+        R = -4.318
+    End If
+    If w = 45# Then
+        R = -4.425
+    End If
+    If w = 44# Then
+        R = -4.534
+    End If
+    If w = 43# Then
+        R = -4.644
+    End If
+    If w = 42# Then
+        R = -4.757
+    End If
+    If w = 41# Then
+        R = -4.872
+    End If
+    If w = 40# Then
+        R = -4.99
+    End If
+    If w = 39# Then
+        R = -5.109
+    End If
+    If w = 38# Then
+        R = -5.232
+    End If
+    If w = 37# Then
+        R = -5.356
+    End If
+    If w = 36# Then
+        R = -5.484
+    End If
+    If w = 35# Then
+        R = -5.614
+    End If
+    If w = 34# Then
+        R = -5.746
+    End If
+    If w = 33# Then
+        R = -5.882
+    End If
+    If w = 32# Then
+        R = -6.02
+    End If
+    If w = 31# Then
+        R = -6.161
+    End If
+    If w = 30# Then
+        R = -6.305
+    End If
+    If w = 29# Then
+        R = -6.453
+    End If
+    If w = 28# Then
+        R = -6.603
+    End If
+    If w = 27# Then
+        R = -6.757
+    End If
+    If w = 26# Then
+        R = -6.915
+    End If
+    If w = 25# Then
+        R = -7.076
+    End If
+    If w = 24# Then
+        R = -7.242
+    End If
+    If w = 23# Then
+        R = -7.411
+    End If
+    If w = 22# Then
+        R = -7.584
+    End If
+    If w = 21# Then
+        R = -7.763
+    End If
+    If w = 20# Then
+        R = -7.947
+    End If
+    If w = 19# Then
+        R = -8.136
+    End If
+    If w = 18# Then
+        R = -8.33
+    End If
+    If w = 17# Then
+        R = -8.53
+    End If
+    If w = 16# Then
+        R = -8.733
+    End If
+    If w = 15# Then
+        R = -8.943
+    End If
+    If w = 14# Then
+        R = -9.162
+    End If
+    If w = 13# Then
+        R = -9.386
+    End If
+    If w = 12# Then
+        R = -9.614
+    End If
+    If w = 11# Then
+        R = -9.856
+    End If
+    If w = 10# Then
+        R = -10.1
+    End If
+    If w = 9# Then
+        R = -10.37
+    End If
+    If w = 8# Then
+        R = -10.64
+    End If
+    If w = 7# Then
+        R = -10.92
+    End If
+    If w = 6# Then
+        R = -11.22
+    End If
+    If w = 5# Then
+        R = -11.56
+    End If
+    If w = 4# Then
+        R = -11.92
+    End If
+    If w = 3# Then
+        R = -12.25
+    End If
+    If w = 2# Then
+        R = -12.76
+    End If
+    If w = 1# Then
+        R = -13.17
+    End If
+    If w <= 0# Then
+        R = -13.86
+    End If
+    Result = R
+    W20 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 21)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W21(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(28.77064 * S) + 115.5)
+    If w >= 115# Then
+        R = -0.6931
+    End If
+    If w = 114# Then
+        R = -0.7207
+    End If
+    If w = 113# Then
+        R = -0.7489
+    End If
+    If w = 112# Then
+        R = -0.7779
+    End If
+    If w = 111# Then
+        R = -0.8077
+    End If
+    If w = 110# Then
+        R = -0.8383
+    End If
+    If w = 109# Then
+        R = -0.8697
+    End If
+    If w = 108# Then
+        R = -0.9018
+    End If
+    If w = 107# Then
+        R = -0.9348
+    End If
+    If w = 106# Then
+        R = -0.9685
+    End If
+    If w = 105# Then
+        R = -1.003
+    End If
+    If w = 104# Then
+        R = -1.039
+    End If
+    If w = 103# Then
+        R = -1.075
+    End If
+    If w = 102# Then
+        R = -1.112
+    End If
+    If w = 101# Then
+        R = -1.15
+    End If
+    If w = 100# Then
+        R = -1.189
+    End If
+    If w = 99# Then
+        R = -1.229
+    End If
+    If w = 98# Then
+        R = -1.269
+    End If
+    If w = 97# Then
+        R = -1.311
+    End If
+    If w = 96# Then
+        R = -1.353
+    End If
+    If w = 95# Then
+        R = -1.397
+    End If
+    If w = 94# Then
+        R = -1.441
+    End If
+    If w = 93# Then
+        R = -1.486
+    End If
+    If w = 92# Then
+        R = -1.533
+    End If
+    If w = 91# Then
+        R = -1.58
+    End If
+    If w = 90# Then
+        R = -1.628
+    End If
+    If w = 89# Then
+        R = -1.677
+    End If
+    If w = 88# Then
+        R = -1.728
+    End If
+    If w = 87# Then
+        R = -1.779
+    End If
+    If w = 86# Then
+        R = -1.831
+    End If
+    If w = 85# Then
+        R = -1.884
+    End If
+    If w = 84# Then
+        R = -1.939
+    End If
+    If w = 83# Then
+        R = -1.994
+    End If
+    If w = 82# Then
+        R = -2.051
+    End If
+    If w = 81# Then
+        R = -2.108
+    End If
+    If w = 80# Then
+        R = -2.167
+    End If
+    If w = 79# Then
+        R = -2.227
+    End If
+    If w = 78# Then
+        R = -2.288
+    End If
+    If w = 77# Then
+        R = -2.35
+    End If
+    If w = 76# Then
+        R = -2.414
+    End If
+    If w = 75# Then
+        R = -2.478
+    End If
+    If w = 74# Then
+        R = -2.544
+    End If
+    If w = 73# Then
+        R = -2.611
+    End If
+    If w = 72# Then
+        R = -2.679
+    End If
+    If w = 71# Then
+        R = -2.748
+    End If
+    If w = 70# Then
+        R = -2.819
+    End If
+    If w = 69# Then
+        R = -2.891
+    End If
+    If w = 68# Then
+        R = -2.964
+    End If
+    If w = 67# Then
+        R = -3.039
+    End If
+    If w = 66# Then
+        R = -3.115
+    End If
+    If w = 65# Then
+        R = -3.192
+    End If
+    If w = 64# Then
+        R = -3.27
+    End If
+    If w = 63# Then
+        R = -3.35
+    End If
+    If w = 62# Then
+        R = -3.432
+    End If
+    If w = 61# Then
+        R = -3.515
+    End If
+    If w = 60# Then
+        R = -3.599
+    End If
+    If w = 59# Then
+        R = -3.685
+    End If
+    If w = 58# Then
+        R = -3.772
+    End If
+    If w = 57# Then
+        R = -3.861
+    End If
+    If w = 56# Then
+        R = -3.952
+    End If
+    If w = 55# Then
+        R = -4.044
+    End If
+    If w = 54# Then
+        R = -4.138
+    End If
+    If w = 53# Then
+        R = -4.233
+    End If
+    If w = 52# Then
+        R = -4.33
+    End If
+    If w = 51# Then
+        R = -4.429
+    End If
+    If w = 50# Then
+        R = -4.53
+    End If
+    If w = 49# Then
+        R = -4.632
+    End If
+    If w = 48# Then
+        R = -4.736
+    End If
+    If w = 47# Then
+        R = -4.842
+    End If
+    If w = 46# Then
+        R = -4.95
+    End If
+    If w = 45# Then
+        R = -5.06
+    End If
+    If w = 44# Then
+        R = -5.172
+    End If
+    If w = 43# Then
+        R = -5.286
+    End If
+    If w = 42# Then
+        R = -5.402
+    End If
+    If w = 41# Then
+        R = -5.52
+    End If
+    If w = 40# Then
+        R = -5.641
+    End If
+    If w = 39# Then
+        R = -5.763
+    End If
+    If w = 38# Then
+        R = -5.889
+    End If
+    If w = 37# Then
+        R = -6.016
+    End If
+    If w = 36# Then
+        R = -6.146
+    End If
+    If w = 35# Then
+        R = -6.278
+    End If
+    If w = 34# Then
+        R = -6.413
+    End If
+    If w = 33# Then
+        R = -6.551
+    End If
+    If w = 32# Then
+        R = -6.692
+    End If
+    If w = 31# Then
+        R = -6.835
+    End If
+    If w = 30# Then
+        R = -6.981
+    End If
+    If w = 29# Then
+        R = -7.131
+    End If
+    If w = 28# Then
+        R = -7.283
+    End If
+    If w = 27# Then
+        R = -7.439
+    End If
+    If w = 26# Then
+        R = -7.599
+    End If
+    If w = 25# Then
+        R = -7.762
+    End If
+    If w = 24# Then
+        R = -7.928
+    End If
+    If w = 23# Then
+        R = -8.099
+    End If
+    If w = 22# Then
+        R = -8.274
+    End If
+    If w = 21# Then
+        R = -8.454
+    End If
+    If w = 20# Then
+        R = -8.64
+    End If
+    If w = 19# Then
+        R = -8.829
+    End If
+    If w = 18# Then
+        R = -9.023
+    End If
+    If w = 17# Then
+        R = -9.223
+    End If
+    If w = 16# Then
+        R = -9.426
+    End If
+    If w = 15# Then
+        R = -9.636
+    End If
+    If w = 14# Then
+        R = -9.856
+    End If
+    If w = 13# Then
+        R = -10.08
+    End If
+    If w = 12# Then
+        R = -10.31
+    End If
+    If w = 11# Then
+        R = -10.55
+    End If
+    If w = 10# Then
+        R = -10.79
+    End If
+    If w = 9# Then
+        R = -11.06
+    End If
+    If w = 8# Then
+        R = -11.34
+    End If
+    If w = 7# Then
+        R = -11.61
+    End If
+    If w = 6# Then
+        R = -11.92
+    End If
+    If w = 5# Then
+        R = -12.25
+    End If
+    If w = 4# Then
+        R = -12.61
+    End If
+    If w = 3# Then
+        R = -12.95
+    End If
+    If w = 2# Then
+        R = -13.46
+    End If
+    If w = 1# Then
+        R = -13.86
+    End If
+    If w <= 0# Then
+        R = -14.56
+    End If
+    Result = R
+    W21 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 22)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W22(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(30.80179 * S) + 126.5)
+    If w >= 126# Then
+        R = -0.6931
+    End If
+    If w = 125# Then
+        R = -0.7189
+    End If
+    If w = 124# Then
+        R = -0.7452
+    End If
+    If w = 123# Then
+        R = -0.7722
+    End If
+    If w = 122# Then
+        R = -0.7999
+    End If
+    If w = 121# Then
+        R = -0.8283
+    End If
+    If w = 120# Then
+        R = -0.8573
+    End If
+    If w = 119# Then
+        R = -0.8871
+    End If
+    If w = 118# Then
+        R = -0.9175
+    End If
+    If w = 117# Then
+        R = -0.9486
+    End If
+    If w = 116# Then
+        R = -0.9805
+    End If
+    If w = 115# Then
+        R = -1.013
+    End If
+    If w = 114# Then
+        R = -1.046
+    End If
+    If w = 113# Then
+        R = -1.08
+    End If
+    If w = 112# Then
+        R = -1.115
+    End If
+    If w = 111# Then
+        R = -1.151
+    End If
+    If w = 110# Then
+        R = -1.187
+    End If
+    If w = 109# Then
+        R = -1.224
+    End If
+    If w = 108# Then
+        R = -1.262
+    End If
+    If w = 107# Then
+        R = -1.301
+    End If
+    If w = 106# Then
+        R = -1.34
+    End If
+    If w = 105# Then
+        R = -1.381
+    End If
+    If w = 104# Then
+        R = -1.422
+    End If
+    If w = 103# Then
+        R = -1.464
+    End If
+    If w = 102# Then
+        R = -1.506
+    End If
+    If w = 101# Then
+        R = -1.55
+    End If
+    If w = 100# Then
+        R = -1.594
+    End If
+    If w = 99# Then
+        R = -1.64
+    End If
+    If w = 98# Then
+        R = -1.686
+    End If
+    If w = 97# Then
+        R = -1.733
+    End If
+    If w = 96# Then
+        R = -1.781
+    End If
+    If w = 95# Then
+        R = -1.83
+    End If
+    If w = 94# Then
+        R = -1.88
+    End If
+    If w = 93# Then
+        R = -1.93
+    End If
+    If w = 92# Then
+        R = -1.982
+    End If
+    If w = 91# Then
+        R = -2.034
+    End If
+    If w = 90# Then
+        R = -2.088
+    End If
+    If w = 89# Then
+        R = -2.142
+    End If
+    If w = 88# Then
+        R = -2.198
+    End If
+    If w = 87# Then
+        R = -2.254
+    End If
+    If w = 86# Then
+        R = -2.312
+    End If
+    If w = 85# Then
+        R = -2.37
+    End If
+    If w = 84# Then
+        R = -2.429
+    End If
+    If w = 83# Then
+        R = -2.49
+    End If
+    If w = 82# Then
+        R = -2.551
+    End If
+    If w = 81# Then
+        R = -2.614
+    End If
+    If w = 80# Then
+        R = -2.677
+    End If
+    If w = 79# Then
+        R = -2.742
+    End If
+    If w = 78# Then
+        R = -2.808
+    End If
+    If w = 77# Then
+        R = -2.875
+    End If
+    If w = 76# Then
+        R = -2.943
+    End If
+    If w = 75# Then
+        R = -3.012
+    End If
+    If w = 74# Then
+        R = -3.082
+    End If
+    If w = 73# Then
+        R = -3.153
+    End If
+    If w = 72# Then
+        R = -3.226
+    End If
+    If w = 71# Then
+        R = -3.3
+    End If
+    If w = 70# Then
+        R = -3.375
+    End If
+    If w = 69# Then
+        R = -3.451
+    End If
+    If w = 68# Then
+        R = -3.529
+    End If
+    If w = 67# Then
+        R = -3.607
+    End If
+    If w = 66# Then
+        R = -3.687
+    End If
+    If w = 65# Then
+        R = -3.769
+    End If
+    If w = 64# Then
+        R = -3.851
+    End If
+    If w = 63# Then
+        R = -3.935
+    End If
+    If w = 62# Then
+        R = -4.021
+    End If
+    If w = 61# Then
+        R = -4.108
+    End If
+    If w = 60# Then
+        R = -4.196
+    End If
+    If w = 59# Then
+        R = -4.285
+    End If
+    If w = 58# Then
+        R = -4.376
+    End If
+    If w = 57# Then
+        R = -4.469
+    End If
+    If w = 56# Then
+        R = -4.563
+    End If
+    If w = 55# Then
+        R = -4.659
+    End If
+    If w = 54# Then
+        R = -4.756
+    End If
+    If w = 53# Then
+        R = -4.855
+    End If
+    If w = 52# Then
+        R = -4.955
+    End If
+    If w = 51# Then
+        R = -5.057
+    End If
+    If w = 50# Then
+        R = -5.161
+    End If
+    If w = 49# Then
+        R = -5.266
+    End If
+    If w = 48# Then
+        R = -5.374
+    End If
+    If w = 47# Then
+        R = -5.483
+    End If
+    If w = 46# Then
+        R = -5.594
+    End If
+    If w = 45# Then
+        R = -5.706
+    End If
+    If w = 44# Then
+        R = -5.821
+    End If
+    If w = 43# Then
+        R = -5.938
+    End If
+    If w = 42# Then
+        R = -6.057
+    End If
+    If w = 41# Then
+        R = -6.177
+    End If
+    If w = 40# Then
+        R = -6.3
+    End If
+    If w = 39# Then
+        R = -6.426
+    End If
+    If w = 38# Then
+        R = -6.553
+    End If
+    If w = 37# Then
+        R = -6.683
+    End If
+    If w = 36# Then
+        R = -6.815
+    End If
+    If w = 35# Then
+        R = -6.949
+    End If
+    If w = 34# Then
+        R = -7.086
+    End If
+    If w = 33# Then
+        R = -7.226
+    End If
+    If w = 32# Then
+        R = -7.368
+    End If
+    If w = 31# Then
+        R = -7.513
+    End If
+    If w = 30# Then
+        R = -7.661
+    End If
+    If w = 29# Then
+        R = -7.813
+    End If
+    If w = 28# Then
+        R = -7.966
+    End If
+    If w = 27# Then
+        R = -8.124
+    End If
+    If w = 26# Then
+        R = -8.285
+    End If
+    If w = 25# Then
+        R = -8.449
+    End If
+    If w = 24# Then
+        R = -8.617
+    End If
+    If w = 23# Then
+        R = -8.789
+    End If
+    If w = 22# Then
+        R = -8.965
+    End If
+    If w = 21# Then
+        R = -9.147
+    End If
+    If w = 20# Then
+        R = -9.333
+    End If
+    If w = 19# Then
+        R = -9.522
+    End If
+    If w = 18# Then
+        R = -9.716
+    End If
+    If w = 17# Then
+        R = -9.917
+    End If
+    If w = 16# Then
+        R = -10.12
+    End If
+    If w = 15# Then
+        R = -10.33
+    End If
+    If w = 14# Then
+        R = -10.55
+    End If
+    If w = 13# Then
+        R = -10.77
+    End If
+    If w = 12# Then
+        R = -11#
+    End If
+    If w = 11# Then
+        R = -11.24
+    End If
+    If w = 10# Then
+        R = -11.49
+    End If
+    If w = 9# Then
+        R = -11.75
+    End If
+    If w = 8# Then
+        R = -12.03
+    End If
+    If w = 7# Then
+        R = -12.3
+    End If
+    If w = 6# Then
+        R = -12.61
+    End If
+    If w = 5# Then
+        R = -12.95
+    End If
+    If w = 4# Then
+        R = -13.3
+    End If
+    If w = 3# Then
+        R = -13.64
+    End If
+    If w = 2# Then
+        R = -14.15
+    End If
+    If w = 1# Then
+        R = -14.56
+    End If
+    If w <= 0# Then
+        R = -15.25
+    End If
+    Result = R
+    W22 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 23)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W23(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(32.87856 * S) + 138#)
+    If w >= 138# Then
+        R = -0.6813
+    End If
+    If w = 137# Then
+        R = -0.7051
+    End If
+    If w = 136# Then
+        R = -0.7295
+    End If
+    If w = 135# Then
+        R = -0.7544
+    End If
+    If w = 134# Then
+        R = -0.78
+    End If
+    If w = 133# Then
+        R = -0.8061
+    End If
+    If w = 132# Then
+        R = -0.8328
+    End If
+    If w = 131# Then
+        R = -0.8601
+    End If
+    If w = 130# Then
+        R = -0.888
+    End If
+    If w = 129# Then
+        R = -0.9166
+    End If
+    If w = 128# Then
+        R = -0.9457
+    End If
+    If w = 127# Then
+        R = -0.9755
+    End If
+    If w = 126# Then
+        R = -1.006
+    End If
+    If w = 125# Then
+        R = -1.037
+    End If
+    If w = 124# Then
+        R = -1.069
+    End If
+    If w = 123# Then
+        R = -1.101
+    End If
+    If w = 122# Then
+        R = -1.134
+    End If
+    If w = 121# Then
+        R = -1.168
+    End If
+    If w = 120# Then
+        R = -1.202
+    End If
+    If w = 119# Then
+        R = -1.237
+    End If
+    If w = 118# Then
+        R = -1.273
+    End If
+    If w = 117# Then
+        R = -1.309
+    End If
+    If w = 116# Then
+        R = -1.347
+    End If
+    If w = 115# Then
+        R = -1.384
+    End If
+    If w = 114# Then
+        R = -1.423
+    End If
+    If w = 113# Then
+        R = -1.462
+    End If
+    If w = 112# Then
+        R = -1.502
+    End If
+    If w = 111# Then
+        R = -1.543
+    End If
+    If w = 110# Then
+        R = -1.585
+    End If
+    If w = 109# Then
+        R = -1.627
+    End If
+    If w = 108# Then
+        R = -1.67
+    End If
+    If w = 107# Then
+        R = -1.714
+    End If
+    If w = 106# Then
+        R = -1.758
+    End If
+    If w = 105# Then
+        R = -1.804
+    End If
+    If w = 104# Then
+        R = -1.85
+    End If
+    If w = 103# Then
+        R = -1.897
+    End If
+    If w = 102# Then
+        R = -1.944
+    End If
+    If w = 101# Then
+        R = -1.993
+    End If
+    If w = 100# Then
+        R = -2.042
+    End If
+    If w = 99# Then
+        R = -2.093
+    End If
+    If w = 98# Then
+        R = -2.144
+    End If
+    If w = 97# Then
+        R = -2.195
+    End If
+    If w = 96# Then
+        R = -2.248
+    End If
+    If w = 95# Then
+        R = -2.302
+    End If
+    If w = 94# Then
+        R = -2.356
+    End If
+    If w = 93# Then
+        R = -2.412
+    End If
+    If w = 92# Then
+        R = -2.468
+    End If
+    If w = 91# Then
+        R = -2.525
+    End If
+    If w = 90# Then
+        R = -2.583
+    End If
+    If w = 89# Then
+        R = -2.642
+    End If
+    If w = 88# Then
+        R = -2.702
+    End If
+    If w = 87# Then
+        R = -2.763
+    End If
+    If w = 86# Then
+        R = -2.825
+    End If
+    If w = 85# Then
+        R = -2.888
+    End If
+    If w = 84# Then
+        R = -2.951
+    End If
+    If w = 83# Then
+        R = -3.016
+    End If
+    If w = 82# Then
+        R = -3.082
+    End If
+    If w = 81# Then
+        R = -3.149
+    End If
+    If w = 80# Then
+        R = -3.216
+    End If
+    If w = 79# Then
+        R = -3.285
+    End If
+    If w = 78# Then
+        R = -3.355
+    End If
+    If w = 77# Then
+        R = -3.426
+    End If
+    If w = 76# Then
+        R = -3.498
+    End If
+    If w = 75# Then
+        R = -3.571
+    End If
+    If w = 74# Then
+        R = -3.645
+    End If
+    If w = 73# Then
+        R = -3.721
+    End If
+    If w = 72# Then
+        R = -3.797
+    End If
+    If w = 71# Then
+        R = -3.875
+    End If
+    If w = 70# Then
+        R = -3.953
+    End If
+    If w = 69# Then
+        R = -4.033
+    End If
+    If w = 68# Then
+        R = -4.114
+    End If
+    If w = 67# Then
+        R = -4.197
+    End If
+    If w = 66# Then
+        R = -4.28
+    End If
+    If w = 65# Then
+        R = -4.365
+    End If
+    If w = 64# Then
+        R = -4.451
+    End If
+    If w = 63# Then
+        R = -4.539
+    End If
+    If w = 62# Then
+        R = -4.628
+    End If
+    If w = 61# Then
+        R = -4.718
+    End If
+    If w = 60# Then
+        R = -4.809
+    End If
+    If w = 59# Then
+        R = -4.902
+    End If
+    If w = 58# Then
+        R = -4.996
+    End If
+    If w = 57# Then
+        R = -5.092
+    End If
+    If w = 56# Then
+        R = -5.189
+    End If
+    If w = 55# Then
+        R = -5.287
+    End If
+    If w = 54# Then
+        R = -5.388
+    End If
+    If w = 53# Then
+        R = -5.489
+    End If
+    If w = 52# Then
+        R = -5.592
+    End If
+    If w = 51# Then
+        R = -5.697
+    End If
+    If w = 50# Then
+        R = -5.804
+    End If
+    If w = 49# Then
+        R = -5.912
+    End If
+    If w = 48# Then
+        R = -6.022
+    End If
+    If w = 47# Then
+        R = -6.133
+    End If
+    If w = 46# Then
+        R = -6.247
+    End If
+    If w = 45# Then
+        R = -6.362
+    End If
+    If w = 44# Then
+        R = -6.479
+    End If
+    If w = 43# Then
+        R = -6.598
+    End If
+    If w = 42# Then
+        R = -6.719
+    End If
+    If w = 41# Then
+        R = -6.842
+    End If
+    If w = 40# Then
+        R = -6.967
+    End If
+    If w = 39# Then
+        R = -7.094
+    End If
+    If w = 38# Then
+        R = -7.224
+    End If
+    If w = 37# Then
+        R = -7.355
+    End If
+    If w = 36# Then
+        R = -7.489
+    End If
+    If w = 35# Then
+        R = -7.625
+    End If
+    If w = 34# Then
+        R = -7.764
+    End If
+    If w = 33# Then
+        R = -7.905
+    End If
+    If w = 32# Then
+        R = -8.049
+    End If
+    If w = 31# Then
+        R = -8.196
+    End If
+    If w = 30# Then
+        R = -8.345
+    End If
+    If w = 29# Then
+        R = -8.498
+    End If
+    If w = 28# Then
+        R = -8.653
+    End If
+    If w = 27# Then
+        R = -8.811
+    End If
+    If w = 26# Then
+        R = -8.974
+    End If
+    If w = 25# Then
+        R = -9.139
+    End If
+    If w = 24# Then
+        R = -9.308
+    End If
+    If w = 23# Then
+        R = -9.481
+    End If
+    If w = 22# Then
+        R = -9.658
+    End If
+    If w = 21# Then
+        R = -9.84
+    End If
+    If w = 20# Then
+        R = -10.03
+    End If
+    If w = 19# Then
+        R = -10.22
+    End If
+    If w = 18# Then
+        R = -10.41
+    End If
+    If w = 17# Then
+        R = -10.61
+    End If
+    If w = 16# Then
+        R = -10.81
+    End If
+    If w = 15# Then
+        R = -11.02
+    End If
+    If w = 14# Then
+        R = -11.24
+    End If
+    If w = 13# Then
+        R = -11.47
+    End If
+    If w = 12# Then
+        R = -11.69
+    End If
+    If w = 11# Then
+        R = -11.94
+    End If
+    If w = 10# Then
+        R = -12.18
+    End If
+    If w = 9# Then
+        R = -12.45
+    End If
+    If w = 8# Then
+        R = -12.72
+    End If
+    If w = 7# Then
+        R = -13#
+    End If
+    If w = 6# Then
+        R = -13.3
+    End If
+    If w = 5# Then
+        R = -13.64
+    End If
+    If w = 4# Then
+        R = -14#
+    End If
+    If w = 3# Then
+        R = -14.33
+    End If
+    If w = 2# Then
+        R = -14.84
+    End If
+    If w = 1# Then
+        R = -15.25
+    End If
+    If w <= 0# Then
+        R = -15.94
+    End If
+    Result = R
+    W23 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 24)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W24(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim w As Long
+    Dim R As Double
+    w = Round(-(35# * S) + 150#)
+    If w >= 150# Then
+        R = -0.682
+    End If
+    If w = 149# Then
+        R = -0.7044
+    End If
+    If w = 148# Then
+        R = -0.7273
+    End If
+    If w = 147# Then
+        R = -0.7507
+    End If
+    If w = 146# Then
+        R = -0.7746
+    End If
+    If w = 145# Then
+        R = -0.799
+    End If
+    If w = 144# Then
+        R = -0.8239
+    End If
+    If w = 143# Then
+        R = -0.8494
+    End If
+    If w = 142# Then
+        R = -0.8754
+    End If
+    If w = 141# Then
+        R = -0.902
+    End If
+    If w = 140# Then
+        R = -0.9291
+    End If
+    If w = 139# Then
+        R = -0.9567
+    End If
+    If w = 138# Then
+        R = -0.9849
+    End If
+    If w = 137# Then
+        R = -1.014
+    End If
+    If w = 136# Then
+        R = -1.043
+    End If
+    If w = 135# Then
+        R = -1.073
+    End If
+    If w = 134# Then
+        R = -1.103
+    End If
+    If w = 133# Then
+        R = -1.135
+    End If
+    If w = 132# Then
+        R = -1.166
+    End If
+    If w = 131# Then
+        R = -1.198
+    End If
+    If w = 130# Then
+        R = -1.231
+    End If
+    If w = 129# Then
+        R = -1.265
+    End If
+    If w = 128# Then
+        R = -1.299
+    End If
+    If w = 127# Then
+        R = -1.334
+    End If
+    If w = 126# Then
+        R = -1.369
+    End If
+    If w = 125# Then
+        R = -1.405
+    End If
+    If w = 124# Then
+        R = -1.441
+    End If
+    If w = 123# Then
+        R = -1.479
+    End If
+    If w = 122# Then
+        R = -1.517
+    End If
+    If w = 121# Then
+        R = -1.555
+    End If
+    If w = 120# Then
+        R = -1.594
+    End If
+    If w = 119# Then
+        R = -1.634
+    End If
+    If w = 118# Then
+        R = -1.675
+    End If
+    If w = 117# Then
+        R = -1.716
+    End If
+    If w = 116# Then
+        R = -1.758
+    End If
+    If w = 115# Then
+        R = -1.8
+    End If
+    If w = 114# Then
+        R = -1.844
+    End If
+    If w = 113# Then
+        R = -1.888
+    End If
+    If w = 112# Then
+        R = -1.932
+    End If
+    If w = 111# Then
+        R = -1.978
+    End If
+    If w = 110# Then
+        R = -2.024
+    End If
+    If w = 109# Then
+        R = -2.07
+    End If
+    If w = 108# Then
+        R = -2.118
+    End If
+    If w = 107# Then
+        R = -2.166
+    End If
+    If w = 106# Then
+        R = -2.215
+    End If
+    If w = 105# Then
+        R = -2.265
+    End If
+    If w = 104# Then
+        R = -2.316
+    End If
+    If w = 103# Then
+        R = -2.367
+    End If
+    If w = 102# Then
+        R = -2.419
+    End If
+    If w = 101# Then
+        R = -2.472
+    End If
+    If w = 100# Then
+        R = -2.526
+    End If
+    If w = 99# Then
+        R = -2.58
+    End If
+    If w = 98# Then
+        R = -2.636
+    End If
+    If w = 97# Then
+        R = -2.692
+    End If
+    If w = 96# Then
+        R = -2.749
+    End If
+    If w = 95# Then
+        R = -2.806
+    End If
+    If w = 94# Then
+        R = -2.865
+    End If
+    If w = 93# Then
+        R = -2.925
+    End If
+    If w = 92# Then
+        R = -2.985
+    End If
+    If w = 91# Then
+        R = -3.046
+    End If
+    If w = 90# Then
+        R = -3.108
+    End If
+    If w = 89# Then
+        R = -3.171
+    End If
+    If w = 88# Then
+        R = -3.235
+    End If
+    If w = 87# Then
+        R = -3.3
+    End If
+    If w = 86# Then
+        R = -3.365
+    End If
+    If w = 85# Then
+        R = -3.432
+    End If
+    If w = 84# Then
+        R = -3.499
+    End If
+    If w = 83# Then
+        R = -3.568
+    End If
+    If w = 82# Then
+        R = -3.637
+    End If
+    If w = 81# Then
+        R = -3.708
+    End If
+    If w = 80# Then
+        R = -3.779
+    End If
+    If w = 79# Then
+        R = -3.852
+    End If
+    If w = 78# Then
+        R = -3.925
+    End If
+    If w = 77# Then
+        R = -4#
+    End If
+    If w = 76# Then
+        R = -4.075
+    End If
+    If w = 75# Then
+        R = -4.151
+    End If
+    If w = 74# Then
+        R = -4.229
+    End If
+    If w = 73# Then
+        R = -4.308
+    End If
+    If w = 72# Then
+        R = -4.387
+    End If
+    If w = 71# Then
+        R = -4.468
+    End If
+    If w = 70# Then
+        R = -4.55
+    End If
+    If w = 69# Then
+        R = -4.633
+    End If
+    If w = 68# Then
+        R = -4.718
+    End If
+    If w = 67# Then
+        R = -4.803
+    End If
+    If w = 66# Then
+        R = -4.89
+    End If
+    If w = 65# Then
+        R = -4.978
+    End If
+    If w = 64# Then
+        R = -5.067
+    End If
+    If w = 63# Then
+        R = -5.157
+    End If
+    If w = 62# Then
+        R = -5.249
+    End If
+    If w = 61# Then
+        R = -5.342
+    End If
+    If w = 60# Then
+        R = -5.436
+    End If
+    If w = 59# Then
+        R = -5.531
+    End If
+    If w = 58# Then
+        R = -5.628
+    End If
+    If w = 57# Then
+        R = -5.727
+    End If
+    If w = 56# Then
+        R = -5.826
+    End If
+    If w = 55# Then
+        R = -5.927
+    End If
+    If w = 54# Then
+        R = -6.03
+    End If
+    If w = 53# Then
+        R = -6.134
+    End If
+    If w = 52# Then
+        R = -6.24
+    End If
+    If w = 51# Then
+        R = -6.347
+    End If
+    If w = 50# Then
+        R = -6.456
+    End If
+    If w = 49# Then
+        R = -6.566
+    End If
+    If w = 48# Then
+        R = -6.678
+    End If
+    If w = 47# Then
+        R = -6.792
+    End If
+    If w = 46# Then
+        R = -6.907
+    End If
+    If w = 45# Then
+        R = -7.025
+    End If
+    If w = 44# Then
+        R = -7.144
+    End If
+    If w = 43# Then
+        R = -7.265
+    End If
+    If w = 42# Then
+        R = -7.387
+    End If
+    If w = 41# Then
+        R = -7.512
+    End If
+    If w = 40# Then
+        R = -7.639
+    End If
+    If w = 39# Then
+        R = -7.768
+    End If
+    If w = 38# Then
+        R = -7.899
+    End If
+    If w = 37# Then
+        R = -8.032
+    End If
+    If w = 36# Then
+        R = -8.167
+    End If
+    If w = 35# Then
+        R = -8.305
+    End If
+    If w = 34# Then
+        R = -8.445
+    End If
+    If w = 33# Then
+        R = -8.588
+    End If
+    If w = 32# Then
+        R = -8.733
+    End If
+    If w = 31# Then
+        R = -8.881
+    End If
+    If w = 30# Then
+        R = -9.031
+    End If
+    If w = 29# Then
+        R = -9.185
+    End If
+    If w = 28# Then
+        R = -9.341
+    End If
+    If w = 27# Then
+        R = -9.501
+    End If
+    If w = 26# Then
+        R = -9.664
+    End If
+    If w = 25# Then
+        R = -9.83
+    End If
+    If w = 24# Then
+        R = -10#
+    End If
+    If w = 23# Then
+        R = -10.17
+    End If
+    If w = 22# Then
+        R = -10.35
+    End If
+    If w = 21# Then
+        R = -10.53
+    End If
+    If w = 20# Then
+        R = -10.72
+    End If
+    If w = 19# Then
+        R = -10.91
+    End If
+    If w = 18# Then
+        R = -11.1
+    End If
+    If w = 17# Then
+        R = -11.3
+    End If
+    If w = 16# Then
+        R = -11.51
+    End If
+    If w = 15# Then
+        R = -11.72
+    End If
+    If w = 14# Then
+        R = -11.94
+    End If
+    If w = 13# Then
+        R = -12.16
+    End If
+    If w = 12# Then
+        R = -12.39
+    End If
+    If w = 11# Then
+        R = -12.63
+    End If
+    If w = 10# Then
+        R = -12.87
+    End If
+    If w = 9# Then
+        R = -13.14
+    End If
+    If w = 8# Then
+        R = -13.42
+    End If
+    If w = 7# Then
+        R = -13.69
+    End If
+    If w = 6# Then
+        R = -14#
+    End If
+    If w = 5# Then
+        R = -14.33
+    End If
+    If w = 4# Then
+        R = -14.69
+    End If
+    If w = 3# Then
+        R = -15.03
+    End If
+    If w = 2# Then
+        R = -15.54
+    End If
+    If w = 1# Then
+        R = -15.94
+    End If
+    If w <= 0# Then
+        R = -16.64
+    End If
+    Result = R
+    W24 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 25)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W25(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -5.150509, TJ, TJ1, Result)
+    Call WCheb(X, -5.695528, TJ, TJ1, Result)
+    Call WCheb(X, -1.437637, TJ, TJ1, Result)
+    Call WCheb(X, -0.2611906, TJ, TJ1, Result)
+    Call WCheb(X, -0.07625722, TJ, TJ1, Result)
+    Call WCheb(X, -0.02579892, TJ, TJ1, Result)
+    Call WCheb(X, -0.01086876, TJ, TJ1, Result)
+    Call WCheb(X, -0.002906543, TJ, TJ1, Result)
+    Call WCheb(X, -0.002354881, TJ, TJ1, Result)
+    Call WCheb(X, 0.0001007195, TJ, TJ1, Result)
+    Call WCheb(X, -0.0008437327, TJ, TJ1, Result)
+    W25 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 26)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W26(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -5.117622, TJ, TJ1, Result)
+    Call WCheb(X, -5.635159, TJ, TJ1, Result)
+    Call WCheb(X, -1.395167, TJ, TJ1, Result)
+    Call WCheb(X, -0.2382823, TJ, TJ1, Result)
+    Call WCheb(X, -0.06531987, TJ, TJ1, Result)
+    Call WCheb(X, -0.02060112, TJ, TJ1, Result)
+    Call WCheb(X, -0.008203697, TJ, TJ1, Result)
+    Call WCheb(X, -0.001516523, TJ, TJ1, Result)
+    Call WCheb(X, -0.001431364, TJ, TJ1, Result)
+    Call WCheb(X, 0.0006384553, TJ, TJ1, Result)
+    Call WCheb(X, -0.0003238369, TJ, TJ1, Result)
+    W26 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 27)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W27(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -5.089731, TJ, TJ1, Result)
+    Call WCheb(X, -5.584248, TJ, TJ1, Result)
+    Call WCheb(X, -1.359966, TJ, TJ1, Result)
+    Call WCheb(X, -0.2203696, TJ, TJ1, Result)
+    Call WCheb(X, -0.05753344, TJ, TJ1, Result)
+    Call WCheb(X, -0.01761891, TJ, TJ1, Result)
+    Call WCheb(X, -0.007096897, TJ, TJ1, Result)
+    Call WCheb(X, -0.001419108, TJ, TJ1, Result)
+    Call WCheb(X, -0.001581214, TJ, TJ1, Result)
+    Call WCheb(X, 0.0003033766, TJ, TJ1, Result)
+    Call WCheb(X, -0.0005901441, TJ, TJ1, Result)
+    W27 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 28)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W28(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -5.065046, TJ, TJ1, Result)
+    Call WCheb(X, -5.539163, TJ, TJ1, Result)
+    Call WCheb(X, -1.328939, TJ, TJ1, Result)
+    Call WCheb(X, -0.2046376, TJ, TJ1, Result)
+    Call WCheb(X, -0.05061515, TJ, TJ1, Result)
+    Call WCheb(X, -0.01469271, TJ, TJ1, Result)
+    Call WCheb(X, -0.005711578, TJ, TJ1, Result)
+    Call WCheb(X, -0.0008389153, TJ, TJ1, Result)
+    Call WCheb(X, -0.001250575, TJ, TJ1, Result)
+    Call WCheb(X, 0.0004047245, TJ, TJ1, Result)
+    Call WCheb(X, -0.0005128555, TJ, TJ1, Result)
+    W28 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 29)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W29(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -5.043413, TJ, TJ1, Result)
+    Call WCheb(X, -5.499756, TJ, TJ1, Result)
+    Call WCheb(X, -1.302137, TJ, TJ1, Result)
+    Call WCheb(X, -0.1915129, TJ, TJ1, Result)
+    Call WCheb(X, -0.04516329, TJ, TJ1, Result)
+    Call WCheb(X, -0.01260064, TJ, TJ1, Result)
+    Call WCheb(X, -0.004817269, TJ, TJ1, Result)
+    Call WCheb(X, -0.000547813, TJ, TJ1, Result)
+    Call WCheb(X, -0.001111668, TJ, TJ1, Result)
+    Call WCheb(X, 0.0004093451, TJ, TJ1, Result)
+    Call WCheb(X, -0.000513586, TJ, TJ1, Result)
+    W29 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 30)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W30(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -5.024071, TJ, TJ1, Result)
+    Call WCheb(X, -5.464515, TJ, TJ1, Result)
+    Call WCheb(X, -1.278342, TJ, TJ1, Result)
+    Call WCheb(X, -0.180003, TJ, TJ1, Result)
+    Call WCheb(X, -0.04046294, TJ, TJ1, Result)
+    Call WCheb(X, -0.01076162, TJ, TJ1, Result)
+    Call WCheb(X, -0.003968677, TJ, TJ1, Result)
+    Call WCheb(X, -0.0001911679, TJ, TJ1, Result)
+    Call WCheb(X, -0.0008619185, TJ, TJ1, Result)
+    Call WCheb(X, 0.0005125362, TJ, TJ1, Result)
+    Call WCheb(X, -0.000398437, TJ, TJ1, Result)
+    W30 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 40)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W40(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -4.904809, TJ, TJ1, Result)
+    Call WCheb(X, -5.248327, TJ, TJ1, Result)
+    Call WCheb(X, -1.136698, TJ, TJ1, Result)
+    Call WCheb(X, -0.1170982, TJ, TJ1, Result)
+    Call WCheb(X, -0.01824427, TJ, TJ1, Result)
+    Call WCheb(X, -0.003888648, TJ, TJ1, Result)
+    Call WCheb(X, -0.001344929, TJ, TJ1, Result)
+    Call WCheb(X, 0.0002790407, TJ, TJ1, Result)
+    Call WCheb(X, -0.0004619858, TJ, TJ1, Result)
+    Call WCheb(X, 0.0003359121, TJ, TJ1, Result)
+    Call WCheb(X, -0.0002883026, TJ, TJ1, Result)
+    W40 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 60)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W60(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -4.809656, TJ, TJ1, Result)
+    Call WCheb(X, -5.077191, TJ, TJ1, Result)
+    Call WCheb(X, -1.029402, TJ, TJ1, Result)
+    Call WCheb(X, -0.07507931, TJ, TJ1, Result)
+    Call WCheb(X, -0.006506226, TJ, TJ1, Result)
+    Call WCheb(X, -0.001391278, TJ, TJ1, Result)
+    Call WCheb(X, -0.0004263635, TJ, TJ1, Result)
+    Call WCheb(X, 0.0002302271, TJ, TJ1, Result)
+    Call WCheb(X, -0.0002384348, TJ, TJ1, Result)
+    Call WCheb(X, 0.0001865587, TJ, TJ1, Result)
+    Call WCheb(X, -0.0001622355, TJ, TJ1, Result)
+    W60 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 120)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W120(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -4.729426, TJ, TJ1, Result)
+    Call WCheb(X, -4.934426, TJ, TJ1, Result)
+    Call WCheb(X, -0.9433231, TJ, TJ1, Result)
+    Call WCheb(X, -0.04492504, TJ, TJ1, Result)
+    Call WCheb(X, 0.00001673948, TJ, TJ1, Result)
+    Call WCheb(X, -0.0006077014, TJ, TJ1, Result)
+    Call WCheb(X, -0.00007215768, TJ, TJ1, Result)
+    Call WCheb(X, 0.00009086734, TJ, TJ1, Result)
+    Call WCheb(X, -0.0000844798, TJ, TJ1, Result)
+    Call WCheb(X, 0.00006705028, TJ, TJ1, Result)
+    Call WCheb(X, -0.00005828507, TJ, TJ1, Result)
+    W120 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S, 200)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function W200(ByVal S As Double) As Double
+    Dim Result As Double
+    Dim X As Double
+    Dim TJ As Double
+    Dim TJ1 As Double
+    Result = 0#
+    X = MinReal(2# * (S - 0#) / 4# - 1#, 1#)
+    TJ = 1#
+    TJ1 = X
+    Call WCheb(X, -4.70024, TJ, TJ1, Result)
+    Call WCheb(X, -4.88308, TJ, TJ1, Result)
+    Call WCheb(X, -0.9132168, TJ, TJ1, Result)
+    Call WCheb(X, -0.03512684, TJ, TJ1, Result)
+    Call WCheb(X, 0.001726342, TJ, TJ1, Result)
+    Call WCheb(X, -0.0005189796, TJ, TJ1, Result)
+    Call WCheb(X, -0.000001628659, TJ, TJ1, Result)
+    Call WCheb(X, 0.00004261786, TJ, TJ1, Result)
+    Call WCheb(X, -0.00004002498, TJ, TJ1, Result)
+    Call WCheb(X, 0.00003146287, TJ, TJ1, Result)
+    Call WCheb(X, -0.00002727576, TJ, TJ1, Result)
+    W200 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Tail(S,N), S>=0
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function WSigma(ByVal S As Double, ByVal N As Long) As Double
+    Dim Result As Double
+    Dim F0 As Double
+    Dim F1 As Double
+    Dim F2 As Double
+    Dim F3 As Double
+    Dim F4 As Double
+    Dim X0 As Double
+    Dim X1 As Double
+    Dim X2 As Double
+    Dim X3 As Double
+    Dim X4 As Double
+    Dim X As Double
+    If N = 5# Then
+        Result = W5(S)
+    End If
+    If N = 6# Then
+        Result = W6(S)
+    End If
+    If N = 7# Then
+        Result = W7(S)
+    End If
+    If N = 8# Then
+        Result = W8(S)
+    End If
+    If N = 9# Then
+        Result = W9(S)
+    End If
+    If N = 10# Then
+        Result = W10(S)
+    End If
+    If N = 11# Then
+        Result = W11(S)
+    End If
+    If N = 12# Then
+        Result = W12(S)
+    End If
+    If N = 13# Then
+        Result = W13(S)
+    End If
+    If N = 14# Then
+        Result = W14(S)
+    End If
+    If N = 15# Then
+        Result = W15(S)
+    End If
+    If N = 16# Then
+        Result = W16(S)
+    End If
+    If N = 17# Then
+        Result = W17(S)
+    End If
+    If N = 18# Then
+        Result = W18(S)
+    End If
+    If N = 19# Then
+        Result = W19(S)
+    End If
+    If N = 20# Then
+        Result = W20(S)
+    End If
+    If N = 21# Then
+        Result = W21(S)
+    End If
+    If N = 22# Then
+        Result = W22(S)
+    End If
+    If N = 23# Then
+        Result = W23(S)
+    End If
+    If N = 24# Then
+        Result = W24(S)
+    End If
+    If N = 25# Then
+        Result = W25(S)
+    End If
+    If N = 26# Then
+        Result = W26(S)
+    End If
+    If N = 27# Then
+        Result = W27(S)
+    End If
+    If N = 28# Then
+        Result = W28(S)
+    End If
+    If N = 29# Then
+        Result = W29(S)
+    End If
+    If N = 30# Then
+        Result = W30(S)
+    End If
+    If N > 30# Then
+        X = 1# / N
+        X0 = 1# / 30#
+        F0 = W30(S)
+        X1 = 1# / 40#
+        F1 = W40(S)
+        X2 = 1# / 60#
+        F2 = W60(S)
+        X3 = 1# / 120#
+        F3 = W120(S)
+        X4 = 1# / 200#
+        F4 = W200(S)
+        F1 = ((X - X0) * F1 - (X - X1) * F0) / (X1 - X0)
+        F2 = ((X - X0) * F2 - (X - X2) * F0) / (X2 - X0)
+        F3 = ((X - X0) * F3 - (X - X3) * F0) / (X3 - X0)
+        F4 = ((X - X0) * F4 - (X - X4) * F0) / (X4 - X0)
+        F2 = ((X - X1) * F2 - (X - X2) * F1) / (X2 - X1)
+        F3 = ((X - X1) * F3 - (X - X3) * F1) / (X3 - X1)
+        F4 = ((X - X1) * F4 - (X - X4) * F1) / (X4 - X1)
+        F3 = ((X - X2) * F3 - (X - X3) * F2) / (X3 - X2)
+        F4 = ((X - X2) * F4 - (X - X4) * F2) / (X4 - X2)
+        F4 = ((X - X3) * F4 - (X - X4) * F3) / (X4 - X3)
+        Result = F4
+    End If
+    WSigma = Result
+End Function
+

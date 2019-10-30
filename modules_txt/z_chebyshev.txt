@@ -1,0 +1,196 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Calculation of the value of the Chebyshev polynomials of the
+'first and second kinds.
+'
+'Parameters:
+'    r   -   polynomial kind, either 1 or 2.
+'    n   -   degree, n>=0
+'    x   -   argument, -1 <= x <= 1
+'
+'Result:
+'    the value of the Chebyshev polynomial at x
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function ChebyshevCalculate(ByRef R As Long, _
+         ByRef N As Long, _
+         ByRef X As Double) As Double
+    Dim Result As Double
+    Dim i As Long
+    Dim A As Double
+    Dim B As Double
+    
+    '
+    ' Prepare A and B
+    '
+    If R = 1# Then
+        A = 1#
+        B = X
+    Else
+        A = 1#
+        B = 2# * X
+    End If
+    
+    '
+    ' Special cases: N=0 or N=1
+    '
+    If N = 0# Then
+        Result = A
+        ChebyshevCalculate = Result
+        Exit Function
+    End If
+    If N = 1# Then
+        Result = B
+        ChebyshevCalculate = Result
+        Exit Function
+    End If
+    
+    '
+    ' General case: N>=2
+    '
+    For i = 2# To N Step 1
+        Result = 2# * X * B - A
+        A = B
+        B = Result
+    Next i
+    ChebyshevCalculate = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Summation of Chebyshev polynomials using Clenshaw’s recurrence formula.
+'
+'This routine calculates
+'    c[0]*T0(x) + c[1]*T1(x) + ... + c[N]*TN(x)
+'or
+'    c[0]*U0(x) + c[1]*U1(x) + ... + c[N]*UN(x)
+'depending on the R.
+'
+'Parameters:
+'    r   -   polynomial kind, either 1 or 2.
+'    n   -   degree, n>=0
+'    x   -   argument
+'
+'Result:
+'    the value of the Chebyshev polynomial at x
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function ChebyshevSum(ByRef C() As Double, _
+         ByRef R As Long, _
+         ByRef N As Long, _
+         ByRef X As Double) As Double
+    Dim Result As Double
+    Dim b1 As Double
+    Dim b2 As Double
+    Dim i As Long
+    b1 = 0#
+    b2 = 0#
+    For i = N To 1# Step -1
+        Result = 2# * X * b1 - b2 + C(i)
+        b2 = b1
+        b1 = Result
+    Next i
+    If R = 1# Then
+        Result = -b2 + X * b1 + C(0#)
+    Else
+        Result = -b2 + 2# * X * b1 + C(0#)
+    End If
+    ChebyshevSum = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Representation of Tn as C[0] + C[1]*X + ... + C[N]*X^N
+'
+'Input parameters:
+'    N   -   polynomial degree, n>=0
+'
+'Output parameters:
+'    C   -   coefficients
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub ChebyshevCoefficients(ByRef N As Long, ByRef C() As Double)
+    Dim i As Long
+    ReDim C(0# To N)
+    For i = 0# To N Step 1
+        C(i) = 0#
+    Next i
+    If N = 0# Or N = 1# Then
+        C(N) = 1#
+    Else
+        C(N) = Exp((N - 1#) * Log(2#))
+        For i = 0# To N \ 2# - 1# Step 1
+            C(N - 2# * (i + 1#)) = -(C(N - 2# * i) * (N - 2# * i) * (N - 2# * i - 1#) / 4# / (i + 1#) / (N - i - 1#))
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Conversion of a series of Chebyshev polynomials to a power series.
+'
+'Represents A[0]*T0(x) + A[1]*T1(x) + ... + A[N]*Tn(x) as
+'B[0] + B[1]*X + ... + B[N]*X^N.
+'
+'Input parameters:
+'    A   -   Chebyshev series coefficients
+'    N   -   degree, N>=0
+'
+'Output parameters
+'    B   -   power series coefficients
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub FromChebyshev(ByRef A() As Double, _
+         ByRef N As Long, _
+         ByRef B() As Double)
+    Dim i As Long
+    Dim K As Long
+    Dim E As Double
+    Dim D As Double
+    ReDim B(0# To N)
+    For i = 0# To N Step 1
+        B(i) = 0#
+    Next i
+    D = 0#
+    i = 0#
+    Do
+        K = i
+        Do
+            E = B(K)
+            B(K) = 0#
+            If i <= 1# And K = i Then
+                B(K) = 1#
+            Else
+                If i <> 0# Then
+                    B(K) = 2# * D
+                End If
+                If K > i + 1# Then
+                    B(K) = B(K) - B(K - 2#)
+                End If
+            End If
+            D = E
+            K = K + 1#
+        Loop Until Not K <= N
+        D = B(i)
+        E = 0#
+        K = i
+        Do While K <= N
+            E = E + B(K) * A(K)
+            K = K + 2#
+        Loop
+        B(i) = E
+        i = i + 1#
+    Loop Until Not i <= N
+End Sub
+

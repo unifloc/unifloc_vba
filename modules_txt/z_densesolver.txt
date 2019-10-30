@@ -1,0 +1,2509 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007-2008, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+Public Type DenseSolverReport
+    R1 As Double
+    RInf As Double
+End Type
+Public Type DenseSolverLSReport
+    R2 As Double
+    CX() As Double
+    N As Long
+    K As Long
+End Type
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'This  subroutine  solves  a  system  A*x=b,  where A is NxN non-denegerate
+'real matrix, x and b are vectors.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(N^3) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   return code:
+'                * -3    A is singular, or VERY close to singular.
+'                        X is filled by zeros in such cases.
+'                * -1    N<=0 was passed
+'                *  1    task is solved (but matrix A may be ill-conditioned,
+'                        check R1/RInf parameters for condition numbers).
+'    Rep     -   solver report, see below for more info
+'    X       -   array[0..N-1], it contains:
+'                * solution of A*x=b if A is non-singular (well-conditioned
+'                  or ill-conditioned, but not very close to singular)
+'                * zeros,  if  A  is  singular  or  VERY  close to singular
+'                  (in this case Info=-3).
+'
+'SOLVER REPORT
+'
+'Subroutine sets following fields of the Rep structure:
+'* R1        reciprocal of condition number: 1/cond(A), 1-norm.
+'* RInf      reciprocal of condition number: 1/cond(A), inf-norm.
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixSolve(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByRef B() As Double, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim BM() As Double
+    Dim XM() As Double
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call RMatrixSolveM(A, N, BM, 1#, True, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'Similar to RMatrixSolve() but solves task with multiple right parts (where
+'b and x are NxM matrices).
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* optional iterative refinement
+'* O(N^3+M*N^2) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'    RFS     -   iterative refinement switch:
+'                * True - refinement is used.
+'                  Less performance, more precision.
+'                * False - refinement is not used.
+'                  More performance, less precision.
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixSolveM(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByVal RFS As Boolean, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim DA() As Double
+    Dim EmptyA() As Double
+    Dim p() As Long
+    Dim ScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim DA(0 To N - 1, 0 To N - 1)
+    
+    '
+    ' 1. scale matrix, max(|A[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    ScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        For j = 0# To N - 1# Step 1
+            ScaleA = MaxReal(ScaleA, Abs(A(i, j)))
+        Next j
+    Next i
+    If ScaleA = 0# Then
+        ScaleA = 1#
+    End If
+    ScaleA = 1# / ScaleA
+    For i = 0# To N - 1# Step 1
+        For i_ = 0# To N - 1# Step 1
+            DA(i, i_) = A(i, i_)
+        Next i_
+    Next i
+    Call RMatrixLU(DA, N, N, p)
+    If RFS Then
+        Call RMatrixLUSolveInternal(DA, p, ScaleA, N, A, True, B, M, Info, Rep, X)
+    Else
+        Call RMatrixLUSolveInternal(DA, p, ScaleA, N, EmptyA, False, B, M, Info, Rep, X)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'This  subroutine  solves  a  system  A*X=B,  where A is NxN non-denegerate
+'real matrix given by its LU decomposition, X and B are NxM real matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(N^2) complexity
+'* condition number estimation
+'
+'No iterative refinement  is provided because exact form of original matrix
+'is not known to subroutine. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, RMatrixLU result
+'    P       -   array[0..N-1], pivots array, RMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixLUSolve(ByRef LUA() As Double, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Double, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim BM() As Double
+    Dim XM() As Double
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call RMatrixLUSolveM(LUA, p, N, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'Similar to RMatrixLUSolve() but solves task with multiple right parts
+'(where b and x are NxM matrices).
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(M*N^2) complexity
+'* condition number estimation
+'
+'No iterative refinement  is provided because exact form of original matrix
+'is not known to subroutine. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, RMatrixLU result
+'    P       -   array[0..N-1], pivots array, RMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixLUSolveM(ByRef LUA() As Double, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim EmptyA() As Double
+    Dim i As Long
+    Dim j As Long
+    Dim ScaleA As Double
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' 1. scale matrix, max(|U[i,j]|)
+    '    we assume that LU is in its normal form, i.e. |L[i,j]|<=1
+    ' 2. solve
+    '
+    ScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        For j = i To N - 1# Step 1
+            ScaleA = MaxReal(ScaleA, Abs(LUA(i, j)))
+        Next j
+    Next i
+    If ScaleA = 0# Then
+        ScaleA = 1#
+    End If
+    ScaleA = 1# / ScaleA
+    Call RMatrixLUSolveInternal(LUA, p, ScaleA, N, EmptyA, False, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'This  subroutine  solves  a  system  A*x=b,  where BOTH ORIGINAL A AND ITS
+'LU DECOMPOSITION ARE KNOWN. You can use it if for some  reasons  you  have
+'both A and its LU decomposition.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(N^2) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, RMatrixLU result
+'    P       -   array[0..N-1], pivots array, RMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolveM
+'    Rep     -   same as in RMatrixSolveM
+'    X       -   same as in RMatrixSolveM
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixMixedSolve(ByRef A() As Double, _
+         ByRef LUA() As Double, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Double, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim BM() As Double
+    Dim XM() As Double
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call RMatrixMixedSolveM(A, LUA, p, N, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'Similar to RMatrixMixedSolve() but  solves task with multiple right  parts
+'(where b and x are NxM matrices).
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(M*N^2) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, RMatrixLU result
+'    P       -   array[0..N-1], pivots array, RMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolveM
+'    Rep     -   same as in RMatrixSolveM
+'    X       -   same as in RMatrixSolveM
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixMixedSolveM(ByRef A() As Double, _
+         ByRef LUA() As Double, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim ScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' 1. scale matrix, max(|A[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    ScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        For j = 0# To N - 1# Step 1
+            ScaleA = MaxReal(ScaleA, Abs(A(i, j)))
+        Next j
+    Next i
+    If ScaleA = 0# Then
+        ScaleA = 1#
+    End If
+    ScaleA = 1# / ScaleA
+    Call RMatrixLUSolveInternal(LUA, p, ScaleA, N, A, True, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixSolveM(), but for complex matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(N^3+M*N^2) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'    RFS     -   iterative refinement switch:
+'                * True - refinement is used.
+'                  Less performance, more precision.
+'                * False - refinement is not used.
+'                  More performance, less precision.
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixSolveM(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByVal RFS As Boolean, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim DA() As Complex
+    Dim EmptyA() As Complex
+    Dim p() As Long
+    Dim ScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim DA(0 To N - 1, 0 To N - 1)
+    
+    '
+    ' 1. scale matrix, max(|A[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    ScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        For j = 0# To N - 1# Step 1
+            ScaleA = MaxReal(ScaleA, AbsComplex(A(i, j)))
+        Next j
+    Next i
+    If ScaleA = 0# Then
+        ScaleA = 1#
+    End If
+    ScaleA = 1# / ScaleA
+    For i = 0# To N - 1# Step 1
+        For i_ = 0# To N - 1# Step 1
+            DA(i, i_) = A(i, i_)
+        Next i_
+    Next i
+    Call CMatrixLU(DA, N, N, p)
+    If RFS Then
+        Call CMatrixLUSolveInternal(DA, p, ScaleA, N, A, True, B, M, Info, Rep, X)
+    Else
+        Call CMatrixLUSolveInternal(DA, p, ScaleA, N, EmptyA, False, B, M, Info, Rep, X)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixSolve(), but for complex matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(N^3) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixSolve(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByRef B() As Complex, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim BM() As Complex
+    Dim XM() As Complex
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call CMatrixSolveM(A, N, BM, 1#, True, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixLUSolveM(), but for complex matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(M*N^2) complexity
+'* condition number estimation
+'
+'No iterative refinement  is provided because exact form of original matrix
+'is not known to subroutine. Use CMatrixSolve or CMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, RMatrixLU result
+'    P       -   array[0..N-1], pivots array, RMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixLUSolveM(ByRef LUA() As Complex, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim EmptyA() As Complex
+    Dim i As Long
+    Dim j As Long
+    Dim ScaleA As Double
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' 1. scale matrix, max(|U[i,j]|)
+    '    we assume that LU is in its normal form, i.e. |L[i,j]|<=1
+    ' 2. solve
+    '
+    ScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        For j = i To N - 1# Step 1
+            ScaleA = MaxReal(ScaleA, AbsComplex(LUA(i, j)))
+        Next j
+    Next i
+    If ScaleA = 0# Then
+        ScaleA = 1#
+    End If
+    ScaleA = 1# / ScaleA
+    Call CMatrixLUSolveInternal(LUA, p, ScaleA, N, EmptyA, False, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixLUSolve(), but for complex matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(N^2) complexity
+'* condition number estimation
+'
+'No iterative refinement is provided because exact form of original matrix
+'is not known to subroutine. Use CMatrixSolve or CMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, CMatrixLU result
+'    P       -   array[0..N-1], pivots array, CMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixLUSolve(ByRef LUA() As Complex, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Complex, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim BM() As Complex
+    Dim XM() As Complex
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call CMatrixLUSolveM(LUA, p, N, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixMixedSolveM(), but for complex matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(M*N^2) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, CMatrixLU result
+'    P       -   array[0..N-1], pivots array, CMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolveM
+'    Rep     -   same as in RMatrixSolveM
+'    X       -   same as in RMatrixSolveM
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixMixedSolveM(ByRef A() As Complex, _
+         ByRef LUA() As Complex, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim ScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' 1. scale matrix, max(|A[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    ScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        For j = 0# To N - 1# Step 1
+            ScaleA = MaxReal(ScaleA, AbsComplex(A(i, j)))
+        Next j
+    Next i
+    If ScaleA = 0# Then
+        ScaleA = 1#
+    End If
+    ScaleA = 1# / ScaleA
+    Call CMatrixLUSolveInternal(LUA, p, ScaleA, N, A, True, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixMixedSolve(), but for complex matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* iterative refinement
+'* O(N^2) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    LUA     -   array[0..N-1,0..N-1], LU decomposition, CMatrixLU result
+'    P       -   array[0..N-1], pivots array, CMatrixLU result
+'    N       -   size of A
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolveM
+'    Rep     -   same as in RMatrixSolveM
+'    X       -   same as in RMatrixSolveM
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixMixedSolve(ByRef A() As Complex, _
+         ByRef LUA() As Complex, _
+         ByRef p() As Long, _
+         ByVal N As Long, _
+         ByRef B() As Complex, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim BM() As Complex
+    Dim XM() As Complex
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call CMatrixMixedSolveM(A, LUA, p, N, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixSolveM(), but for symmetric positive definite
+'matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* O(N^3+M*N^2) complexity
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    IsUpper -   what half of A is provided
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve.
+'                Returns -3 for non-SPD matrices.
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub SPDMatrixSolveM(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim DA() As Double
+    Dim SqrtScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim DA(0 To N - 1, 0 To N - 1)
+    
+    '
+    ' 1. scale matrix, max(|A[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    SqrtScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For j = J1 To J2 Step 1
+            SqrtScaleA = MaxReal(SqrtScaleA, Abs(A(i, j)))
+        Next j
+    Next i
+    If SqrtScaleA = 0# Then
+        SqrtScaleA = 1#
+    End If
+    SqrtScaleA = 1# / SqrtScaleA
+    SqrtScaleA = Sqr(SqrtScaleA)
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For i_ = J1 To J2 Step 1
+            DA(i, i_) = A(i, i_)
+        Next i_
+    Next i
+    If Not SPDMatrixCholesky(DA, N, IsUpper) Then
+        ReDim X(0 To N - 1, 0 To M - 1)
+        For i = 0# To N - 1# Step 1
+            For j = 0# To M - 1# Step 1
+                X(i, j) = 0#
+            Next j
+        Next i
+        Rep.R1 = 0#
+        Rep.RInf = 0#
+        Info = -3#
+        Exit Sub
+    End If
+    Info = 1#
+    Call SPDMatrixCholeskySolveInternal(DA, SqrtScaleA, N, IsUpper, A, True, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixSolve(), but for SPD matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* O(N^3) complexity
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    IsUpper -   what half of A is provided
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'                Returns -3 for non-SPD matrices.
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub SPDMatrixSolve(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Double, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim BM() As Double
+    Dim XM() As Double
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call SPDMatrixSolveM(A, N, IsUpper, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixLUSolveM(), but for SPD matrices  represented
+'by their Cholesky decomposition.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(M*N^2) complexity
+'* condition number estimation
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    CHA     -   array[0..N-1,0..N-1], Cholesky decomposition,
+'                SPDMatrixCholesky result
+'    N       -   size of CHA
+'    IsUpper -   what half of CHA is provided
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub SPDMatrixCholeskySolveM(ByRef CHA() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim EmptyA() As Double
+    Dim SqrtScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' 1. scale matrix, max(|U[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    SqrtScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For j = J1 To J2 Step 1
+            SqrtScaleA = MaxReal(SqrtScaleA, Abs(CHA(i, j)))
+        Next j
+    Next i
+    If SqrtScaleA = 0# Then
+        SqrtScaleA = 1#
+    End If
+    SqrtScaleA = 1# / SqrtScaleA
+    Call SPDMatrixCholeskySolveInternal(CHA, SqrtScaleA, N, IsUpper, EmptyA, False, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixLUSolve(), but for  SPD matrices  represented
+'by their Cholesky decomposition.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(N^2) complexity
+'* condition number estimation
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    CHA     -   array[0..N-1,0..N-1], Cholesky decomposition,
+'                SPDMatrixCholesky result
+'    N       -   size of A
+'    IsUpper -   what half of CHA is provided
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub SPDMatrixCholeskySolve(ByRef CHA() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Double, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim BM() As Double
+    Dim XM() As Double
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call SPDMatrixCholeskySolveM(CHA, N, IsUpper, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixSolveM(), but for Hermitian positive definite
+'matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* O(N^3+M*N^2) complexity
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    IsUpper -   what half of A is provided
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve.
+'                Returns -3 for non-HPD matrices.
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HPDMatrixSolveM(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim DA() As Complex
+    Dim SqrtScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim DA(0 To N - 1, 0 To N - 1)
+    
+    '
+    ' 1. scale matrix, max(|A[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    SqrtScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For j = J1 To J2 Step 1
+            SqrtScaleA = MaxReal(SqrtScaleA, AbsComplex(A(i, j)))
+        Next j
+    Next i
+    If SqrtScaleA = 0# Then
+        SqrtScaleA = 1#
+    End If
+    SqrtScaleA = 1# / SqrtScaleA
+    SqrtScaleA = Sqr(SqrtScaleA)
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For i_ = J1 To J2 Step 1
+            DA(i, i_) = A(i, i_)
+        Next i_
+    Next i
+    If Not HPDMatrixCholesky(DA, N, IsUpper) Then
+        ReDim X(0 To N - 1, 0 To M - 1)
+        For i = 0# To N - 1# Step 1
+            For j = 0# To M - 1# Step 1
+                X(i, j) = C_Complex(0#)
+            Next j
+        Next i
+        Rep.R1 = 0#
+        Rep.RInf = 0#
+        Info = -3#
+        Exit Sub
+    End If
+    Info = 1#
+    Call HPDMatrixCholeskySolveInternal(DA, SqrtScaleA, N, IsUpper, A, True, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixSolve(),  but for Hermitian positive definite
+'matrices.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* condition number estimation
+'* O(N^3) complexity
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    A       -   array[0..N-1,0..N-1], system matrix
+'    N       -   size of A
+'    IsUpper -   what half of A is provided
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'                Returns -3 for non-HPD matrices.
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HPDMatrixSolve(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Complex, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim BM() As Complex
+    Dim XM() As Complex
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call HPDMatrixSolveM(A, N, IsUpper, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixLUSolveM(), but for HPD matrices  represented
+'by their Cholesky decomposition.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(M*N^2) complexity
+'* condition number estimation
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    CHA     -   array[0..N-1,0..N-1], Cholesky decomposition,
+'                HPDMatrixCholesky result
+'    N       -   size of CHA
+'    IsUpper -   what half of CHA is provided
+'    B       -   array[0..N-1,0..M-1], right part
+'    M       -   right part size
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HPDMatrixCholeskySolveM(ByRef CHA() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim EmptyA() As Complex
+    Dim SqrtScaleA As Double
+    Dim i As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    
+    '
+    ' 1. scale matrix, max(|U[i,j]|)
+    ' 2. factorize scaled matrix
+    ' 3. solve
+    '
+    SqrtScaleA = 0#
+    For i = 0# To N - 1# Step 1
+        If IsUpper Then
+            J1 = i
+            J2 = N - 1#
+        Else
+            J1 = 0#
+            J2 = i
+        End If
+        For j = J1 To J2 Step 1
+            SqrtScaleA = MaxReal(SqrtScaleA, AbsComplex(CHA(i, j)))
+        Next j
+    Next i
+    If SqrtScaleA = 0# Then
+        SqrtScaleA = 1#
+    End If
+    SqrtScaleA = 1# / SqrtScaleA
+    Call HPDMatrixCholeskySolveInternal(CHA, SqrtScaleA, N, IsUpper, EmptyA, False, B, M, Info, Rep, X)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver. Same as RMatrixLUSolve(), but for  HPD matrices  represented
+'by their Cholesky decomposition.
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* O(N^2) complexity
+'* condition number estimation
+'* matrix is represented by its upper or lower triangle
+'
+'No iterative refinement is provided because such partial representation of
+'matrix does not allow efficient calculation of extra-precise  matrix-vector
+'products for large matrices. Use RMatrixSolve or RMatrixMixedSolve  if  you
+'need iterative refinement.
+'
+'INPUT PARAMETERS
+'    CHA     -   array[0..N-1,0..N-1], Cholesky decomposition,
+'                SPDMatrixCholesky result
+'    N       -   size of A
+'    IsUpper -   what half of CHA is provided
+'    B       -   array[0..N-1], right part
+'
+'OUTPUT PARAMETERS
+'    Info    -   same as in RMatrixSolve
+'    Rep     -   same as in RMatrixSolve
+'    X       -   same as in RMatrixSolve
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HPDMatrixCholeskySolve(ByRef CHA() As Complex, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef B() As Complex, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim BM() As Complex
+    Dim XM() As Complex
+    Dim i_ As Long
+    If N <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim BM(0 To N - 1, 0 To 1# - 1)
+    For i_ = 0# To N - 1# Step 1
+        BM(i_, 0#) = B(i_)
+    Next i_
+    Call HPDMatrixCholeskySolveM(CHA, N, IsUpper, BM, 1#, Info, Rep, XM)
+    ReDim X(0 To N - 1)
+    For i_ = 0# To N - 1# Step 1
+        X(i_) = XM(i_, 0#)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Dense solver.
+'
+'This subroutine finds solution of the linear system A*X=B with non-square,
+'possibly degenerate A.  System  is  solved in the least squares sense, and
+'general least squares solution  X = X0 + CX*y  which  minimizes |A*X-B| is
+'returned. If A is non-degenerate, solution in the  usual sense is returned
+'
+'Algorithm features:
+'* automatic detection of degenerate cases
+'* iterative refinement
+'* O(N^3) complexity
+'
+'INPUT PARAMETERS
+'    A       -   array[0..NRows-1,0..NCols-1], system matrix
+'    NRows   -   vertical size of A
+'    NCols   -   horizontal size of A
+'    B       -   array[0..NCols-1], right part
+'    Threshold-  a number in [0,1]. Singular values  beyond  Threshold  are
+'                considered  zero.  Set  it to 0.0, if you don't understand
+'                what it means, so the solver will choose good value on its
+'                own.
+'
+'OUTPUT PARAMETERS
+'    Info    -   return code:
+'                * -4    SVD subroutine failed
+'                * -1    if NRows<=0 or NCols<=0 or Threshold<0 was passed
+'                *  1    if task is solved
+'    Rep     -   solver report, see below for more info
+'    X       -   array[0..N-1,0..M-1], it contains:
+'                * solution of A*X=B if A is non-singular (well-conditioned
+'                  or ill-conditioned, but not very close to singular)
+'                * zeros,  if  A  is  singular  or  VERY  close to singular
+'                  (in this case Info=-3).
+'
+'SOLVER REPORT
+'
+'Subroutine sets following fields of the Rep structure:
+'* R2        reciprocal of condition number: 1/cond(A), 2-norm.
+'* N         = NCols
+'* K         dim(Null(A))
+'* CX        array[0..N-1,0..K-1], kernel of A.
+'            Columns of CX store such vectors that A*CX[i]=0.
+'
+'  -- ALGLIB --
+'     Copyright 24.08.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixSolveLS(ByRef A() As Double, _
+         ByVal NRows As Long, _
+         ByVal NCols As Long, _
+         ByRef B() As Double, _
+         ByVal Threshold As Double, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverLSReport, _
+         ByRef X() As Double)
+    Dim SV() As Double
+    Dim U() As Double
+    Dim VT() As Double
+    Dim RP() As Double
+    Dim UTB() As Double
+    Dim SUTB() As Double
+    Dim Tmp() As Double
+    Dim TA() As Double
+    Dim TX() As Double
+    Dim Buf() As Double
+    Dim w() As Double
+    Dim i As Long
+    Dim j As Long
+    Dim NSV As Long
+    Dim KernelIdx As Long
+    Dim V As Double
+    Dim VErr As Double
+    Dim SVDFailed As Boolean
+    Dim ZeroA As Boolean
+    Dim RFS As Long
+    Dim NRFS As Long
+    Dim TerminateNextTime As Boolean
+    Dim SmallErr As Boolean
+    Dim i_ As Long
+    If NRows <= 0# Or NCols <= 0# Or Threshold < 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    If Threshold = 0# Then
+        Threshold = 1000# * MachineEpsilon
+    End If
+    
+    '
+    ' Factorize A first
+    '
+    SVDFailed = Not RMatrixSVD(A, NRows, NCols, 1#, 2#, 2#, SV, U, VT)
+    ZeroA = SV(0#) = 0#
+    If SVDFailed Or ZeroA Then
+        If SVDFailed Then
+            Info = -4#
+        Else
+            Info = 1#
+        End If
+        ReDim X(0 To NCols - 1)
+        For i = 0# To NCols - 1# Step 1
+            X(i) = 0#
+        Next i
+        Rep.N = NCols
+        Rep.K = NCols
+        ReDim Rep.CX(0 To NCols - 1, 0 To NCols - 1)
+        For i = 0# To NCols - 1# Step 1
+            For j = 0# To NCols - 1# Step 1
+                If i = j Then
+                    Rep.CX(i, j) = 1#
+                Else
+                    Rep.CX(i, j) = 0#
+                End If
+            Next j
+        Next i
+        Rep.R2 = 0#
+        Exit Sub
+    End If
+    NSV = MinInt(NCols, NRows)
+    If NSV = NCols Then
+        Rep.R2 = SV(NSV - 1#) / SV(0#)
+    Else
+        Rep.R2 = 0#
+    End If
+    Rep.N = NCols
+    Info = 1#
+    
+    '
+    ' Iterative refinement of xc combined with solution:
+    ' 1. xc = 0
+    ' 2. calculate r = bc-A*xc using extra-precise dot product
+    ' 3. solve A*y = r
+    ' 4. update x:=x+r
+    ' 5. goto 2
+    '
+    ' This cycle is executed until one of two things happens:
+    ' 1. maximum number of iterations reached
+    ' 2. last iteration decreased error to the lower limit
+    '
+    ReDim UTB(0 To NSV - 1)
+    ReDim SUTB(0 To NSV - 1)
+    ReDim X(0 To NCols - 1)
+    ReDim Tmp(0 To NCols - 1)
+    ReDim TA(0 To NCols + 1# - 1)
+    ReDim TX(0 To NCols + 1# - 1)
+    ReDim Buf(0 To NCols + 1# - 1)
+    For i = 0# To NCols - 1# Step 1
+        X(i) = 0#
+    Next i
+    KernelIdx = NSV
+    For i = 0# To NSV - 1# Step 1
+        If SV(i) <= Threshold * SV(0#) Then
+            KernelIdx = i
+            Exit For
+        End If
+    Next i
+    Rep.K = NCols - KernelIdx
+    NRFS = DenseSolverRFSMaxV2(NCols, Rep.R2)
+    TerminateNextTime = False
+    ReDim RP(0 To NRows - 1)
+    For RFS = 0# To NRFS Step 1
+        If TerminateNextTime Then
+            Exit For
+        End If
+        
+        '
+        ' calculate right part
+        '
+        If RFS = 0# Then
+            For i_ = 0# To NRows - 1# Step 1
+                RP(i_) = B(i_)
+            Next i_
+        Else
+            SmallErr = True
+            For i = 0# To NRows - 1# Step 1
+                For i_ = 0# To NCols - 1# Step 1
+                    TA(i_) = A(i, i_)
+                Next i_
+                TA(NCols) = -1#
+                For i_ = 0# To NCols - 1# Step 1
+                    TX(i_) = X(i_)
+                Next i_
+                TX(NCols) = B(i)
+                Call XDot(TA, TX, NCols + 1#, Buf, V, VErr)
+                RP(i) = -V
+                SmallErr = SmallErr And Abs(V) < 4# * VErr
+            Next i
+            If SmallErr Then
+                TerminateNextTime = True
+            End If
+        End If
+        
+        '
+        ' solve A*dx = rp
+        '
+        For i = 0# To NCols - 1# Step 1
+            Tmp(i) = 0#
+        Next i
+        For i = 0# To NSV - 1# Step 1
+            UTB(i) = 0#
+        Next i
+        For i = 0# To NRows - 1# Step 1
+            V = RP(i)
+            For i_ = 0# To NSV - 1# Step 1
+                UTB(i_) = UTB(i_) + V * U(i, i_)
+            Next i_
+        Next i
+        For i = 0# To NSV - 1# Step 1
+            If i < KernelIdx Then
+                SUTB(i) = UTB(i) / SV(i)
+            Else
+                SUTB(i) = 0#
+            End If
+        Next i
+        For i = 0# To NSV - 1# Step 1
+            V = SUTB(i)
+            For i_ = 0# To NCols - 1# Step 1
+                Tmp(i_) = Tmp(i_) + V * VT(i, i_)
+            Next i_
+        Next i
+        
+        '
+        ' update x:  x:=x+dx
+        '
+        For i_ = 0# To NCols - 1# Step 1
+            X(i_) = X(i_) + Tmp(i_)
+        Next i_
+    Next RFS
+    
+    '
+    ' fill CX
+    '
+    If Rep.K > 0# Then
+        ReDim Rep.CX(0 To NCols - 1, 0 To Rep.K - 1)
+        For i = 0# To Rep.K - 1# Step 1
+            For i_ = 0# To NCols - 1# Step 1
+                Rep.CX(i_, i) = VT(KernelIdx + i, i_)
+            Next i_
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal LU solver
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixLUSolveInternal(ByRef LUA() As Double, _
+         ByRef p() As Long, _
+         ByRef ScaleA As Double, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal HaveA As Boolean, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim RFS As Long
+    Dim NRFS As Long
+    Dim XC() As Double
+    Dim y() As Double
+    Dim BC() As Double
+    Dim XA() As Double
+    Dim XB() As Double
+    Dim TX() As Double
+    Dim V As Double
+    Dim VErr As Double
+    Dim MXB As Double
+    Dim ScaleRight As Double
+    Dim SmallErr As Boolean
+    Dim TerminateNextTime As Boolean
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    For i = 0# To N - 1# Step 1
+        If p(i) > N - 1# Or p(i) < i Then
+            Info = -1#
+            Exit Sub
+        End If
+    Next i
+    ReDim X(0 To N - 1, 0 To M - 1)
+    ReDim y(0 To N - 1)
+    ReDim XC(0 To N - 1)
+    ReDim BC(0 To N - 1)
+    ReDim TX(0 To N + 1# - 1)
+    ReDim XA(0 To N + 1# - 1)
+    ReDim XB(0 To N + 1# - 1)
+    
+    '
+    ' estimate condition number, test for near singularity
+    '
+    Rep.R1 = RMatrixLURCond1(LUA, N)
+    Rep.RInf = RMatrixLURCondInf(LUA, N)
+    If Rep.R1 < RCondThreshold() Or Rep.RInf < RCondThreshold() Then
+        For i = 0# To N - 1# Step 1
+            For j = 0# To M - 1# Step 1
+                X(i, j) = 0#
+            Next j
+        Next i
+        Rep.R1 = 0#
+        Rep.RInf = 0#
+        Info = -3#
+        Exit Sub
+    End If
+    Info = 1#
+    
+    '
+    ' solve
+    '
+    For K = 0# To M - 1# Step 1
+        
+        '
+        ' copy B to contiguous storage
+        '
+        For i_ = 0# To N - 1# Step 1
+            BC(i_) = B(i_, K)
+        Next i_
+        
+        '
+        ' Scale right part:
+        ' * MX stores max(|Bi|)
+        ' * ScaleRight stores actual scaling applied to B when solving systems
+        '   it is chosen to make |scaleRight*b| close to 1.
+        '
+        MXB = 0#
+        For i = 0# To N - 1# Step 1
+            MXB = MaxReal(MXB, Abs(BC(i)))
+        Next i
+        If MXB = 0# Then
+            MXB = 1#
+        End If
+        ScaleRight = 1# / MXB
+        
+        '
+        ' First, non-iterative part of solution process.
+        ' We use separate code for this task because
+        ' XDot is quite slow and we want to save time.
+        '
+        For i_ = 0# To N - 1# Step 1
+            XC(i_) = ScaleRight * BC(i_)
+        Next i_
+        Call RBasicLUSolve(LUA, p, ScaleA, N, XC, TX)
+        
+        '
+        ' Iterative refinement of xc:
+        ' * calculate r = bc-A*xc using extra-precise dot product
+        ' * solve A*y = r
+        ' * update x:=x+r
+        '
+        ' This cycle is executed until one of two things happens:
+        ' 1. maximum number of iterations reached
+        ' 2. last iteration decreased error to the lower limit
+        '
+        If HaveA Then
+            NRFS = DenseSolverRFSMax(N, Rep.R1, Rep.RInf)
+            TerminateNextTime = False
+            For RFS = 0# To NRFS - 1# Step 1
+                If TerminateNextTime Then
+                    Exit For
+                End If
+                
+                '
+                ' generate right part
+                '
+                SmallErr = True
+                For i_ = 0# To N - 1# Step 1
+                    XB(i_) = XC(i_)
+                Next i_
+                For i = 0# To N - 1# Step 1
+                    For i_ = 0# To N - 1# Step 1
+                        XA(i_) = ScaleA * A(i, i_)
+                    Next i_
+                    XA(N) = -1#
+                    XB(N) = ScaleRight * BC(i)
+                    Call XDot(XA, XB, N + 1#, TX, V, VErr)
+                    y(i) = -V
+                    SmallErr = SmallErr And Abs(V) < 4# * VErr
+                Next i
+                If SmallErr Then
+                    TerminateNextTime = True
+                End If
+                
+                '
+                ' solve and update
+                '
+                Call RBasicLUSolve(LUA, p, ScaleA, N, y, TX)
+                For i_ = 0# To N - 1# Step 1
+                    XC(i_) = XC(i_) + y(i_)
+                Next i_
+            Next RFS
+        End If
+        
+        '
+        ' Store xc.
+        ' Post-scale result.
+        '
+        V = ScaleA * MXB
+        For i_ = 0# To N - 1# Step 1
+            X(i_, K) = V * XC(i_)
+        Next i_
+    Next K
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal Cholesky solver
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub SPDMatrixCholeskySolveInternal(ByRef CHA() As Double, _
+         ByRef SqrtScaleA As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef A() As Double, _
+         ByVal HaveA As Boolean, _
+         ByRef B() As Double, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Double)
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim RFS As Long
+    Dim NRFS As Long
+    Dim XC() As Double
+    Dim y() As Double
+    Dim BC() As Double
+    Dim XA() As Double
+    Dim XB() As Double
+    Dim TX() As Double
+    Dim V As Double
+    Dim VErr As Double
+    Dim MXB As Double
+    Dim ScaleRight As Double
+    Dim SmallErr As Boolean
+    Dim TerminateNextTime As Boolean
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim X(0 To N - 1, 0 To M - 1)
+    ReDim y(0 To N - 1)
+    ReDim XC(0 To N - 1)
+    ReDim BC(0 To N - 1)
+    ReDim TX(0 To N + 1# - 1)
+    ReDim XA(0 To N + 1# - 1)
+    ReDim XB(0 To N + 1# - 1)
+    
+    '
+    ' estimate condition number, test for near singularity
+    '
+    Rep.R1 = SPDMatrixCholeskyRCond(CHA, N, IsUpper)
+    Rep.RInf = Rep.R1
+    If Rep.R1 < RCondThreshold() Then
+        For i = 0# To N - 1# Step 1
+            For j = 0# To M - 1# Step 1
+                X(i, j) = 0#
+            Next j
+        Next i
+        Rep.R1 = 0#
+        Rep.RInf = 0#
+        Info = -3#
+        Exit Sub
+    End If
+    Info = 1#
+    
+    '
+    ' solve
+    '
+    For K = 0# To M - 1# Step 1
+        
+        '
+        ' copy B to contiguous storage
+        '
+        For i_ = 0# To N - 1# Step 1
+            BC(i_) = B(i_, K)
+        Next i_
+        
+        '
+        ' Scale right part:
+        ' * MX stores max(|Bi|)
+        ' * ScaleRight stores actual scaling applied to B when solving systems
+        '   it is chosen to make |scaleRight*b| close to 1.
+        '
+        MXB = 0#
+        For i = 0# To N - 1# Step 1
+            MXB = MaxReal(MXB, Abs(BC(i)))
+        Next i
+        If MXB = 0# Then
+            MXB = 1#
+        End If
+        ScaleRight = 1# / MXB
+        
+        '
+        ' First, non-iterative part of solution process.
+        ' We use separate code for this task because
+        ' XDot is quite slow and we want to save time.
+        '
+        For i_ = 0# To N - 1# Step 1
+            XC(i_) = ScaleRight * BC(i_)
+        Next i_
+        Call SPDBasicCholeskySolve(CHA, SqrtScaleA, N, IsUpper, XC, TX)
+        
+        '
+        ' Store xc.
+        ' Post-scale result.
+        '
+        V = Square(SqrtScaleA) * MXB
+        For i_ = 0# To N - 1# Step 1
+            X(i_, K) = V * XC(i_)
+        Next i_
+    Next K
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal LU solver
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixLUSolveInternal(ByRef LUA() As Complex, _
+         ByRef p() As Long, _
+         ByRef ScaleA As Double, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal HaveA As Boolean, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim RFS As Long
+    Dim NRFS As Long
+    Dim XC() As Complex
+    Dim y() As Complex
+    Dim BC() As Complex
+    Dim XA() As Complex
+    Dim XB() As Complex
+    Dim TX() As Complex
+    Dim TmpBuf() As Double
+    Dim V As Complex
+    Dim VErr As Double
+    Dim MXB As Double
+    Dim ScaleRight As Double
+    Dim SmallErr As Boolean
+    Dim TerminateNextTime As Boolean
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    For i = 0# To N - 1# Step 1
+        If p(i) > N - 1# Or p(i) < i Then
+            Info = -1#
+            Exit Sub
+        End If
+    Next i
+    ReDim X(0 To N - 1, 0 To M - 1)
+    ReDim y(0 To N - 1)
+    ReDim XC(0 To N - 1)
+    ReDim BC(0 To N - 1)
+    ReDim TX(0 To N - 1)
+    ReDim XA(0 To N + 1# - 1)
+    ReDim XB(0 To N + 1# - 1)
+    ReDim TmpBuf(0 To 2# * N + 2# - 1)
+    
+    '
+    ' estimate condition number, test for near singularity
+    '
+    Rep.R1 = CMatrixLURCond1(LUA, N)
+    Rep.RInf = CMatrixLURCondInf(LUA, N)
+    If Rep.R1 < RCondThreshold() Or Rep.RInf < RCondThreshold() Then
+        For i = 0# To N - 1# Step 1
+            For j = 0# To M - 1# Step 1
+                X(i, j) = C_Complex(0#)
+            Next j
+        Next i
+        Rep.R1 = 0#
+        Rep.RInf = 0#
+        Info = -3#
+        Exit Sub
+    End If
+    Info = 1#
+    
+    '
+    ' solve
+    '
+    For K = 0# To M - 1# Step 1
+        
+        '
+        ' copy B to contiguous storage
+        '
+        For i_ = 0# To N - 1# Step 1
+            BC(i_) = B(i_, K)
+        Next i_
+        
+        '
+        ' Scale right part:
+        ' * MX stores max(|Bi|)
+        ' * ScaleRight stores actual scaling applied to B when solving systems
+        '   it is chosen to make |scaleRight*b| close to 1.
+        '
+        MXB = 0#
+        For i = 0# To N - 1# Step 1
+            MXB = MaxReal(MXB, AbsComplex(BC(i)))
+        Next i
+        If MXB = 0# Then
+            MXB = 1#
+        End If
+        ScaleRight = 1# / MXB
+        
+        '
+        ' First, non-iterative part of solution process.
+        ' We use separate code for this task because
+        ' XDot is quite slow and we want to save time.
+        '
+        For i_ = 0# To N - 1# Step 1
+            XC(i_) = C_MulR(BC(i_), ScaleRight)
+        Next i_
+        Call CBasicLUSolve(LUA, p, ScaleA, N, XC, TX)
+        
+        '
+        ' Iterative refinement of xc:
+        ' * calculate r = bc-A*xc using extra-precise dot product
+        ' * solve A*y = r
+        ' * update x:=x+r
+        '
+        ' This cycle is executed until one of two things happens:
+        ' 1. maximum number of iterations reached
+        ' 2. last iteration decreased error to the lower limit
+        '
+        If HaveA Then
+            NRFS = DenseSolverRFSMax(N, Rep.R1, Rep.RInf)
+            TerminateNextTime = False
+            For RFS = 0# To NRFS - 1# Step 1
+                If TerminateNextTime Then
+                    Exit For
+                End If
+                
+                '
+                ' generate right part
+                '
+                SmallErr = True
+                For i_ = 0# To N - 1# Step 1
+                    XB(i_) = XC(i_)
+                Next i_
+                For i = 0# To N - 1# Step 1
+                    For i_ = 0# To N - 1# Step 1
+                        XA(i_) = C_MulR(A(i, i_), ScaleA)
+                    Next i_
+                    XA(N) = C_Complex(-1#)
+                    XB(N) = C_MulR(BC(i), ScaleRight)
+                    Call XCDot(XA, XB, N + 1#, TmpBuf, V, VErr)
+                    y(i) = C_Opposite(V)
+                    SmallErr = SmallErr And AbsComplex(V) < 4# * VErr
+                Next i
+                If SmallErr Then
+                    TerminateNextTime = True
+                End If
+                
+                '
+                ' solve and update
+                '
+                Call CBasicLUSolve(LUA, p, ScaleA, N, y, TX)
+                For i_ = 0# To N - 1# Step 1
+                    XC(i_) = C_Add(XC(i_), y(i_))
+                Next i_
+            Next RFS
+        End If
+        
+        '
+        ' Store xc.
+        ' Post-scale result.
+        '
+        V = C_Complex(ScaleA * MXB)
+        For i_ = 0# To N - 1# Step 1
+            X(i_, K) = C_Mul(V, XC(i_))
+        Next i_
+    Next K
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal Cholesky solver
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub HPDMatrixCholeskySolveInternal(ByRef CHA() As Complex, _
+         ByRef SqrtScaleA As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef A() As Complex, _
+         ByVal HaveA As Boolean, _
+         ByRef B() As Complex, _
+         ByVal M As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As DenseSolverReport, _
+         ByRef X() As Complex)
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    Dim RFS As Long
+    Dim NRFS As Long
+    Dim XC() As Complex
+    Dim y() As Complex
+    Dim BC() As Complex
+    Dim XA() As Complex
+    Dim XB() As Complex
+    Dim TX() As Complex
+    Dim V As Double
+    Dim VErr As Double
+    Dim MXB As Double
+    Dim ScaleRight As Double
+    Dim SmallErr As Boolean
+    Dim TerminateNextTime As Boolean
+    Dim i_ As Long
+    
+    '
+    ' prepare: check inputs, allocate space...
+    '
+    If N <= 0# Or M <= 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    ReDim X(0 To N - 1, 0 To M - 1)
+    ReDim y(0 To N - 1)
+    ReDim XC(0 To N - 1)
+    ReDim BC(0 To N - 1)
+    ReDim TX(0 To N + 1# - 1)
+    ReDim XA(0 To N + 1# - 1)
+    ReDim XB(0 To N + 1# - 1)
+    
+    '
+    ' estimate condition number, test for near singularity
+    '
+    Rep.R1 = HPDMatrixCholeskyRCond(CHA, N, IsUpper)
+    Rep.RInf = Rep.R1
+    If Rep.R1 < RCondThreshold() Then
+        For i = 0# To N - 1# Step 1
+            For j = 0# To M - 1# Step 1
+                X(i, j) = C_Complex(0#)
+            Next j
+        Next i
+        Rep.R1 = 0#
+        Rep.RInf = 0#
+        Info = -3#
+        Exit Sub
+    End If
+    Info = 1#
+    
+    '
+    ' solve
+    '
+    For K = 0# To M - 1# Step 1
+        
+        '
+        ' copy B to contiguous storage
+        '
+        For i_ = 0# To N - 1# Step 1
+            BC(i_) = B(i_, K)
+        Next i_
+        
+        '
+        ' Scale right part:
+        ' * MX stores max(|Bi|)
+        ' * ScaleRight stores actual scaling applied to B when solving systems
+        '   it is chosen to make |scaleRight*b| close to 1.
+        '
+        MXB = 0#
+        For i = 0# To N - 1# Step 1
+            MXB = MaxReal(MXB, AbsComplex(BC(i)))
+        Next i
+        If MXB = 0# Then
+            MXB = 1#
+        End If
+        ScaleRight = 1# / MXB
+        
+        '
+        ' First, non-iterative part of solution process.
+        ' We use separate code for this task because
+        ' XDot is quite slow and we want to save time.
+        '
+        For i_ = 0# To N - 1# Step 1
+            XC(i_) = C_MulR(BC(i_), ScaleRight)
+        Next i_
+        Call HPDBasicCholeskySolve(CHA, SqrtScaleA, N, IsUpper, XC, TX)
+        
+        '
+        ' Store xc.
+        ' Post-scale result.
+        '
+        V = Square(SqrtScaleA) * MXB
+        For i_ = 0# To N - 1# Step 1
+            X(i_, K) = C_MulR(XC(i_), V)
+        Next i_
+    Next K
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine.
+'Returns maximum count of RFS iterations as function of:
+'1. machine epsilon
+'2. task size.
+'3. condition number
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function DenseSolverRFSMax(ByVal N As Long, _
+         ByVal R1 As Double, _
+         ByVal RInf As Double) As Long
+    Dim Result As Long
+    Result = 5#
+    DenseSolverRFSMax = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal subroutine.
+'Returns maximum count of RFS iterations as function of:
+'1. machine epsilon
+'2. task size.
+'3. norm-2 condition number
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function DenseSolverRFSMaxV2(ByVal N As Long, _
+         ByVal R2 As Double) As Long
+    Dim Result As Long
+    Result = DenseSolverRFSMax(N, 0#, 0#)
+    DenseSolverRFSMaxV2 = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Basic LU solver for ScaleA*PLU*x = y.
+'
+'This subroutine assumes that:
+'* L is well-scaled, and it is U which needs scaling by ScaleA.
+'* A=PLU is well-conditioned, so no zero divisions or overflow may occur
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RBasicLUSolve(ByRef LUA() As Double, _
+         ByRef p() As Long, _
+         ByVal ScaleA As Double, _
+         ByVal N As Long, _
+         ByRef XB() As Double, _
+         ByRef Tmp() As Double)
+    Dim i As Long
+    Dim V As Double
+    Dim i_ As Long
+    For i = 0# To N - 1# Step 1
+        If p(i) <> i Then
+            V = XB(i)
+            XB(i) = XB(p(i))
+            XB(p(i)) = V
+        End If
+    Next i
+    For i = 1# To N - 1# Step 1
+        V = 0#
+        For i_ = 0# To i - 1# Step 1
+            V = V + LUA(i, i_) * XB(i_)
+        Next i_
+        XB(i) = XB(i) - V
+    Next i
+    XB(N - 1#) = XB(N - 1#) / (ScaleA * LUA(N - 1#, N - 1#))
+    For i = N - 2# To 0# Step -1
+        For i_ = i + 1# To N - 1# Step 1
+            Tmp(i_) = ScaleA * LUA(i, i_)
+        Next i_
+        V = 0#
+        For i_ = i + 1# To N - 1# Step 1
+            V = V + Tmp(i_) * XB(i_)
+        Next i_
+        XB(i) = (XB(i) - V) / (ScaleA * LUA(i, i))
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Basic Cholesky solver for ScaleA*Cholesky(A)'*x = y.
+'
+'This subroutine assumes that:
+'* A*ScaleA is well scaled
+'* A is well-conditioned, so no zero divisions or overflow may occur
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub SPDBasicCholeskySolve(ByRef CHA() As Double, _
+         ByVal SqrtScaleA As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef XB() As Double, _
+         ByRef Tmp() As Double)
+    Dim i As Long
+    Dim V As Double
+    Dim i_ As Long
+    
+    '
+    ' A = L*L' or A=U'*U
+    '
+    If IsUpper Then
+        
+        '
+        ' Solve U'*y=b first.
+        '
+        For i = 0# To N - 1# Step 1
+            XB(i) = XB(i) / (SqrtScaleA * CHA(i, i))
+            If i < N - 1# Then
+                V = XB(i)
+                For i_ = i + 1# To N - 1# Step 1
+                    Tmp(i_) = SqrtScaleA * CHA(i, i_)
+                Next i_
+                For i_ = i + 1# To N - 1# Step 1
+                    XB(i_) = XB(i_) - V * Tmp(i_)
+                Next i_
+            End If
+        Next i
+        
+        '
+        ' Solve U*x=y then.
+        '
+        For i = N - 1# To 0# Step -1
+            If i < N - 1# Then
+                For i_ = i + 1# To N - 1# Step 1
+                    Tmp(i_) = SqrtScaleA * CHA(i, i_)
+                Next i_
+                V = 0#
+                For i_ = i + 1# To N - 1# Step 1
+                    V = V + Tmp(i_) * XB(i_)
+                Next i_
+                XB(i) = XB(i) - V
+            End If
+            XB(i) = XB(i) / (SqrtScaleA * CHA(i, i))
+        Next i
+    Else
+        
+        '
+        ' Solve L*y=b first
+        '
+        For i = 0# To N - 1# Step 1
+            If i > 0# Then
+                For i_ = 0# To i - 1# Step 1
+                    Tmp(i_) = SqrtScaleA * CHA(i, i_)
+                Next i_
+                V = 0#
+                For i_ = 0# To i - 1# Step 1
+                    V = V + Tmp(i_) * XB(i_)
+                Next i_
+                XB(i) = XB(i) - V
+            End If
+            XB(i) = XB(i) / (SqrtScaleA * CHA(i, i))
+        Next i
+        
+        '
+        ' Solve L'*x=y then.
+        '
+        For i = N - 1# To 0# Step -1
+            XB(i) = XB(i) / (SqrtScaleA * CHA(i, i))
+            If i > 0# Then
+                V = XB(i)
+                For i_ = 0# To i - 1# Step 1
+                    Tmp(i_) = SqrtScaleA * CHA(i, i_)
+                Next i_
+                For i_ = 0# To i - 1# Step 1
+                    XB(i_) = XB(i_) - V * Tmp(i_)
+                Next i_
+            End If
+        Next i
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Basic LU solver for ScaleA*PLU*x = y.
+'
+'This subroutine assumes that:
+'* L is well-scaled, and it is U which needs scaling by ScaleA.
+'* A=PLU is well-conditioned, so no zero divisions or overflow may occur
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CBasicLUSolve(ByRef LUA() As Complex, _
+         ByRef p() As Long, _
+         ByVal ScaleA As Double, _
+         ByVal N As Long, _
+         ByRef XB() As Complex, _
+         ByRef Tmp() As Complex)
+    Dim i As Long
+    Dim V As Complex
+    Dim i_ As Long
+    For i = 0# To N - 1# Step 1
+        If p(i) <> i Then
+            V = XB(i)
+            XB(i) = XB(p(i))
+            XB(p(i)) = V
+        End If
+    Next i
+    For i = 1# To N - 1# Step 1
+        V = C_Complex(0#)
+        For i_ = 0# To i - 1# Step 1
+            V = C_Add(V, C_Mul(LUA(i, i_), XB(i_)))
+        Next i_
+        XB(i) = C_Sub(XB(i), V)
+    Next i
+    XB(N - 1#) = C_Div(XB(N - 1#), C_MulR(LUA(N - 1#, N - 1#), ScaleA))
+    For i = N - 2# To 0# Step -1
+        For i_ = i + 1# To N - 1# Step 1
+            Tmp(i_) = C_MulR(LUA(i, i_), ScaleA)
+        Next i_
+        V = C_Complex(0#)
+        For i_ = i + 1# To N - 1# Step 1
+            V = C_Add(V, C_Mul(Tmp(i_), XB(i_)))
+        Next i_
+        XB(i) = C_Div(C_Sub(XB(i), V), C_MulR(LUA(i, i), ScaleA))
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Basic Cholesky solver for ScaleA*Cholesky(A)'*x = y.
+'
+'This subroutine assumes that:
+'* A*ScaleA is well scaled
+'* A is well-conditioned, so no zero divisions or overflow may occur
+'
+'  -- ALGLIB --
+'     Copyright 27.01.2010 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub HPDBasicCholeskySolve(ByRef CHA() As Complex, _
+         ByVal SqrtScaleA As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean, _
+         ByRef XB() As Complex, _
+         ByRef Tmp() As Complex)
+    Dim i As Long
+    Dim V As Complex
+    Dim i_ As Long
+    
+    '
+    ' A = L*L' or A=U'*U
+    '
+    If IsUpper Then
+        
+        '
+        ' Solve U'*y=b first.
+        '
+        For i = 0# To N - 1# Step 1
+            XB(i) = C_Div(XB(i), C_MulR(Conj(CHA(i, i)), SqrtScaleA))
+            If i < N - 1# Then
+                V = XB(i)
+                For i_ = i + 1# To N - 1# Step 1
+                    Tmp(i_) = C_MulR(Conj(CHA(i, i_)), SqrtScaleA)
+                Next i_
+                For i_ = i + 1# To N - 1# Step 1
+                    XB(i_) = C_Sub(XB(i_), C_Mul(V, Tmp(i_)))
+                Next i_
+            End If
+        Next i
+        
+        '
+        ' Solve U*x=y then.
+        '
+        For i = N - 1# To 0# Step -1
+            If i < N - 1# Then
+                For i_ = i + 1# To N - 1# Step 1
+                    Tmp(i_) = C_MulR(CHA(i, i_), SqrtScaleA)
+                Next i_
+                V = C_Complex(0#)
+                For i_ = i + 1# To N - 1# Step 1
+                    V = C_Add(V, C_Mul(Tmp(i_), XB(i_)))
+                Next i_
+                XB(i) = C_Sub(XB(i), V)
+            End If
+            XB(i) = C_Div(XB(i), C_MulR(CHA(i, i), SqrtScaleA))
+        Next i
+    Else
+        
+        '
+        ' Solve L*y=b first
+        '
+        For i = 0# To N - 1# Step 1
+            If i > 0# Then
+                For i_ = 0# To i - 1# Step 1
+                    Tmp(i_) = C_MulR(CHA(i, i_), SqrtScaleA)
+                Next i_
+                V = C_Complex(0#)
+                For i_ = 0# To i - 1# Step 1
+                    V = C_Add(V, C_Mul(Tmp(i_), XB(i_)))
+                Next i_
+                XB(i) = C_Sub(XB(i), V)
+            End If
+            XB(i) = C_Div(XB(i), C_MulR(CHA(i, i), SqrtScaleA))
+        Next i
+        
+        '
+        ' Solve L'*x=y then.
+        '
+        For i = N - 1# To 0# Step -1
+            XB(i) = C_Div(XB(i), C_MulR(Conj(CHA(i, i)), SqrtScaleA))
+            If i > 0# Then
+                V = XB(i)
+                For i_ = 0# To i - 1# Step 1
+                    Tmp(i_) = C_MulR(Conj(CHA(i, i_)), SqrtScaleA)
+                Next i_
+                For i_ = 0# To i - 1# Step 1
+                    XB(i_) = C_Sub(XB(i_), C_Mul(V, Tmp(i_)))
+                Next i_
+            End If
+        Next i
+    End If
+End Sub
+

@@ -1,0 +1,773 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 1992-2007 The University of Tennessee.  All rights reserved.
+'
+'Contributors:
+'    * Sergey Bochkanov (ALGLIB project). Translation from FORTRAN to
+'      pseudocode.
+'
+'See subroutines comments for additional copyrights.
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Inversion of a symmetric indefinite matrix
+'
+'The algorithm gets an LDLT-decomposition as an input, generates matrix A^-1
+'and saves the lower or upper triangle of an inverse matrix depending on the
+'input (U*D*U' or L*D*L').
+'
+'Input parameters:
+'    A       -   LDLT-decomposition of the matrix,
+'                Output of subroutine SMatrixLDLT.
+'    N       -   size of matrix A.
+'    IsUpper -   storage format. If IsUpper = True, then the symmetric matrix
+'                is given as decomposition A = U*D*U' and this decomposition
+'                is stored in the upper triangle of matrix A and on the main
+'                diagonal, and the lower triangle of matrix A is not used.
+'    Pivots  -   a table of permutations, output of subroutine SMatrixLDLT.
+'
+'Output parameters:
+'    A       -   inverse of the matrix, whose LDLT-decomposition was stored
+'                in matrix A as a subroutine input.
+'                Array with elements [0..N-1, 0..N-1].
+'                If IsUpper = True, then A contains the upper triangle of
+'                matrix A^-1, and the elements below the main diagonal are
+'                not used nor changed. The same applies if IsUpper = False.
+'
+'Result:
+'    True, if the matrix is not singular.
+'    False, if the matrix is singular and could not be inverted.
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     March 31, 1993
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixLDLTInverse(ByRef A() As Double, _
+         ByRef Pivots() As Long, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Boolean
+    Dim Result As Boolean
+    Dim WORK() As Double
+    Dim WORK2() As Double
+    Dim i As Long
+    Dim K As Long
+    Dim KP As Long
+    Dim KSTEP As Long
+    Dim AK As Double
+    Dim AKKP1 As Double
+    Dim AKP1 As Double
+    Dim D As Double
+    Dim T As Double
+    Dim temp As Double
+    Dim KM1 As Long
+    Dim KP1 As Long
+    Dim L As Long
+    Dim I1 As Long
+    Dim I2 As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    ReDim WORK(1# To N)
+    ReDim WORK2(1# To N)
+    Result = True
+    
+    '
+    ' Quick return if possible
+    '
+    If N = 0# Then
+        SMatrixLDLTInverse = Result
+        Exit Function
+    End If
+    
+    '
+    ' Check that the diagonal matrix D is nonsingular.
+    '
+    For i = 0# To N - 1# Step 1
+        If Pivots(i) >= 0# And A(i, i) = 0# Then
+            Result = False
+            SMatrixLDLTInverse = Result
+            Exit Function
+        End If
+    Next i
+    If IsUpper Then
+        
+        '
+        ' Compute inv(A) from the factorization A = U*D*U'.
+        '
+        ' K+1 is the main loop index, increasing from 1 to N in steps of
+        ' 1 or 2, depending on the size of the diagonal blocks.
+        '
+        K = 0#
+        Do While K <= N - 1#
+            If Pivots(K) >= 0# Then
+                
+                '
+                ' 1 x 1 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                A(K, K) = 1# / A(K, K)
+                
+                '
+                ' Compute column K+1 of the inverse.
+                '
+                If K > 0# Then
+                    i1_ = (0#) - (1#)
+                    For i_ = 1# To K Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, 1# - 1#, K + 1# - 1# - 1#, WORK, -1#, WORK2)
+                    i1_ = (1#) - (0#)
+                    For i_ = 0# To K - 1# Step 1
+                        A(i_, K) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To K Step 1
+                        V = V + WORK2(i_) * WORK(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                End If
+                KSTEP = 1#
+            Else
+                
+                '
+                ' 2 x 2 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                T = Abs(A(K, K + 1#))
+                AK = A(K, K) / T
+                AKP1 = A(K + 1#, K + 1#) / T
+                AKKP1 = A(K, K + 1#) / T
+                D = T * (AK * AKP1 - 1#)
+                A(K, K) = AKP1 / D
+                A(K + 1#, K + 1#) = AK / D
+                A(K, K + 1#) = -(AKKP1 / D)
+                
+                '
+                ' Compute columns K+1 and K+1+1 of the inverse.
+                '
+                If K > 0# Then
+                    i1_ = (0#) - (1#)
+                    For i_ = 1# To K Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, 0#, K - 1#, WORK, -1#, WORK2)
+                    i1_ = (1#) - (0#)
+                    For i_ = 0# To K - 1# Step 1
+                        A(i_, K) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To K Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                    V = 0#
+                    For i_ = 0# To K - 1# Step 1
+                        V = V + A(i_, K) * A(i_, K + 1#)
+                    Next i_
+                    A(K, K + 1#) = A(K, K + 1#) - V
+                    i1_ = (0#) - (1#)
+                    For i_ = 1# To K Step 1
+                        WORK(i_) = A(i_ + i1_, K + 1#)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, 0#, K - 1#, WORK, -1#, WORK2)
+                    i1_ = (1#) - (0#)
+                    For i_ = 0# To K - 1# Step 1
+                        A(i_, K + 1#) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To K Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K + 1#, K + 1#) = A(K + 1#, K + 1#) - V
+                End If
+                KSTEP = 2#
+            End If
+            If Pivots(K) >= 0# Then
+                KP = Pivots(K)
+            Else
+                KP = N + Pivots(K)
+            End If
+            If KP <> K Then
+                
+                '
+                ' Interchange rows and columns K and KP in the leading
+                ' submatrix
+                '
+                i1_ = (0#) - (1#)
+                For i_ = 1# To KP Step 1
+                    WORK(i_) = A(i_ + i1_, K)
+                Next i_
+                For i_ = 0# To KP - 1# Step 1
+                    A(i_, K) = A(i_, KP)
+                Next i_
+                i1_ = (1#) - (0#)
+                For i_ = 0# To KP - 1# Step 1
+                    A(i_, KP) = WORK(i_ + i1_)
+                Next i_
+                i1_ = (KP + 1#) - (1#)
+                For i_ = 1# To K - 1# - KP Step 1
+                    WORK(i_) = A(i_ + i1_, K)
+                Next i_
+                For i_ = KP + 1# To K - 1# Step 1
+                    A(i_, K) = A(KP, i_)
+                Next i_
+                i1_ = (1#) - (KP + 1#)
+                For i_ = KP + 1# To K - 1# Step 1
+                    A(KP, i_) = WORK(i_ + i1_)
+                Next i_
+                temp = A(K, K)
+                A(K, K) = A(KP, KP)
+                A(KP, KP) = temp
+                If KSTEP = 2# Then
+                    temp = A(K, K + 1#)
+                    A(K, K + 1#) = A(KP, K + 1#)
+                    A(KP, K + 1#) = temp
+                End If
+            End If
+            K = K + KSTEP
+        Loop
+    Else
+        
+        '
+        ' Compute inv(A) from the factorization A = L*D*L'.
+        '
+        ' K is the main loop index, increasing from 0 to N-1 in steps of
+        ' 1 or 2, depending on the size of the diagonal blocks.
+        '
+        K = N - 1#
+        Do While K >= 0#
+            If Pivots(K) >= 0# Then
+                
+                '
+                ' 1 x 1 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                A(K, K) = 1# / A(K, K)
+                
+                '
+                ' Compute column K+1 of the inverse.
+                '
+                If K < N - 1# Then
+                    i1_ = (K + 1#) - (1#)
+                    For i_ = 1# To N - K - 1# Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, K + 1#, N - 1#, WORK, -1#, WORK2)
+                    i1_ = (1#) - (K + 1#)
+                    For i_ = K + 1# To N - 1# Step 1
+                        A(i_, K) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To N - K - 1# Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                End If
+                KSTEP = 1#
+            Else
+                
+                '
+                ' 2 x 2 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                T = Abs(A(K, K - 1#))
+                AK = A(K - 1#, K - 1#) / T
+                AKP1 = A(K, K) / T
+                AKKP1 = A(K, K - 1#) / T
+                D = T * (AK * AKP1 - 1#)
+                A(K - 1#, K - 1#) = AKP1 / D
+                A(K, K) = AK / D
+                A(K, K - 1#) = -(AKKP1 / D)
+                
+                '
+                ' Compute columns K+1-1 and K+1 of the inverse.
+                '
+                If K < N - 1# Then
+                    i1_ = (K + 1#) - (1#)
+                    For i_ = 1# To N - K - 1# Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, K + 1#, N - 1#, WORK, -1#, WORK2)
+                    i1_ = (1#) - (K + 1#)
+                    For i_ = K + 1# To N - 1# Step 1
+                        A(i_, K) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To N - K - 1# Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                    V = 0#
+                    For i_ = K + 1# To N - 1# Step 1
+                        V = V + A(i_, K) * A(i_, K - 1#)
+                    Next i_
+                    A(K, K - 1#) = A(K, K - 1#) - V
+                    i1_ = (K + 1#) - (1#)
+                    For i_ = 1# To N - K - 1# Step 1
+                        WORK(i_) = A(i_ + i1_, K - 1#)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, K + 1#, N - 1#, WORK, -1#, WORK2)
+                    i1_ = (1#) - (K + 1#)
+                    For i_ = K + 1# To N - 1# Step 1
+                        A(i_, K - 1#) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To N - K - 1# Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K - 1#, K - 1#) = A(K - 1#, K - 1#) - V
+                End If
+                KSTEP = 2#
+            End If
+            If Pivots(K) >= 0# Then
+                KP = Pivots(K)
+            Else
+                KP = Pivots(K) + N
+            End If
+            If KP <> K Then
+                
+                '
+                ' Interchange rows and columns K and KP
+                '
+                If KP < N - 1# Then
+                    i1_ = (KP + 1#) - (1#)
+                    For i_ = 1# To N - KP - 1# Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    For i_ = KP + 1# To N - 1# Step 1
+                        A(i_, K) = A(i_, KP)
+                    Next i_
+                    i1_ = (1#) - (KP + 1#)
+                    For i_ = KP + 1# To N - 1# Step 1
+                        A(i_, KP) = WORK(i_ + i1_)
+                    Next i_
+                End If
+                i1_ = (K + 1#) - (1#)
+                For i_ = 1# To KP - K - 1# Step 1
+                    WORK(i_) = A(i_ + i1_, K)
+                Next i_
+                For i_ = K + 1# To KP - 1# Step 1
+                    A(i_, K) = A(KP, i_)
+                Next i_
+                i1_ = (1#) - (K + 1#)
+                For i_ = K + 1# To KP - 1# Step 1
+                    A(KP, i_) = WORK(i_ + i1_)
+                Next i_
+                temp = A(K, K)
+                A(K, K) = A(KP, KP)
+                A(KP, KP) = temp
+                If KSTEP = 2# Then
+                    temp = A(K, K - 1#)
+                    A(K, K - 1#) = A(KP, K - 1#)
+                    A(KP, K - 1#) = temp
+                End If
+            End If
+            K = K - KSTEP
+        Loop
+    End If
+    SMatrixLDLTInverse = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Inversion of a symmetric indefinite matrix
+'
+'Given a lower or upper triangle of matrix A, the algorithm generates
+'matrix A^-1 and saves the lower or upper triangle depending on the input.
+'
+'Input parameters:
+'    A       -   matrix to be inverted (upper or lower triangle).
+'                Array with elements [0..N-1, 0..N-1].
+'    N       -   size of matrix A.
+'    IsUpper -   storage format. If IsUpper = True, then the upper
+'                triangle of matrix A is given, otherwise the lower
+'                triangle is given.
+'
+'Output parameters:
+'    A       -   inverse of matrix A.
+'                Array with elements [0..N-1, 0..N-1].
+'                If IsUpper = True, then A contains the upper triangle of
+'                matrix A^-1, and the elements below the main diagonal are
+'                not used nor changed.
+'                The same applies if IsUpper = False.
+'
+'Result:
+'    True, if the matrix is not singular.
+'    False, if the matrix is singular and could not be inverted.
+'
+'  -- LAPACK routine (version 3.0) --
+'     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
+'     Courant Institute, Argonne National Lab, and Rice University
+'     March 31, 1993
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function SMatrixInverse(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Boolean
+    Dim Result As Boolean
+    Dim Pivots() As Long
+    Call SMatrixLDLT(A, N, IsUpper, Pivots)
+    Result = SMatrixLDLTInverse(A, Pivots, N, IsUpper)
+    SMatrixInverse = Result
+End Function
+Public Function InverseLDLT(ByRef A() As Double, _
+         ByRef Pivots() As Long, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Boolean
+    Dim Result As Boolean
+    Dim WORK() As Double
+    Dim WORK2() As Double
+    Dim i As Long
+    Dim K As Long
+    Dim KP As Long
+    Dim KSTEP As Long
+    Dim AK As Double
+    Dim AKKP1 As Double
+    Dim AKP1 As Double
+    Dim D As Double
+    Dim T As Double
+    Dim temp As Double
+    Dim KM1 As Long
+    Dim KP1 As Long
+    Dim L As Long
+    Dim I1 As Long
+    Dim I2 As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    ReDim WORK(1# To N)
+    ReDim WORK2(1# To N)
+    Result = True
+    
+    '
+    ' Quick return if possible
+    '
+    If N = 0# Then
+        InverseLDLT = Result
+        Exit Function
+    End If
+    
+    '
+    ' Check that the diagonal matrix D is nonsingular.
+    '
+    For i = 1# To N Step 1
+        If Pivots(i) > 0# And A(i, i) = 0# Then
+            Result = False
+            InverseLDLT = Result
+            Exit Function
+        End If
+    Next i
+    If IsUpper Then
+        
+        '
+        ' Compute inv(A) from the factorization A = U*D*U'.
+        '
+        ' K is the main loop index, increasing from 1 to N in steps of
+        ' 1 or 2, depending on the size of the diagonal blocks.
+        '
+        K = 1#
+        Do While K <= N
+            If Pivots(K) > 0# Then
+                
+                '
+                ' 1 x 1 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                A(K, K) = 1# / A(K, K)
+                
+                '
+                ' Compute column K of the inverse.
+                '
+                If K > 1# Then
+                    KM1 = K - 1#
+                    For i_ = 1# To KM1 Step 1
+                        WORK(i_) = A(i_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, 1#, K - 1#, WORK, -1#, WORK2)
+                    For i_ = 1# To KM1 Step 1
+                        A(i_, K) = WORK2(i_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To KM1 Step 1
+                        V = V + WORK2(i_) * WORK(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                End If
+                KSTEP = 1#
+            Else
+                
+                '
+                ' 2 x 2 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                T = Abs(A(K, K + 1#))
+                AK = A(K, K) / T
+                AKP1 = A(K + 1#, K + 1#) / T
+                AKKP1 = A(K, K + 1#) / T
+                D = T * (AK * AKP1 - 1#)
+                A(K, K) = AKP1 / D
+                A(K + 1#, K + 1#) = AK / D
+                A(K, K + 1#) = -(AKKP1 / D)
+                
+                '
+                ' Compute columns K and K+1 of the inverse.
+                '
+                If K > 1# Then
+                    KM1 = K - 1#
+                    KP1 = K + 1#
+                    For i_ = 1# To KM1 Step 1
+                        WORK(i_) = A(i_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, 1#, K - 1#, WORK, -1#, WORK2)
+                    For i_ = 1# To KM1 Step 1
+                        A(i_, K) = WORK2(i_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To KM1 Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                    V = 0#
+                    For i_ = 1# To KM1 Step 1
+                        V = V + A(i_, K) * A(i_, KP1)
+                    Next i_
+                    A(K, K + 1#) = A(K, K + 1#) - V
+                    For i_ = 1# To KM1 Step 1
+                        WORK(i_) = A(i_, KP1)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, 1#, K - 1#, WORK, -1#, WORK2)
+                    For i_ = 1# To KM1 Step 1
+                        A(i_, KP1) = WORK2(i_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To KM1 Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K + 1#, K + 1#) = A(K + 1#, K + 1#) - V
+                End If
+                KSTEP = 2#
+            End If
+            KP = Abs(Pivots(K))
+            If KP <> K Then
+                
+                '
+                ' Interchange rows and columns K and KP in the leading
+                ' submatrix A(1:k+1,1:k+1)
+                '
+                L = KP - 1#
+                For i_ = 1# To L Step 1
+                    WORK(i_) = A(i_, K)
+                Next i_
+                For i_ = 1# To L Step 1
+                    A(i_, K) = A(i_, KP)
+                Next i_
+                For i_ = 1# To L Step 1
+                    A(i_, KP) = WORK(i_)
+                Next i_
+                L = K - KP - 1#
+                I1 = KP + 1#
+                I2 = K - 1#
+                i1_ = (I1) - (1#)
+                For i_ = 1# To L Step 1
+                    WORK(i_) = A(i_ + i1_, K)
+                Next i_
+                For i_ = I1 To I2 Step 1
+                    A(i_, K) = A(KP, i_)
+                Next i_
+                i1_ = (1#) - (I1)
+                For i_ = I1 To I2 Step 1
+                    A(KP, i_) = WORK(i_ + i1_)
+                Next i_
+                temp = A(K, K)
+                A(K, K) = A(KP, KP)
+                A(KP, KP) = temp
+                If KSTEP = 2# Then
+                    temp = A(K, K + 1#)
+                    A(K, K + 1#) = A(KP, K + 1#)
+                    A(KP, K + 1#) = temp
+                End If
+            End If
+            K = K + KSTEP
+        Loop
+    Else
+        
+        '
+        ' Compute inv(A) from the factorization A = L*D*L'.
+        '
+        ' K is the main loop index, increasing from 1 to N in steps of
+        ' 1 or 2, depending on the size of the diagonal blocks.
+        '
+        K = N
+        Do While K >= 1#
+            If Pivots(K) > 0# Then
+                
+                '
+                ' 1 x 1 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                A(K, K) = 1# / A(K, K)
+                
+                '
+                ' Compute column K of the inverse.
+                '
+                If K < N Then
+                    KP1 = K + 1#
+                    KM1 = K - 1#
+                    L = N - K
+                    i1_ = (KP1) - (1#)
+                    For i_ = 1# To L Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, K + 1#, N, WORK, -1#, WORK2)
+                    i1_ = (1#) - (KP1)
+                    For i_ = KP1 To N Step 1
+                        A(i_, K) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To L Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                End If
+                KSTEP = 1#
+            Else
+                
+                '
+                ' 2 x 2 diagonal block
+                '
+                ' Invert the diagonal block.
+                '
+                T = Abs(A(K, K - 1#))
+                AK = A(K - 1#, K - 1#) / T
+                AKP1 = A(K, K) / T
+                AKKP1 = A(K, K - 1#) / T
+                D = T * (AK * AKP1 - 1#)
+                A(K - 1#, K - 1#) = AKP1 / D
+                A(K, K) = AK / D
+                A(K, K - 1#) = -(AKKP1 / D)
+                
+                '
+                ' Compute columns K-1 and K of the inverse.
+                '
+                If K < N Then
+                    KP1 = K + 1#
+                    KM1 = K - 1#
+                    L = N - K
+                    i1_ = (KP1) - (1#)
+                    For i_ = 1# To L Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, K + 1#, N, WORK, -1#, WORK2)
+                    i1_ = (1#) - (KP1)
+                    For i_ = KP1 To N Step 1
+                        A(i_, K) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To L Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K, K) = A(K, K) - V
+                    V = 0#
+                    For i_ = KP1 To N Step 1
+                        V = V + A(i_, K) * A(i_, KM1)
+                    Next i_
+                    A(K, K - 1#) = A(K, K - 1#) - V
+                    i1_ = (KP1) - (1#)
+                    For i_ = 1# To L Step 1
+                        WORK(i_) = A(i_ + i1_, KM1)
+                    Next i_
+                    Call SymmetricMatrixVectorMultiply(A, IsUpper, K + 1#, N, WORK, -1#, WORK2)
+                    i1_ = (1#) - (KP1)
+                    For i_ = KP1 To N Step 1
+                        A(i_, KM1) = WORK2(i_ + i1_)
+                    Next i_
+                    V = 0#
+                    For i_ = 1# To L Step 1
+                        V = V + WORK(i_) * WORK2(i_)
+                    Next i_
+                    A(K - 1#, K - 1#) = A(K - 1#, K - 1#) - V
+                End If
+                KSTEP = 2#
+            End If
+            KP = Abs(Pivots(K))
+            If KP <> K Then
+                
+                '
+                ' Interchange rows and columns K and KP in the trailing
+                ' submatrix A(k-1:n,k-1:n)
+                '
+                If KP < N Then
+                    L = N - KP
+                    KP1 = KP + 1#
+                    i1_ = (KP1) - (1#)
+                    For i_ = 1# To L Step 1
+                        WORK(i_) = A(i_ + i1_, K)
+                    Next i_
+                    For i_ = KP1 To N Step 1
+                        A(i_, K) = A(i_, KP)
+                    Next i_
+                    i1_ = (1#) - (KP1)
+                    For i_ = KP1 To N Step 1
+                        A(i_, KP) = WORK(i_ + i1_)
+                    Next i_
+                End If
+                L = KP - K - 1#
+                I1 = K + 1#
+                I2 = KP - 1#
+                i1_ = (I1) - (1#)
+                For i_ = 1# To L Step 1
+                    WORK(i_) = A(i_ + i1_, K)
+                Next i_
+                For i_ = I1 To I2 Step 1
+                    A(i_, K) = A(KP, i_)
+                Next i_
+                i1_ = (1#) - (I1)
+                For i_ = I1 To I2 Step 1
+                    A(KP, i_) = WORK(i_ + i1_)
+                Next i_
+                temp = A(K, K)
+                A(K, K) = A(KP, KP)
+                A(KP, KP) = temp
+                If KSTEP = 2# Then
+                    temp = A(K, K - 1#)
+                    A(K, K - 1#) = A(KP, K - 1#)
+                    A(KP, K - 1#) = temp
+                End If
+            End If
+            K = K - KSTEP
+        Loop
+    End If
+    InverseLDLT = Result
+End Function
+Public Function InverseSymmetricIndefinite(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByVal IsUpper As Boolean) As Boolean
+    Dim Result As Boolean
+    Dim Pivots() As Long
+    Call LDLTDecomposition(A, N, IsUpper, Pivots)
+    Result = InverseLDLT(A, Pivots, N, IsUpper)
+    InverseSymmetricIndefinite = Result
+End Function
+

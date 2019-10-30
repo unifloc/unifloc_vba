@@ -1,0 +1,1054 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007-2008, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Training report:
+'    * NGrad     - number of gradient calculations
+'    * NHess     - number of Hessian calculations
+'    * NCholesky - number of Cholesky decompositions
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Type MLPReport
+    NGrad As Long
+    NHess As Long
+    NCholesky As Long
+End Type
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Cross-validation estimates of generalization error
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Type MLPCVReport
+    RelCLSError As Double
+    AvgCE As Double
+    RMSError As Double
+    AvgError As Double
+    AvgRelError As Double
+End Type
+'Global constants
+Private Const MinDecay As Double = 0.001
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Neural network training  using  modified  Levenberg-Marquardt  with  exact
+'Hessian calculation and regularization. Subroutine trains  neural  network
+'with restarts from random positions. Algorithm is well  suited  for  small
+'and medium scale problems (hundreds of weights).
+'
+'INPUT PARAMETERS:
+'    Network     -   neural network with initialized geometry
+'    XY          -   training set
+'    NPoints     -   training set size
+'    Decay       -   weight decay constant, >=0.001
+'                    Decay term 'Decay*||Weights||^2' is added to error
+'                    function.
+'                    If you don't know what Decay to choose, use 0.001.
+'    Restarts    -   number of restarts from random position, >0.
+'                    If you don't know what Restarts to choose, use 2.
+'
+'OUTPUT PARAMETERS:
+'    Network     -   trained neural network.
+'    Info        -   return code:
+'                    * -9, if internal matrix inverse subroutine failed
+'                    * -2, if there is a point with class number
+'                          outside of [0..NOut-1].
+'                    * -1, if wrong parameters specified
+'                          (NPoints<0, Restarts<1).
+'                    *  2, if task has been solved.
+'    Rep         -   training report
+'
+'  -- ALGLIB --
+'     Copyright 10.03.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPTrainLM(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long, _
+         ByVal Decay As Double, _
+         ByVal Restarts As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As MLPReport)
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim LMFTol As Double
+    Dim LMStepTol As Double
+    Dim i As Long
+    Dim K As Long
+    Dim V As Double
+    Dim E As Double
+    Dim ENew As Double
+    Dim XNorm2 As Double
+    Dim StepNorm As Double
+    Dim G() As Double
+    Dim D() As Double
+    Dim H() As Double
+    Dim HMod() As Double
+    Dim z() As Double
+    Dim SPD As Boolean
+    Dim Nu As Double
+    Dim Lambda As Double
+    Dim LambdaUp As Double
+    Dim LambdaDown As Double
+    Dim InternalRep As MinLBFGSReport
+    Dim State As MinLBFGSState
+    Dim X() As Double
+    Dim y() As Double
+    Dim WBase() As Double
+    Dim WDir() As Double
+    Dim WT() As Double
+    Dim WX() As Double
+    Dim Pass As Long
+    Dim WBest() As Double
+    Dim EBest As Double
+    Dim InvInfo As Long
+    Dim InvRep As MatInvReport
+    Dim SolverInfo As Long
+    Dim SolverRep As DenseSolverReport
+    Dim i_ As Long
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    LambdaUp = 10#
+    LambdaDown = 0.3
+    LMFTol = 0.001
+    LMStepTol = 0.001
+    
+    '
+    ' Test for inputs
+    '
+    If NPoints <= 0# Or Restarts < 1# Then
+        Info = -1#
+        Exit Sub
+    End If
+    If MLPIsSoftmax(Network) Then
+        For i = 0# To NPoints - 1# Step 1
+            If Round(XY(i, NIn)) < 0# Or Round(XY(i, NIn)) >= NOut Then
+                Info = -2#
+                Exit Sub
+            End If
+        Next i
+    End If
+    Decay = MaxReal(Decay, MinDecay)
+    Info = 2#
+    
+    '
+    ' Initialize data
+    '
+    Rep.NGrad = 0#
+    Rep.NHess = 0#
+    Rep.NCholesky = 0#
+    
+    '
+    ' General case.
+    ' Prepare task and network. Allocate space.
+    '
+    Call MLPInitPreprocessor(Network, XY, NPoints)
+    ReDim G(0# To WCount - 1#)
+    ReDim H(0# To WCount - 1#, 0# To WCount - 1#)
+    ReDim HMod(0# To WCount - 1#, 0# To WCount - 1#)
+    ReDim WBase(0# To WCount - 1#)
+    ReDim WDir(0# To WCount - 1#)
+    ReDim WBest(0# To WCount - 1#)
+    ReDim WT(0# To WCount - 1#)
+    ReDim WX(0# To WCount - 1#)
+    EBest = MaxRealNumber
+    
+    '
+    ' Multiple passes
+    '
+    For Pass = 1# To Restarts Step 1
+        
+        '
+        ' Initialize weights
+        '
+        Call MLPRandomize(Network)
+        
+        '
+        ' First stage of the hybrid algorithm: LBFGS
+        '
+        For i_ = 0# To WCount - 1# Step 1
+            WBase(i_) = Network.Weights(i_)
+        Next i_
+        Call MinLBFGSCreate(WCount, MinInt(WCount, 5#), WBase, State)
+        Call MinLBFGSSetCond(State, 0#, 0#, 0#, MaxInt(25#, WCount))
+        Do While MinLBFGSIteration(State)
+            
+            '
+            ' gradient
+            '
+            For i_ = 0# To WCount - 1# Step 1
+                Network.Weights(i_) = State.X(i_)
+            Next i_
+            Call MLPGradBatch(Network, XY, NPoints, State.F, State.G)
+            
+            '
+            ' weight decay
+            '
+            V = 0#
+            For i_ = 0# To WCount - 1# Step 1
+                V = V + Network.Weights(i_) * Network.Weights(i_)
+            Next i_
+            State.F = State.F + 0.5 * Decay * V
+            For i_ = 0# To WCount - 1# Step 1
+                State.G(i_) = State.G(i_) + Decay * Network.Weights(i_)
+            Next i_
+            
+            '
+            ' next iteration
+            '
+            Rep.NGrad = Rep.NGrad + 1#
+        Loop
+        Call MinLBFGSResults(State, WBase, InternalRep)
+        For i_ = 0# To WCount - 1# Step 1
+            Network.Weights(i_) = WBase(i_)
+        Next i_
+        
+        '
+        ' Second stage of the hybrid algorithm: LM
+        '
+        ' Initialize H with identity matrix,
+        ' G with gradient,
+        ' E with regularized error.
+        '
+        Call MLPHessianBatch(Network, XY, NPoints, E, G, H)
+        V = 0#
+        For i_ = 0# To WCount - 1# Step 1
+            V = V + Network.Weights(i_) * Network.Weights(i_)
+        Next i_
+        E = E + 0.5 * Decay * V
+        For i_ = 0# To WCount - 1# Step 1
+            G(i_) = G(i_) + Decay * Network.Weights(i_)
+        Next i_
+        For K = 0# To WCount - 1# Step 1
+            H(K, K) = H(K, K) + Decay
+        Next K
+        Rep.NHess = Rep.NHess + 1#
+        Lambda = 0.001
+        Nu = 2#
+        Do While True
+            
+            '
+            ' 1. HMod = H+lambda*I
+            ' 2. Try to solve (H+Lambda*I)*dx = -g.
+            '    Increase lambda if left part is not positive definite.
+            '
+            For i = 0# To WCount - 1# Step 1
+                For i_ = 0# To WCount - 1# Step 1
+                    HMod(i, i_) = H(i, i_)
+                Next i_
+                HMod(i, i) = HMod(i, i) + Lambda
+            Next i
+            SPD = SPDMatrixCholesky(HMod, WCount, True)
+            Rep.NCholesky = Rep.NCholesky + 1#
+            If Not SPD Then
+                Lambda = Lambda * LambdaUp * Nu
+                Nu = Nu * 2#
+                GoTo Cont_5
+            End If
+            Call SPDMatrixCholeskySolve(HMod, WCount, True, G, SolverInfo, SolverRep, WDir)
+            If SolverInfo < 0# Then
+                Lambda = Lambda * LambdaUp * Nu
+                Nu = Nu * 2#
+                GoTo Cont_5
+            End If
+            For i_ = 0# To WCount - 1# Step 1
+                WDir(i_) = -1 * WDir(i_)
+            Next i_
+            
+            '
+            ' Lambda found.
+            ' 1. Save old w in WBase
+            ' 1. Test some stopping criterions
+            ' 2. If error(w+wdir)>error(w), increase lambda
+            '
+            For i_ = 0# To WCount - 1# Step 1
+                Network.Weights(i_) = Network.Weights(i_) + WDir(i_)
+            Next i_
+            XNorm2 = 0#
+            For i_ = 0# To WCount - 1# Step 1
+                XNorm2 = XNorm2 + Network.Weights(i_) * Network.Weights(i_)
+            Next i_
+            StepNorm = 0#
+            For i_ = 0# To WCount - 1# Step 1
+                StepNorm = StepNorm + WDir(i_) * WDir(i_)
+            Next i_
+            StepNorm = Sqr(StepNorm)
+            ENew = MLPError(Network, XY, NPoints) + 0.5 * Decay * XNorm2
+            If StepNorm < LMStepTol * (1# + Sqr(XNorm2)) Then
+                Exit Do
+            End If
+            If ENew > E Then
+                Lambda = Lambda * LambdaUp * Nu
+                Nu = Nu * 2#
+                GoTo Cont_5
+            End If
+            
+            '
+            ' Optimize using inv(cholesky(H)) as preconditioner
+            '
+            Call RMatrixTRInverse(HMod, WCount, True, False, InvInfo, InvRep)
+            If InvInfo <= 0# Then
+                
+                '
+                ' if matrix can't be inverted then exit with errors
+                ' TODO: make WCount steps in direction suggested by HMod
+                '
+                Info = -9#
+                Exit Sub
+            End If
+            For i_ = 0# To WCount - 1# Step 1
+                WBase(i_) = Network.Weights(i_)
+            Next i_
+            For i = 0# To WCount - 1# Step 1
+                WT(i) = 0#
+            Next i
+            Call MinLBFGSCreateX(WCount, WCount, WT, 1#, State)
+            Call MinLBFGSSetCond(State, 0#, 0#, 0#, 5#)
+            Do While MinLBFGSIteration(State)
+                
+                '
+                ' gradient
+                '
+                For i = 0# To WCount - 1# Step 1
+                    V = 0#
+                    For i_ = i To WCount - 1# Step 1
+                        V = V + State.X(i_) * HMod(i, i_)
+                    Next i_
+                    Network.Weights(i) = WBase(i) + V
+                Next i
+                Call MLPGradBatch(Network, XY, NPoints, State.F, G)
+                For i = 0# To WCount - 1# Step 1
+                    State.G(i) = 0#
+                Next i
+                For i = 0# To WCount - 1# Step 1
+                    V = G(i)
+                    For i_ = i To WCount - 1# Step 1
+                        State.G(i_) = State.G(i_) + V * HMod(i, i_)
+                    Next i_
+                Next i
+                
+                '
+                ' weight decay
+                ' grad(x'*x) = A'*(x0+A*t)
+                '
+                V = 0#
+                For i_ = 0# To WCount - 1# Step 1
+                    V = V + Network.Weights(i_) * Network.Weights(i_)
+                Next i_
+                State.F = State.F + 0.5 * Decay * V
+                For i = 0# To WCount - 1# Step 1
+                    V = Decay * Network.Weights(i)
+                    For i_ = i To WCount - 1# Step 1
+                        State.G(i_) = State.G(i_) + V * HMod(i, i_)
+                    Next i_
+                Next i
+                
+                '
+                ' next iteration
+                '
+                Rep.NGrad = Rep.NGrad + 1#
+            Loop
+            Call MinLBFGSResults(State, WT, InternalRep)
+            
+            '
+            ' Accept new position.
+            ' Calculate Hessian
+            '
+            For i = 0# To WCount - 1# Step 1
+                V = 0#
+                For i_ = i To WCount - 1# Step 1
+                    V = V + WT(i_) * HMod(i, i_)
+                Next i_
+                Network.Weights(i) = WBase(i) + V
+            Next i
+            Call MLPHessianBatch(Network, XY, NPoints, E, G, H)
+            V = 0#
+            For i_ = 0# To WCount - 1# Step 1
+                V = V + Network.Weights(i_) * Network.Weights(i_)
+            Next i_
+            E = E + 0.5 * Decay * V
+            For i_ = 0# To WCount - 1# Step 1
+                G(i_) = G(i_) + Decay * Network.Weights(i_)
+            Next i_
+            For K = 0# To WCount - 1# Step 1
+                H(K, K) = H(K, K) + Decay
+            Next K
+            Rep.NHess = Rep.NHess + 1#
+            
+            '
+            ' Update lambda
+            '
+            Lambda = Lambda * LambdaDown
+            Nu = 2#
+Cont_5:
+        Loop
+        
+        '
+        ' update WBest
+        '
+        V = 0#
+        For i_ = 0# To WCount - 1# Step 1
+            V = V + Network.Weights(i_) * Network.Weights(i_)
+        Next i_
+        E = 0.5 * Decay * V + MLPError(Network, XY, NPoints)
+        If E < EBest Then
+            EBest = E
+            For i_ = 0# To WCount - 1# Step 1
+                WBest(i_) = Network.Weights(i_)
+            Next i_
+        End If
+    Next Pass
+    
+    '
+    ' copy WBest to output
+    '
+    For i_ = 0# To WCount - 1# Step 1
+        Network.Weights(i_) = WBest(i_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Neural  network  training  using  L-BFGS  algorithm  with  regularization.
+'Subroutine  trains  neural  network  with  restarts from random positions.
+'Algorithm  is  well  suited  for  problems  of  any dimensionality (memory
+'requirements and step complexity are linear by weights number).
+'
+'INPUT PARAMETERS:
+'    Network     -   neural network with initialized geometry
+'    XY          -   training set
+'    NPoints     -   training set size
+'    Decay       -   weight decay constant, >=0.001
+'                    Decay term 'Decay*||Weights||^2' is added to error
+'                    function.
+'                    If you don't know what Decay to choose, use 0.001.
+'    Restarts    -   number of restarts from random position, >0.
+'                    If you don't know what Restarts to choose, use 2.
+'    WStep       -   stopping criterion. Algorithm stops if  step  size  is
+'                    less than WStep. Recommended value - 0.01.  Zero  step
+'                    size means stopping after MaxIts iterations.
+'    MaxIts      -   stopping   criterion.  Algorithm  stops  after  MaxIts
+'                    iterations (NOT gradient  calculations).  Zero  MaxIts
+'                    means stopping when step is sufficiently small.
+'
+'OUTPUT PARAMETERS:
+'    Network     -   trained neural network.
+'    Info        -   return code:
+'                    * -8, if both WStep=0 and MaxIts=0
+'                    * -2, if there is a point with class number
+'                          outside of [0..NOut-1].
+'                    * -1, if wrong parameters specified
+'                          (NPoints<0, Restarts<1).
+'                    *  2, if task has been solved.
+'    Rep         -   training report
+'
+'  -- ALGLIB --
+'     Copyright 09.12.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPTrainLBFGS(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long, _
+         ByVal Decay As Double, _
+         ByVal Restarts As Long, _
+         ByVal WStep As Double, _
+         ByVal MaxIts As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As MLPReport)
+    Dim i As Long
+    Dim Pass As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim w() As Double
+    Dim WBest() As Double
+    Dim E As Double
+    Dim V As Double
+    Dim EBest As Double
+    Dim InternalRep As MinLBFGSReport
+    Dim State As MinLBFGSState
+    Dim i_ As Long
+    
+    '
+    ' Test inputs, parse flags, read network geometry
+    '
+    If WStep = 0# And MaxIts = 0# Then
+        Info = -8#
+        Exit Sub
+    End If
+    If NPoints <= 0# Or Restarts < 1# Or WStep < 0# Or MaxIts < 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    If MLPIsSoftmax(Network) Then
+        For i = 0# To NPoints - 1# Step 1
+            If Round(XY(i, NIn)) < 0# Or Round(XY(i, NIn)) >= NOut Then
+                Info = -2#
+                Exit Sub
+            End If
+        Next i
+    End If
+    Decay = MaxReal(Decay, MinDecay)
+    Info = 2#
+    
+    '
+    ' Prepare
+    '
+    Call MLPInitPreprocessor(Network, XY, NPoints)
+    ReDim w(0# To WCount - 1#)
+    ReDim WBest(0# To WCount - 1#)
+    EBest = MaxRealNumber
+    
+    '
+    ' Multiple starts
+    '
+    Rep.NCholesky = 0#
+    Rep.NHess = 0#
+    Rep.NGrad = 0#
+    For Pass = 1# To Restarts Step 1
+        
+        '
+        ' Process
+        '
+        Call MLPRandomize(Network)
+        For i_ = 0# To WCount - 1# Step 1
+            w(i_) = Network.Weights(i_)
+        Next i_
+        Call MinLBFGSCreate(WCount, MinInt(WCount, 10#), w, State)
+        Call MinLBFGSSetCond(State, 0#, 0#, WStep, MaxIts)
+        Do While MinLBFGSIteration(State)
+            For i_ = 0# To WCount - 1# Step 1
+                Network.Weights(i_) = State.X(i_)
+            Next i_
+            Call MLPGradNBatch(Network, XY, NPoints, State.F, State.G)
+            V = 0#
+            For i_ = 0# To WCount - 1# Step 1
+                V = V + Network.Weights(i_) * Network.Weights(i_)
+            Next i_
+            State.F = State.F + 0.5 * Decay * V
+            For i_ = 0# To WCount - 1# Step 1
+                State.G(i_) = State.G(i_) + Decay * Network.Weights(i_)
+            Next i_
+            Rep.NGrad = Rep.NGrad + 1#
+        Loop
+        Call MinLBFGSResults(State, w, InternalRep)
+        For i_ = 0# To WCount - 1# Step 1
+            Network.Weights(i_) = w(i_)
+        Next i_
+        
+        '
+        ' Compare with best
+        '
+        V = 0#
+        For i_ = 0# To WCount - 1# Step 1
+            V = V + Network.Weights(i_) * Network.Weights(i_)
+        Next i_
+        E = MLPErrorN(Network, XY, NPoints) + 0.5 * Decay * V
+        If E < EBest Then
+            For i_ = 0# To WCount - 1# Step 1
+                WBest(i_) = Network.Weights(i_)
+            Next i_
+            EBest = E
+        End If
+    Next Pass
+    
+    '
+    ' The best network
+    '
+    For i_ = 0# To WCount - 1# Step 1
+        Network.Weights(i_) = WBest(i_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Neural network training using early stopping (base algorithm - L-BFGS with
+'regularization).
+'
+'INPUT PARAMETERS:
+'    Network     -   neural network with initialized geometry
+'    TrnXY       -   training set
+'    TrnSize     -   training set size
+'    ValXY       -   validation set
+'    ValSize     -   validation set size
+'    Decay       -   weight decay constant, >=0.001
+'                    Decay term 'Decay*||Weights||^2' is added to error
+'                    function.
+'                    If you don't know what Decay to choose, use 0.001.
+'    Restarts    -   number of restarts from random position, >0.
+'                    If you don't know what Restarts to choose, use 2.
+'
+'OUTPUT PARAMETERS:
+'    Network     -   trained neural network.
+'    Info        -   return code:
+'                    * -2, if there is a point with class number
+'                          outside of [0..NOut-1].
+'                    * -1, if wrong parameters specified
+'                          (NPoints<0, Restarts<1, ...).
+'                    *  2, task has been solved, stopping  criterion  met -
+'                          sufficiently small step size.  Not expected  (we
+'                          use  EARLY  stopping)  but  possible  and not an
+'                          error.
+'                    *  6, task has been solved, stopping  criterion  met -
+'                          increasing of validation set error.
+'    Rep         -   training report
+'
+'NOTE:
+'
+'Algorithm stops if validation set error increases for  a  long  enough  or
+'step size is small enought  (there  are  task  where  validation  set  may
+'decrease for eternity). In any case solution returned corresponds  to  the
+'minimum of validation set error.
+'
+'  -- ALGLIB --
+'     Copyright 10.03.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPTrainES(ByRef Network As MultiLayerPerceptron, _
+         ByRef TrnXY() As Double, _
+         ByVal TrnSize As Long, _
+         ByRef ValXY() As Double, _
+         ByVal ValSize As Long, _
+         ByVal Decay As Double, _
+         ByVal Restarts As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As MLPReport)
+    Dim i As Long
+    Dim Pass As Long
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim WCount As Long
+    Dim w() As Double
+    Dim WBest() As Double
+    Dim E As Double
+    Dim V As Double
+    Dim EBest As Double
+    Dim WFinal() As Double
+    Dim EFinal As Double
+    Dim ItBest As Long
+    Dim InternalRep As MinLBFGSReport
+    Dim State As MinLBFGSState
+    Dim WStep As Double
+    Dim i_ As Long
+    WStep = 0.001
+    
+    '
+    ' Test inputs, parse flags, read network geometry
+    '
+    If TrnSize <= 0# Or ValSize <= 0# Or Restarts < 1# Or Decay < 0# Then
+        Info = -1#
+        Exit Sub
+    End If
+    Call MLPProperties(Network, NIn, NOut, WCount)
+    If MLPIsSoftmax(Network) Then
+        For i = 0# To TrnSize - 1# Step 1
+            If Round(TrnXY(i, NIn)) < 0# Or Round(TrnXY(i, NIn)) >= NOut Then
+                Info = -2#
+                Exit Sub
+            End If
+        Next i
+        For i = 0# To ValSize - 1# Step 1
+            If Round(ValXY(i, NIn)) < 0# Or Round(ValXY(i, NIn)) >= NOut Then
+                Info = -2#
+                Exit Sub
+            End If
+        Next i
+    End If
+    Info = 2#
+    
+    '
+    ' Prepare
+    '
+    Call MLPInitPreprocessor(Network, TrnXY, TrnSize)
+    ReDim w(0# To WCount - 1#)
+    ReDim WBest(0# To WCount - 1#)
+    ReDim WFinal(0# To WCount - 1#)
+    EFinal = MaxRealNumber
+    For i = 0# To WCount - 1# Step 1
+        WFinal(i) = 0#
+    Next i
+    
+    '
+    ' Multiple starts
+    '
+    Rep.NCholesky = 0#
+    Rep.NHess = 0#
+    Rep.NGrad = 0#
+    For Pass = 1# To Restarts Step 1
+        
+        '
+        ' Process
+        '
+        Call MLPRandomize(Network)
+        EBest = MLPError(Network, ValXY, ValSize)
+        For i_ = 0# To WCount - 1# Step 1
+            WBest(i_) = Network.Weights(i_)
+        Next i_
+        ItBest = 0#
+        For i_ = 0# To WCount - 1# Step 1
+            w(i_) = Network.Weights(i_)
+        Next i_
+        Call MinLBFGSCreate(WCount, MinInt(WCount, 10#), w, State)
+        Call MinLBFGSSetCond(State, 0#, 0#, WStep, 0#)
+        Call MinLBFGSSetXRep(State, True)
+        Do While MinLBFGSIteration(State)
+            
+            '
+            ' Calculate gradient
+            '
+            For i_ = 0# To WCount - 1# Step 1
+                Network.Weights(i_) = State.X(i_)
+            Next i_
+            Call MLPGradNBatch(Network, TrnXY, TrnSize, State.F, State.G)
+            V = 0#
+            For i_ = 0# To WCount - 1# Step 1
+                V = V + Network.Weights(i_) * Network.Weights(i_)
+            Next i_
+            State.F = State.F + 0.5 * Decay * V
+            For i_ = 0# To WCount - 1# Step 1
+                State.G(i_) = State.G(i_) + Decay * Network.Weights(i_)
+            Next i_
+            Rep.NGrad = Rep.NGrad + 1#
+            
+            '
+            ' Validation set
+            '
+            If State.XUpdated Then
+                For i_ = 0# To WCount - 1# Step 1
+                    Network.Weights(i_) = w(i_)
+                Next i_
+                E = MLPError(Network, ValXY, ValSize)
+                If E < EBest Then
+                    EBest = E
+                    For i_ = 0# To WCount - 1# Step 1
+                        WBest(i_) = Network.Weights(i_)
+                    Next i_
+                    ItBest = InternalRep.IterationsCount
+                End If
+                If InternalRep.IterationsCount > 30# And InternalRep.IterationsCount > 1.5 * ItBest Then
+                    Info = 6#
+                    Exit Do
+                End If
+            End If
+        Loop
+        Call MinLBFGSResults(State, w, InternalRep)
+        
+        '
+        ' Compare with final answer
+        '
+        If EBest < EFinal Then
+            For i_ = 0# To WCount - 1# Step 1
+                WFinal(i_) = WBest(i_)
+            Next i_
+            EFinal = EBest
+        End If
+    Next Pass
+    
+    '
+    ' The best network
+    '
+    For i_ = 0# To WCount - 1# Step 1
+        Network.Weights(i_) = WFinal(i_)
+    Next i_
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Cross-validation estimate of generalization error.
+'
+'Base algorithm - L-BFGS.
+'
+'INPUT PARAMETERS:
+'    Network     -   neural network with initialized geometry.   Network is
+'                    not changed during cross-validation -  it is used only
+'                    as a representative of its architecture.
+'    XY          -   training set.
+'    SSize       -   training set size
+'    Decay       -   weight  decay, same as in MLPTrainLBFGS
+'    Restarts    -   number of restarts, >0.
+'                    restarts are counted for each partition separately, so
+'                    total number of restarts will be Restarts*FoldsCount.
+'    WStep       -   stopping criterion, same as in MLPTrainLBFGS
+'    MaxIts      -   stopping criterion, same as in MLPTrainLBFGS
+'    FoldsCount  -   number of folds in k-fold cross-validation,
+'                    2<=FoldsCount<=SSize.
+'                    recommended value: 10.
+'
+'OUTPUT PARAMETERS:
+'    Info        -   return code, same as in MLPTrainLBFGS
+'    Rep         -   report, same as in MLPTrainLM/MLPTrainLBFGS
+'    CVRep       -   generalization error estimates
+'
+'  -- ALGLIB --
+'     Copyright 09.12.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPKFoldCVLBFGS(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long, _
+         ByVal Decay As Double, _
+         ByVal Restarts As Long, _
+         ByVal WStep As Double, _
+         ByVal MaxIts As Long, _
+         ByVal FoldsCount As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As MLPReport, _
+         ByRef CVRep As MLPCVReport)
+    Call MLPKFoldCVGeneral(Network, XY, NPoints, Decay, Restarts, FoldsCount, False, WStep, MaxIts, Info, Rep, CVRep)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Cross-validation estimate of generalization error.
+'
+'Base algorithm - Levenberg-Marquardt.
+'
+'INPUT PARAMETERS:
+'    Network     -   neural network with initialized geometry.   Network is
+'                    not changed during cross-validation -  it is used only
+'                    as a representative of its architecture.
+'    XY          -   training set.
+'    SSize       -   training set size
+'    Decay       -   weight  decay, same as in MLPTrainLBFGS
+'    Restarts    -   number of restarts, >0.
+'                    restarts are counted for each partition separately, so
+'                    total number of restarts will be Restarts*FoldsCount.
+'    FoldsCount  -   number of folds in k-fold cross-validation,
+'                    2<=FoldsCount<=SSize.
+'                    recommended value: 10.
+'
+'OUTPUT PARAMETERS:
+'    Info        -   return code, same as in MLPTrainLBFGS
+'    Rep         -   report, same as in MLPTrainLM/MLPTrainLBFGS
+'    CVRep       -   generalization error estimates
+'
+'  -- ALGLIB --
+'     Copyright 09.12.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub MLPKFoldCVLM(ByRef Network As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long, _
+         ByVal Decay As Double, _
+         ByVal Restarts As Long, _
+         ByVal FoldsCount As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As MLPReport, _
+         ByRef CVRep As MLPCVReport)
+    Call MLPKFoldCVGeneral(Network, XY, NPoints, Decay, Restarts, FoldsCount, True, 0#, 0#, Info, Rep, CVRep)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Internal cross-validation subroutine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPKFoldCVGeneral(ByRef N As MultiLayerPerceptron, _
+         ByRef XY() As Double, _
+         ByVal NPoints As Long, _
+         ByVal Decay As Double, _
+         ByVal Restarts As Long, _
+         ByVal FoldsCount As Long, _
+         ByVal LMAlgorithm As Boolean, _
+         ByVal WStep As Double, _
+         ByVal MaxIts As Long, _
+         ByRef Info As Long, _
+         ByRef Rep As MLPReport, _
+         ByRef CVRep As MLPCVReport)
+    Dim i As Long
+    Dim Fold As Long
+    Dim j As Long
+    Dim K As Long
+    Dim Network As MultiLayerPerceptron
+    Dim NIn As Long
+    Dim NOut As Long
+    Dim RowLen As Long
+    Dim WCount As Long
+    Dim NClasses As Long
+    Dim TSSize As Long
+    Dim CVSSize As Long
+    Dim CVSet() As Double
+    Dim TestSet() As Double
+    Dim Folds() As Long
+    Dim RelCnt As Long
+    Dim InternalRep As MLPReport
+    Dim X() As Double
+    Dim y() As Double
+    Dim i_ As Long
+    
+    '
+    ' Read network geometry, test parameters
+    '
+    Call MLPProperties(N, NIn, NOut, WCount)
+    If MLPIsSoftmax(N) Then
+        NClasses = NOut
+        RowLen = NIn + 1#
+    Else
+        NClasses = -NOut
+        RowLen = NIn + NOut
+    End If
+    If NPoints <= 0# Or FoldsCount < 2# Or FoldsCount > NPoints Then
+        Info = -1#
+        Exit Sub
+    End If
+    Call MLPCopy(N, Network)
+    
+    '
+    ' K-fold out cross-validation.
+    ' First, estimate generalization error
+    '
+    ReDim TestSet(0# To NPoints - 1#, 0# To RowLen - 1#)
+    ReDim CVSet(0# To NPoints - 1#, 0# To RowLen - 1#)
+    ReDim X(0# To NIn - 1#)
+    ReDim y(0# To NOut - 1#)
+    Call MLPKFoldSplit(XY, NPoints, NClasses, FoldsCount, False, Folds)
+    CVRep.RelCLSError = 0#
+    CVRep.AvgCE = 0#
+    CVRep.RMSError = 0#
+    CVRep.AvgError = 0#
+    CVRep.AvgRelError = 0#
+    Rep.NGrad = 0#
+    Rep.NHess = 0#
+    Rep.NCholesky = 0#
+    RelCnt = 0#
+    For Fold = 0# To FoldsCount - 1# Step 1
+        
+        '
+        ' Separate set
+        '
+        TSSize = 0#
+        CVSSize = 0#
+        For i = 0# To NPoints - 1# Step 1
+            If Folds(i) = Fold Then
+                For i_ = 0# To RowLen - 1# Step 1
+                    TestSet(TSSize, i_) = XY(i, i_)
+                Next i_
+                TSSize = TSSize + 1#
+            Else
+                For i_ = 0# To RowLen - 1# Step 1
+                    CVSet(CVSSize, i_) = XY(i, i_)
+                Next i_
+                CVSSize = CVSSize + 1#
+            End If
+        Next i
+        
+        '
+        ' Train on CV training set
+        '
+        If LMAlgorithm Then
+            Call MLPTrainLM(Network, CVSet, CVSSize, Decay, Restarts, Info, InternalRep)
+        Else
+            Call MLPTrainLBFGS(Network, CVSet, CVSSize, Decay, Restarts, WStep, MaxIts, Info, InternalRep)
+        End If
+        If Info < 0# Then
+            CVRep.RelCLSError = 0#
+            CVRep.AvgCE = 0#
+            CVRep.RMSError = 0#
+            CVRep.AvgError = 0#
+            CVRep.AvgRelError = 0#
+            Exit Sub
+        End If
+        Rep.NGrad = Rep.NGrad + InternalRep.NGrad
+        Rep.NHess = Rep.NHess + InternalRep.NHess
+        Rep.NCholesky = Rep.NCholesky + InternalRep.NCholesky
+        
+        '
+        ' Estimate error using CV test set
+        '
+        If MLPIsSoftmax(Network) Then
+            
+            '
+            ' classification-only code
+            '
+            CVRep.RelCLSError = CVRep.RelCLSError + MLPClsError(Network, TestSet, TSSize)
+            CVRep.AvgCE = CVRep.AvgCE + MLPErrorN(Network, TestSet, TSSize)
+        End If
+        For i = 0# To TSSize - 1# Step 1
+            For i_ = 0# To NIn - 1# Step 1
+                X(i_) = TestSet(i, i_)
+            Next i_
+            Call MLPProcess(Network, X, y)
+            If MLPIsSoftmax(Network) Then
+                
+                '
+                ' Classification-specific code
+                '
+                K = Round(TestSet(i, NIn))
+                For j = 0# To NOut - 1# Step 1
+                    If j = K Then
+                        CVRep.RMSError = CVRep.RMSError + Square(y(j) - 1#)
+                        CVRep.AvgError = CVRep.AvgError + Abs(y(j) - 1#)
+                        CVRep.AvgRelError = CVRep.AvgRelError + Abs(y(j) - 1#)
+                        RelCnt = RelCnt + 1#
+                    Else
+                        CVRep.RMSError = CVRep.RMSError + Square(y(j))
+                        CVRep.AvgError = CVRep.AvgError + Abs(y(j))
+                    End If
+                Next j
+            Else
+                
+                '
+                ' Regression-specific code
+                '
+                For j = 0# To NOut - 1# Step 1
+                    CVRep.RMSError = CVRep.RMSError + Square(y(j) - TestSet(i, NIn + j))
+                    CVRep.AvgError = CVRep.AvgError + Abs(y(j) - TestSet(i, NIn + j))
+                    If TestSet(i, NIn + j) <> 0# Then
+                        CVRep.AvgRelError = CVRep.AvgRelError + Abs((y(j) - TestSet(i, NIn + j)) / TestSet(i, NIn + j))
+                        RelCnt = RelCnt + 1#
+                    End If
+                Next j
+            End If
+        Next i
+    Next Fold
+    If MLPIsSoftmax(Network) Then
+        CVRep.RelCLSError = CVRep.RelCLSError / NPoints
+        CVRep.AvgCE = CVRep.AvgCE / (Log(2#) * NPoints)
+    End If
+    CVRep.RMSError = Sqr(CVRep.RMSError / (NPoints * NOut))
+    CVRep.AvgError = CVRep.AvgError / (NPoints * NOut)
+    CVRep.AvgRelError = CVRep.AvgRelError / RelCnt
+    Info = 1#
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Subroutine prepares K-fold split of the training set.
+'
+'NOTES:
+'    "NClasses>0" means that we have classification task.
+'    "NClasses<0" means regression task with -NClasses real outputs.
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub MLPKFoldSplit(ByRef XY() As Double, _
+         ByVal NPoints As Long, _
+         ByVal NClasses As Long, _
+         ByVal FoldsCount As Long, _
+         ByVal StratifiedSplits As Boolean, _
+         ByRef Folds() As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim K As Long
+    
+    '
+    ' test parameters
+    '
+    
+    '
+    ' Folds
+    '
+    ReDim Folds(0# To NPoints - 1#)
+    For i = 0# To NPoints - 1# Step 1
+        Folds(i) = i * FoldsCount \ NPoints
+    Next i
+    For i = 0# To NPoints - 2# Step 1
+        j = i + RandomInteger(NPoints - i)
+        If j <> i Then
+            K = Folds(i)
+            Folds(i) = Folds(j)
+            Folds(j) = K
+        End If
+    Next i
+End Sub
+

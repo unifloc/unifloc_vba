@@ -1,0 +1,234 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c)
+'    2007, Sergey Bochkanov (ALGLIB project).
+'    1988, Pierre L'Ecuyer
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Data types
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Portable high quality random number generator state.
+'Initialized with HQRNDRandomize() or HQRNDSeed().
+'
+'Fields:
+'    S1, S2      -   seed values
+'    V           -   precomputed value
+'    MagicV      -   'magic' value used to determine whether State structure
+'                    was correctly initialized.
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Type HQRNDState
+    S1 As Long
+    S2 As Long
+    V As Double
+    MagicV As Long
+End Type
+'Global constants
+Private Const HQRNDMax As Long = 2147483563#
+Private Const HQRNDM1 As Long = 2147483563#
+Private Const HQRNDM2 As Long = 2147483399#
+Private Const HQRNDMagic As Long = 1634357784#
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'HQRNDState  initialization  with  random  values  which come from standard
+'RNG.
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HQRNDRandomize(ByRef State As HQRNDState)
+    Call HQRNDSeed(RandomInteger(HQRNDM1), RandomInteger(HQRNDM2), State)
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'HQRNDState initialization with seed values
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HQRNDSeed(ByVal S1 As Long, _
+         ByVal S2 As Long, _
+         ByRef State As HQRNDState)
+    State.S1 = S1 Mod (HQRNDM1 - 1#) + 1#
+    State.S2 = S2 Mod (HQRNDM2 - 1#) + 1#
+    State.V = 1# / HQRNDMax
+    State.MagicV = HQRNDMagic
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This function generates random real number in (0,1),
+'not including interval boundaries
+'
+'State structure must be initialized with HQRNDRandomize() or HQRNDSeed().
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HQRNDUniformR(ByRef State As HQRNDState) As Double
+    Dim Result As Double
+    Result = State.V * HQRNDIntegerBase(State)
+    HQRNDUniformR = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This function generates random integer number in [0, N)
+'
+'1. N must be less than HQRNDMax-1.
+'2. State structure must be initialized with HQRNDRandomize() or HQRNDSeed()
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HQRNDUniformI(ByVal N As Long, _
+         ByRef State As HQRNDState) As Long
+    Dim Result As Long
+    Dim MX As Long
+    
+    '
+    ' Correct handling of N's close to RNDBaseMax
+    ' (avoiding skewed distributions for RNDBaseMax<>K*N)
+    '
+    MX = HQRNDMax - 1# - (HQRNDMax - 1#) Mod N
+    Do
+        Result = HQRNDIntegerBase(State) - 1#
+    Loop Until Result < MX
+    Result = Result Mod N
+    HQRNDUniformI = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Random number generator: normal numbers
+'
+'This function generates one random number from normal distribution.
+'Its performance is equal to that of HQRNDNormal2()
+'
+'State structure must be initialized with HQRNDRandomize() or HQRNDSeed().
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HQRNDNormal(ByRef State As HQRNDState) As Double
+    Dim Result As Double
+    Dim V1 As Double
+    Dim V2 As Double
+    Call HQRNDNormal2(State, V1, V2)
+    Result = V1
+    HQRNDNormal = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Random number generator: random X and Y such that X^2+Y^2=1
+'
+'State structure must be initialized with HQRNDRandomize() or HQRNDSeed().
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HQRNDUnit2(ByRef State As HQRNDState, _
+         ByRef X As Double, _
+         ByRef y As Double)
+    Dim V As Double
+    Dim MX As Double
+    Dim MN As Double
+    Do
+        Call HQRNDNormal2(State, X, y)
+    Loop Until X <> 0# Or y <> 0#
+    MX = MaxReal(Abs(X), Abs(y))
+    MN = MinReal(Abs(X), Abs(y))
+    V = MX * Sqr(1# + Square(MN / MX))
+    X = X / V
+    y = y / V
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Random number generator: normal numbers
+'
+'This function generates two independent random numbers from normal
+'distribution. Its performance is equal to that of HQRNDNormal()
+'
+'State structure must be initialized with HQRNDRandomize() or HQRNDSeed().
+'
+'  -- ALGLIB --
+'     Copyright 02.12.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub HQRNDNormal2(ByRef State As HQRNDState, _
+         ByRef X1 As Double, _
+         ByRef X2 As Double)
+    Dim U As Double
+    Dim V As Double
+    Dim S As Double
+    Do While True
+        U = 2# * HQRNDUniformR(State) - 1#
+        V = 2# * HQRNDUniformR(State) - 1#
+        S = Square(U) + Square(V)
+        If S > 0# And S < 1# Then
+            
+            '
+            ' two Sqrt's instead of one to
+            ' avoid overflow when S is too small
+            '
+            S = Sqr(-(2# * Log(S))) / Sqr(S)
+            X1 = U * S
+            X2 = V * S
+            Exit Sub
+        End If
+    Loop
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Random number generator: exponential distribution
+'
+'State structure must be initialized with HQRNDRandomize() or HQRNDSeed().
+'
+'  -- ALGLIB --
+'     Copyright 11.08.2007 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function HQRNDExponential(ByVal Lambda As Double, _
+         ByRef State As HQRNDState) As Double
+    Dim Result As Double
+    Result = -(Log(HQRNDUniformR(State)) / Lambda)
+    HQRNDExponential = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'
+'L'Ecuyer, Efficient and portable combined random number generators
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Function HQRNDIntegerBase(ByRef State As HQRNDState) As Long
+    Dim Result As Long
+    Dim K As Long
+    K = State.S1 \ 53668#
+    State.S1 = 40014# * (State.S1 - K * 53668#) - K * 12211#
+    If State.S1 < 0# Then
+        State.S1 = State.S1 + 2147483563#
+    End If
+    K = State.S2 \ 52774#
+    State.S2 = 40692# * (State.S2 - K * 52774#) - K * 3791#
+    If State.S2 < 0# Then
+        State.S2 = State.S2 + 2147483399#
+    End If
+    
+    '
+    ' Result
+    '
+    Result = State.S1 - State.S2
+    If Result < 1# Then
+        Result = Result + 2147483562#
+    End If
+    HQRNDIntegerBase = Result
+End Function
+

@@ -1,0 +1,319 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2009, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'1-dimensional complex cross-correlation.
+'
+'For given Pattern/Signal returns corr(Pattern,Signal) (non-circular).
+'
+'Correlation is calculated using reduction to  convolution.  Algorithm with
+'max(N,N)*log(max(N,N)) complexity is used (see  ConvC1D()  for  more  info
+'about performance).
+'
+'IMPORTANT:
+'    for  historical reasons subroutine accepts its parameters in  reversed
+'    order: CorrC1D(Signal, Pattern) = Pattern x Signal (using  traditional
+'    definition of cross-correlation, denoting cross-correlation as "x").
+'
+'INPUT PARAMETERS
+'    Signal  -   array[0..N-1] - complex function to be transformed,
+'                signal containing pattern
+'    N       -   problem size
+'    Pattern -   array[0..M-1] - complex function to be transformed,
+'                pattern to search withing signal
+'    M       -   problem size
+'
+'OUTPUT PARAMETERS
+'    R       -   cross-correlation, array[0..N+M-2]:
+'                * positive lags are stored in R[0..N-1],
+'                  R[i] = sum(conj(pattern[j])*signal[i+j]
+'                * negative lags are stored in R[N..N+M-2],
+'                  R[N+M-1-i] = sum(conj(pattern[j])*signal[-i+j]
+'
+'NOTE:
+'    It is assumed that pattern domain is [0..M-1].  If Pattern is non-zero
+'on [-K..M-1],  you can still use this subroutine, just shift result by K.
+'
+'  -- ALGLIB --
+'     Copyright 21.07.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CorrC1D(ByRef Signal() As Complex, _
+         ByVal N As Long, _
+         ByRef Pattern() As Complex, _
+         ByVal M As Long, _
+         ByRef R() As Complex)
+    Dim p() As Complex
+    Dim B() As Complex
+    Dim i As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    ReDim p(0 To M - 1)
+    For i = 0# To M - 1# Step 1
+        p(M - 1# - i) = Conj(Pattern(i))
+    Next i
+    Call ConvC1D(p, M, Signal, N, B)
+    ReDim R(0 To M + N - 1# - 1)
+    i1_ = (M - 1#) - (0#)
+    For i_ = 0# To N - 1# Step 1
+        R(i_) = B(i_ + i1_)
+    Next i_
+    If M + N - 2# >= N Then
+        i1_ = (0#) - (N)
+        For i_ = N To M + N - 2# Step 1
+            R(i_) = B(i_ + i1_)
+        Next i_
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'1-dimensional circular complex cross-correlation.
+'
+'For given Pattern/Signal returns corr(Pattern,Signal) (circular).
+'Algorithm has linearithmic complexity for any M/N.
+'
+'IMPORTANT:
+'    for  historical reasons subroutine accepts its parameters in  reversed
+'    order:   CorrC1DCircular(Signal, Pattern) = Pattern x Signal    (using
+'    traditional definition of cross-correlation, denoting cross-correlation
+'    as "x").
+'
+'INPUT PARAMETERS
+'    Signal  -   array[0..N-1] - complex function to be transformed,
+'                periodic signal containing pattern
+'    N       -   problem size
+'    Pattern -   array[0..M-1] - complex function to be transformed,
+'                non-periodic pattern to search withing signal
+'    M       -   problem size
+'
+'OUTPUT PARAMETERS
+'    R   -   convolution: A*B. array[0..M-1].
+'
+'
+'  -- ALGLIB --
+'     Copyright 21.07.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CorrC1DCircular(ByRef Signal() As Complex, _
+         ByVal M As Long, _
+         ByRef Pattern() As Complex, _
+         ByVal N As Long, _
+         ByRef C() As Complex)
+    Dim p() As Complex
+    Dim B() As Complex
+    Dim I1 As Long
+    Dim I2 As Long
+    Dim i As Long
+    Dim J2 As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' normalize task: make M>=N,
+    ' so A will be longer (at least - not shorter) that B.
+    '
+    If M < N Then
+        ReDim B(0 To M - 1)
+        For I1 = 0# To M - 1# Step 1
+            B(I1) = C_Complex(0#)
+        Next I1
+        I1 = 0#
+        Do While I1 < N
+            I2 = MinInt(I1 + M - 1#, N - 1#)
+            J2 = I2 - I1
+            i1_ = (I1) - (0#)
+            For i_ = 0# To J2 Step 1
+                B(i_) = C_Add(B(i_), Pattern(i_ + i1_))
+            Next i_
+            I1 = I1 + M
+        Loop
+        Call CorrC1DCircular(Signal, M, B, M, C)
+        Exit Sub
+    End If
+    
+    '
+    ' Task is normalized
+    '
+    ReDim p(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        p(N - 1# - i) = Conj(Pattern(i))
+    Next i
+    Call ConvC1DCircular(Signal, M, p, N, B)
+    ReDim C(0 To M - 1)
+    i1_ = (N - 1#) - (0#)
+    For i_ = 0# To M - N Step 1
+        C(i_) = B(i_ + i1_)
+    Next i_
+    If M - N + 1# <= M - 1# Then
+        i1_ = (0#) - (M - N + 1#)
+        For i_ = M - N + 1# To M - 1# Step 1
+            C(i_) = B(i_ + i1_)
+        Next i_
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'1-dimensional real cross-correlation.
+'
+'For given Pattern/Signal returns corr(Pattern,Signal) (non-circular).
+'
+'Correlation is calculated using reduction to  convolution.  Algorithm with
+'max(N,N)*log(max(N,N)) complexity is used (see  ConvC1D()  for  more  info
+'about performance).
+'
+'IMPORTANT:
+'    for  historical reasons subroutine accepts its parameters in  reversed
+'    order: CorrR1D(Signal, Pattern) = Pattern x Signal (using  traditional
+'    definition of cross-correlation, denoting cross-correlation as "x").
+'
+'INPUT PARAMETERS
+'    Signal  -   array[0..N-1] - real function to be transformed,
+'                signal containing pattern
+'    N       -   problem size
+'    Pattern -   array[0..M-1] - real function to be transformed,
+'                pattern to search withing signal
+'    M       -   problem size
+'
+'OUTPUT PARAMETERS
+'    R       -   cross-correlation, array[0..N+M-2]:
+'                * positive lags are stored in R[0..N-1],
+'                  R[i] = sum(pattern[j]*signal[i+j]
+'                * negative lags are stored in R[N..N+M-2],
+'                  R[N+M-1-i] = sum(pattern[j]*signal[-i+j]
+'
+'NOTE:
+'    It is assumed that pattern domain is [0..M-1].  If Pattern is non-zero
+'on [-K..M-1],  you can still use this subroutine, just shift result by K.
+'
+'  -- ALGLIB --
+'     Copyright 21.07.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CorrR1D(ByRef Signal() As Double, _
+         ByVal N As Long, _
+         ByRef Pattern() As Double, _
+         ByVal M As Long, _
+         ByRef R() As Double)
+    Dim p() As Double
+    Dim B() As Double
+    Dim i As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    ReDim p(0 To M - 1)
+    For i = 0# To M - 1# Step 1
+        p(M - 1# - i) = Pattern(i)
+    Next i
+    Call ConvR1D(p, M, Signal, N, B)
+    ReDim R(0 To M + N - 1# - 1)
+    i1_ = (M - 1#) - (0#)
+    For i_ = 0# To N - 1# Step 1
+        R(i_) = B(i_ + i1_)
+    Next i_
+    If M + N - 2# >= N Then
+        i1_ = (0#) - (N)
+        For i_ = N To M + N - 2# Step 1
+            R(i_) = B(i_ + i1_)
+        Next i_
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'1-dimensional circular real cross-correlation.
+'
+'For given Pattern/Signal returns corr(Pattern,Signal) (circular).
+'Algorithm has linearithmic complexity for any M/N.
+'
+'IMPORTANT:
+'    for  historical reasons subroutine accepts its parameters in  reversed
+'    order:   CorrR1DCircular(Signal, Pattern) = Pattern x Signal    (using
+'    traditional definition of cross-correlation, denoting cross-correlation
+'    as "x").
+'
+'INPUT PARAMETERS
+'    Signal  -   array[0..N-1] - real function to be transformed,
+'                periodic signal containing pattern
+'    N       -   problem size
+'    Pattern -   array[0..M-1] - real function to be transformed,
+'                non-periodic pattern to search withing signal
+'    M       -   problem size
+'
+'OUTPUT PARAMETERS
+'    R   -   convolution: A*B. array[0..M-1].
+'
+'
+'  -- ALGLIB --
+'     Copyright 21.07.2009 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CorrR1DCircular(ByRef Signal() As Double, _
+         ByVal M As Long, _
+         ByRef Pattern() As Double, _
+         ByVal N As Long, _
+         ByRef C() As Double)
+    Dim p() As Double
+    Dim B() As Double
+    Dim I1 As Long
+    Dim I2 As Long
+    Dim i As Long
+    Dim J2 As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' normalize task: make M>=N,
+    ' so A will be longer (at least - not shorter) that B.
+    '
+    If M < N Then
+        ReDim B(0 To M - 1)
+        For I1 = 0# To M - 1# Step 1
+            B(I1) = 0#
+        Next I1
+        I1 = 0#
+        Do While I1 < N
+            I2 = MinInt(I1 + M - 1#, N - 1#)
+            J2 = I2 - I1
+            i1_ = (I1) - (0#)
+            For i_ = 0# To J2 Step 1
+                B(i_) = B(i_) + Pattern(i_ + i1_)
+            Next i_
+            I1 = I1 + M
+        Loop
+        Call CorrR1DCircular(Signal, M, B, M, C)
+        Exit Sub
+    End If
+    
+    '
+    ' Task is normalized
+    '
+    ReDim p(0 To N - 1)
+    For i = 0# To N - 1# Step 1
+        p(N - 1# - i) = Pattern(i)
+    Next i
+    Call ConvR1DCircular(Signal, M, p, N, B)
+    ReDim C(0 To M - 1)
+    i1_ = (N - 1#) - (0#)
+    For i_ = 0# To M - N Step 1
+        C(i_) = B(i_ + i1_)
+    Next i_
+    If M - N + 1# <= M - 1# Then
+        i1_ = (0#) - (M - N + 1#)
+        For i_ = M - N + 1# To M - 1# Step 1
+            C(i_) = B(i_ + i1_)
+        Next i_
+    End If
+End Sub
+

@@ -1,0 +1,331 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2007, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'One-sample t-test
+'
+'This test checks three hypotheses about the mean of the given sample.  The
+'following tests are performed:
+'    * two-tailed test (null hypothesis - the mean is equal  to  the  given
+'      value)
+'    * left-tailed test (null hypothesis - the  mean  is  greater  than  or
+'      equal to the given value)
+'    * right-tailed test (null hypothesis - the mean is less than or  equal
+'      to the given value).
+'
+'The test is based on the assumption that  a  given  sample  has  a  normal
+'distribution and  an  unknown  dispersion.  If  the  distribution  sharply
+'differs from normal, the test will work incorrectly.
+'
+'Input parameters:
+'    X       -   sample. Array whose index goes from 0 to N-1.
+'    N       -   size of sample.
+'    Mean    -   assumed value of the mean.
+'
+'Output parameters:
+'    BothTails   -   p-value for two-tailed test.
+'                    If BothTails is less than the given significance level
+'                    the null hypothesis is rejected.
+'    LeftTail    -   p-value for left-tailed test.
+'                    If LeftTail is less than the given significance level,
+'                    the null hypothesis is rejected.
+'    RightTail   -   p-value for right-tailed test.
+'                    If RightTail is less than the given significance level
+'                    the null hypothesis is rejected.
+'
+'  -- ALGLIB --
+'     Copyright 08.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub StudentTTest1(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByVal Mean As Double, _
+         ByRef BothTails As Double, _
+         ByRef LeftTail As Double, _
+         ByRef RightTail As Double)
+    Dim i As Long
+    Dim XMean As Double
+    Dim XVariance As Double
+    Dim XStdDev As Double
+    Dim V1 As Double
+    Dim V2 As Double
+    Dim Stat As Double
+    Dim S As Double
+    If N <= 1# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    XMean = 0#
+    For i = 0# To N - 1# Step 1
+        XMean = XMean + X(i)
+    Next i
+    XMean = XMean / N
+    
+    '
+    ' Variance (using corrected two-pass algorithm)
+    '
+    XVariance = 0#
+    XStdDev = 0#
+    If N <> 1# Then
+        V1 = 0#
+        For i = 0# To N - 1# Step 1
+            V1 = V1 + Square(X(i) - XMean)
+        Next i
+        V2 = 0#
+        For i = 0# To N - 1# Step 1
+            V2 = V2 + (X(i) - XMean)
+        Next i
+        V2 = Square(V2) / N
+        XVariance = (V1 - V2) / (N - 1#)
+        If XVariance < 0# Then
+            XVariance = 0#
+        End If
+        XStdDev = Sqr(XVariance)
+    End If
+    If XStdDev = 0# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Statistic
+    '
+    Stat = (XMean - Mean) / (XStdDev / Sqr(N))
+    S = StudentTDistribution(N - 1#, Stat)
+    BothTails = 2# * MinReal(S, 1# - S)
+    LeftTail = S
+    RightTail = 1# - S
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Two-sample pooled test
+'
+'This test checks three hypotheses about the mean of the given samples. The
+'following tests are performed:
+'    * two-tailed test (null hypothesis - the means are equal)
+'    * left-tailed test (null hypothesis - the mean of the first sample  is
+'      greater than or equal to the mean of the second sample)
+'    * right-tailed test (null hypothesis - the mean of the first sample is
+'      less than or equal to the mean of the second sample).
+'
+'Test is based on the following assumptions:
+'    * given samples have normal distributions
+'    * dispersions are equal
+'    * samples are independent.
+'
+'Input parameters:
+'    X       -   sample 1. Array whose index goes from 0 to N-1.
+'    N       -   size of sample.
+'    Y       -   sample 2. Array whose index goes from 0 to M-1.
+'    M       -   size of sample.
+'
+'Output parameters:
+'    BothTails   -   p-value for two-tailed test.
+'                    If BothTails is less than the given significance level
+'                    the null hypothesis is rejected.
+'    LeftTail    -   p-value for left-tailed test.
+'                    If LeftTail is less than the given significance level,
+'                    the null hypothesis is rejected.
+'    RightTail   -   p-value for right-tailed test.
+'                    If RightTail is less than the given significance level
+'                    the null hypothesis is rejected.
+'
+'  -- ALGLIB --
+'     Copyright 18.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub StudentTTest2(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByRef y() As Double, _
+         ByVal M As Long, _
+         ByRef BothTails As Double, _
+         ByRef LeftTail As Double, _
+         ByRef RightTail As Double)
+    Dim i As Long
+    Dim XMean As Double
+    Dim YMean As Double
+    Dim Stat As Double
+    Dim S As Double
+    Dim p As Double
+    If N <= 1# Or M <= 1# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    XMean = 0#
+    For i = 0# To N - 1# Step 1
+        XMean = XMean + X(i)
+    Next i
+    XMean = XMean / N
+    YMean = 0#
+    For i = 0# To M - 1# Step 1
+        YMean = YMean + y(i)
+    Next i
+    YMean = YMean / M
+    
+    '
+    ' S
+    '
+    S = 0#
+    For i = 0# To N - 1# Step 1
+        S = S + Square(X(i) - XMean)
+    Next i
+    For i = 0# To M - 1# Step 1
+        S = S + Square(y(i) - YMean)
+    Next i
+    S = Sqr(S * (1# / N + 1# / M) / (N + M - 2#))
+    If S = 0# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Statistic
+    '
+    Stat = (XMean - YMean) / S
+    p = StudentTDistribution(N + M - 2#, Stat)
+    BothTails = 2# * MinReal(p, 1# - p)
+    LeftTail = p
+    RightTail = 1# - p
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Two-sample unpooled test
+'
+'This test checks three hypotheses about the mean of the given samples. The
+'following tests are performed:
+'    * two-tailed test (null hypothesis - the means are equal)
+'    * left-tailed test (null hypothesis - the mean of the first sample  is
+'      greater than or equal to the mean of the second sample)
+'    * right-tailed test (null hypothesis - the mean of the first sample is
+'      less than or equal to the mean of the second sample).
+'
+'Test is based on the following assumptions:
+'    * given samples have normal distributions
+'    * samples are independent.
+'Dispersion equality is not required
+'
+'Input parameters:
+'    X - sample 1. Array whose index goes from 0 to N-1.
+'    N - size of the sample.
+'    Y - sample 2. Array whose index goes from 0 to M-1.
+'    M - size of the sample.
+'
+'Output parameters:
+'    BothTails   -   p-value for two-tailed test.
+'                    If BothTails is less than the given significance level
+'                    the null hypothesis is rejected.
+'    LeftTail    -   p-value for left-tailed test.
+'                    If LeftTail is less than the given significance level,
+'                    the null hypothesis is rejected.
+'    RightTail   -   p-value for right-tailed test.
+'                    If RightTail is less than the given significance level
+'                    the null hypothesis is rejected.
+'
+'  -- ALGLIB --
+'     Copyright 18.09.2006 by Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub UnequalVarianceTTest(ByRef X() As Double, _
+         ByVal N As Long, _
+         ByRef y() As Double, _
+         ByVal M As Long, _
+         ByRef BothTails As Double, _
+         ByRef LeftTail As Double, _
+         ByRef RightTail As Double)
+    Dim i As Long
+    Dim XMean As Double
+    Dim YMean As Double
+    Dim XVar As Double
+    Dim YVar As Double
+    Dim DF As Double
+    Dim p As Double
+    Dim Stat As Double
+    Dim C As Double
+    If N <= 1# Or M <= 1# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Mean
+    '
+    XMean = 0#
+    For i = 0# To N - 1# Step 1
+        XMean = XMean + X(i)
+    Next i
+    XMean = XMean / N
+    YMean = 0#
+    For i = 0# To M - 1# Step 1
+        YMean = YMean + y(i)
+    Next i
+    YMean = YMean / M
+    
+    '
+    ' Variance (using corrected two-pass algorithm)
+    '
+    XVar = 0#
+    For i = 0# To N - 1# Step 1
+        XVar = XVar + Square(X(i) - XMean)
+    Next i
+    XVar = XVar / (N - 1#)
+    YVar = 0#
+    For i = 0# To M - 1# Step 1
+        YVar = YVar + Square(y(i) - YMean)
+    Next i
+    YVar = YVar / (M - 1#)
+    If XVar = 0# Or YVar = 0# Then
+        BothTails = 1#
+        LeftTail = 1#
+        RightTail = 1#
+        Exit Sub
+    End If
+    
+    '
+    ' Statistic
+    '
+    Stat = (XMean - YMean) / Sqr(XVar / N + YVar / M)
+    C = XVar / N / (XVar / N + YVar / M)
+    DF = (N - 1#) * (M - 1#) / ((M - 1#) * Square(C) + (N - 1#) * (1# - Square(C)))
+    If Stat > 0# Then
+        p = 1# - 0.5 * IncompleteBeta(DF / 2#, 0.5, DF / (DF + Square(Stat)))
+    Else
+        p = 0.5 * IncompleteBeta(DF / 2#, 0.5, DF / (DF + Square(Stat)))
+    End If
+    BothTails = 2# * MinReal(p, 1# - p)
+    LeftTail = p
+    RightTail = 1# - p
+End Sub
+

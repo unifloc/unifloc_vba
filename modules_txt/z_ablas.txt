@@ -1,0 +1,2717 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copyright (c) 2009-2010, Sergey Bochkanov (ALGLIB project).
+'
+'>>> SOURCE LICENSE >>>
+'This program is free software; you can redistribute it and/or modify
+'it under the terms of the GNU General Public License as published by
+'the Free Software Foundation (www.fsf.org); either version 2 of the
+'License, or (at your option) any later version.
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'A copy of the GNU General Public License is available at
+'http://www.fsf.org/licensing/licenses
+'
+'>>> END OF LICENSE >>>
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Routines
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Splits matrix length in two parts, left part should match ABLAS block size
+'
+'INPUT PARAMETERS
+'    A   -   real matrix, is passed to ensure that we didn't split
+'            complex matrix using real splitting subroutine.
+'            matrix itself is not changed.
+'    N   -   length, N>0
+'
+'OUTPUT PARAMETERS
+'    N1  -   length
+'    N2  -   length
+'
+'N1+N2=N, N1>=N2, N2 may be zero
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub ABLASSplitLength(ByRef A() As Double, _
+         ByVal N As Long, _
+         ByRef N1 As Long, _
+         ByRef N2 As Long)
+    If N > ABLASBlockSize(A) Then
+        Call ABLASInternalSplitLength(N, ABLASBlockSize(A), N1, N2)
+    Else
+        Call ABLASInternalSplitLength(N, ABLASMicroBlockSize(), N1, N2)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Complex ABLASSplitLength
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub ABLASComplexSplitLength(ByRef A() As Complex, _
+         ByVal N As Long, _
+         ByRef N1 As Long, _
+         ByRef N2 As Long)
+    If N > ABLASComplexBlockSize(A) Then
+        Call ABLASInternalSplitLength(N, ABLASComplexBlockSize(A), N1, N2)
+    Else
+        Call ABLASInternalSplitLength(N, ABLASMicroBlockSize(), N1, N2)
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Returns block size - subdivision size where  cache-oblivious  soubroutines
+'switch to the optimized kernel.
+'
+'INPUT PARAMETERS
+'    A   -   real matrix, is passed to ensure that we didn't split
+'            complex matrix using real splitting subroutine.
+'            matrix itself is not changed.
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function ABLASBlockSize(ByRef A() As Double) As Long
+    Dim Result As Long
+    Result = 32#
+    ABLASBlockSize = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Block size for complex subroutines.
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function ABLASComplexBlockSize(ByRef A() As Complex) As Long
+    Dim Result As Long
+    Result = 24#
+    ABLASComplexBlockSize = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Microblock size
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Function ABLASMicroBlockSize() As Long
+    Dim Result As Long
+    Result = 8#
+    ABLASMicroBlockSize = Result
+End Function
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Cache-oblivous complex "copy-and-transpose"
+'
+'Input parameters:
+'    M   -   number of rows
+'    N   -   number of columns
+'    A   -   source matrix, MxN submatrix is copied and transposed
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    A   -   destination matrix
+'    IB  -   submatrix offset (row index)
+'    JB  -   submatrix offset (column index)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixTranspose(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByRef B() As Complex, _
+         ByVal IB As Long, _
+         ByVal JB As Long)
+    Dim i As Long
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    If M <= 2# * ABLASComplexBlockSize(A) And N <= 2# * ABLASComplexBlockSize(A) Then
+        
+        '
+        ' base case
+        '
+        For i = 0# To M - 1# Step 1
+            i1_ = (JA) - (IB)
+            For i_ = IB To IB + N - 1# Step 1
+                B(i_, JB + i) = A(IA + i, i_ + i1_)
+            Next i_
+        Next i
+    Else
+        
+        '
+        ' Cache-oblivious recursion
+        '
+        If M > N Then
+            Call ABLASComplexSplitLength(A, M, S1, S2)
+            Call CMatrixTranspose(S1, N, A, IA, JA, B, IB, JB)
+            Call CMatrixTranspose(S2, N, A, IA + S1, JA, B, IB, JB + S1)
+        Else
+            Call ABLASComplexSplitLength(A, N, S1, S2)
+            Call CMatrixTranspose(M, S1, A, IA, JA, B, IB, JB)
+            Call CMatrixTranspose(M, S2, A, IA, JA + S1, B, IB + S1, JB)
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Cache-oblivous real "copy-and-transpose"
+'
+'Input parameters:
+'    M   -   number of rows
+'    N   -   number of columns
+'    A   -   source matrix, MxN submatrix is copied and transposed
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    A   -   destination matrix
+'    IB  -   submatrix offset (row index)
+'    JB  -   submatrix offset (column index)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixTranspose(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByRef B() As Double, _
+         ByVal IB As Long, _
+         ByVal JB As Long)
+    Dim i As Long
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    If M <= 2# * ABLASBlockSize(A) And N <= 2# * ABLASBlockSize(A) Then
+        
+        '
+        ' base case
+        '
+        For i = 0# To M - 1# Step 1
+            i1_ = (JA) - (IB)
+            For i_ = IB To IB + N - 1# Step 1
+                B(i_, JB + i) = A(IA + i, i_ + i1_)
+            Next i_
+        Next i
+    Else
+        
+        '
+        ' Cache-oblivious recursion
+        '
+        If M > N Then
+            Call ABLASSplitLength(A, M, S1, S2)
+            Call RMatrixTranspose(S1, N, A, IA, JA, B, IB, JB)
+            Call RMatrixTranspose(S2, N, A, IA + S1, JA, B, IB, JB + S1)
+        Else
+            Call ABLASSplitLength(A, N, S1, S2)
+            Call RMatrixTranspose(M, S1, A, IA, JA, B, IB, JB)
+            Call RMatrixTranspose(M, S2, A, IA, JA + S1, B, IB + S1, JB)
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copy
+'
+'Input parameters:
+'    M   -   number of rows
+'    N   -   number of columns
+'    A   -   source matrix, MxN submatrix is copied and transposed
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    B   -   destination matrix
+'    IB  -   submatrix offset (row index)
+'    JB  -   submatrix offset (column index)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixCopy(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByRef B() As Complex, _
+         ByVal IB As Long, _
+         ByVal JB As Long)
+    Dim i As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    For i = 0# To M - 1# Step 1
+        i1_ = (JA) - (JB)
+        For i_ = JB To JB + N - 1# Step 1
+            B(IB + i, i_) = A(IA + i, i_ + i1_)
+        Next i_
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Copy
+'
+'Input parameters:
+'    M   -   number of rows
+'    N   -   number of columns
+'    A   -   source matrix, MxN submatrix is copied and transposed
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    B   -   destination matrix
+'    IB  -   submatrix offset (row index)
+'    JB  -   submatrix offset (column index)
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixCopy(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByRef B() As Double, _
+         ByVal IB As Long, _
+         ByVal JB As Long)
+    Dim i As Long
+    Dim i_ As Long
+    Dim i1_ As Long
+    For i = 0# To M - 1# Step 1
+        i1_ = (JA) - (JB)
+        For i_ = JB To JB + N - 1# Step 1
+            B(IB + i, i_) = A(IA + i, i_ + i1_)
+        Next i_
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Rank-1 correction: A := A + u*v'
+'
+'INPUT PARAMETERS:
+'    M   -   number of rows
+'    N   -   number of columns
+'    A   -   target matrix, MxN submatrix is updated
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    U   -   vector #1
+'    IU  -   subvector offset
+'    V   -   vector #2
+'    IV  -   subvector offset
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixRank1(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByRef U() As Complex, _
+         ByVal IU As Long, _
+         ByRef V() As Complex, _
+         ByVal IV As Long)
+    Dim i As Long
+    Dim S As Complex
+    Dim i_ As Long
+    Dim i1_ As Long
+    If M = 0# Or N = 0# Then
+        Exit Sub
+    End If
+    If CMatrixRank1F(M, N, A, IA, JA, U, IU, V, IV) Then
+        Exit Sub
+    End If
+    For i = 0# To M - 1# Step 1
+        S = U(IU + i)
+        i1_ = (IV) - (JA)
+        For i_ = JA To JA + N - 1# Step 1
+            A(IA + i, i_) = C_Add(A(IA + i, i_), C_Mul(S, V(i_ + i1_)))
+        Next i_
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Rank-1 correction: A := A + u*v'
+'
+'INPUT PARAMETERS:
+'    M   -   number of rows
+'    N   -   number of columns
+'    A   -   target matrix, MxN submatrix is updated
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    U   -   vector #1
+'    IU  -   subvector offset
+'    V   -   vector #2
+'    IV  -   subvector offset
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixRank1(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByRef U() As Double, _
+         ByVal IU As Long, _
+         ByRef V() As Double, _
+         ByVal IV As Long)
+    Dim i As Long
+    Dim S As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    If M = 0# Or N = 0# Then
+        Exit Sub
+    End If
+    If RMatrixRank1F(M, N, A, IA, JA, U, IU, V, IV) Then
+        Exit Sub
+    End If
+    For i = 0# To M - 1# Step 1
+        S = U(IU + i)
+        i1_ = (IV) - (JA)
+        For i_ = JA To JA + N - 1# Step 1
+            A(IA + i, i_) = A(IA + i, i_) + S * V(i_ + i1_)
+        Next i_
+    Next i
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Matrix-vector product: y := op(A)*x
+'
+'INPUT PARAMETERS:
+'    M   -   number of rows of op(A)
+'            M>=0
+'    N   -   number of columns of op(A)
+'            N>=0
+'    A   -   target matrix
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    OpA -   operation type:
+'            * OpA=0     =>  op(A) = A
+'            * OpA=1     =>  op(A) = A^T
+'            * OpA=2     =>  op(A) = A^H
+'    X   -   input vector
+'    IX  -   subvector offset
+'    IY  -   subvector offset
+'
+'OUTPUT PARAMETERS:
+'    Y   -   vector which stores result
+'
+'if M=0, then subroutine does nothing.
+'if N=0, Y is filled by zeros.
+'
+'
+'  -- ALGLIB routine --
+'
+'     28.01.2010
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixMV(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpA As Long, _
+         ByRef X() As Complex, _
+         ByVal IX As Long, _
+         ByRef y() As Complex, _
+         ByVal IY As Long)
+    Dim i As Long
+    Dim V As Complex
+    Dim i_ As Long
+    Dim i1_ As Long
+    If M = 0# Then
+        Exit Sub
+    End If
+    If N = 0# Then
+        For i = 0# To M - 1# Step 1
+            y(IY + i) = C_Complex(0#)
+        Next i
+        Exit Sub
+    End If
+    If CMatrixMVF(M, N, A, IA, JA, OpA, X, IX, y, IY) Then
+        Exit Sub
+    End If
+    If OpA = 0# Then
+        
+        '
+        ' y = A*x
+        '
+        For i = 0# To M - 1# Step 1
+            i1_ = (IX) - (JA)
+            V = C_Complex(0#)
+            For i_ = JA To JA + N - 1# Step 1
+                V = C_Add(V, C_Mul(A(IA + i, i_), X(i_ + i1_)))
+            Next i_
+            y(IY + i) = V
+        Next i
+        Exit Sub
+    End If
+    If OpA = 1# Then
+        
+        '
+        ' y = A^T*x
+        '
+        For i = 0# To M - 1# Step 1
+            y(IY + i) = C_Complex(0#)
+        Next i
+        For i = 0# To N - 1# Step 1
+            V = X(IX + i)
+            i1_ = (JA) - (IY)
+            For i_ = IY To IY + M - 1# Step 1
+                y(i_) = C_Add(y(i_), C_Mul(V, A(IA + i, i_ + i1_)))
+            Next i_
+        Next i
+        Exit Sub
+    End If
+    If OpA = 2# Then
+        
+        '
+        ' y = A^H*x
+        '
+        For i = 0# To M - 1# Step 1
+            y(IY + i) = C_Complex(0#)
+        Next i
+        For i = 0# To N - 1# Step 1
+            V = X(IX + i)
+            i1_ = (JA) - (IY)
+            For i_ = IY To IY + M - 1# Step 1
+                y(i_) = C_Add(y(i_), C_Mul(V, Conj(A(IA + i, i_ + i1_))))
+            Next i_
+        Next i
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Matrix-vector product: y := op(A)*x
+'
+'INPUT PARAMETERS:
+'    M   -   number of rows of op(A)
+'    N   -   number of columns of op(A)
+'    A   -   target matrix
+'    IA  -   submatrix offset (row index)
+'    JA  -   submatrix offset (column index)
+'    OpA -   operation type:
+'            * OpA=0     =>  op(A) = A
+'            * OpA=1     =>  op(A) = A^T
+'    X   -   input vector
+'    IX  -   subvector offset
+'    IY  -   subvector offset
+'
+'OUTPUT PARAMETERS:
+'    Y   -   vector which stores result
+'
+'if M=0, then subroutine does nothing.
+'if N=0, Y is filled by zeros.
+'
+'
+'  -- ALGLIB routine --
+'
+'     28.01.2010
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixMV(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpA As Long, _
+         ByRef X() As Double, _
+         ByVal IX As Long, _
+         ByRef y() As Double, _
+         ByVal IY As Long)
+    Dim i As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    If M = 0# Then
+        Exit Sub
+    End If
+    If N = 0# Then
+        For i = 0# To M - 1# Step 1
+            y(IY + i) = 0#
+        Next i
+        Exit Sub
+    End If
+    If RMatrixMVF(M, N, A, IA, JA, OpA, X, IX, y, IY) Then
+        Exit Sub
+    End If
+    If OpA = 0# Then
+        
+        '
+        ' y = A*x
+        '
+        For i = 0# To M - 1# Step 1
+            i1_ = (IX) - (JA)
+            V = 0#
+            For i_ = JA To JA + N - 1# Step 1
+                V = V + A(IA + i, i_) * X(i_ + i1_)
+            Next i_
+            y(IY + i) = V
+        Next i
+        Exit Sub
+    End If
+    If OpA = 1# Then
+        
+        '
+        ' y = A^T*x
+        '
+        For i = 0# To M - 1# Step 1
+            y(IY + i) = 0#
+        Next i
+        For i = 0# To N - 1# Step 1
+            V = X(IX + i)
+            i1_ = (JA) - (IY)
+            For i_ = IY To IY + M - 1# Step 1
+                y(i_) = y(i_) + V * A(IA + i, i_ + i1_)
+            Next i_
+        Next i
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine calculates X*op(A^-1) where:
+'* X is MxN general matrix
+'* A is NxN upper/lower triangular/unitriangular matrix
+'* "op" may be identity transformation, transposition, conjugate transposition
+'
+'Multiplication result replaces X.
+'Cache-oblivious algorithm is used.
+'
+'INPUT PARAMETERS
+'    N   -   matrix size, N>=0
+'    M   -   matrix size, N>=0
+'    A       -   matrix, actial matrix is stored in A[I1:I1+N-1,J1:J1+N-1]
+'    I1      -   submatrix offset
+'    J1      -   submatrix offset
+'    IsUpper -   whether matrix is upper triangular
+'    IsUnit  -   whether matrix is unitriangular
+'    OpType  -   transformation type:
+'                * 0 - no transformation
+'                * 1 - transposition
+'                * 2 - conjugate transposition
+'    C   -   matrix, actial matrix is stored in C[I2:I2+M-1,J2:J2+N-1]
+'    I2  -   submatrix offset
+'    J2  -   submatrix offset
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixRightTRSM(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Complex, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASComplexBlockSize(A)
+    If M <= BS And N <= BS Then
+        Call CMatrixRightTRSM2(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Exit Sub
+    End If
+    If M >= N Then
+        
+        '
+        ' Split X: X*A = (X1 X2)^T*A
+        '
+        Call ABLASComplexSplitLength(A, M, S1, S2)
+        Call CMatrixRightTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Call CMatrixRightTRSM(S2, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+    Else
+        
+        '
+        ' Split A:
+        '               (A1  A12)
+        ' X*op(A) = X*op(       )
+        '               (     A2)
+        '
+        ' Different variants depending on
+        ' IsUpper/OpType combinations
+        '
+        Call ABLASComplexSplitLength(A, N, S1, S2)
+        If IsUpper And OpType = 0# Then
+            
+            '
+            '                  (A1  A12)-1
+            ' X*A^-1 = (X1 X2)*(       )
+            '                  (     A2)
+            '
+            Call CMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call CMatrixGEMM(M, S2, S1, C_Complex(-1#), X, I2, J2, 0#, A, I1, J1 + S1, 0#, C_Complex(1#), X, I2, J2 + S1)
+            Call CMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Exit Sub
+        End If
+        If IsUpper And OpType <> 0# Then
+            
+            '
+            '                  (A1'     )-1
+            ' X*A^-1 = (X1 X2)*(        )
+            '                  (A12' A2')
+            '
+            Call CMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Call CMatrixGEMM(M, S1, S2, C_Complex(-1#), X, I2, J2 + S1, 0#, A, I1, J1 + S1, OpType, C_Complex(1#), X, I2, J2)
+            Call CMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType = 0# Then
+            
+            '
+            '                  (A1     )-1
+            ' X*A^-1 = (X1 X2)*(       )
+            '                  (A21  A2)
+            '
+            Call CMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Call CMatrixGEMM(M, S1, S2, C_Complex(-1#), X, I2, J2 + S1, 0#, A, I1 + S1, J1, 0#, C_Complex(1#), X, I2, J2)
+            Call CMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType <> 0# Then
+            
+            '
+            '                  (A1' A21')-1
+            ' X*A^-1 = (X1 X2)*(        )
+            '                  (     A2')
+            '
+            Call CMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call CMatrixGEMM(M, S2, S1, C_Complex(-1#), X, I2, J2, 0#, A, I1 + S1, J1, OpType, C_Complex(1#), X, I2, J2 + S1)
+            Call CMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine calculates op(A^-1)*X where:
+'* X is MxN general matrix
+'* A is MxM upper/lower triangular/unitriangular matrix
+'* "op" may be identity transformation, transposition, conjugate transposition
+'
+'Multiplication result replaces X.
+'Cache-oblivious algorithm is used.
+'
+'INPUT PARAMETERS
+'    N   -   matrix size, N>=0
+'    M   -   matrix size, N>=0
+'    A       -   matrix, actial matrix is stored in A[I1:I1+M-1,J1:J1+M-1]
+'    I1      -   submatrix offset
+'    J1      -   submatrix offset
+'    IsUpper -   whether matrix is upper triangular
+'    IsUnit  -   whether matrix is unitriangular
+'    OpType  -   transformation type:
+'                * 0 - no transformation
+'                * 1 - transposition
+'                * 2 - conjugate transposition
+'    C   -   matrix, actial matrix is stored in C[I2:I2+M-1,J2:J2+N-1]
+'    I2  -   submatrix offset
+'    J2  -   submatrix offset
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixLeftTRSM(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Complex, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASComplexBlockSize(A)
+    If M <= BS And N <= BS Then
+        Call CMatrixLeftTRSM2(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Exit Sub
+    End If
+    If N >= M Then
+        
+        '
+        ' Split X: op(A)^-1*X = op(A)^-1*(X1 X2)
+        '
+        Call ABLASComplexSplitLength(X, N, S1, S2)
+        Call CMatrixLeftTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Call CMatrixLeftTRSM(M, S2, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+    Else
+        
+        '
+        ' Split A
+        '
+        Call ABLASComplexSplitLength(A, M, S1, S2)
+        If IsUpper And OpType = 0# Then
+            
+            '
+            '           (A1  A12)-1  ( X1 )
+            ' A^-1*X* = (       )   *(    )
+            '           (     A2)    ( X2 )
+            '
+            Call CMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Call CMatrixGEMM(S1, N, S2, C_Complex(-1#), A, I1, J1 + S1, 0#, X, I2 + S1, J2, 0#, C_Complex(1#), X, I2, J2)
+            Call CMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+        If IsUpper And OpType <> 0# Then
+            
+            '
+            '          (A1'     )-1 ( X1 )
+            ' A^-1*X = (        )  *(    )
+            '          (A12' A2')   ( X2 )
+            '
+            Call CMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call CMatrixGEMM(S2, N, S1, C_Complex(-1#), A, I1, J1 + S1, OpType, X, I2, J2, 0#, C_Complex(1#), X, I2 + S1, J2)
+            Call CMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType = 0# Then
+            
+            '
+            '          (A1     )-1 ( X1 )
+            ' A^-1*X = (       )  *(    )
+            '          (A21  A2)   ( X2 )
+            '
+            Call CMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call CMatrixGEMM(S2, N, S1, C_Complex(-1#), A, I1 + S1, J1, 0#, X, I2, J2, 0#, C_Complex(1#), X, I2 + S1, J2)
+            Call CMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType <> 0# Then
+            
+            '
+            '          (A1' A21')-1 ( X1 )
+            ' A^-1*X = (        )  *(    )
+            '          (     A2')   ( X2 )
+            '
+            Call CMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Call CMatrixGEMM(S1, N, S2, C_Complex(-1#), A, I1 + S1, J1, OpType, X, I2 + S1, J2, 0#, C_Complex(1#), X, I2, J2)
+            Call CMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as CMatrixRightTRSM, but for real matrices
+'
+'OpType may be only 0 or 1.
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixRightTRSM(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Double, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASBlockSize(A)
+    If M <= BS And N <= BS Then
+        Call RMatrixRightTRSM2(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Exit Sub
+    End If
+    If M >= N Then
+        
+        '
+        ' Split X: X*A = (X1 X2)^T*A
+        '
+        Call ABLASSplitLength(A, M, S1, S2)
+        Call RMatrixRightTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Call RMatrixRightTRSM(S2, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+    Else
+        
+        '
+        ' Split A:
+        '               (A1  A12)
+        ' X*op(A) = X*op(       )
+        '               (     A2)
+        '
+        ' Different variants depending on
+        ' IsUpper/OpType combinations
+        '
+        Call ABLASSplitLength(A, N, S1, S2)
+        If IsUpper And OpType = 0# Then
+            
+            '
+            '                  (A1  A12)-1
+            ' X*A^-1 = (X1 X2)*(       )
+            '                  (     A2)
+            '
+            Call RMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call RMatrixGEMM(M, S2, S1, -1#, X, I2, J2, 0#, A, I1, J1 + S1, 0#, 1#, X, I2, J2 + S1)
+            Call RMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Exit Sub
+        End If
+        If IsUpper And OpType <> 0# Then
+            
+            '
+            '                  (A1'     )-1
+            ' X*A^-1 = (X1 X2)*(        )
+            '                  (A12' A2')
+            '
+            Call RMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Call RMatrixGEMM(M, S1, S2, -1#, X, I2, J2 + S1, 0#, A, I1, J1 + S1, OpType, 1#, X, I2, J2)
+            Call RMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType = 0# Then
+            
+            '
+            '                  (A1     )-1
+            ' X*A^-1 = (X1 X2)*(       )
+            '                  (A21  A2)
+            '
+            Call RMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Call RMatrixGEMM(M, S1, S2, -1#, X, I2, J2 + S1, 0#, A, I1 + S1, J1, 0#, 1#, X, I2, J2)
+            Call RMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType <> 0# Then
+            
+            '
+            '                  (A1' A21')-1
+            ' X*A^-1 = (X1 X2)*(        )
+            '                  (     A2')
+            '
+            Call RMatrixRightTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call RMatrixGEMM(M, S2, S1, -1#, X, I2, J2, 0#, A, I1 + S1, J1, OpType, 1#, X, I2, J2 + S1)
+            Call RMatrixRightTRSM(M, S2, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as CMatrixLeftTRSM, but for real matrices
+'
+'OpType may be only 0 or 1.
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixLeftTRSM(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Double, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASBlockSize(A)
+    If M <= BS And N <= BS Then
+        Call RMatrixLeftTRSM2(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Exit Sub
+    End If
+    If N >= M Then
+        
+        '
+        ' Split X: op(A)^-1*X = op(A)^-1*(X1 X2)
+        '
+        Call ABLASSplitLength(X, N, S1, S2)
+        Call RMatrixLeftTRSM(M, S1, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+        Call RMatrixLeftTRSM(M, S2, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2 + S1)
+    Else
+        
+        '
+        ' Split A
+        '
+        Call ABLASSplitLength(A, M, S1, S2)
+        If IsUpper And OpType = 0# Then
+            
+            '
+            '           (A1  A12)-1  ( X1 )
+            ' A^-1*X* = (       )   *(    )
+            '           (     A2)    ( X2 )
+            '
+            Call RMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Call RMatrixGEMM(S1, N, S2, -1#, A, I1, J1 + S1, 0#, X, I2 + S1, J2, 0#, 1#, X, I2, J2)
+            Call RMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+        If IsUpper And OpType <> 0# Then
+            
+            '
+            '          (A1'     )-1 ( X1 )
+            ' A^-1*X = (        )  *(    )
+            '          (A12' A2')   ( X2 )
+            '
+            Call RMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call RMatrixGEMM(S2, N, S1, -1#, A, I1, J1 + S1, OpType, X, I2, J2, 0#, 1#, X, I2 + S1, J2)
+            Call RMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType = 0# Then
+            
+            '
+            '          (A1     )-1 ( X1 )
+            ' A^-1*X = (       )  *(    )
+            '          (A21  A2)   ( X2 )
+            '
+            Call RMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Call RMatrixGEMM(S2, N, S1, -1#, A, I1 + S1, J1, 0#, X, I2, J2, 0#, 1#, X, I2 + S1, J2)
+            Call RMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Exit Sub
+        End If
+        If Not IsUpper And OpType <> 0# Then
+            
+            '
+            '          (A1' A21')-1 ( X1 )
+            ' A^-1*X = (        )  *(    )
+            '          (     A2')   ( X2 )
+            '
+            Call RMatrixLeftTRSM(S2, N, A, I1 + S1, J1 + S1, IsUpper, Isunit, OpType, X, I2 + S1, J2)
+            Call RMatrixGEMM(S1, N, S2, -1#, A, I1 + S1, J1, OpType, X, I2 + S1, J2, 0#, 1#, X, I2, J2)
+            Call RMatrixLeftTRSM(S1, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2)
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine calculates  C=alpha*A*A^H+beta*C  or  C=alpha*A^H*A+beta*C
+'where:
+'* C is NxN Hermitian matrix given by its upper/lower triangle
+'* A is NxK matrix when A*A^H is calculated, KxN matrix otherwise
+'
+'Additional info:
+'* cache-oblivious algorithm is used.
+'* multiplication result replaces C. If Beta=0, C elements are not used in
+'  calculations (not multiplied by zero - just not referenced)
+'* if Alpha=0, A is not used (not multiplied by zero - just not referenced)
+'* if both Beta and Alpha are zero, C is filled by zeros.
+'
+'INPUT PARAMETERS
+'    N       -   matrix size, N>=0
+'    K       -   matrix size, K>=0
+'    Alpha   -   coefficient
+'    A       -   matrix
+'    IA      -   submatrix offset
+'    JA      -   submatrix offset
+'    OpTypeA -   multiplication type:
+'                * 0 - A*A^H is calculated
+'                * 2 - A^H*A is calculated
+'    Beta    -   coefficient
+'    C       -   matrix
+'    IC      -   submatrix offset
+'    JC      -   submatrix offset
+'    IsUpper -   whether C is upper triangular or lower triangular
+'
+'  -- ALGLIB routine --
+'     16.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixSYRK(ByVal N As Long, _
+         ByVal K As Long, _
+         ByVal Alpha As Double, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByVal Beta As Double, _
+         ByRef C() As Complex, _
+         ByVal IC As Long, _
+         ByVal JC As Long, _
+         ByVal IsUpper As Boolean)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASComplexBlockSize(A)
+    If N <= BS And K <= BS Then
+        Call CMatrixSYRK2(N, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+        Exit Sub
+    End If
+    If K >= N Then
+        
+        '
+        ' Split K
+        '
+        Call ABLASComplexSplitLength(A, K, S1, S2)
+        If OpTypeA = 0# Then
+            Call CMatrixSYRK(N, S1, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call CMatrixSYRK(N, S2, Alpha, A, IA, JA + S1, OpTypeA, 1#, C, IC, JC, IsUpper)
+        Else
+            Call CMatrixSYRK(N, S1, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call CMatrixSYRK(N, S2, Alpha, A, IA + S1, JA, OpTypeA, 1#, C, IC, JC, IsUpper)
+        End If
+    Else
+        
+        '
+        ' Split N
+        '
+        Call ABLASComplexSplitLength(A, N, S1, S2)
+        If OpTypeA = 0# And IsUpper Then
+            Call CMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call CMatrixGEMM(S1, S2, K, C_Complex(Alpha), A, IA, JA, 0#, A, IA + S1, JA, 2#, C_Complex(Beta), C, IC, JC + S1)
+            Call CMatrixSYRK(S2, K, Alpha, A, IA + S1, JA, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+        If OpTypeA = 0# And Not IsUpper Then
+            Call CMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call CMatrixGEMM(S2, S1, K, C_Complex(Alpha), A, IA + S1, JA, 0#, A, IA, JA, 2#, C_Complex(Beta), C, IC + S1, JC)
+            Call CMatrixSYRK(S2, K, Alpha, A, IA + S1, JA, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+        If OpTypeA <> 0# And IsUpper Then
+            Call CMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call CMatrixGEMM(S1, S2, K, C_Complex(Alpha), A, IA, JA, 2#, A, IA, JA + S1, 0#, C_Complex(Beta), C, IC, JC + S1)
+            Call CMatrixSYRK(S2, K, Alpha, A, IA, JA + S1, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+        If OpTypeA <> 0# And Not IsUpper Then
+            Call CMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call CMatrixGEMM(S2, S1, K, C_Complex(Alpha), A, IA, JA + S1, 2#, A, IA, JA, 0#, C_Complex(Beta), C, IC + S1, JC)
+            Call CMatrixSYRK(S2, K, Alpha, A, IA, JA + S1, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as CMatrixSYRK, but for real matrices
+'
+'OpType may be only 0 or 1.
+'
+'  -- ALGLIB routine --
+'     16.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixSYRK(ByVal N As Long, _
+         ByVal K As Long, _
+         ByVal Alpha As Double, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByVal Beta As Double, _
+         ByRef C() As Double, _
+         ByVal IC As Long, _
+         ByVal JC As Long, _
+         ByVal IsUpper As Boolean)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASBlockSize(A)
+    If N <= BS And K <= BS Then
+        Call RMatrixSYRK2(N, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+        Exit Sub
+    End If
+    If K >= N Then
+        
+        '
+        ' Split K
+        '
+        Call ABLASSplitLength(A, K, S1, S2)
+        If OpTypeA = 0# Then
+            Call RMatrixSYRK(N, S1, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call RMatrixSYRK(N, S2, Alpha, A, IA, JA + S1, OpTypeA, 1#, C, IC, JC, IsUpper)
+        Else
+            Call RMatrixSYRK(N, S1, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call RMatrixSYRK(N, S2, Alpha, A, IA + S1, JA, OpTypeA, 1#, C, IC, JC, IsUpper)
+        End If
+    Else
+        
+        '
+        ' Split N
+        '
+        Call ABLASSplitLength(A, N, S1, S2)
+        If OpTypeA = 0# And IsUpper Then
+            Call RMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call RMatrixGEMM(S1, S2, K, Alpha, A, IA, JA, 0#, A, IA + S1, JA, 1#, Beta, C, IC, JC + S1)
+            Call RMatrixSYRK(S2, K, Alpha, A, IA + S1, JA, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+        If OpTypeA = 0# And Not IsUpper Then
+            Call RMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call RMatrixGEMM(S2, S1, K, Alpha, A, IA + S1, JA, 0#, A, IA, JA, 1#, Beta, C, IC + S1, JC)
+            Call RMatrixSYRK(S2, K, Alpha, A, IA + S1, JA, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+        If OpTypeA <> 0# And IsUpper Then
+            Call RMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call RMatrixGEMM(S1, S2, K, Alpha, A, IA, JA, 1#, A, IA, JA + S1, 0#, Beta, C, IC, JC + S1)
+            Call RMatrixSYRK(S2, K, Alpha, A, IA, JA + S1, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+        If OpTypeA <> 0# And Not IsUpper Then
+            Call RMatrixSYRK(S1, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper)
+            Call RMatrixGEMM(S2, S1, K, Alpha, A, IA, JA + S1, 1#, A, IA, JA, 0#, Beta, C, IC + S1, JC)
+            Call RMatrixSYRK(S2, K, Alpha, A, IA, JA + S1, OpTypeA, Beta, C, IC + S1, JC + S1, IsUpper)
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'This subroutine calculates C = alpha*op1(A)*op2(B) +beta*C where:
+'* C is MxN general matrix
+'* op1(A) is MxK matrix
+'* op2(B) is KxN matrix
+'* "op" may be identity transformation, transposition, conjugate transposition
+'
+'Additional info:
+'* cache-oblivious algorithm is used.
+'* multiplication result replaces C. If Beta=0, C elements are not used in
+'  calculations (not multiplied by zero - just not referenced)
+'* if Alpha=0, A is not used (not multiplied by zero - just not referenced)
+'* if both Beta and Alpha are zero, C is filled by zeros.
+'
+'INPUT PARAMETERS
+'    N       -   matrix size, N>0
+'    M       -   matrix size, N>0
+'    K       -   matrix size, K>0
+'    Alpha   -   coefficient
+'    A       -   matrix
+'    IA      -   submatrix offset
+'    JA      -   submatrix offset
+'    OpTypeA -   transformation type:
+'                * 0 - no transformation
+'                * 1 - transposition
+'                * 2 - conjugate transposition
+'    B       -   matrix
+'    IB      -   submatrix offset
+'    JB      -   submatrix offset
+'    OpTypeB -   transformation type:
+'                * 0 - no transformation
+'                * 1 - transposition
+'                * 2 - conjugate transposition
+'    Beta    -   coefficient
+'    C       -   matrix
+'    IC      -   submatrix offset
+'    JC      -   submatrix offset
+'
+'  -- ALGLIB routine --
+'     16.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub CMatrixGEMM(ByVal M As Long, _
+         ByVal N As Long, _
+         ByVal K As Long, _
+         ByRef Alpha_ As Complex, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByRef B() As Complex, _
+         ByVal IB As Long, _
+         ByVal JB As Long, _
+         ByVal OpTypeB As Long, _
+         ByRef Beta_ As Complex, _
+         ByRef C() As Complex, _
+         ByVal IC As Long, _
+         ByVal JC As Long)
+    Dim Alpha As Complex
+    Dim Beta As Complex
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    Alpha = Alpha_
+    Beta = Beta_
+    BS = ABLASComplexBlockSize(A)
+    If M <= BS And N <= BS And K <= BS Then
+        Call CMatrixGEMMK(M, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+        Exit Sub
+    End If
+    If M >= N And M >= K Then
+        
+        '
+        ' A*B = (A1 A2)^T*B
+        '
+        Call ABLASComplexSplitLength(A, M, S1, S2)
+        Call CMatrixGEMM(S1, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+        If OpTypeA = 0# Then
+            Call CMatrixGEMM(S2, N, K, Alpha, A, IA + S1, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC + S1, JC)
+        Else
+            Call CMatrixGEMM(S2, N, K, Alpha, A, IA, JA + S1, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC + S1, JC)
+        End If
+        Exit Sub
+    End If
+    If N >= M And N >= K Then
+        
+        '
+        ' A*B = A*(B1 B2)
+        '
+        Call ABLASComplexSplitLength(A, N, S1, S2)
+        If OpTypeB = 0# Then
+            Call CMatrixGEMM(M, S1, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call CMatrixGEMM(M, S2, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB + S1, OpTypeB, Beta, C, IC, JC + S1)
+        Else
+            Call CMatrixGEMM(M, S1, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call CMatrixGEMM(M, S2, K, Alpha, A, IA, JA, OpTypeA, B, IB + S1, JB, OpTypeB, Beta, C, IC, JC + S1)
+        End If
+        Exit Sub
+    End If
+    If K >= M And K >= N Then
+        
+        '
+        ' A*B = (A1 A2)*(B1 B2)^T
+        '
+        Call ABLASComplexSplitLength(A, K, S1, S2)
+        If OpTypeA = 0# And OpTypeB = 0# Then
+            Call CMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call CMatrixGEMM(M, N, S2, Alpha, A, IA, JA + S1, OpTypeA, B, IB + S1, JB, OpTypeB, C_Complex(1#), C, IC, JC)
+        End If
+        If OpTypeA = 0# And OpTypeB <> 0# Then
+            Call CMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call CMatrixGEMM(M, N, S2, Alpha, A, IA, JA + S1, OpTypeA, B, IB, JB + S1, OpTypeB, C_Complex(1#), C, IC, JC)
+        End If
+        If OpTypeA <> 0# And OpTypeB = 0# Then
+            Call CMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call CMatrixGEMM(M, N, S2, Alpha, A, IA + S1, JA, OpTypeA, B, IB + S1, JB, OpTypeB, C_Complex(1#), C, IC, JC)
+        End If
+        If OpTypeA <> 0# And OpTypeB <> 0# Then
+            Call CMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call CMatrixGEMM(M, N, S2, Alpha, A, IA + S1, JA, OpTypeA, B, IB, JB + S1, OpTypeB, C_Complex(1#), C, IC, JC)
+        End If
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Same as CMatrixGEMM, but for real numbers.
+'OpType may be only 0 or 1.
+'
+'  -- ALGLIB routine --
+'     16.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Public Sub RMatrixGEMM(ByVal M As Long, _
+         ByVal N As Long, _
+         ByVal K As Long, _
+         ByVal Alpha As Double, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByRef B() As Double, _
+         ByVal IB As Long, _
+         ByVal JB As Long, _
+         ByVal OpTypeB As Long, _
+         ByVal Beta As Double, _
+         ByRef C() As Double, _
+         ByVal IC As Long, _
+         ByVal JC As Long)
+    Dim S1 As Long
+    Dim S2 As Long
+    Dim BS As Long
+    BS = ABLASBlockSize(A)
+    If M <= BS And N <= BS And K <= BS Then
+        Call RMatrixGEMMK(M, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+        Exit Sub
+    End If
+    If M >= N And M >= K Then
+        
+        '
+        ' A*B = (A1 A2)^T*B
+        '
+        Call ABLASSplitLength(A, M, S1, S2)
+        If OpTypeA = 0# Then
+            Call RMatrixGEMM(S1, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(S2, N, K, Alpha, A, IA + S1, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC + S1, JC)
+        Else
+            Call RMatrixGEMM(S1, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(S2, N, K, Alpha, A, IA, JA + S1, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC + S1, JC)
+        End If
+        Exit Sub
+    End If
+    If N >= M And N >= K Then
+        
+        '
+        ' A*B = A*(B1 B2)
+        '
+        Call ABLASSplitLength(A, N, S1, S2)
+        If OpTypeB = 0# Then
+            Call RMatrixGEMM(M, S1, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(M, S2, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB + S1, OpTypeB, Beta, C, IC, JC + S1)
+        Else
+            Call RMatrixGEMM(M, S1, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(M, S2, K, Alpha, A, IA, JA, OpTypeA, B, IB + S1, JB, OpTypeB, Beta, C, IC, JC + S1)
+        End If
+        Exit Sub
+    End If
+    If K >= M And K >= N Then
+        
+        '
+        ' A*B = (A1 A2)*(B1 B2)^T
+        '
+        Call ABLASSplitLength(A, K, S1, S2)
+        If OpTypeA = 0# And OpTypeB = 0# Then
+            Call RMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(M, N, S2, Alpha, A, IA, JA + S1, OpTypeA, B, IB + S1, JB, OpTypeB, 1#, C, IC, JC)
+        End If
+        If OpTypeA = 0# And OpTypeB <> 0# Then
+            Call RMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(M, N, S2, Alpha, A, IA, JA + S1, OpTypeA, B, IB, JB + S1, OpTypeB, 1#, C, IC, JC)
+        End If
+        If OpTypeA <> 0# And OpTypeB = 0# Then
+            Call RMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(M, N, S2, Alpha, A, IA + S1, JA, OpTypeA, B, IB + S1, JB, OpTypeB, 1#, C, IC, JC)
+        End If
+        If OpTypeA <> 0# And OpTypeB <> 0# Then
+            Call RMatrixGEMM(M, N, S1, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC)
+            Call RMatrixGEMM(M, N, S2, Alpha, A, IA + S1, JA, OpTypeA, B, IB, JB + S1, OpTypeB, 1#, C, IC, JC)
+        End If
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Complex ABLASSplitLength
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub ABLASInternalSplitLength(ByVal N As Long, _
+         ByVal NB As Long, _
+         ByRef N1 As Long, _
+         ByRef N2 As Long)
+    Dim R As Long
+    If N <= NB Then
+        
+        '
+        ' Block size, no further splitting
+        '
+        N1 = N
+        N2 = 0#
+    Else
+        
+        '
+        ' Greater than block size
+        '
+        If N Mod NB <> 0# Then
+            
+            '
+            ' Split remainder
+            '
+            N2 = N Mod NB
+            N1 = N - N2
+        Else
+            
+            '
+            ' Split on block boundaries
+            '
+            N2 = N \ 2#
+            N1 = N - N2
+            If N1 Mod NB = 0# Then
+                Exit Sub
+            End If
+            R = NB - N1 Mod NB
+            N1 = N1 + R
+            N2 = N2 - R
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Level 2 variant of CMatrixRightTRSM
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixRightTRSM2(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Complex, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim VC As Complex
+    Dim VD As Complex
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Special case
+    '
+    If N * M = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try to call fast TRSM
+    '
+    If CMatrixRightTRSMF(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2) Then
+        Exit Sub
+    End If
+    
+    '
+    ' General case
+    '
+    If IsUpper Then
+        
+        '
+        ' Upper triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' X*A^(-1)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    If Isunit Then
+                        VD = C_Complex(1#)
+                    Else
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = C_Div(X(I2 + i, J2 + j), VD)
+                    If j < N - 1# Then
+                        VC = X(I2 + i, J2 + j)
+                        i1_ = (J1 + j + 1#) - (J2 + j + 1#)
+                        For i_ = J2 + j + 1# To J2 + N - 1# Step 1
+                            X(I2 + i, i_) = C_Sub(X(I2 + i, i_), C_Mul(VC, A(I1 + j, i_ + i1_)))
+                        Next i_
+                    End If
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' X*A^(-T)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = N - 1# To 0# Step -1
+                    VC = C_Complex(0#)
+                    VD = C_Complex(1#)
+                    If j < N - 1# Then
+                        i1_ = (J1 + j + 1#) - (J2 + j + 1#)
+                        VC = C_Complex(0#)
+                        For i_ = J2 + j + 1# To J2 + N - 1# Step 1
+                            VC = C_Add(VC, C_Mul(X(I2 + i, i_), A(I1 + j, i_ + i1_)))
+                        Next i_
+                    End If
+                    If Not Isunit Then
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = C_Div(C_Sub(X(I2 + i, J2 + j), VC), VD)
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 2# Then
+            
+            '
+            ' X*A^(-H)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = N - 1# To 0# Step -1
+                    VC = C_Complex(0#)
+                    VD = C_Complex(1#)
+                    If j < N - 1# Then
+                        i1_ = (J1 + j + 1#) - (J2 + j + 1#)
+                        VC = C_Complex(0#)
+                        For i_ = J2 + j + 1# To J2 + N - 1# Step 1
+                            VC = C_Add(VC, C_Mul(X(I2 + i, i_), Conj(A(I1 + j, i_ + i1_))))
+                        Next i_
+                    End If
+                    If Not Isunit Then
+                        VD = Conj(A(I1 + j, J1 + j))
+                    End If
+                    X(I2 + i, J2 + j) = C_Div(C_Sub(X(I2 + i, J2 + j), VC), VD)
+                Next j
+            Next i
+            Exit Sub
+        End If
+    Else
+        
+        '
+        ' Lower triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' X*A^(-1)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = N - 1# To 0# Step -1
+                    If Isunit Then
+                        VD = C_Complex(1#)
+                    Else
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = C_Div(X(I2 + i, J2 + j), VD)
+                    If j > 0# Then
+                        VC = X(I2 + i, J2 + j)
+                        i1_ = (J1) - (J2)
+                        For i_ = J2 To J2 + j - 1# Step 1
+                            X(I2 + i, i_) = C_Sub(X(I2 + i, i_), C_Mul(VC, A(I1 + j, i_ + i1_)))
+                        Next i_
+                    End If
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' X*A^(-T)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    VC = C_Complex(0#)
+                    VD = C_Complex(1#)
+                    If j > 0# Then
+                        i1_ = (J1) - (J2)
+                        VC = C_Complex(0#)
+                        For i_ = J2 To J2 + j - 1# Step 1
+                            VC = C_Add(VC, C_Mul(X(I2 + i, i_), A(I1 + j, i_ + i1_)))
+                        Next i_
+                    End If
+                    If Not Isunit Then
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = C_Div(C_Sub(X(I2 + i, J2 + j), VC), VD)
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 2# Then
+            
+            '
+            ' X*A^(-H)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    VC = C_Complex(0#)
+                    VD = C_Complex(1#)
+                    If j > 0# Then
+                        i1_ = (J1) - (J2)
+                        VC = C_Complex(0#)
+                        For i_ = J2 To J2 + j - 1# Step 1
+                            VC = C_Add(VC, C_Mul(X(I2 + i, i_), Conj(A(I1 + j, i_ + i1_))))
+                        Next i_
+                    End If
+                    If Not Isunit Then
+                        VD = Conj(A(I1 + j, J1 + j))
+                    End If
+                    X(I2 + i, J2 + j) = C_Div(C_Sub(X(I2 + i, J2 + j), VC), VD)
+                Next j
+            Next i
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Level-2 subroutine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixLeftTRSM2(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Complex, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Complex, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim VC As Complex
+    Dim VD As Complex
+    Dim i_ As Long
+    
+    '
+    ' Special case
+    '
+    If N * M = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try to call fast TRSM
+    '
+    If CMatrixLeftTRSMF(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2) Then
+        Exit Sub
+    End If
+    
+    '
+    ' General case
+    '
+    If IsUpper Then
+        
+        '
+        ' Upper triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' A^(-1)*X
+            '
+            For i = M - 1# To 0# Step -1
+                For j = i + 1# To M - 1# Step 1
+                    VC = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + i, i_) = C_Sub(X(I2 + i, i_), C_Mul(VC, X(I2 + j, i_)))
+                    Next i_
+                Next j
+                If Not Isunit Then
+                    VD = C_RDiv(1#, A(I1 + i, J1 + i))
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + i, i_) = C_Mul(VD, X(I2 + i, i_))
+                    Next i_
+                End If
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' A^(-T)*X
+            '
+            For i = 0# To M - 1# Step 1
+                If Isunit Then
+                    VD = C_Complex(1#)
+                Else
+                    VD = C_RDiv(1#, A(I1 + i, J1 + i))
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = C_Mul(VD, X(I2 + i, i_))
+                Next i_
+                For j = i + 1# To M - 1# Step 1
+                    VC = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + j, i_) = C_Sub(X(I2 + j, i_), C_Mul(VC, X(I2 + i, i_)))
+                    Next i_
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 2# Then
+            
+            '
+            ' A^(-H)*X
+            '
+            For i = 0# To M - 1# Step 1
+                If Isunit Then
+                    VD = C_Complex(1#)
+                Else
+                    VD = C_RDiv(1#, Conj(A(I1 + i, J1 + i)))
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = C_Mul(VD, X(I2 + i, i_))
+                Next i_
+                For j = i + 1# To M - 1# Step 1
+                    VC = Conj(A(I1 + i, J1 + j))
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + j, i_) = C_Sub(X(I2 + j, i_), C_Mul(VC, X(I2 + i, i_)))
+                    Next i_
+                Next j
+            Next i
+            Exit Sub
+        End If
+    Else
+        
+        '
+        ' Lower triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' A^(-1)*X
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To i - 1# Step 1
+                    VC = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + i, i_) = C_Sub(X(I2 + i, i_), C_Mul(VC, X(I2 + j, i_)))
+                    Next i_
+                Next j
+                If Isunit Then
+                    VD = C_Complex(1#)
+                Else
+                    VD = C_RDiv(1#, A(I1 + j, J1 + j))
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = C_Mul(VD, X(I2 + i, i_))
+                Next i_
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' A^(-T)*X
+            '
+            For i = M - 1# To 0# Step -1
+                If Isunit Then
+                    VD = C_Complex(1#)
+                Else
+                    VD = C_RDiv(1#, A(I1 + i, J1 + i))
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = C_Mul(VD, X(I2 + i, i_))
+                Next i_
+                For j = i - 1# To 0# Step -1
+                    VC = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + j, i_) = C_Sub(X(I2 + j, i_), C_Mul(VC, X(I2 + i, i_)))
+                    Next i_
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 2# Then
+            
+            '
+            ' A^(-H)*X
+            '
+            For i = M - 1# To 0# Step -1
+                If Isunit Then
+                    VD = C_Complex(1#)
+                Else
+                    VD = C_RDiv(1#, Conj(A(I1 + i, J1 + i)))
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = C_Mul(VD, X(I2 + i, i_))
+                Next i_
+                For j = i - 1# To 0# Step -1
+                    VC = Conj(A(I1 + i, J1 + j))
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + j, i_) = C_Sub(X(I2 + j, i_), C_Mul(VC, X(I2 + i, i_)))
+                    Next i_
+                Next j
+            Next i
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Level 2 subroutine
+'
+'  -- ALGLIB routine --
+'     15.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixRightTRSM2(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Double, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim VR As Double
+    Dim VD As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Special case
+    '
+    If N * M = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try to use "fast" code
+    '
+    If RMatrixRightTRSMF(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2) Then
+        Exit Sub
+    End If
+    
+    '
+    ' General case
+    '
+    If IsUpper Then
+        
+        '
+        ' Upper triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' X*A^(-1)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    If Isunit Then
+                        VD = 1#
+                    Else
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = X(I2 + i, J2 + j) / VD
+                    If j < N - 1# Then
+                        VR = X(I2 + i, J2 + j)
+                        i1_ = (J1 + j + 1#) - (J2 + j + 1#)
+                        For i_ = J2 + j + 1# To J2 + N - 1# Step 1
+                            X(I2 + i, i_) = X(I2 + i, i_) - VR * A(I1 + j, i_ + i1_)
+                        Next i_
+                    End If
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' X*A^(-T)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = N - 1# To 0# Step -1
+                    VR = 0#
+                    VD = 1#
+                    If j < N - 1# Then
+                        i1_ = (J1 + j + 1#) - (J2 + j + 1#)
+                        VR = 0#
+                        For i_ = J2 + j + 1# To J2 + N - 1# Step 1
+                            VR = VR + X(I2 + i, i_) * A(I1 + j, i_ + i1_)
+                        Next i_
+                    End If
+                    If Not Isunit Then
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = (X(I2 + i, J2 + j) - VR) / VD
+                Next j
+            Next i
+            Exit Sub
+        End If
+    Else
+        
+        '
+        ' Lower triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' X*A^(-1)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = N - 1# To 0# Step -1
+                    If Isunit Then
+                        VD = 1#
+                    Else
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = X(I2 + i, J2 + j) / VD
+                    If j > 0# Then
+                        VR = X(I2 + i, J2 + j)
+                        i1_ = (J1) - (J2)
+                        For i_ = J2 To J2 + j - 1# Step 1
+                            X(I2 + i, i_) = X(I2 + i, i_) - VR * A(I1 + j, i_ + i1_)
+                        Next i_
+                    End If
+                Next j
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' X*A^(-T)
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    VR = 0#
+                    VD = 1#
+                    If j > 0# Then
+                        i1_ = (J1) - (J2)
+                        VR = 0#
+                        For i_ = J2 To J2 + j - 1# Step 1
+                            VR = VR + X(I2 + i, i_) * A(I1 + j, i_ + i1_)
+                        Next i_
+                    End If
+                    If Not Isunit Then
+                        VD = A(I1 + j, J1 + j)
+                    End If
+                    X(I2 + i, J2 + j) = (X(I2 + i, J2 + j) - VR) / VD
+                Next j
+            Next i
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Level 2 subroutine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixLeftTRSM2(ByVal M As Long, _
+         ByVal N As Long, _
+         ByRef A() As Double, _
+         ByVal I1 As Long, _
+         ByVal J1 As Long, _
+         ByVal IsUpper As Boolean, _
+         ByVal Isunit As Boolean, _
+         ByVal OpType As Long, _
+         ByRef X() As Double, _
+         ByVal I2 As Long, _
+         ByVal J2 As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim VR As Double
+    Dim VD As Double
+    Dim i_ As Long
+    
+    '
+    ' Special case
+    '
+    If N * M = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try fast code
+    '
+    If RMatrixLeftTRSMF(M, N, A, I1, J1, IsUpper, Isunit, OpType, X, I2, J2) Then
+        Exit Sub
+    End If
+    
+    '
+    ' General case
+    '
+    If IsUpper Then
+        
+        '
+        ' Upper triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' A^(-1)*X
+            '
+            For i = M - 1# To 0# Step -1
+                For j = i + 1# To M - 1# Step 1
+                    VR = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + i, i_) = X(I2 + i, i_) - VR * X(I2 + j, i_)
+                    Next i_
+                Next j
+                If Not Isunit Then
+                    VD = 1# / A(I1 + i, J1 + i)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + i, i_) = VD * X(I2 + i, i_)
+                    Next i_
+                End If
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' A^(-T)*X
+            '
+            For i = 0# To M - 1# Step 1
+                If Isunit Then
+                    VD = 1#
+                Else
+                    VD = 1# / A(I1 + i, J1 + i)
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = VD * X(I2 + i, i_)
+                Next i_
+                For j = i + 1# To M - 1# Step 1
+                    VR = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + j, i_) = X(I2 + j, i_) - VR * X(I2 + i, i_)
+                    Next i_
+                Next j
+            Next i
+            Exit Sub
+        End If
+    Else
+        
+        '
+        ' Lower triangular matrix
+        '
+        If OpType = 0# Then
+            
+            '
+            ' A^(-1)*X
+            '
+            For i = 0# To M - 1# Step 1
+                For j = 0# To i - 1# Step 1
+                    VR = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + i, i_) = X(I2 + i, i_) - VR * X(I2 + j, i_)
+                    Next i_
+                Next j
+                If Isunit Then
+                    VD = 1#
+                Else
+                    VD = 1# / A(I1 + j, J1 + j)
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = VD * X(I2 + i, i_)
+                Next i_
+            Next i
+            Exit Sub
+        End If
+        If OpType = 1# Then
+            
+            '
+            ' A^(-T)*X
+            '
+            For i = M - 1# To 0# Step -1
+                If Isunit Then
+                    VD = 1#
+                Else
+                    VD = 1# / A(I1 + i, J1 + i)
+                End If
+                For i_ = J2 To J2 + N - 1# Step 1
+                    X(I2 + i, i_) = VD * X(I2 + i, i_)
+                Next i_
+                For j = i - 1# To 0# Step -1
+                    VR = A(I1 + i, J1 + j)
+                    For i_ = J2 To J2 + N - 1# Step 1
+                        X(I2 + j, i_) = X(I2 + j, i_) - VR * X(I2 + i, i_)
+                    Next i_
+                Next j
+            Next i
+            Exit Sub
+        End If
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Level 2 subroutine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixSYRK2(ByVal N As Long, _
+         ByVal K As Long, _
+         ByVal Alpha As Double, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByVal Beta As Double, _
+         ByRef C() As Complex, _
+         ByVal IC As Long, _
+         ByVal JC As Long, _
+         ByVal IsUpper As Boolean)
+    Dim i As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim V As Complex
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Fast exit (nothing to be done)
+    '
+    If (Alpha = 0# Or K = 0#) And Beta = 1# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try to call fast SYRK
+    '
+    If CMatrixSYRKF(N, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper) Then
+        Exit Sub
+    End If
+    
+    '
+    ' SYRK
+    '
+    If OpTypeA = 0# Then
+        
+        '
+        ' C=alpha*A*A^H+beta*C
+        '
+        For i = 0# To N - 1# Step 1
+            If IsUpper Then
+                J1 = i
+                J2 = N - 1#
+            Else
+                J1 = 0#
+                J2 = i
+            End If
+            For j = J1 To J2 Step 1
+                If Alpha <> 0# And K > 0# Then
+                    V = C_Complex(0#)
+                    For i_ = JA To JA + K - 1# Step 1
+                        V = C_Add(V, C_Mul(A(IA + i, i_), Conj(A(IA + j, i_))))
+                    Next i_
+                Else
+                    V = C_Complex(0#)
+                End If
+                If Beta = 0# Then
+                    C(IC + i, JC + j) = C_MulR(V, Alpha)
+                Else
+                    C(IC + i, JC + j) = C_Add(C_MulR(C(IC + i, JC + j), Beta), C_MulR(V, Alpha))
+                End If
+            Next j
+        Next i
+        Exit Sub
+    Else
+        
+        '
+        ' C=alpha*A^H*A+beta*C
+        '
+        For i = 0# To N - 1# Step 1
+            If IsUpper Then
+                J1 = i
+                J2 = N - 1#
+            Else
+                J1 = 0#
+                J2 = i
+            End If
+            If Beta = 0# Then
+                For j = J1 To J2 Step 1
+                    C(IC + i, JC + j) = C_Complex(0#)
+                Next j
+            Else
+                For i_ = JC + J1 To JC + J2 Step 1
+                    C(IC + i, i_) = C_MulR(C(IC + i, i_), Beta)
+                Next i_
+            End If
+        Next i
+        For i = 0# To K - 1# Step 1
+            For j = 0# To N - 1# Step 1
+                If IsUpper Then
+                    J1 = j
+                    J2 = N - 1#
+                Else
+                    J1 = 0#
+                    J2 = j
+                End If
+                V = C_MulR(Conj(A(IA + i, JA + j)), Alpha)
+                i1_ = (JA + J1) - (JC + J1)
+                For i_ = JC + J1 To JC + J2 Step 1
+                    C(IC + j, i_) = C_Add(C(IC + j, i_), C_Mul(V, A(IA + i, i_ + i1_)))
+                Next i_
+            Next j
+        Next i
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Level 2 subrotuine
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixSYRK2(ByVal N As Long, _
+         ByVal K As Long, _
+         ByVal Alpha As Double, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByVal Beta As Double, _
+         ByRef C() As Double, _
+         ByVal IC As Long, _
+         ByVal JC As Long, _
+         ByVal IsUpper As Boolean)
+    Dim i As Long
+    Dim j As Long
+    Dim J1 As Long
+    Dim J2 As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' Fast exit (nothing to be done)
+    '
+    If (Alpha = 0# Or K = 0#) And Beta = 1# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try to call fast SYRK
+    '
+    If RMatrixSYRKF(N, K, Alpha, A, IA, JA, OpTypeA, Beta, C, IC, JC, IsUpper) Then
+        Exit Sub
+    End If
+    
+    '
+    ' SYRK
+    '
+    If OpTypeA = 0# Then
+        
+        '
+        ' C=alpha*A*A^H+beta*C
+        '
+        For i = 0# To N - 1# Step 1
+            If IsUpper Then
+                J1 = i
+                J2 = N - 1#
+            Else
+                J1 = 0#
+                J2 = i
+            End If
+            For j = J1 To J2 Step 1
+                If Alpha <> 0# And K > 0# Then
+                    V = 0#
+                    For i_ = JA To JA + K - 1# Step 1
+                        V = V + A(IA + i, i_) * A(IA + j, i_)
+                    Next i_
+                Else
+                    V = 0#
+                End If
+                If Beta = 0# Then
+                    C(IC + i, JC + j) = Alpha * V
+                Else
+                    C(IC + i, JC + j) = Beta * C(IC + i, JC + j) + Alpha * V
+                End If
+            Next j
+        Next i
+        Exit Sub
+    Else
+        
+        '
+        ' C=alpha*A^H*A+beta*C
+        '
+        For i = 0# To N - 1# Step 1
+            If IsUpper Then
+                J1 = i
+                J2 = N - 1#
+            Else
+                J1 = 0#
+                J2 = i
+            End If
+            If Beta = 0# Then
+                For j = J1 To J2 Step 1
+                    C(IC + i, JC + j) = 0#
+                Next j
+            Else
+                For i_ = JC + J1 To JC + J2 Step 1
+                    C(IC + i, i_) = Beta * C(IC + i, i_)
+                Next i_
+            End If
+        Next i
+        For i = 0# To K - 1# Step 1
+            For j = 0# To N - 1# Step 1
+                If IsUpper Then
+                    J1 = j
+                    J2 = N - 1#
+                Else
+                    J1 = 0#
+                    J2 = j
+                End If
+                V = Alpha * A(IA + i, JA + j)
+                i1_ = (JA + J1) - (JC + J1)
+                For i_ = JC + J1 To JC + J2 Step 1
+                    C(IC + j, i_) = C(IC + j, i_) + V * A(IA + i, i_ + i1_)
+                Next i_
+            Next j
+        Next i
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'GEMM kernel
+'
+'  -- ALGLIB routine --
+'     16.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub CMatrixGEMMK(ByVal M As Long, _
+         ByVal N As Long, _
+         ByVal K As Long, _
+         ByRef Alpha_ As Complex, _
+         ByRef A() As Complex, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByRef B() As Complex, _
+         ByVal IB As Long, _
+         ByVal JB As Long, _
+         ByVal OpTypeB As Long, _
+         ByRef Beta_ As Complex, _
+         ByRef C() As Complex, _
+         ByVal IC As Long, _
+         ByVal JC As Long)
+    Dim Alpha As Complex
+    Dim Beta As Complex
+    Dim i As Long
+    Dim j As Long
+    Dim V As Complex
+    Dim i_ As Long
+    Dim i1_ As Long
+    Alpha = Alpha_
+    Beta = Beta_
+    
+    '
+    ' Special case
+    '
+    If M * N = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try optimized code
+    '
+    If CMatrixGEMMF(M, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC) Then
+        Exit Sub
+    End If
+    
+    '
+    ' Another special case
+    '
+    If K = 0# Then
+        If C_NotEqualR(Beta, 0#) Then
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    C(IC + i, JC + j) = C_Mul(Beta, C(IC + i, JC + j))
+                Next j
+            Next i
+        Else
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    C(IC + i, JC + j) = C_Complex(0#)
+                Next j
+            Next i
+        End If
+        Exit Sub
+    End If
+    
+    '
+    ' General case
+    '
+    If OpTypeA = 0# And OpTypeB <> 0# Then
+        
+        '
+        ' A*B'
+        '
+        For i = 0# To M - 1# Step 1
+            For j = 0# To N - 1# Step 1
+                If K = 0# Or C_EqualR(Alpha, 0#) Then
+                    V = C_Complex(0#)
+                Else
+                    If OpTypeB = 1# Then
+                        i1_ = (JB) - (JA)
+                        V = C_Complex(0#)
+                        For i_ = JA To JA + K - 1# Step 1
+                            V = C_Add(V, C_Mul(A(IA + i, i_), B(IB + j, i_ + i1_)))
+                        Next i_
+                    Else
+                        i1_ = (JB) - (JA)
+                        V = C_Complex(0#)
+                        For i_ = JA To JA + K - 1# Step 1
+                            V = C_Add(V, C_Mul(A(IA + i, i_), Conj(B(IB + j, i_ + i1_))))
+                        Next i_
+                    End If
+                End If
+                If C_EqualR(Beta, 0#) Then
+                    C(IC + i, JC + j) = C_Mul(Alpha, V)
+                Else
+                    C(IC + i, JC + j) = C_Add(C_Mul(Beta, C(IC + i, JC + j)), C_Mul(Alpha, V))
+                End If
+            Next j
+        Next i
+        Exit Sub
+    End If
+    If OpTypeA = 0# And OpTypeB = 0# Then
+        
+        '
+        ' A*B
+        '
+        For i = 0# To M - 1# Step 1
+            If C_NotEqualR(Beta, 0#) Then
+                For i_ = JC To JC + N - 1# Step 1
+                    C(IC + i, i_) = C_Mul(Beta, C(IC + i, i_))
+                Next i_
+            Else
+                For j = 0# To N - 1# Step 1
+                    C(IC + i, JC + j) = C_Complex(0#)
+                Next j
+            End If
+            If C_NotEqualR(Alpha, 0#) Then
+                For j = 0# To K - 1# Step 1
+                    V = C_Mul(Alpha, A(IA + i, JA + j))
+                    i1_ = (JB) - (JC)
+                    For i_ = JC To JC + N - 1# Step 1
+                        C(IC + i, i_) = C_Add(C(IC + i, i_), C_Mul(V, B(IB + j, i_ + i1_)))
+                    Next i_
+                Next j
+            End If
+        Next i
+        Exit Sub
+    End If
+    If OpTypeA <> 0# And OpTypeB <> 0# Then
+        
+        '
+        ' A'*B'
+        '
+        For i = 0# To M - 1# Step 1
+            For j = 0# To N - 1# Step 1
+                If C_EqualR(Alpha, 0#) Then
+                    V = C_Complex(0#)
+                Else
+                    If OpTypeA = 1# Then
+                        If OpTypeB = 1# Then
+                            i1_ = (JB) - (IA)
+                            V = C_Complex(0#)
+                            For i_ = IA To IA + K - 1# Step 1
+                                V = C_Add(V, C_Mul(A(i_, JA + i), B(IB + j, i_ + i1_)))
+                            Next i_
+                        Else
+                            i1_ = (JB) - (IA)
+                            V = C_Complex(0#)
+                            For i_ = IA To IA + K - 1# Step 1
+                                V = C_Add(V, C_Mul(A(i_, JA + i), Conj(B(IB + j, i_ + i1_))))
+                            Next i_
+                        End If
+                    Else
+                        If OpTypeB = 1# Then
+                            i1_ = (JB) - (IA)
+                            V = C_Complex(0#)
+                            For i_ = IA To IA + K - 1# Step 1
+                                V = C_Add(V, C_Mul(Conj(A(i_, JA + i)), B(IB + j, i_ + i1_)))
+                            Next i_
+                        Else
+                            i1_ = (JB) - (IA)
+                            V = C_Complex(0#)
+                            For i_ = IA To IA + K - 1# Step 1
+                                V = C_Add(V, C_Mul(Conj(A(i_, JA + i)), Conj(B(IB + j, i_ + i1_))))
+                            Next i_
+                        End If
+                    End If
+                End If
+                If C_EqualR(Beta, 0#) Then
+                    C(IC + i, JC + j) = C_Mul(Alpha, V)
+                Else
+                    C(IC + i, JC + j) = C_Add(C_Mul(Beta, C(IC + i, JC + j)), C_Mul(Alpha, V))
+                End If
+            Next j
+        Next i
+        Exit Sub
+    End If
+    If OpTypeA <> 0# And OpTypeB = 0# Then
+        
+        '
+        ' A'*B
+        '
+        If C_EqualR(Beta, 0#) Then
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    C(IC + i, JC + j) = C_Complex(0#)
+                Next j
+            Next i
+        Else
+            For i = 0# To M - 1# Step 1
+                For i_ = JC To JC + N - 1# Step 1
+                    C(IC + i, i_) = C_Mul(Beta, C(IC + i, i_))
+                Next i_
+            Next i
+        End If
+        If C_NotEqualR(Alpha, 0#) Then
+            For j = 0# To K - 1# Step 1
+                For i = 0# To M - 1# Step 1
+                    If OpTypeA = 1# Then
+                        V = C_Mul(Alpha, A(IA + j, JA + i))
+                    Else
+                        V = C_Mul(Alpha, Conj(A(IA + j, JA + i)))
+                    End If
+                    i1_ = (JB) - (JC)
+                    For i_ = JC To JC + N - 1# Step 1
+                        C(IC + i, i_) = C_Add(C(IC + i, i_), C_Mul(V, B(IB + j, i_ + i1_)))
+                    Next i_
+                Next i
+            Next j
+        End If
+        Exit Sub
+    End If
+End Sub
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'GEMM kernel
+'
+'  -- ALGLIB routine --
+'     16.12.2009
+'     Bochkanov Sergey
+'
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Private Sub RMatrixGEMMK(ByVal M As Long, _
+         ByVal N As Long, _
+         ByVal K As Long, _
+         ByVal Alpha As Double, _
+         ByRef A() As Double, _
+         ByVal IA As Long, _
+         ByVal JA As Long, _
+         ByVal OpTypeA As Long, _
+         ByRef B() As Double, _
+         ByVal IB As Long, _
+         ByVal JB As Long, _
+         ByVal OpTypeB As Long, _
+         ByVal Beta As Double, _
+         ByRef C() As Double, _
+         ByVal IC As Long, _
+         ByVal JC As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim V As Double
+    Dim i_ As Long
+    Dim i1_ As Long
+    
+    '
+    ' if matrix size is zero
+    '
+    If M * N = 0# Then
+        Exit Sub
+    End If
+    
+    '
+    ' Try optimized code
+    '
+    If RMatrixGEMMF(M, N, K, Alpha, A, IA, JA, OpTypeA, B, IB, JB, OpTypeB, Beta, C, IC, JC) Then
+        Exit Sub
+    End If
+    
+    '
+    ' if K=0, then C=Beta*C
+    '
+    If K = 0# Then
+        If Beta <> 1# Then
+            If Beta <> 0# Then
+                For i = 0# To M - 1# Step 1
+                    For j = 0# To N - 1# Step 1
+                        C(IC + i, JC + j) = Beta * C(IC + i, JC + j)
+                    Next j
+                Next i
+            Else
+                For i = 0# To M - 1# Step 1
+                    For j = 0# To N - 1# Step 1
+                        C(IC + i, JC + j) = 0#
+                    Next j
+                Next i
+            End If
+        End If
+        Exit Sub
+    End If
+    
+    '
+    ' General case
+    '
+    If OpTypeA = 0# And OpTypeB <> 0# Then
+        
+        '
+        ' A*B'
+        '
+        For i = 0# To M - 1# Step 1
+            For j = 0# To N - 1# Step 1
+                If K = 0# Or Alpha = 0# Then
+                    V = 0#
+                Else
+                    i1_ = (JB) - (JA)
+                    V = 0#
+                    For i_ = JA To JA + K - 1# Step 1
+                        V = V + A(IA + i, i_) * B(IB + j, i_ + i1_)
+                    Next i_
+                End If
+                If Beta = 0# Then
+                    C(IC + i, JC + j) = Alpha * V
+                Else
+                    C(IC + i, JC + j) = Beta * C(IC + i, JC + j) + Alpha * V
+                End If
+            Next j
+        Next i
+        Exit Sub
+    End If
+    If OpTypeA = 0# And OpTypeB = 0# Then
+        
+        '
+        ' A*B
+        '
+        For i = 0# To M - 1# Step 1
+            If Beta <> 0# Then
+                For i_ = JC To JC + N - 1# Step 1
+                    C(IC + i, i_) = Beta * C(IC + i, i_)
+                Next i_
+            Else
+                For j = 0# To N - 1# Step 1
+                    C(IC + i, JC + j) = 0#
+                Next j
+            End If
+            If Alpha <> 0# Then
+                For j = 0# To K - 1# Step 1
+                    V = Alpha * A(IA + i, JA + j)
+                    i1_ = (JB) - (JC)
+                    For i_ = JC To JC + N - 1# Step 1
+                        C(IC + i, i_) = C(IC + i, i_) + V * B(IB + j, i_ + i1_)
+                    Next i_
+                Next j
+            End If
+        Next i
+        Exit Sub
+    End If
+    If OpTypeA <> 0# And OpTypeB <> 0# Then
+        
+        '
+        ' A'*B'
+        '
+        For i = 0# To M - 1# Step 1
+            For j = 0# To N - 1# Step 1
+                If Alpha = 0# Then
+                    V = 0#
+                Else
+                    i1_ = (JB) - (IA)
+                    V = 0#
+                    For i_ = IA To IA + K - 1# Step 1
+                        V = V + A(i_, JA + i) * B(IB + j, i_ + i1_)
+                    Next i_
+                End If
+                If Beta = 0# Then
+                    C(IC + i, JC + j) = Alpha * V
+                Else
+                    C(IC + i, JC + j) = Beta * C(IC + i, JC + j) + Alpha * V
+                End If
+            Next j
+        Next i
+        Exit Sub
+    End If
+    If OpTypeA <> 0# And OpTypeB = 0# Then
+        
+        '
+        ' A'*B
+        '
+        If Beta = 0# Then
+            For i = 0# To M - 1# Step 1
+                For j = 0# To N - 1# Step 1
+                    C(IC + i, JC + j) = 0#
+                Next j
+            Next i
+        Else
+            For i = 0# To M - 1# Step 1
+                For i_ = JC To JC + N - 1# Step 1
+                    C(IC + i, i_) = Beta * C(IC + i, i_)
+                Next i_
+            Next i
+        End If
+        If Alpha <> 0# Then
+            For j = 0# To K - 1# Step 1
+                For i = 0# To M - 1# Step 1
+                    V = Alpha * A(IA + j, JA + i)
+                    i1_ = (JB) - (JC)
+                    For i_ = JC To JC + N - 1# Step 1
+                        C(IC + i, i_) = C(IC + i, i_) + V * B(IB + j, i_ + i1_)
+                    Next i_
+                Next i
+            Next j
+        End If
+        Exit Sub
+    End If
+End Sub
+
