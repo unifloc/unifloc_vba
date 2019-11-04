@@ -9,23 +9,20 @@ Option Explicit
 Option Base 0
 Implements IWell
 Public Event ReportProgress(msg As String)
-Public curve As New CCurves           ' коллекция кривых с результатами расчетов
-Public trajectory_tub As New CPipeTrajectory         ' полная траектория скважины с инклинометрии (основной способ задания скважины)
-Public trajectory_cas As New CPipeTrajectory         ' полная траектория скважины с инклинометрии (основной способ задания скважины)
+Private ESP_ As CESPsystemSimple
+Public curve As New CCurves                     ' коллекция кривых с результатами расчетов
+Public trajectory_tub As New CPipeTrajectory    ' полная траектория скважины с инклинометрии (основной способ задания скважины)
+Public trajectory_cas As New CPipeTrajectory    ' полная траектория скважины с инклинометрии (основной способ задания скважины)
 Public h_perf_m As Double
 Public h_tub_m As Double
 Public isCalcCasing As Boolean
 Public isCalcESPtemp As Boolean
-'
-' ============ general well objects ===========
 ' штуцер установленный на поверхности
 ' choke always exist in well (but can have diam = 0 which means - no influence on flow)
-Private choke_ As New Cchoke
+Public choke As New Cchoke
 ' input fluid object
-Private fluid_ As New CPVT                  ' флюид из пласта
-' параметры УЭЦН
-Private ESP_ As CESPsystemSimple
-' abbient formation object needed for full temperature calculation
+Private fluid_ As New CPVT                      ' флюид из пласта
+' ambient formation object needed for full temperature calculation
 ' must be accessed through property - in order to pass it to pipes properly
 Private ambient_formation_ As New CAmbientFormation
 ' calculated parameters for well
@@ -43,21 +40,20 @@ Private t_bh_C_ As Double
 Private t_int_C_ As Double
 Private tres_C_ As Double
 Private param_ As PARAMCALC                 ' параметры расчета по трубе
- ' поправочные коэффициенты для расчета распределения давления
+' поправочные коэффициенты для расчета распределения давления
 Private c_calibr_grav_ As Double
 Private c_calibr_fric_ As Double
-' ============ESP well objects =======================================
 ' ключевые элементы конструкции
 Private pipe_HspHvd_ As New CPipe           ' от приема насоса до забоя (перфорации)      ' pipe segment from bottom to tubing setting depth
 Private pipe_WHeadHsp_Tubing_ As New CPipe  ' от приема насоса по устья скважины до нкт
 Private pipe_WHeadHsp_Casing_ As New CPipe  ' от приема насоса до устья
 Private pipe_WHeadHsp_Casing_Gas_ As New CPipe  ' от приема насоса до устья газовая шапка в затрубе с учетом плотности газа
-' ===========================================
 'данные расчета
 Private h_sp_m_ As Double                   ' tubing depth
 Private H_dyn_m_ As Double                    ' динамический уровень
 Private ESP_on As Boolean                 '  УЭЦН включен или нет (флаг)
-' ============ constructor ====================
+' =============================================================================
+' ============ constructor ====================================================
 Private Sub Class_Initialize()
     With param_
         .correlation = BeggsBrill
@@ -72,28 +68,6 @@ Private Sub Class_Initialize()
     isCalcCasing = True
     isCalcESPtemp = False
 End Sub
-'------------------------------------------------------------
-' choke general  properties
-'------------------------------------------------------------
-Property Get choke() As Cchoke
-   Set choke = choke_
-End Property
-Public Sub set_choke(dchoke_mm, Optional dtub_mm = 62)
-    ' установка параметров штуцера
-    If Not IsMissing(dchoke_mm) Then
-       choke_.d_choke_m = dchoke_mm / 1000
-       choke_.d_down_m = dtub_mm / 1000
-       choke_.d_up_m = dtub_mm / 1000
-    Else
-       Call clearChoke
-    End If
-End Sub
-Public Sub clearChoke()
-   choke_.d_choke_m = 0
-End Sub
-Private Function is_choke() As Boolean
-   is_choke = choke_.d_choke_m > 0
-End Function
 '------------------------------------------------------------
 ' fluid general properties
 '------------------------------------------------------------
@@ -174,6 +148,17 @@ Public Property Let temp_correlation(val As TEMP_CALC_METHOD)
     prm.temp_method = val
     param = prm
 End Property
+Public Sub set_param(Optional calc_along_coord As Boolean, _
+                     Optional flow_along_coord As Boolean, _
+                     Optional ByVal hcor As H_CORRELATION, _
+                     Optional temp_method As TEMP_CALC_METHOD)
+    If Not IsMissing(calc_along_coord) Then param_.CalcAlongCoord = calc_along_coord
+    If Not IsMissing(flow_along_coord) Then param_.FlowAlongCoord = flow_along_coord
+    If Not IsMissing(hcor) Then param_.correlation = hcor
+    If Not IsMissing(temp_method) Then param_.temp_method = temp_method
+    
+    param = param_
+End Sub
 Public Property Get param() As PARAMCALC
     param = param_
 End Property
@@ -345,8 +330,7 @@ On Error GoTo err1:
     PT_wf_.p_atma = pwf_atma
     PT_wf_.t_C = t_bh_C
     ' 2. Рассчитывается давление на приеме насоса PIn и температура в потоке перед насосом TbIт
-    ' pipe_HspHvd_ - труба от забоя до приема, задаем расчет параметров снизу-вверх
-    'pipe_HspHvd_.param = param_calc_along_flow(hydraulic_correlation, temp_correlation)
+    '    pipe_HspHvd_ - труба от забоя до приема, задаем расчет параметров снизу-вверх
     pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=False, _
                                              hcor:=hydraulic_correlation, _
@@ -392,6 +376,7 @@ err1:
 End Function
 Public Function calc_plin_pwf_atma( _
                              ByVal pwf_atma As Double, _
+                    Optional ByVal t_C As Double, _
                     Optional ByVal saveCurve As CALC_RESULTS = nocurves _
                                   ) As Double
 ' @brief расчет давления на устье через забойное давление (снизу -> вверх)
@@ -405,21 +390,19 @@ Dim pcur As CInterpolation
 On Error GoTo err1:
     ' 1. Начало расчета. Заданы забойное давление p_wf, температура на забое скважины Tbh
     PT_wf_.p_atma = pwf_atma
+    If Not IsMissing(t_C) Then t_bh_C_ = t_C
     PT_wf_.t_C = t_bh_C
     ' 2. Рассчитывается давление на приеме насоса PIn и температура в потоке перед насосом TbIт
-    ' pipe_HspHvd_ - труба от забоя до приема, задаем расчет параметров снизу-вверх
+    '    pipe_HspHvd_ - труба от забоя до приема, задаем расчет параметров снизу-вверх
     pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=False, _
                                              flow_along_coord:=False, _
                                              hcor:=hydraulic_correlation, _
                                              temp_method:=temp_correlation)
     ' Расчитываем давление на приеме (p_wf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
-    pipe_HspHvd_.t_calc_C = t_bh_C
-    PT_int_ = pipe_HspHvd_.calc_dPipe(PT_wf_.p_atma, saveCurve)
-    ' еслт давление на приеме меньше 1 значит поток не доходит до насоса, значит надо поправить расчеты
+    'pipe_HspHvd_.t_calc_C = t_bh_C
+    PT_int_ = pipe_HspHvd_.calc_dPipe(PT_wf_.p_atma, t_bh_C_, saveCurve:=saveCurve)
+    ' если давление на приеме меньше 1 значит поток не доходит до насоса, значит надо поправить расчеты
     If PT_int_.p_atma < 1 Then
-'        pipe_HspHvd_.Param = ParamCalcAlongFlow(hydraulic_correlation, temp_correlation)
-'        PT_int_.p_atma = 1
-'        PT_wf_ = pipe_HspHvd_.calc_dPipe (PT_int_, SaveCurve)              ' стрельнем назад и определим новое давление на приеме
         calc_plin_pwf_atma = 0
         Exit Function
     End If
@@ -446,10 +429,10 @@ On Error GoTo err1:
                                                       hcor:=hydraulic_correlation, _
                                                       temp_method:=temp_correlation)
     pipe_WHeadHsp_Tubing_.t_calc_C = PT_dis_.t_C
-    PT_buf_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_dis_.p_atma, saveCurve)      'calc_Pipe_PIncl_atma(p_dis_atma_, t_dis_C_)
+    PT_buf_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_dis_.p_atma, PT_dis_.t_C, saveCurve)     'calc_Pipe_PIncl_atma(p_dis_atma_, t_dis_C_)
     ' 8. Расчет линейного давления по штуцеру
     On Error GoTo err_choke:
-        If choke_.d_choke_m > 0 Then       ' пока отключено
+        If choke.d_choke_m > 0 Then       ' пока отключено
             PT_lin_ = choke.calc_choke_p_lin(PT_buf_)
             If PT_lin_.p_atma <= 0 Then
                 PT_lin_.p_atma = 0
@@ -463,7 +446,7 @@ b:
     ' то в качестве результатов расчетов сохраняются эти значения
     ' уже подсчитано
     calc_plin_pwf_atma = PT_lin_.p_atma
-    Call Savecurves(saveCurve)
+    Call save_curves(saveCurve)
     Exit Function
 err_choke:
     addLogMsg "CWellESP.calc_plin_pwf_atma: error in choke calculation. p_buf = ", S(PT_buf_.p_atma)
@@ -543,9 +526,6 @@ err1:
         Err.Raise kErrInitCalc, Err.Source, errmsg
     End If
 End Function
-' =============================================================================
-' specific properties and functions
-' =============================================================================
 '------------------------------------------------------------
 ' ESP  properties
 '------------------------------------------------------------
@@ -557,7 +537,6 @@ Public Property Set ESP(val As CESPsystemSimple)
   Set ESP_ = val
   If val Is Nothing Then GoTo noESP:
   ' переводим в состояние "целостность нарушена"
-'  p_Calculated = False
 On Error GoTo noESP
   ESP_on = True
   Set ESP_.fluid = fluid
@@ -722,14 +701,13 @@ On Error GoTo err_casing:
                                              flow_along_coord:=False, _
                                              hcor:=hydraulic_correlation, _
                                              temp_method:=temp_correlation)
-        PT_cas__temp = pipe_WHeadHsp_Casing_.calc_dPipe(PT_int_.p_atma, maincurves)
+        PT_cas__temp = pipe_WHeadHsp_Casing_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, maincurves)
         ' 2. для затруба считаем распределение давления в газовом столбе сверху вниз
         pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=True, _
-                                             hcor:=Gas, _
+                                             hcor:=gas, _
                                              temp_method:=temp_correlation)
-        'pipe_WHeadHsp_Casing_Gas_.fluid.gas_only = True
-        p_PTintgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_cas_.p_atma, maincurves)
+        p_PTintgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_cas_.p_atma, PT_cas_.t_C, maincurves)
         ' 3. найдем пересечение  распределений газа и жидкости в затрубе по давлению
         Set cas_crv = pipe_WHeadHsp_Casing_.p_curve.SubtractCurve(pipe_WHeadHsp_Casing_Gas_.p_curve)
         num_Hd = cas_crv.FindSolutions(0, TS_NO_EXTRPOLATION)  ' ищем количество пересечений
@@ -746,9 +724,9 @@ On Error GoTo err_casing:
             
             pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=False, _
                                          flow_along_coord:=False, _
-                                         hcor:=Gas, _
+                                         hcor:=gas, _
                                          temp_method:=temp_correlation)
-            p_PTcasgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_int_.p_atma, maincurves)
+            p_PTcasgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, maincurves)
             If PT_cas_.p_atma >= p_PTcasgas_temp.p_atma Then
                 H_dyn_m_ = h_sp_m_
                 ' готовим кривую распределения давления в затрубе из двух - для жидкости и для газа
@@ -797,7 +775,11 @@ err_casing:
     RaiseEvent ReportProgress(err_str)
     Err.Raise Err.Number, Err.Source, err_str
  End Sub
-Private Sub add_crv(crv_name As String, crv_pipe_name As String, tub As Boolean, xnam As String, ynam As String, _
+Private Sub add_crv(crv_name As String, _
+                    crv_pipe_name As String, _
+                    tub As Boolean, _
+                    xnam As String, _
+                    ynam As String, _
                     Optional crv_name2 As String)
     If crv_name2 = "" Then
         If tub Then
@@ -812,7 +794,7 @@ Private Sub add_crv(crv_name As String, crv_pipe_name As String, tub As Boolean,
     curve(crv_name).yName = ynam
     
 End Sub
- Private Sub Savecurves(saveCurve As CALC_RESULTS)
+ Private Sub save_curves(saveCurve As CALC_RESULTS)
  On Error GoTo err1:
     If saveCurve > 0 Then
         add_crv "c_udl_m", "c_udl_m", tub:=True, xnam:="hmes_m", ynam:="h_vert_m"
@@ -849,7 +831,7 @@ End Sub
      Exit Sub
 err1:
     Dim errmsg As String
-    errmsg = "CWellESP.Savecurves: ошибка" & sDELIM & Err.Description
+    errmsg = "CWellESP.save_curves: ошибка" & sDELIM & Err.Description
     addLogMsg errmsg
     RaiseEvent ReportProgress(errmsg)
     Err.Raise kErrInitCalc, Err.Source, errmsg
@@ -875,24 +857,24 @@ On Error GoTo err1:
     If is_ESP Then
         Call ESP.calc_separation(p_int_atma, t_int_C)
         Set pipe_WHeadHsp_Tubing_.fluid = ESP.fluid_tub
-        If is_choke() Then Set choke.fluid = ESP.fluid_tub
+        If choke.d_choke_m > 0 Then Set choke.fluid = ESP.fluid_tub
     End If
     ' 2. фиксируем заданные линейные давления
     PT_lin_.p_atma = plin_atma
     PT_lin_.t_C = t_wh_C
     ' 3. Расчет буферного давления по штуцеру
-    If is_choke() Then
+    If choke.d_choke_m > 0 Then
         PT_buf_ = choke.calc_choke_p_buf(PT_lin_)
         If PT_buf_.p_atma < 0 Then PT_buf_.p_atma = 1
     Else
         PT_buf_ = PT_lin_
     End If
     ' 4. Расчет давления на выкиде по буферному
-    pipe_WHeadHsp_Tubing_.param = set_calc_flow_param(calc_along_coord:=False, _
+    pipe_WHeadHsp_Tubing_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=False, _
                                              hcor:=hydraulic_correlation, _
                                              temp_method:=temp_correlation)
-    PT_dis_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_buf_.p_atma, saveCurve)
+    PT_dis_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_buf_.p_atma, PT_buf_.t_C, saveCurve)
     ' 5. если есть ЭЦН то считаем давление на приеме по давлению на выкиде сверху вниз
     If is_ESP() Then                                                 ' Если есть насос
         ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
@@ -902,18 +884,18 @@ On Error GoTo err1:
         PT_int_ = PT_dis_
     End If
     ' 6. По давлению на приеме считаем забойное давление
-    pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=False, _
+    pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=False, _
                                              hcor:=hydraulic_correlation, _
                                              temp_method:=temp_correlation)
-    PT_wf_ = pipe_HspHvd_.calc_dPipe(PT_int_.p_atma, saveCurve)
+    PT_wf_ = pipe_HspHvd_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, saveCurve)
     fast_pwf_plin_atma = PT_wf_.p_atma
     ' 7. если надо считаем затруб
     Dim PT_cas__temp As PTtype
     If isCalcCasing And pcas_atma >= 1 Then
         Call calc_casing
     End If
-    Call Savecurves(saveCurve)
+    Call save_curves(saveCurve)
     Exit Function
 err1:
     Dim errmsg As String
@@ -1088,6 +1070,7 @@ On Error GoTo err1:
         Else
             p_wfmin_atma = pwf_temp
         End If
+        
         If (p_line_atma > -1) And (Not isEqual(p_line_atma, pbuf_atma)) Then      ' вышли в область больших линейных давлений
             If curve(str_plin_Depend_p_wf).num_points = 0 Then   ' первый раз тут - ищем поточнее начало
                 pwf_temp_old = pwf_temp - P_step
@@ -1274,9 +1257,6 @@ Public Function Build_VLPcurve(p_line As Double, ByVal t_bh_C As Double, Optiona
     curve(str_VLPcurve).AddPoint qliq_sm3day, p_wf
     Set Build_VLPcurve = curve(str_VLPcurve)
 End Function
-'Public Property get PtubHmes_curve() As CInterpolation
-' Set PtubHmes_curve = curve(str_PtubHmes_curve)
-'End Property
 Property Get VLPCurve() As CInterpolation
   Set VLPCurve = curve(str_VLPcurve)
 End Property
@@ -1358,511 +1338,4 @@ End Property
 Private Property Get IWell_Qliq() As Double
     IWell_Qliq = fluid.qliq_sm3day
 End Property
-'Private Sub fillcurvesPT()
-'' формирование массивов свойств потока вдоль ствола скважины (давление температура и прочее)
-'Dim i As Integer
-'Dim pumpLenCorr As Double
-'Dim h_mes_m As Double   ' текущая глубина
-'Dim StableFlag As Boolean
-'
-'StableFlag = False
-'
-'' соберем точки по НКТ
-'If pipe_WHeadHsp_Tubing_.length_mes_m > 0 Then
-'    For i = 1 To pipe_WHeadHsp_Tubing_.p_curve.num_points
-'
-'        If i = 1 Or i = pipe_WHeadHsp_Tubing_.p_curve.num_points Then
-'            StableFlag = True
-'        Else
-'            StableFlag = False
-'        End If
-'
-'        h_mes_m = pipe_WHeadHsp_Tubing_.p_curve.pointX(i)
-'
-'        curve(str_PtubHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.p_curve.PointY(i), StableFlag
-'        curve(str_TtubHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_T").PointY(i), StableFlag
-'        curve(str_RstubHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_Rs").PointY(i), StableFlag
-'        curve(str_GasFracTubHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_gasfrac").PointY(i), StableFlag
-'        curve(str_HLtubHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_Hl").PointY(i), StableFlag
-'
-'        curve(str_muoTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_muo").PointY(i), StableFlag
-'        curve(str_muwTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_muw").PointY(i), StableFlag
-'        curve(str_mugTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_mug").PointY(i), StableFlag
-'        curve(str_mumixTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_mumix").PointY(i), StableFlag
-'
-'        curve(str_rhooTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_rhoo").PointY(i), StableFlag
-'        curve(str_rhowTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_rhow").PointY(i), StableFlag
-'        curve(str_rholTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_rhol").PointY(i), StableFlag
-'        curve(str_rhogTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_rhog").PointY(i), StableFlag
-'        curve(str_rhomixTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_rhomix").PointY(i), StableFlag
-'
-'        curve(str_qoTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_qo").PointY(i), StableFlag
-'        curve(str_qwTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_qw").PointY(i), StableFlag
-'        curve(str_qgTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_qg").PointY(i), StableFlag
-'
-'        curve(str_moTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_mo").PointY(i), StableFlag
-'        curve(str_mwTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_mw").PointY(i), StableFlag
-'        curve(str_mgTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_mg").PointY(i), StableFlag
-'
-'        curve(str_vlTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_vl").PointY(i), StableFlag
-'        curve(str_vgTubCurve).AddPoint h_mes_m, pipe_WHeadHsp_Tubing_.curves("c_vg").PointY(i), StableFlag
-'
-'    Next i
-'End If
-'
-'
-'' соберем точки по затрубному пространству
-'If pipe_WHeadHsp_Casing_.length_mes_m > 0 Then
-'    For i = 1 To pipe_WHeadHsp_Casing_.p_curve.num_points
-'
-'        If i = 1 Or i = pipe_WHeadHsp_Casing_.p_curve.num_points Then
-'            StableFlag = True
-'        Else
-'            StableFlag = False
-'        End If
-'
-'        h_mes_m = pipe_WHeadHsp_Casing_.p_curve.pointX(i)
-'        curve(str_PcasHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_P").PointY(i), StableFlag
-'        curve(str_TcasHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_T").PointY(i), StableFlag
-'
-'        curve(str_RscasHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_Rs").PointY(i), StableFlag
-'
-'        curve(str_GasFracCasHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_gasfrac").PointY(i), StableFlag
-'        curve(str_HLcasHmes_curve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_Hl").PointY(i), StableFlag
-'
-'
-'        curve(str_muoCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_muo").PointY(i), StableFlag
-'        curve(str_muwCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_muw").PointY(i), StableFlag
-'        curve(str_mugCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_mug").PointY(i), StableFlag
-'        curve(str_mumixCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_mumix").PointY(i), StableFlag
-'
-'        curve(str_rhooCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_rhog").PointY(i), StableFlag
-'        curve(str_rhowCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_rhow").PointY(i), StableFlag
-'        curve(str_rholCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_rhol").PointY(i), StableFlag
-'        curve(str_rhogCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_rhog").PointY(i), StableFlag
-'        curve(str_rhomixCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_rhomix").PointY(i), StableFlag
-'
-'        curve(str_qoCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_qo").PointY(i), StableFlag
-'        curve(str_qwCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_qw").PointY(i), StableFlag
-'        curve(str_qgCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_qg").PointY(i), StableFlag
-'
-'        curve(str_moCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_mo").PointY(i), StableFlag
-'        curve(str_mwCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_mw").PointY(i), StableFlag
-'        curve(str_mgCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_mg").PointY(i), StableFlag
-'
-'        curve(str_vlCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_vl").PointY(i), StableFlag
-'        curve(str_vgCasCurve).AddPoint h_mes_m, pipe_WHeadHsp_Casing_.curves("c_vg").PointY(i), StableFlag
-'
-'    Next i
-'End If
-'
-''  соберем все точки ниже насоса
-'If pipe_HspHvd_.length_mes_m > 0 Then
-'    For i = 1 To pipe_HspHvd_.p_curve.num_points
-'        pumpLenCorr = 0
-'        If i = 1 Then
-'            ' первая точка ниже насоса - глубина спуска насоса - скорректируем учтем длину насоса, чтобы графики выглядели красиво
-'            pumpLenCorr = const_ESP_length
-'        End If
-'        If i = 1 Or i = pipe_HspHvd_.p_curve.num_points Then
-'            StableFlag = True
-'        Else
-'            StableFlag = False
-'        End If
-'
-'        h_mes_m = pipe_HspHvd_.p_curve.pointX(i)
-'        curve(str_PtubHmes_curve).AddPoint h_mes_m + pumpLenCorr, pipe_HspHvd_.curves("c_P").PointY(i), StableFlag
-'        curve(str_PcasHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_P").PointY(i), StableFlag
-'
-'        curve(str_TtubHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_T").PointY(i), StableFlag   ' все свойства с одной трубы пишутся в одних точках, поэтому можно писать по индексам (по координатам будет дольше)
-'        curve(str_TcasHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_T").PointY(i), StableFlag
-'        curve(str_RstubHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_Rs").PointY(i), StableFlag
-'        curve(str_GasFracTubHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_gasfrac").PointY(i), StableFlag
-'        curve(str_HLtubHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_Hl").PointY(i), StableFlag
-'
-'        curve(str_RscasHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_Rs").PointY(i), StableFlag
-'        curve(str_GasFracCasHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_gasfrac").PointY(i), StableFlag
-'        curve(str_HLcasHmes_curve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_Hl").PointY(i), StableFlag
-'
-'        curve(str_muoTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_muo").PointY(i), StableFlag
-'        curve(str_muwTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_muw").PointY(i), StableFlag
-'        curve(str_mugTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mug").PointY(i), StableFlag
-'        curve(str_mumixTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mumix").PointY(i), StableFlag
-'
-'        curve(str_rhooTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhoo").PointY(i), StableFlag
-'        curve(str_rhowTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhow").PointY(i), StableFlag
-'        curve(str_rholTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhol").PointY(i), StableFlag
-'        curve(str_rhogTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhog").PointY(i), StableFlag
-'        curve(str_rhomixTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhomix").PointY(i), StableFlag
-'
-'        curve(str_qoTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_qo").PointY(i), StableFlag
-'        curve(str_qwTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_qw").PointY(i), StableFlag
-'        curve(str_qgTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_qg").PointY(i), StableFlag
-'
-'        curve(str_moTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mo").PointY(i), StableFlag
-'        curve(str_mwTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mw").PointY(i), StableFlag
-'        curve(str_mgTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mg").PointY(i), StableFlag
-'
-'        curve(str_vlTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_vl").PointY(i), StableFlag
-'        curve(str_vgTubCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_vg").PointY(i), StableFlag
-'
-'        curve(str_muoCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_muo").PointY(i), StableFlag
-'        curve(str_muwCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_muw").PointY(i), StableFlag
-'        curve(str_mugCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mug").PointY(i), StableFlag
-'        curve(str_mumixCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mumix").PointY(i), StableFlag
-'
-'        curve(str_rhooCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhog").PointY(i), StableFlag
-'        curve(str_rhowCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhow").PointY(i), StableFlag
-'        curve(str_rholCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhol").PointY(i), StableFlag
-'        curve(str_rhogCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhog").PointY(i), StableFlag
-'        curve(str_rhomixCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_rhomix").PointY(i), StableFlag
-'
-'        curve(str_qoCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_qo").PointY(i), StableFlag
-'        curve(str_qwCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_qw").PointY(i), StableFlag
-'        curve(str_qgCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_qg").PointY(i), StableFlag
-'
-'        curve(str_moCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mo").PointY(i), StableFlag
-'        curve(str_mwCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mw").PointY(i), StableFlag
-'        curve(str_mgCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_mg").PointY(i), StableFlag
-'
-'        curve(str_vlCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_vl").PointY(i), StableFlag
-'        curve(str_vgCasCurve).AddPoint h_mes_m, pipe_HspHvd_.curves("c_vg").PointY(i), StableFlag
-'
-'
-'    Next i
-'End If
-'
-'
-'End Sub
-'Public Function calc_PinGasFrac_simple_atma(GasFrac_d As Double, T_C As Double, Optional Ksepar As Double = 0)
-''  расчет давления на приеме обеспечивающего заданную долю газа при определенное температуре
-'
-'Dim PinMin As Double, PInMax As Double  ' оценки снизу и сверху для доли газа
-'Dim eps As Double
-'Dim Pcalc As Double
-'Dim i As Integer
-'Dim gasfr As Double
-'
-'i = 0
-'eps = 0.1 '  погрешность расчета
-'
-'If Ksepar < 0 Then Ksepar = 0
-'If Ksepar > 1 Then Ksepar = 1
-'
-'
-'PinMin = 1
-'If gas_fraction_d(PinMin, T_C, fluid, Ksep:=Ksepar) < GasFrac_d Then
-'    ' либо что то неправильно рассчиталось либо исходный gasfrac больше единицы задан, должно в расчете быть 1
-'    calc_PinGasFrac_simple_atma = 0
-'  '  Debug.Assert False
-'    Exit Function
-'End If
-'
-'PInMax = fluid.calc_pb_atma(fluid.rsb_m3m3, T_C)
-'If gas_fraction_d(PInMax, T_C, fluid, Ksep:=Ksepar) > GasFrac_d Then
-'    ' либо что то неправильно рассчиталось либо исходный gasfrac менее нуля задан - должно в расчете быть ноль
-'    calc_PinGasFrac_simple_atma = PInMax
-'  ' Debug.Assert False
-'    Exit Function
-'End If
-'
-'
-'Do
-'    i = i + 1   ' предохранитель от сваливания в бесконечный цикл
-'    Pcalc = (PinMin + PInMax) / 2
-'    gasfr = gas_fraction_d(Pcalc, T_C, fluid, Ksep:=Ksepar)
-'    If GasFrac_d < gasfr Then
-'        PinMin = Pcalc
-'    Else
-'        PInMax = Pcalc
-'    End If
-'
-'Loop Until (Abs(PinMin - PInMax) < eps) Or (i > 100)
-'calc_PinGasFrac_simple_atma = Pcalc
-'
-'End Function
-'Public Function calc_p_wfGasFrac_atma(GasFrac_d As Double, t_bh_C As Double)
-''  расчет давления на приеме обеспечивающего заданную долю газа при определенное температуре
-'
-'Dim p_wfMin As Double, p_wfMax As Double  ' оценки снизу и сверху для доли газа
-'Dim PinMin As Double, PInMax As Double
-'Dim eps As Double
-'Dim Pcalc As Double
-'Dim i As Integer
-'Dim gasfr As Double
-'
-'i = 0
-'eps = 0.1 '  погрешность расчета
-'
-'
-'
-'PinMin = 1
-'p_wfMin = calc_pwf_p_intake_atma(PinMin, t_bh_C)
-'
-'Call calc_plin_pwf_atma(SetPT(p_wfMin, t_bh_C), CalcCasing:=False)
-'
-'If gas_fraction_PumpIntake_d < GasFrac_d Then
-'    ' либо что то неправильно рассчиталось либо исходный gasfrac больше единицы задан, должно в расчете быть 1
-'    calc_p_wfGasFrac_atma = 0
-'  '  Debug.Assert False
-'    Exit Function
-'End If
-'
-'PInMax = fluid.calc_pb_atma(fluid.rsb_m3m3, t_bh_C)
-'p_wfMax = calc_pwf_p_intake_atma(PInMax, t_bh_C)
-'
-'Call calc_plin_pwf_atma(SetPT(p_wfMax, t_bh_C), CalcCasing:=False)
-'
-'If gas_fraction_PumpIntake_d > GasFrac_d Then
-'    ' либо что то неправильно рассчиталось либо исходный gasfrac менее нуля задан - должно в расчете быть ноль
-'    calc_p_wfGasFrac_atma = PInMax
-'  ' Debug.Assert False
-'    Exit Function
-'End If
-'
-'
-'Do
-'    i = i + 1   ' предохранитель от сваливания в бесконечный цикл
-'    Pcalc = (PinMin + PInMax) / 2
-'
-'    Call calc_plin_pwf_atma(SetPT(Pcalc, t_bh_C), CalcCasing:=False)
-'    gasfr = gas_fraction_PumpIntake_d
-'    If GasFrac_d < gasfr Then
-'        PinMin = Pcalc
-'    Else
-'        PInMax = Pcalc
-'    End If
-'
-'Loop Until (Abs(PinMin - PInMax) < eps) Or (i > 100)
-'calc_p_wfGasFrac_atma = Pcalc
-'
-'End Function
-'Private Sub FillWellConstructionSimple( _
-'                                h_perf_m As Double, _
-'                                h_tub_m As Double, _
-'                                udl_m As Double, _
-'                                d_cas_mm As Double, _
-'                                dtub_mm As Double _
-'                                       )
-'' метод для инициализации скважины простыми числами
-'On Error GoTo err1:
-'   Dim errmsg As String
-'
-'   Dim habs_curve_m As New CInterpolation
-'   habs_curve_m.AddPoint 0, 0
-'   habs_curve_m.AddPoint h_perf_m, h_perf_m - udl_m
-'
-'   Dim dcas_curve_mm As New CInterpolation
-'   dcas_curve_mm.AddPoint 0, d_cas_mm
-'   dcas_curve_mm.AddPoint h_perf_m, d_cas_mm
-'
-'   Dim dtub_curve_mm As New CInterpolation
-'   dtub_curve_mm.AddPoint 0, dtub_mm
-'   dtub_curve_mm.AddPoint h_tub_m, dtub_mm
-'
-'   Me.h_perf_m = h_perf_m
-'   Me.h_tub_m = h_tub_m
-'   Call trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
-'   Call trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
-'
-'   Call FillWellConstructionTr
-'   Exit Sub
-'err1:
-'   errmsg = "CWellESP.FillWellConstructionSimple: Ошибка простой инициализации скважины " & sDELIM & Err.Description
-'   RaiseEvent ReportProgress(errmsg)
-'   Err.Raise kErrInitCalc, Err.Source, errmsg
-'End Sub
-'
-'Private Sub FillWellConstructionRange( _
-'                          ByVal incl_h_mes_m_ As range, _
-'                          ByVal incl_h_vert_m_ As range, _
-'                          ByVal h_perf_m As Double, _
-'                          ByVal h_tub_m As Double, _
-'                          ByVal d_cas_mm As Double, _
-'                          ByVal dtub_mm As Double _
-'                                      )
-'' метод для инициализации скважины данными инсклинометрии и числами для остальных параметров
-'On Error GoTo err1:
-'   Dim habs_curve_m As New CInterpolation
-'   Dim dcas_curve_mm As New CInterpolation
-'   Dim dtub_curve_mm As New CInterpolation
-'   Dim geoGrad As New CInterpolation
-'   Dim ambTemp As New CAmbientFormation
-'
-'  ' Dim tr As New CTrajectory
-'   Dim errmsg As String
-'
-'   Call habs_curve_m.loadFromVertRange(incl_h_mes_m_, incl_h_vert_m_)
-'
-'   dcas_curve_mm.AddPoint 0, d_cas_mm
-'   dcas_curve_mm.AddPoint h_perf_m, d_cas_mm
-'
-'   dtub_curve_mm.AddPoint 0, dtub_mm
-'   dtub_curve_mm.AddPoint h_tub_m, dtub_mm
-'
-'   Me.h_perf_m = h_perf_m
-'   Me.h_tub_m = h_tub_m
-'
-'   Call trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
-'   Call trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
-'
-'   Call FillWellConstructionTr
-'
-'
-'   Exit Sub
-'err1:
-'   errmsg = "CWellESP.FillWellConstructionRange: Ошибка простой инициализации скважины " & sDELIM & Err.Description
-'   RaiseEvent ReportProgress(errmsg)
-'   Err.Raise kErrInitCalc, Err.Source, errmsg
-'End Sub
-'
-'Private Sub FillWellConstructionRangeAll(ByVal incl_h_mes_m_ As range, _
-'                           ByVal incl_h_vert_m_ As range, _
-'                           ByVal hmes_d_cas_m_ As range, _
-'                           ByVal dcas_arr_mm_ As range, _
-'                           ByVal hmes_d_tub_m_ As range, _
-'                           ByVal dtub_arr_mm_ As range, _
-'                           ByVal h_perf_m As Double, _
-'                           ByVal h_tub_m As Double)
-'' метод для инициализации скважины из диапазонов измнения ключевых параметров
-'On Error GoTo err1:
-'   Dim habs_curve_m As New CInterpolation
-'   Dim dcas_curve_mm As New CInterpolation
-'   Dim dtub_curve_mm As New CInterpolation
-'   Dim geoGrad As New CInterpolation
-'   Dim ambTemp As New CAmbientFormation
-'  ' Dim h_perf_m As Double, h_tub_m As Double
-'   Dim errmsg As String
-'
-'   Call habs_curve_m.loadFromVertRange(incl_h_mes_m_, incl_h_vert_m_)
-'   Call dcas_curve_mm.loadFromVertRange(hmes_d_cas_m_, dcas_arr_mm_)
-'   Call dtub_curve_mm.loadFromVertRange(hmes_d_tub_m_, dtub_arr_mm_)
-'
-'  ' h_perf_m = dcas_curve_mm.maxx
-'  ' h_tub_m = dtub_curve_mm.maxx
-'
-'   Me.h_perf_m = h_perf_m
-'   Me.h_tub_m = h_tub_m
-'   Call trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
-'   Call trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
-'   Call FillWellConstructionTr
-'
-'   Exit Sub
-'err1:
-'   errmsg = "CWellESP.FillWellConstructionRangeAll: Ошибка простой инициализации скважины " & sDELIM & Err.Description
-'   RaiseEvent ReportProgress(errmsg)
-'   Err.Raise kErrInitCalc, Err.Source, errmsg
-'End Sub
-'
-' =======================================
-' методы инициализации скважины
-' =======================================
-'Public Sub init_well_construction(ByVal h_perf_m As Double, _
-'                                ByVal h_tub_m As Double, _
-'                       Optional ByVal d_cas_mm As Double = 125, _
-'                       Optional ByVal dtub_mm As Double = 72, _
-'                       Optional ByVal udl_m As Double = 0, _
-'                       Optional ByVal hmes_incl_range_m_ = -1, _
-'                       Optional ByVal hvert_incl_range_m_ = -1, _
-'                       Optional ByVal hmes_dcas_range_m_ = -1, _
-'                       Optional ByVal dcas_range_mm_ = -1, _
-'                       Optional ByVal hmes_dtub_range_m_ = -1, _
-'                       Optional ByVal dtub_range_mm_ = -1)
-'    ' универсальный метод инициализации скважины - должен использоваться для инициализации скважины
-'    ' поддерживает три варианта инициалиции
-'    '       - с упрощенным набором данных с удлинением (загрузка из тех режима)
-'    '       - с заданием инклинометрии через range и упрощенным набором труб (диаметры)
-'    '       - с заданием инклинометрии и диаметров с использованием range
-'    '
-'    ' параметры обязательные для всех вариантов задания
-'    ' h_perf_m               - глубина перфорации измеренная, м. Используется для расчета забойного давления
-'    ' h_tub_m                - глубина спуска НКТ измеренная, м. Соответствует глубине спуска насоса
-'    '
-'    ' параметры упрощенного режима задания
-'    ' d_cas_mm               - внутренний диамет эксплуатационной колонны, мм
-'    ' dtub_mm               - внешний диамет НКТ, мм (толщина стенки 10 мм)
-'    ' udl_m                 - удлинение на глубину перфорации, м (разница между измеренной и вертикальной глубиной)
-'    '
-'    ' параметры детального задания скважины  (все - вертикальные range)
-'    ' hmes_incl_range_m_    - измеренная глубина скважины для задания инклинометрии
-'    ' hvert_incl_range_m_   - вертикальная глубина скважины для задания инклинометрии
-'    '                       - если инклинометрии как range задана, то удлинение игнорируется
-'    '
-'    ' hmes_dcas_range_m_    - измеренная глубина для задания диаметра эксплуатационной колонны (начинается с 0)
-'    ' dcas_range_mm_        - диаметр эксплуатационной колонны на соответствующей глубине (действует от глубины и вниз до след изменения)
-'    ' hmes_dtub_range_m_    - измеренная глубина для задания диаметра НКТ
-'    ' dtub_range_mm_        - диаметр НКТ внешний на соответствующей глубине (действует от глубины и вниз до след изменения)
-'    '                       - для полного задания скважины все range должны быть заданы
-'
-'
-'
-'    Dim simpleNumbers As Boolean
-'    Dim fullRange As Boolean
-'    Dim inclRange As Boolean
-'    Dim fullArray As Boolean
-'On Error GoTo er1:
-'    simpleNumbers = IsNumeric(hmes_incl_range_m_)
-'    inclRange = IsObject(hmes_incl_range_m_) And IsObject(hvert_incl_range_m_)
-'    fullRange = inclRange And IsObject(hmes_dcas_range_m_) And IsObject(dcas_range_mm_) And _
-'                              IsObject(hmes_dtub_range_m_) And IsObject(dtub_range_mm_)
-'
-'    If simpleNumbers Then
-'    ' use simple numbers here
-'        Call FillWellConstructionSimple(h_perf_m, h_tub_m, udl_m, d_cas_mm, dtub_mm)
-'    ElseIf fullRange Then
-'        Call FillWellConstructionRangeAll(hmes_incl_range_m_, hvert_incl_range_m_, hmes_dcas_range_m_, _
-'                              dcas_range_mm_, hmes_dtub_range_m_, dtub_range_mm_, _
-'                              h_perf_m, h_tub_m)
-'    ElseIf inclRange Then
-'        Call FillWellConstructionRange(hmes_incl_range_m_, hvert_incl_range_m_, h_perf_m, h_tub_m, d_cas_mm, dtub_mm)
-'    End If
-'    Exit Sub
-'er1:
-'    ' стандартная схема обработки ошибок
-'    Dim err_str As String
-'    err_str = "CWellESP.init_well_construction: error" & sDELIM & Err.Description
-'    addLogMsg err_str
-'    RaiseEvent ReportProgress(err_str)
-'    Err.Raise Err.Number, Err.Source, err_str
-'
-'End Sub
-'Public Sub init_well_temperature(Optional ByVal t_bh_C As Double = -1, _
-'                               Optional ByVal t_wh_C As Double = -1, _
-'                               Optional ByVal hmes_tamb_arr_m_ = -1, _
-'                               Optional ByVal tamb_arr_C_ = -1)
-'   ' основная функция инициализации температуры в скважине
-'   ' задает по исходным данным объект ambient_formation, который определяет параметры температуры в скважине
-'   '
-'   ' если никакие параметры не заданы, скважине переинициализируется используя уже заданный объект ambient_formation_
-'   '
-'   ' t_bh_C              - температура на забое скважины
-'   ' t_wh_C              - температура на устье скважины
-'   ' hmes_tamb_arr_m_   - массив (range) измеренных глубин для задания распределения температуры по глубине
-'   ' tamb_arr_C_        - значения температуры по глубине
-'
-'
-'    Dim simpleNumbers As Boolean
-'    Dim ambRange As Boolean
-'    Dim newTempValues As Boolean
-'
-'    Dim geoGrad As New CInterpolation
-'    Dim ambTemp As New CAmbientFormation
-'    Dim RangX As range, RangY As range
-'On Error GoTo err1:
-'    simpleNumbers = IsNumeric(hmes_tamb_arr_m_)
-'    ambRange = IsObject(hmes_tamb_arr_m_) And IsObject(tamb_arr_C_)
-'    newTempValues = ((t_bh_C > 20) And (t_wh_C > 0)) Or ambRange
-'
-'    If newTempValues Then
-'        If simpleNumbers Then
-'            geoGrad.AddPoint 0, t_wh_C
-'            geoGrad.AddPoint trajectory_cas.h_abs_hmes_m(h_perf_m), t_bh_C
-'        ElseIf ambRange Then
-'            Set RangX = hmes_tamb_arr_m_
-'            Set RangY = tamb_arr_C_
-'            Call geoGrad.loadFromVertRange(RangX, RangY)
-'        End If
-'        Set ambTemp.amb_temp_curve = geoGrad
-'        Set ambient_formation_ = ambTemp
-'    End If
 

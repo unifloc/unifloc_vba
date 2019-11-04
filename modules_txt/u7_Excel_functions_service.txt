@@ -12,7 +12,7 @@ Public Function UFversion() As String
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция кодирования параметров PVT в строку,
-' для передачи PVT свойств в прикладных пользовательских функциях.
+' для передачи PVT свойств в прикладные функции Унифлок.
 Public Function PVT_encode_string( _
                     Optional ByVal gamma_gas As Double = const_gg_, _
                     Optional ByVal gamma_oil As Double = const_go_, _
@@ -329,7 +329,7 @@ On Error GoTo er1:
         
         ' initwell with use linear temp distribution mode by default
         ' so no  need to adjust temperature here anymore
-        well.set_choke dchoke_mm, dtub_mm
+        well.choke.d_choke_m = dchoke_mm
         Set well_decode_string = well
     End If
     Exit Function
@@ -583,7 +583,7 @@ Public Function wellGL_decode_string(well_GL_str As String, Optional ByVal getSt
     Dim roughness_m As Double
     Dim t_bh_C As Double
     Dim t_wh_C As Double
-    Dim glv As Integer
+    Dim GLV As Integer
     
     Dim dict As New Dictionary
     Dim Key As String
@@ -616,16 +616,16 @@ On Error GoTo er2:
     Key = "roughness_m": roughness_m = Cdbl_(dict.Item(Key))
     Key = "t_bh_C": t_bh_C = Cdbl_(dict.Item(Key))
     Key = "t_wh_C": t_wh_C = Cdbl_(dict.Item(Key))
-    Key = "GLV": glv = Cdbl_(dict.Item(Key)) ' количество клапанов
+    Key = "GLV": GLV = Cdbl_(dict.Item(Key)) ' количество клапанов
     
     Dim H_glv_m() As Double
     Dim d_glv_mm() As Double
     Dim p_glv_atma() As Double
-    ReDim H_glv_m(1 To glv)
-    ReDim d_glv_mm(1 To glv)
-    ReDim p_glv_atma(1 To glv)
+    ReDim H_glv_m(1 To GLV)
+    ReDim d_glv_mm(1 To GLV)
+    ReDim p_glv_atma(1 To GLV)
     
-    For i = 1 To glv
+    For i = 1 To GLV
             Key = "H_glv_m" & FormatInteger(i, 0): H_glv_m(i) = Cdbl_(dict.Item(Key))
             Key = "d_glv_mm" & FormatInteger(i, 0): d_glv_mm(i) = Cdbl_(dict.Item(Key))
             Key = "p_glv_atma" & FormatInteger(i, 0): p_glv_atma(i) = Cdbl_(dict.Item(Key))
@@ -659,8 +659,10 @@ On Error GoTo er1:
 '        Call well.init_well_construction(h_perf_m, htub_m, d_cas_mm, dtub_mm, udl_m)
         
         
+        well.ambient_formation.init_amb_temp t_bh_C, t_wh_C
+        well.fill_temperature_from_amb
         
-        Call well.init_well_temperature(t_bh_C, t_wh_C)
+      '  Call well.init_well_temperature(t_bh_C, t_wh_C)
         well.choke.d_choke_m = dchoke_mm
         well.hydraulic_correlation = BeggsBrill
         well.temp_correlation = StartEndTemp
@@ -680,7 +682,7 @@ er2:
     Resume Next
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция кодирования параметров работы скважины с газлифтом
+' Функция кодирования параметров работы скважины с газлифтом.
 Public Function wellGL_encode_string( _
                     Optional ByVal h_perf_m As Double = 2000, _
                     Optional ByVal htub_m As Double = 1800, _
@@ -770,7 +772,7 @@ Public Function GL_decode_string(well_GL_str As String, _
     Dim S As String
     Dim a, b
     Dim i As Long
-    Dim glv As Integer
+    Dim GLV As Integer
     Dim dict As New Dictionary
     Dim Key As String
 ' при разбиении строки на части ошибки недопустимы
@@ -793,16 +795,23 @@ On Error GoTo er1:
 On Error GoTo er2:
     ' при чтении параметров используем промежуточную переменную key
     ' чтобы иметь возможность более информативно отреагировать на ошибку
-    Key = "GLV": glv = Cdbl_(dict.Item(Key)) ' количество клапанов
+    Key = "GLV": GLV = Cdbl_(dict.Item(Key)) ' количество клапанов
     
+    Dim q_gas_inj_sm3day As Double
+    Dim p_gas_inj_atma As Double
+    Dim d_gas_inj_mm As Double
     Dim H_glv_m() As Double
     Dim d_glv_mm() As Double
     Dim p_glv_atma() As Double
-    ReDim H_glv_m(1 To glv)
-    ReDim d_glv_mm(1 To glv)
-    ReDim p_glv_atma(1 To glv)
+    ReDim H_glv_m(1 To GLV)
+    ReDim d_glv_mm(1 To GLV)
+    ReDim p_glv_atma(1 To GLV)
     
-    For i = 1 To glv
+    Key = "q_gas_inj_sm3day": q_gas_inj_sm3day = Cdbl_(dict.Item(Key))
+    Key = "p_gas_inj_atma": p_gas_inj_atma = Cdbl_(dict.Item(Key))
+    Key = "d_gas_inj_mm": d_gas_inj_mm = Cdbl_(dict.Item(Key))
+    
+    For i = 1 To GLV
             Key = "H_glv_m" & FormatInteger(i, 0): H_glv_m(i) = Cdbl_(dict.Item(Key))
             Key = "d_glv_mm" & FormatInteger(i, 0): d_glv_mm(i) = Cdbl_(dict.Item(Key))
             Key = "p_glv_atma" & FormatInteger(i, 0): p_glv_atma(i) = Cdbl_(dict.Item(Key))
@@ -810,10 +819,14 @@ On Error GoTo er2:
 On Error GoTo er1:
 ' ловим все ошибки, все должно пройти идеально при дешифровке
     If getStr Then
-        GL_decode_string = GL_encode_string(H_glv_m, d_glv_mm, p_glv_atma)
+        GL_decode_string = GL_encode_string(q_gas_inj_sm3day, p_gas_inj_atma, d_gas_inj_mm, H_glv_m, d_glv_mm, p_glv_atma)
     Else
         Dim glv_set As New CGLValveSet
         Call glv_set.loadFromArray(H_glv_m, d_glv_mm, p_glv_atma)
+        glv_set.q_gas_inj_sm3day = q_gas_inj_sm3day
+        glv_set.p_gas_inj_atma = p_gas_inj_atma
+        glv_set.d_gas_inj_mm = d_gas_inj_mm
+        
         Set GL_decode_string = glv_set
     End If
     Exit Function
@@ -831,9 +844,15 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы скважины с газлифтом
 Public Function GL_encode_string( _
+                    Optional q_gas_inj_sm3day As Double = 0, _
+                    Optional p_gas_inj_atma As Double = 0, _
+                    Optional d_gas_inj_mm As Double = 0, _
                     Optional HmesGLV_m = 0, _
                     Optional dGLV_mm = 0, _
                     Optional PsurfGLV_atma = 0)
+' q_gas_inj_sm3day - расход газа закачки
+' p_gas_inj_atma - давление газа закачки на поверхности
+' d_gas_inj_mm - диаметр штуцера регулировки закачки газа на поверхности
 ' HmesGLV_m     - измеренные глубины установки газлифтных клапанов
 ' dGLV_mm       - диаметры порта установленных газлифтных клапанов
 ' PsurfGLV_atma - давления зарядки газлифтных клапанов
@@ -851,8 +870,10 @@ Public Function GL_encode_string( _
     
     frmt = "#0.####0"
     frmt_int = "0"
-    str = ""
-    
+    str = "GLV:1;"
+    str = str & "q_gas_inj_sm3day:" & Format(q_gas_inj_sm3day, frmt) & ";"
+    str = str & "p_gas_inj_atma:" & Format(p_gas_inj_atma, frmt) & ";"
+    str = str & "d_gas_inj_mm:" & Format(d_gas_inj_mm, frmt) & ";"
     H_glv_m = readRange(HmesGLV_m)
     d_glv_mm = readRange(dGLV_mm)
     p_glv_atma = readRange(PsurfGLV_atma)
