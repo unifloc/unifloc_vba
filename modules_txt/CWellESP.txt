@@ -19,7 +19,7 @@ Public isCalcCasing As Boolean
 Public isCalcESPtemp As Boolean
 ' штуцер установленный на поверхности
 ' choke always exist in well (but can have diam = 0 which means - no influence on flow)
-Public choke As New Cchoke
+Public Choke As New Cchoke
 ' input fluid object
 Private fluid_ As New CPVT                      ' флюид из пласта
 ' ambient formation object needed for full temperature calculation
@@ -50,7 +50,7 @@ Private pipe_WHeadHsp_Casing_ As New CPipe  ' от приема насоса до устья
 Private pipe_WHeadHsp_Casing_Gas_ As New CPipe  ' от приема насоса до устья газовая шапка в затрубе с учетом плотности газа
 'данные расчета
 Private h_sp_m_ As Double                   ' tubing depth
-Private H_dyn_m_ As Double                    ' динамический уровень
+Private Hdyn_Pcas_ As PCAS_HDYN_type                    ' динамический уровень
 Private ESP_on As Boolean                 '  УЭЦН включен или нет (флаг)
 ' =============================================================================
 ' ============ constructor ====================================================
@@ -75,10 +75,10 @@ Public Property Get fluid() As CPVT
    Set fluid = fluid_
 End Property
 Public Property Get fluid_tub() As CPVT
-   If is_ESP Then Set fluid_tub = ESP.fluid_tub
+   If ESP_on Then Set fluid_tub = ESP.fluid_tub
 End Property
 Public Property Get fluid_cas() As CPVT
-   If is_ESP Then Set fluid_cas = ESP.fluid_cas
+   If ESP_on Then Set fluid_cas = ESP.fluid_cas
 End Property
 Public Property Set fluid(val As CPVT)
 ' Установка PVT свойств для скважины
@@ -88,8 +88,8 @@ Public Property Set fluid(val As CPVT)
   Set pipe_WHeadHsp_Casing_.fluid = fluid
   Set pipe_WHeadHsp_Casing_Gas_.fluid = fluid
   Set pipe_WHeadHsp_Tubing_.fluid = fluid
-  Set choke.fluid = fluid
-  If is_ESP Then
+  Set Choke.fluid = fluid
+  If ESP_on Then
       Set ESP.fluid = fluid
   End If
 End Property
@@ -277,7 +277,7 @@ Public Function clone() As CWellESP
    Set wl.trajectory_tub = trajectory_tub
    Set wl.trajectory_cas = trajectory_cas
    Set wl.ambient_formation = ambient_formation
-   Call wl.choke.Copy(choke)
+   Call wl.Choke.Copy(Choke)
    Dim ESP_1 As New CESPpump
    Call ESP_1.Copy(ESP)
    Set wl.ESP = ESP_1
@@ -406,7 +406,7 @@ On Error GoTo err1:
         calc_plin_pwf_atma = 0
         Exit Function
     End If
-    If is_ESP() Then                                                 ' Если есть насос
+    If ESP_on Then                                                 ' Если есть насос
         ' 3. Расчет изменения температуры в насосе
         ' сначала считаем сепарацию и модификацию флюидов
         Call ESP.calc_separation(PT_int_.p_atma, PT_int_.t_C)
@@ -420,7 +420,7 @@ On Error GoTo err1:
         PT_dis_ = PT_int_
     End If
     ' calc casing (dynamic level) if data given
-    If isCalcCasing And is_ESP() And pcas_atma >= 1 Then
+    If isCalcCasing And ESP_on And pcas_atma >= 1 Then
         Call calc_casing
     End If
     ' 7. Расчет распределения давления в НКТ и расчет буферного давления c учетом движения в НКТ нефти после сепарации PVTtub
@@ -432,8 +432,8 @@ On Error GoTo err1:
     PT_buf_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_dis_.p_atma, PT_dis_.t_C, saveCurve)     'calc_Pipe_PIncl_atma(p_dis_atma_, t_dis_C_)
     ' 8. Расчет линейного давления по штуцеру
     On Error GoTo err_choke:
-        If choke.d_choke_m > 0 Then       ' пока отключено
-            PT_lin_ = choke.calc_choke_p_lin(PT_buf_)
+        If Choke.d_choke_m > 0 Then       ' пока отключено
+            PT_lin_ = Choke.calc_choke_p_lin(PT_buf_)
             If PT_lin_.p_atma <= 0 Then
                 PT_lin_.p_atma = 0
             End If
@@ -494,9 +494,9 @@ On Error GoTo err1:
    ' расчет параетров калибровки штуцера
    '     - проводится если только данные для штуцера коррекно заданы
    '     - если линейное давление и оно меньше буферного
-   If plin_atma > 0 And pbuf_atma > plin_atma And choke.d_choke_m > 0 Then
+   If plin_atma > 0 And pbuf_atma > plin_atma And Choke.d_choke_m > 0 Then
        '  ищем распределение давления в скважине соответствующее текущим условиям
-       Call choke.calc_choke_calibration(pbuf_atma, plin_atma, t_wh_C)
+       Call Choke.calc_choke_calibration(pbuf_atma, plin_atma, t_wh_C)
        ' определили поправочный коэффициент для штуцера
    End If
    isCalcCasing = False
@@ -547,9 +547,6 @@ noESP:
   ESP_on = False
   addLogMsg_debug "насос отключен"
 End Property
- Public Property Get is_ESP() As Boolean
-    is_ESP = ESP_on
- End Property
 '------------------------------------------------------------
 ' ESP well specific properties
 '------------------------------------------------------------
@@ -568,7 +565,11 @@ Public Property Get t_dis_C() As Double
    t_dis_C = PT_dis_.t_C
 End Property
 Public Property Get h_dyn_m() As Double
-   h_dyn_m = H_dyn_m_
+    If Hdyn_Pcas_.correct Then
+        h_dyn_m = Hdyn_Pcas_.hdyn_m
+    Else
+        h_dyn_m = 0
+    End If
 End Property
 Public Sub FillWellConstructionTr()
     Dim ESPbottom_m As Double   ' ESP bottom - todo - move to main definition and account pressure drop along ESP
@@ -576,7 +577,7 @@ Public Sub FillWellConstructionTr()
     
     Call pipe_WHeadHsp_Tubing_.init_pipe_constr_by_trajectory(trajectory_tub, 0, h_tub_m)
     h_sp_m_ = h_tub_m ' определим глубину спуска установки
-    If is_ESP Then
+    If ESP_on Then
        ESP.h_mes_top_m = h_sp_m_  ' установим глубину спуска оборудования
        ESPbottom_m = ESP.HmesBottom_m
     Else
@@ -585,8 +586,8 @@ Public Sub FillWellConstructionTr()
     Call pipe_WHeadHsp_Casing_.init_pipe_constr_by_trajectory(trajectory_tub, 0, ESPbottom_m, trajectory_cas)
     Call pipe_WHeadHsp_Casing_Gas_.init_pipe_constr_by_trajectory(trajectory_tub, 0, ESPbottom_m, trajectory_cas)
     Call pipe_HspHvd_.init_pipe_constr_by_trajectory(trajectory_cas, ESPbottom_m, h_perf_m)
-    choke.d_up_m = 0.06
-    choke.d_down_m = 0.06
+    Choke.d_up_m = 0.06
+    Choke.d_down_m = 0.06
     Set pipe_HspHvd_.ambient_formation = ambient_formation_
     Set pipe_WHeadHsp_Casing_.ambient_formation = ambient_formation_
     Set pipe_WHeadHsp_Casing_Gas_.ambient_formation = ambient_formation_
@@ -694,6 +695,7 @@ Private Sub calc_casing()
     Dim p_PTcasgas_temp As PTtype
     Dim cas_crv As CInterpolation
     Dim num_Hd As Integer
+    Dim H_dyn_m_ As Double
 On Error GoTo err_casing:
         ' 1. Расчет расхода свободного газа двигающегося через затрубное пространство после сепарации
         ' для затруба считаем снизу вверх
@@ -714,45 +716,72 @@ On Error GoTo err_casing:
         ' 4. если пересечение одно, то все в порядке - это Ндин если значение хорошее
         If num_Hd = 1 Then
             H_dyn_m_ = cas_crv.SolutionPointX(1)
+            Hdyn_Pcas_.correct = True
+            Hdyn_Pcas_.pump_off_condition = False
+            Hdyn_Pcas_.self_flow_condition = False
             ' проверяем, чтобы значение динамического уровня было разумным, иначе фиксируем крайние значения
-            If H_dyn_m_ < 0 Then H_dyn_m_ = 0
-            If H_dyn_m_ >= h_sp_m_ Then H_dyn_m_ = h_sp_m_
+            If H_dyn_m_ < 0 Then
+                H_dyn_m_ = 0
+                Hdyn_Pcas_.self_flow_condition = True
+            ElseIf H_dyn_m_ >= h_sp_m_ Then
+                H_dyn_m_ = h_sp_m_
+                Hdyn_Pcas_.pump_off_condition = True
+            End If
             ' готовим кривую распределения давления в затрубе из двух - для жидкости и для газа
             Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_.p_curve.CutByCurve(pipe_WHeadHsp_Casing_Gas_.p_curve)
+            Hdyn_Pcas_.hdyn_m = H_dyn_m_
+            Hdyn_Pcas_.p_cas_atma = PT_cas_.p_atma
         ElseIf num_Hd = 0 Then
         ' 5. если пересечение найти не удалось - то фиксируем крайние значения
             
+            Hdyn_Pcas_.correct = False
+            Hdyn_Pcas_.pump_off_condition = False
+            Hdyn_Pcas_.self_flow_condition = False
             pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=False, _
-                                         flow_along_coord:=False, _
-                                         hcor:=gas, _
-                                         temp_method:=temp_correlation)
+                                                                  flow_along_coord:=False, _
+                                                                  hcor:=gas, _
+                                                                  temp_method:=temp_correlation)
             p_PTcasgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, maincurves)
             If PT_cas_.p_atma >= p_PTcasgas_temp.p_atma Then
                 H_dyn_m_ = h_sp_m_
                 ' готовим кривую распределения давления в затрубе из двух - для жидкости и для газа
                 Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_Gas_.p_curve
+                Hdyn_Pcas_.p_cas_atma = p_PTcasgas_temp.p_atma
+                Hdyn_Pcas_.pump_off_condition = True
             Else
                 H_dyn_m_ = 0
                 ' готовим кривую распределения давления в затрубе из двух - для жидкости и для газа
                 Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_.p_curve
+                Hdyn_Pcas_.p_cas_atma = PT_cas_.p_atma
+                Hdyn_Pcas_.self_flow_condition = True
             End If
+            
+            Hdyn_Pcas_.hdyn_m = H_dyn_m_
         Else
         '6. если пересечений не одно, то пытаемся применить устаревший алгоритм без учета плотности газа
             addLogMsg_debug "CWellESP.calc_plin_pwf_atma: abnormal casing behavior. Num of intersections =", num_Hd
             ' Если заданному затрубному давлению Pan соответствует отрицательный динамический уровень Hdyn,
             ' тогда ищется затрубное давление P(Hdyn=0)an соответствующее Hdyn=0 и данные значения сохраняются как результат
+            Hdyn_Pcas_.correct = False
+            Hdyn_Pcas_.pump_off_condition = False
+            Hdyn_Pcas_.self_flow_condition = False
             If (PT_cas_.p_atma = 0 Or PT_cas_.p_atma >= PT_int_.p_atma) Then
                 'p_p_an_atma = pipe_WHeadHsp_Casing_.p_curve.getPoint(0)
                 H_dyn_m_ = h_sp_m_
-                PT_cas_.p_atma = PT_int_.p_atma
+                'PT_cas_.p_atma = PT_int_.p_atma
+                Hdyn_Pcas_.p_cas_atma = PT_int_.p_atma
+                Hdyn_Pcas_.pump_off_condition = True
             Else
                 With pipe_WHeadHsp_Casing_.p_curve
-                        H_dyn_m_ = .FindMinOneSolution(PT_cas_.p_atma)
+                    H_dyn_m_ = .FindMinOneSolution(PT_cas_.p_atma)
+                    Hdyn_Pcas_.p_cas_atma = PT_cas_.p_atma
                 End With
             End If
             If (H_dyn_m_ < 0) Then
                 H_dyn_m_ = 0
-                PT_cas_.p_atma = pipe_WHeadHsp_Casing_.p_curve.getPoint(0)
+               ' PT_cas_.p_atma = pipe_WHeadHsp_Casing_.p_curve.getPoint(0)
+                Hdyn_Pcas_.p_cas_atma = pipe_WHeadHsp_Casing_.p_curve.getPoint(0)
+                Hdyn_Pcas_.pump_off_condition = True
             End If
             ' Если заданному затрубному давлению Pan соответствует динамический уровень Hdyn больше глубины спуска насоса Hpump, _
             ' тогда ищется затрубное давление P(Hdyn=Hpump)an соответствующее Hdyn=Hpump и данные значения сохраняются как результат
@@ -761,6 +790,7 @@ On Error GoTo err_casing:
                 PT_cas_.p_atma = pipe_WHeadHsp_Casing_.p_curve.getPoint(h_sp_m_)
             End If
             Set curve("Pcas_Hd") = pipe_WHeadHsp_Casing_.p_curve.CutByValue(H_dyn_m_)
+            Hdyn_Pcas_.hdyn_m = H_dyn_m_
         End If
         '7. сохраним параметры для расчета распределения давления
         ambient_formation_.h_dyn_m = H_dyn_m_
@@ -854,17 +884,17 @@ On Error GoTo err1:
         temp_correlation = GeoGradTemp
     End If
     ' 1. если есть ЭЦН пытаемся оценить сепарацию и модификацию флюида на основе предполагаемого давления на приеме насоса
-    If is_ESP Then
+    If ESP_on Then
         Call ESP.calc_separation(p_int_atma, t_int_C)
         Set pipe_WHeadHsp_Tubing_.fluid = ESP.fluid_tub
-        If choke.d_choke_m > 0 Then Set choke.fluid = ESP.fluid_tub
+        If Choke.d_choke_m > 0 Then Set Choke.fluid = ESP.fluid_tub
     End If
     ' 2. фиксируем заданные линейные давления
     PT_lin_.p_atma = plin_atma
     PT_lin_.t_C = t_wh_C
     ' 3. Расчет буферного давления по штуцеру
-    If choke.d_choke_m > 0 Then
-        PT_buf_ = choke.calc_choke_p_buf(PT_lin_)
+    If Choke.d_choke_m > 0 Then
+        PT_buf_ = Choke.calc_choke_p_buf(PT_lin_)
         If PT_buf_.p_atma < 0 Then PT_buf_.p_atma = 1
     Else
         PT_buf_ = PT_lin_
@@ -876,7 +906,7 @@ On Error GoTo err1:
                                              temp_method:=temp_correlation)
     PT_dis_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_buf_.p_atma, PT_buf_.t_C, saveCurve)
     ' 5. если есть ЭЦН то считаем давление на приеме по давлению на выкиде сверху вниз
-    If is_ESP() Then                                                 ' Если есть насос
+    If ESP_on Then                                                 ' Если есть насос
         ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
         Call ESP.calc_ESPsys(PT_dis_.p_atma, calc_along_flow:=False)
         PT_int_ = SetPT(ESP.ESP_pump.p_int_atma, ESP.ESP_pump.t_int_C)
@@ -994,7 +1024,7 @@ err1:
 End Function
 Private Function is_Hdyn_Larger_Hsp() As Boolean
 ' Динамический уровень Hdyn больше глубины спуска насоса Hpump,
-    is_Hdyn_Larger_Hsp = is_ESP() And H_dyn_m_ > h_sp_m_
+    is_Hdyn_Larger_Hsp = ESP_on And Hdyn_Pcas_.hdyn_m > h_sp_m_
 End Function
 Public Function Build_Pwhp_wfcurve( _
                 Optional ByVal p_linMax As Double = -1, _
@@ -1168,11 +1198,11 @@ Public Function Build_Hdp_wfcurve(p_an_atma As Double, t_bh_C As Double, Optiona
                 HdAtIntake = True
                 Panold = Me.p_an_atma
                 p_wfold = pwf_temp
-                Hdold = H_dyn_m_
-                Hdpump = H_dyn_m_
+                Hdold = Hdyn_Pcas_.hdyn_m
+                Hdpump = Hdyn_Pcas_.hdyn_m
             Else
             ' вышли в зону где уровень выше приема насоса
-                If HdAtIntake And Abs(Hdold - H_dyn_m_) > 10 Then
+                If HdAtIntake And Abs(Hdold - Hdyn_Pcas_.hdyn_m) > 10 Then
                     ' погрешность около точки слома по дин уровню больше 10 метров - надо уточнить лучше
                     p_wfold1 = pwf_temp
                     itr = 0
@@ -1182,26 +1212,26 @@ Public Function Build_Hdp_wfcurve(p_an_atma As Double, t_bh_C As Double, Optiona
                         PT_cas_.p_atma = p_an_atma
                         isCalcCasing = True
                         plin_temp = calc_plin_pwf_atma(pwf_temp)
-                        If H_dyn_m_ = Hdpump Then
+                        If Hdyn_Pcas_.hdyn_m = Hdpump Then
                             HdAtIntake = True
                             Panold = Me.p_an_atma
                             p_wfold = pwf_temp
-                            Hdold = H_dyn_m_
+                            Hdold = Hdyn_Pcas_.hdyn_m
                         Else
                             p_wfold1 = pwf_temp
                         End If
-                    Loop While ((Abs(Hdpump - H_dyn_m_) > 10) Or Abs(p_an_atma - Me.p_an_atma) > 2) And itr < 10 '
+                    Loop While ((Abs(Hdpump - Hdyn_Pcas_.hdyn_m) > 10) Or Abs(p_an_atma - Me.p_an_atma) > 2) And itr < 10 '
                 End If
 '                Debug.Assert itr < 10
                 itr = 0
                 HdAtIntake = False ' сбросим флаг, что нашли точку слома
             End If
-            curve(str_Hd_Depend_p_wf).AddPoint pwf_temp, H_dyn_m_
+            curve(str_Hd_Depend_p_wf).AddPoint pwf_temp, Hdyn_Pcas_.hdyn_m
             curve(str_Pan_Depend_p_wf).AddPoint pwf_temp, p_an_atma
             pwf_temp = pwf_temp + P_step
 '            Debug.Assert pwf_temp < 300
             itr2 = itr2 + 1
-        Loop While (Not is_Hdyn_Larger_Hsp And H_dyn_m_ > 0) And (itr2 < 100)
+        Loop While (Not is_Hdyn_Larger_Hsp And Hdyn_Pcas_.hdyn_m > 0) And (itr2 < 100)
         ' проверка условий продолжения цикла
         If (curve(str_Hd_Depend_p_wf).num_points >= MinCountPoints_calc_pwf_pcas_hdyn_atma) Then
             processing = False
@@ -1261,7 +1291,7 @@ Property Get VLPCurve() As CInterpolation
   Set VLPCurve = curve(str_VLPcurve)
 End Property
 Public Property Get ksep_total_d() As Double
-   If is_ESP Then
+   If ESP_on Then
        ksep_total_d = ESP.ksep_total_fr
    Else
        ksep_total_d = 0
@@ -1283,8 +1313,10 @@ End Sub
 Private Function IWell_CalcDown(p_line_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
     IWell_CalcDown = calc_pwf_plin_atma(p_line_atma, t_bh_C, saveCurve:=saveCurve)
 End Function
-Private Function IWell_CalcUp(pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
-    IWell_CalcUp = calc_plin_pwf_atma(pwf_atma, saveCurve:=saveCurve)
+Private Function IWell_CalcUp(pwf_atma As Double, _
+                              twf_C As Double, _
+                    Optional saveCurve As CALC_RESULTS = 0&) As Double
+    IWell_CalcUp = calc_plin_pwf_atma(pwf_atma, twf_C, saveCurve:=saveCurve)
 End Function
 Private Function IWell_CalcWell(pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
 End Function
@@ -1293,9 +1325,6 @@ Private Property Get IWell_cfBettaFric() As Double
 End Property
 Private Property Get IWell_cfBettaGrav() As Double
     IWell_cfBettaGrav = c_calibr_grav
-End Property
-Private Property Get IWell_cDegradChoke() As Double
-    IWell_cDegradChoke = choke.c_degrad_fr
 End Property
 Private Property Get IWell_cfESP() As Double
     IWell_cfESP = ESP.c_calibr_head
@@ -1311,21 +1340,51 @@ End Property
 Private Property Get IWell_cfRp() As Double
     IWell_cfRp = 0
 End Property
+Private Property Get IWell_Choke() As Cchoke
+    Set IWell_Choke = Choke
+End Property
+Private Property Get IWell_ESP() As CESPsystemSimple
+    Set IWell_ESP = ESP_
+End Property
 Private Property Get IWell_fw() As Double
     IWell_fw = fluid.fw_perc
 End Property
-Private Property Get IWell_Pintake() As Double
-    IWell_Pintake = PT_int_.p_atma
+Private Property Get IWell_GLVset() As CGLValveSet
+    Set IWell_GLVset = Nothing
 End Property
-Private Property Get IWell_Pline() As Double
-    IWell_Pline = PT_lin_.p_atma
+Private Property Get IWell_HdynPcas() As PCAS_HDYN_type
+    IWell_HdynPcas = Hdyn_Pcas_
 End Property
-Private Property Get IWell_Pwf() As Double
-    IWell_Pwf = PT_wf_.p_atma
+Private Property Get IWell_isESP() As Boolean
+    IWell_isESP = ESP_on
 End Property
-Private Property Get IWell_Pwh() As Double
-    IWell_Pwh = PT_buf_.p_atma
+Private Property Get IWell_isGL() As Boolean
+    IWell_isGL = False
 End Property
+Private Property Get IWell_PTbuf() As PTtype
+    IWell_PTbuf = PT_buf_
+End Property
+Private Property Get IWell_PTcas() As PTtype
+    IWell_PTcas = PT_cas_
+End Property
+Private Property Get IWell_PTdis() As PTtype
+    IWell_PTdis = PT_dis_
+End Property
+Private Property Get IWell_PTintake() As PTtype
+    IWell_PTintake = PT_int_
+End Property
+Private Property Get IWell_PTline() As PTtype
+    IWell_PTline = PT_lin_
+End Property
+Private Property Get IWell_PTwf() As PTtype
+    IWell_PTwf = PT_wf_
+End Property
+Private Property Get IWell_Qgas() As Double
+    IWell_Qgas = fluid.q_gas_sm3day
+End Property
+'Private Property Get IWell_Pwh() As Double
+'    IWell_Pwh = PT_buf_.p_atma
+'End Property
 Private Property Get IWell_Qgascas() As Double
     IWell_Qgascas = 0
 End Property
