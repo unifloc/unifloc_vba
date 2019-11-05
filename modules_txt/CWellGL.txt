@@ -31,6 +31,7 @@ Private PT_buf_ As PTtype
 Private PT_lin_ As PTtype
 Private PT_wf_ As PTtype         '
 Private PT_gas_inj_ As PTtype
+Private PTcas_behind_ As PTtype
 ' it is assumed - one fluid in tubing - other in casing
 ' in gasing gas - with additional amount of gas in flow
 Private q_gas_inj_scm3day_ As Double
@@ -107,7 +108,7 @@ Public Property Set fluid(val As CPVT)
     Next pipe
     
     Set Choke.fluid = fluid_
-    Set valves.fluid = fluid_
+    Set valves.fluid = fluid_cas_
 End Property
 ' ---------------------------------------------------------------
 ' flow correlations tuning methods
@@ -455,18 +456,46 @@ Dim fluid_Pipe_Below As CPVT
 Dim LowestGLVdone As Boolean ' flag show if lowest GLV has been acounted
 Dim Qgas_inj_GLV_scm3day As Double
 Dim temp_corr_inj As TEMP_CALC_METHOD
+Dim pressure_driven_mode As Boolean
+pressure_driven_mode = False
 Qgfree_tot_scm3day = fluid.q_gas_free_sm3day
+Set fluid = fluid
 Set fluid_Pipe_Below = fluid ' first initialize temp fluid with general one
 LowestGLVdone = False
 Qgas_inj_GLV_scm3day = 0
 On Error GoTo err1:
-    ' 1. Start calculation from p_wf, Tbh
+    ' 1. prepare initial data for calculation from p_wf, Tbh
     PT_wf_.p_atma = pwf_atma
     If Not IsMissing(t_C) Then t_bh_C_ = t_C
     PT_wf_.t_C = t_bh_C_
     PT_temp = PT_wf_
-    'PT_temp.t_C = pwf_atma
-    PTcas_temp = PT_gas_inj_ 'SetPT(Pcas_inj_atma, PT_cas_.T_C)
+    ' 1.1 prepare gas injection pressure gradient calculation
+    PTcas_temp = PT_gas_inj_
+    If valves_.p_gas_inj_atma > 0 Then
+        ' pressure driven calculation mode initialisation
+        pressure_driven_mode = True
+        PT_temp.p_atma = valves_.p_gas_inj_atma
+    End If
+    
+    If valves_.d_gas_inj_mm > 0 Then
+        ' correct injection pressure by injection line choke
+        Dim choke_inj_res
+        On Error GoTo err4:
+        choke_inj_res = GLV_p_atma(d_mm:=valves_.d_gas_inj_mm, _
+                                   p_calc_atma:=PTcas_temp.p_atma, _
+                                   q_gas_sm3day:=valves.q_gas_inj_sm3day, _
+                                   gamma_g:=fluid_cas_.gamma_g, _
+                                   t_C:=PT_temp.t_C, _
+                                   calc_along_flow:=True)
+        valves_.p_cas_behind_atma = choke_inj_res(0)(0)
+        valves_.critical_flow_surf = choke_inj_res(0)(3)
+        On Error GoTo err1:
+    Else
+        valves_.p_cas_behind_atma = PTcas_temp.p_atma
+    End If
+    ' prepare injection gas start pressure point
+    PTcas_behind_ = SetPT(valves_.p_cas_behind_atma, PTcas_temp.t_C)
+    PTcas_temp = PTcas_behind_
     
     ' 2. calculate pressure distribution in annulus
     For i = PipesInj.Count To 1 Step -1
@@ -531,6 +560,7 @@ On Error GoTo err1:
                                              temp_method:=temp_correlation)
         PT_temp = pipe.calc_dPipe(PT_temp.p_atma, PT_temp.t_C, saveCurve)
     Next i
+    valves.q_gas_inj_sm3day = Qgfree_tot_scm3day - fluid.q_gas_free_sm3day
     PT_buf_ = PT_temp
     PT_lin_ = PT_buf_
 On Error GoTo err3:
@@ -559,6 +589,16 @@ err2:
 err3:
     On Error Resume Next
     addLogMsg "CWellGL.calc_plin_pwf_atma:error while choke calc - choke have been  ignored"
+    Resume Next
+err4:
+    On Error Resume Next
+    addLogMsg "CWellGL.calc_plin_pwf_atma:error while injection choke calc - choke have been  ignored"
+    ReDim choke_inj_res(2)
+    Dim a()
+    ReDim a(3)
+    a(0) = PTcas_temp.p_atma
+    a(3) = False
+    choke_inj_res(0) = a
     Resume Next
 End Function
 Private Sub save_curves(saveCurve As CALC_RESULTS)
@@ -786,8 +826,10 @@ End Property
 ' ======================================================================
 ' Iwell implementation
 ' ======================================================================
-Private Function IWell_CalcDown(p_line_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
- '   IWell_CalcDown = calc_pwf_plin_atma(p_line_atma, t_bh_C, saveCurve:=saveCurve)
+Private Function IWell_CalcDown(p_line_atma As Double, _
+                                twf_C As Double, _
+                       Optional saveCurve As CALC_RESULTS = 0&) As Double
+    IWell_CalcDown = calc_pwf_plin_atma(p_line_atma, twf_C, saveCurve:=saveCurve)
 End Function
 Private Function IWell_CalcUp(pwf_atma As Double, _
                               twf_C As Double, _
@@ -818,6 +860,9 @@ Private Property Get IWell_cfRp() As Double
 End Property
 Private Property Get IWell_Choke() As Cchoke
     Set IWell_Choke = Choke
+End Property
+Private Property Get IWell_curve() As CCurves
+    Set IWell_curve = curve
 End Property
 Private Property Get IWell_ESP() As CESPsystemSimple
     Set IWell_ESP = Nothing

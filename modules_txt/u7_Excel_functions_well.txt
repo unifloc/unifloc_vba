@@ -119,6 +119,7 @@ Public Function well_pwf_plin_atma( _
         Optional ByVal temp_list_C As Variant, _
         Optional ByVal hydr_corr As H_CORRELATION = 0, _
         Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+        Optional ByVal twf_C As Double, _
         Optional ByVal c_calibr_grav = 1, _
         Optional ByVal c_calibr_fric = 1, _
         Optional ByVal roughness_m As Double = 0.0001, _
@@ -160,7 +161,7 @@ Public Function well_pwf_plin_atma( _
 ' результат   - число - давление на другом конце трубы atma.
 'description_end
     
-    Dim well As CWellESP
+    Dim well As IWell
 On Error GoTo err1:
             
     Set well = well_load( _
@@ -183,7 +184,7 @@ On Error GoTo err1:
                     q_gas_sm3day)
     
     Dim res1
-    res1 = well.calc_pwf_plin_atma(plin_atma, 100, fast:=True, saveCurve:=allCurves)
+    res1 = well.CalcDown(plin_atma, twf_C, saveCurve:=allCurves)
     well_pwf_plin_atma = well_out_arr(well, param_out, num_pt_crv)
     Exit Function
 err1:
@@ -339,8 +340,13 @@ On Error GoTo err1:
     ReDim ar3(arr_len)
     ReDim ar4(arr_len)
     Dim i As Integer
-'    Set w = well
+    Dim pcas_out As Double
     With well
+        If .GLVset.p_gas_inj_atma > 0 Then
+           pcas_out = .GLVset.p_gas_inj_atma
+        Else
+           pcas_out = .PTcas.p_atma
+        End If
          ' сначала идут общие параметры для всех типов скважин
          res.Add "p_line_atma", .PTLine.p_atma                              'i=1
          res.Add "p_buf_atma", .PTbuf.p_atma                                'i=2
@@ -384,9 +390,20 @@ On Error GoTo err1:
         ElseIf well.isGL Then
              resAL.Add "GLV.count", .GLVset.Count                             'i=1
              resAL.Add "q_gas_inj_sm3day", .GLVset.q_gas_inj_sm3day           'i=2
-             resAL.Add "p_gas_inj_atma", .GLVset.p_gas_inj_atma               'i=3
+             resAL.Add "p_gas_inj_atma", pcas_out                             'i=3
              resAL.Add "d_gas_inj_mm", .GLVset.d_gas_inj_mm                   'i=4
-        
+             If .GLVset.Count > 0 Then
+                Dim vlv As CGLvalve
+                For i = 1 To .GLVset.Count
+                    Set vlv = .GLVset.valves(i)
+                    resAL.Add "glv" + CStr(i) + ":d_mm", vlv.d_port_mm
+                    resAL.Add "glv" + CStr(i) + ":p_in_atma", vlv.p_in_atma
+                    resAL.Add "glv" + CStr(i) + ":p_out_atma", vlv.p_out_atma
+                    resAL.Add "glv" + CStr(i) + ":q_gas_scm3day", vlv.q_gas_inj_scm3day
+                    resAL.Add "glv" + CStr(i) + ":t_C", vlv.t_C
+'                    resAL.Add "glv" + CStr(i) + ":t_C", vlv.
+                Next i
+             End If
         End If
 '
         For i = 1 To res.Count
@@ -421,92 +438,82 @@ On Error GoTo err1:
             arr(3, i) = ar4(i)
             arr(4, i) = i
         Next i
-'
-'        Set crv1 = .curve(str_PtubHmes_curve).ClonePointsToNum(num_points)
-'        arr(offset, 0) = "num"
-'        arr(offset, 1) = crv1.xName
-'        arr(offset, 2) = crv1.yName
-'        For i = 1 To num_points
-'            arr(offset + i, 0) = i
-'            arr(offset + i, 1) = crv1.pointX(i)
-'            arr(offset + i, 2) = crv1.PointY(i)
-'        Next i
-'        n = 2
-'        ' use copy paste below :)
-'
-'        crv_name = "c_udl_m": n = n + 1
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'        crv_name = "c_Diam": n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'        crv_name = "c_Theta": n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'
-'        crv_name = str_TtubHmes_curve: n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'
-'        crv_name = str_HlHmes_curve: n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'
-'
-'        'crv_name = "Pcas_Hd": n = n + 2
-'        crv_name = str_PcasHmes_curve: n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'         crv_name = str_HLcasHmes_curve: n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'         crv_name = str_TambHmes_curve: n = n + 2
-'                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
-'                                            arr(offset, n) = crv1.xName
-'                                            arr(offset, n + 1) = crv1.yName
-'                                            For i = 1 To num_points
-'                                                arr(offset + i, n) = crv1.pointX(i)
-'                                                arr(offset + i, n + 1) = crv1.PointY(i)
-'                                            Next i
-'
-'
-'
-'
+        Set crv1 = .curve(str_PtubHmes_curve).ClonePointsToNum(num_points)
+        arr(offset, 0) = "num"
+        arr(offset, 1) = crv1.xName
+        arr(offset, 2) = crv1.yName
+        For i = 1 To num_points
+            arr(offset + i, 0) = i
+            arr(offset + i, 1) = crv1.pointX(i)
+            arr(offset + i, 2) = crv1.PointY(i)
+        Next i
+        n = 2
+        ' use copy paste below :)
+        crv_name = "c_udl_m": n = n + 1
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+        crv_name = "c_Diam": n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+        crv_name = "c_Theta": n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+        crv_name = str_TtubHmes_curve: n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+        crv_name = str_HlHmes_curve: n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+        'crv_name = "Pcas_Hd": n = n + 2
+        crv_name = str_PcasHmes_curve: n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+         crv_name = str_HLcasHmes_curve: n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
+         crv_name = str_TambHmes_curve: n = n + 2
+                                            Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                            arr(offset, n) = crv1.xName
+                                            arr(offset, n + 1) = crv1.yName
+                                            For i = 1 To num_points
+                                                arr(offset + i, n) = crv1.pointX(i)
+                                                arr(offset + i, n + 1) = crv1.PointY(i)
+                                            Next i
         well_out_arr = arr
         
     ' можно еще добавить сюда вывод кривых распределения давления и температуры по стволу и еще 4 параметров  (потом)
