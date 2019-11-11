@@ -8,117 +8,120 @@
 Option Explicit
 ' ==============  функции для расчета скважины ==========================
 ' =====================================================================
-Private Function wellGL_InitData(q_m3day As Double, _
-                                 fw_perc As Double, _
-                        Optional pcas_atma As Double = 10, _
-                        Optional str_well As String = WELL_GL_DEFAULT, _
-                        Optional str_PVT As String = PVT_DEFAULT, _
-                        Optional hydr_corr As H_CORRELATION = 0 _
-                                 ) As CWellGL
-    ' функция для шаблонного чтения данных по скважине в интерфейсных функциях
-    '
-    ' на входе данные по конструкции скважины, PVT, ГЛ берутся из строк с закодированными параметрами
-    '    следует использовать функции Encode для передачи параметров
-    ' на выходе объект скважина с загруженными данными
-    Dim well As New CWellGL
-    Dim PVT As New CPVT
-        
-    Set PVT = PVT_decode_string(str_PVT)
-    PVT.qliq_sm3day = q_m3day
-    PVT.fw_fr = fw_perc / 100
-    
-    Set well = wellGL_decode_string(str_well)
-    Set well.fluid = PVT
-  '  well.pcas_atma = pcas_atma
-    well.hydraulic_correlation = hydr_corr
-    Set wellGL_InitData = well
-End Function
-Private Function wellGL_out_arr(well As CWellGL, Optional FirsrCol As Integer = 0)
-    Dim ar1(), ar2()
-    Dim vlv As CGLvalve
-    With well
-        ' подготовим данные для вывода
-        ' данные выводятся в одну линию, чтобы, хотя бы теоретически, можно было вывести данные по скважине в таблице
-        ' во второй строке выводятся подписи параметров, если необходимо
-        
-        Dim i As Integer, j As Integer
-        
-        ' первый параметр настраиваемый
-        i = 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(0) = "":  ar2(0) = ""
-        ' блок параметров по давлениям
-        i = i: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .p_line_atma:  ar2(i) = "p_line_atma"
-        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .pbuf_atma:  ar2(i) = "pbuf_atma"
-        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .pcas_atma:  ar2(i) = "pcas_atma"
-        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .p_gas_inj_atma:   ar2(i) = "Pgas_inj_atma"
-        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .pwf_atma:  ar2(i) = "pwf_atma"
-        
-        For j = 1 To .valves.Count
-            Set vlv = .valves.valves(j)
-            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-            ar1(i) = vlv.p_in_atma:   ar2(i) = "GLV" + CStr(j) + ".p_in_atma"
-            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-            ar1(i) = vlv.p_out_atma:   ar2(i) = "GLV" + CStr(j) + ".p_out_atma"
-            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-            ar1(i) = vlv.h_mes_m:    ar2(i) = "GLV" + CStr(j) + ".h_mes_m"
-            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-            ar1(i) = vlv.q_gas_inj_scm3day:     ar2(i) = "GLV" + CStr(j) + ".q_gas_inj_scm3day"
-            
-        Next j
-        ' параметры температуры
-        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .t_buf_C:  ar2(i) = "t_buf_C"
-        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
-        ar1(i) = .t_bh_C:  ar2(i) = "t_bh_C"
-        
-        ar1(0) = ar1(FirsrCol): ar2(0) = ar2(FirsrCol)
-         
-        wellGL_out_arr = Array(ar1, ar2)
-    ' можно еще добавить сюда вывод кривых распределения давления и температуры по стволу и еще 4 параметров  (потом)
-    End With
-End Function
-Public Function wellGL_plin_pwf_atma(ByVal pwf_atma As Double, _
-                                     ByVal q_m3day As Double, _
-                                     ByVal fw_perc As Double, _
-                                     Optional ByVal pcas_atma As Double = 10, _
-                                     Optional qgas_inj_scm3day As Double = -1, _
-                                     Optional str_well As String = WELL_GL_DEFAULT, _
-                                     Optional str_PVT As String = PVT_DEFAULT, _
-                                     Optional ByVal hydr_corr As H_CORRELATION = 0)
-' функция расчета линейного давления скважины по забойному
-    Dim well As CWellGL
-    Set well = wellGL_InitData(q_m3day, fw_perc, pcas_atma, _
-                               str_well, str_PVT, hydr_corr)
-    Call well.set_qgas_inj(pcas_atma, qgas_inj_scm3day)
-    
-    Call well.calc_plin_pwf_atma(pwf_atma)           ' проведем расчет
-    ' в качестве результата выведем ряд расчитанных значений давления
-    wellGL_plin_pwf_atma = wellGL_out_arr(well, 1)
-    
-End Function
-Public Function wellGL_pwf_plin_atma(ByVal plin_atma As Double, _
-                                     ByVal q_m3day As Double, _
-                                     ByVal fw_perc As Double, _
-                                     Optional ByVal pcas_atma As Double = 10, _
-                                     Optional qgas_inj_scm3day As Double = -1, _
-                                     Optional str_well As String = WELL_GL_DEFAULT, _
-                                     Optional str_PVT As String = PVT_DEFAULT, _
-                                     Optional ByVal hydr_corr As H_CORRELATION = 0)
-' функция расчета линейного давления скважины по забойному
-    Dim well As CWellGL
-    Set well = wellGL_InitData(q_m3day, fw_perc, pcas_atma, _
-                               str_well, str_PVT, hydr_corr)
-    Call well.set_qgas_inj(pcas_atma, qgas_inj_scm3day)
-    Call well.calc_pwf_plin_atma(plin_atma, well.t_bh_C)            ' проведем расчет
-    ' в качестве результата выведем ряд расчитанных значений давления
-    wellGL_pwf_plin_atma = wellGL_out_arr(well, 5)
-    
-End Function
+'Private Function wellGL_InitData(q_m3day As Double, _
+'                                 fw_perc As Double, _
+'                        Optional pcas_atma As Double = 10, _
+'                        Optional str_well As String = WELL_GL_DEFAULT, _
+'                        Optional str_PVT As String = PVT_DEFAULT, _
+'                        Optional hydr_corr As H_CORRELATION = 0 _
+'                                 ) As CWellGL
+'    ' функция для шаблонного чтения данных по скважине в интерфейсных функциях
+'    '
+'    ' на входе данные по конструкции скважины, PVT, ГЛ берутся из строк с закодированными параметрами
+'    '    следует использовать функции Encode для передачи параметров
+'    ' на выходе объект скважина с загруженными данными
+'    Dim well As New CWellGL
+'    Dim PVT As New CPVT
+'
+'    Set PVT = PVT_decode_string(str_PVT)
+'    PVT.qliq_sm3day = q_m3day
+'    PVT.fw_fr = fw_perc / 100
+'
+'    Set well = wellGL_decode_string(str_well)
+'    Set well.fluid = PVT
+'  '  well.pcas_atma = pcas_atma
+'    well.hydraulic_correlation = hydr_corr
+'
+'    Set wellGL_InitData = well
+'End Function
+'
+'Private Function wellGL_out_arr(well As CWellGL, Optional FirsrCol As Integer = 0)
+'    Dim ar1(), ar2()
+'    Dim vlv As CGLvalve
+'    With well
+'        ' подготовим данные для вывода
+'        ' данные выводятся в одну линию, чтобы, хотя бы теоретически, можно было вывести данные по скважине в таблице
+'        ' во второй строке выводятся подписи параметров, если необходимо
+'
+'        Dim i As Integer, j As Integer
+'
+'        ' первый параметр настраиваемый
+'        i = 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(0) = "":  ar2(0) = ""
+'        ' блок параметров по давлениям
+'        i = i: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .p_line_atma:  ar2(i) = "p_line_atma"
+'        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .pbuf_atma:  ar2(i) = "pbuf_atma"
+'        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .pcas_atma:  ar2(i) = "pcas_atma"
+'        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .p_gas_inj_atma:   ar2(i) = "Pgas_inj_atma"
+'        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .pwf_atma:  ar2(i) = "pwf_atma"
+'
+'        For j = 1 To .valves.Count
+'            Set vlv = .valves.valves(j)
+'            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'            ar1(i) = vlv.p_in_atma:   ar2(i) = "GLV" + CStr(j) + ".p_in_atma"
+'            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'            ar1(i) = vlv.p_out_atma:   ar2(i) = "GLV" + CStr(j) + ".p_out_atma"
+'            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'            ar1(i) = vlv.h_mes_m:    ar2(i) = "GLV" + CStr(j) + ".h_mes_m"
+'            i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'            ar1(i) = vlv.q_gas_inj_scm3day:     ar2(i) = "GLV" + CStr(j) + ".q_gas_inj_scm3day"
+'
+'        Next j
+'        ' параметры температуры
+'        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .t_buf_C:  ar2(i) = "t_buf_C"
+'        i = i + 1: ReDim Preserve ar1(i): ReDim Preserve ar2(i)
+'        ar1(i) = .t_bh_C:  ar2(i) = "t_bh_C"
+'
+'        ar1(0) = ar1(FirsrCol): ar2(0) = ar2(FirsrCol)
+'
+'        wellGL_out_arr = Array(ar1, ar2)
+'    ' можно еще добавить сюда вывод кривых распределения давления и температуры по стволу и еще 4 параметров  (потом)
+'    End With
+'End Function
+'Public Function wellGL_plin_pwf_atma(ByVal pwf_atma As Double, _
+'                                     ByVal q_m3day As Double, _
+'                                     ByVal fw_perc As Double, _
+'                                     Optional ByVal pcas_atma As Double = 10, _
+'                                     Optional qgas_inj_scm3day As Double = -1, _
+'                                     Optional str_well As String = WELL_GL_DEFAULT, _
+'                                     Optional str_PVT As String = PVT_DEFAULT, _
+'                                     Optional ByVal hydr_corr As H_CORRELATION = 0)
+'' функция расчета линейного давления скважины по забойному
+'    Dim well As CWellGL
+'    Set well = wellGL_InitData(q_m3day, fw_perc, pcas_atma, _
+'                               str_well, str_PVT, hydr_corr)
+'    Call well.set_qgas_inj(pcas_atma, qgas_inj_scm3day)
+'
+'    Call well.calc_plin_pwf_atma(pwf_atma)           ' проведем расчет
+'    ' в качестве результата выведем ряд расчитанных значений давления
+'    wellGL_plin_pwf_atma = wellGL_out_arr(well, 1)
+'
+'End Function
+'
+'Public Function wellGL_pwf_plin_atma(ByVal plin_atma As Double, _
+'                                     ByVal q_m3day As Double, _
+'                                     ByVal fw_perc As Double, _
+'                                     Optional ByVal pcas_atma As Double = 10, _
+'                                     Optional qgas_inj_scm3day As Double = -1, _
+'                                     Optional str_well As String = WELL_GL_DEFAULT, _
+'                                     Optional str_PVT As String = PVT_DEFAULT, _
+'                                     Optional ByVal hydr_corr As H_CORRELATION = 0)
+'' функция расчета линейного давления скважины по забойному
+'    Dim well As CWellGL
+'    Set well = wellGL_InitData(q_m3day, fw_perc, pcas_atma, _
+'                               str_well, str_PVT, hydr_corr)
+'    Call well.set_qgas_inj(pcas_atma, qgas_inj_scm3day)
+'    Call well.calc_pwf_plin_atma(plin_atma, well.t_bh_C)            ' проведем расчет
+'    ' в качестве результата выведем ряд расчитанных значений давления
+'    wellGL_pwf_plin_atma = wellGL_out_arr(well, 5)
+'
+'End Function
 ' function to calculated gas passage trough orifice or gas valve
 ' link in K Brawn AL 2A - Craft, Holden, Graves (p.111)
 ' also found in Mischenko book
