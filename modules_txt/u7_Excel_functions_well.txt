@@ -192,9 +192,9 @@ err1:
     addLogMsg "Error:well_pwf_plin_atma:" & Err.Description
 End Function
 Private Function well_load( _
-                 ByVal qliq_sm3day As Double, _
-                 ByVal fw_perc As Double, _
-                 ByVal h_perf_m As Double, _
+        Optional ByVal qliq_sm3day As Double = 0, _
+        Optional ByVal fw_perc As Double = 0, _
+        Optional ByVal h_perf_m As Double = 0, _
         Optional ByVal pcas_atma As Double, _
         Optional ByVal d_choke_mm As Double, _
         Optional ByVal str_PVT As String = PVT_DEFAULT, _
@@ -448,7 +448,8 @@ On Error GoTo err1:
             arr(offset + i, 2) = crv1.PointY(i)
         Next i
         n = 2
-        ' use copy paste below :)
+        
+        ' use copy paste below :)   ugly but works
         crv_name = "c_udl_m": n = n + 1
                                             Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
                                             arr(offset, n) = crv1.xName
@@ -489,7 +490,6 @@ On Error GoTo err1:
                                                 arr(offset + i, n) = crv1.pointX(i)
                                                 arr(offset + i, n + 1) = crv1.PointY(i)
                                             Next i
-        'crv_name = "Pcas_Hd": n = n + 2
         crv_name = str_PcasHmes_curve: n = n + 2
                                             Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
                                             arr(offset, n) = crv1.xName
@@ -514,6 +514,17 @@ On Error GoTo err1:
                                                 arr(offset + i, n) = crv1.pointX(i)
                                                 arr(offset + i, n + 1) = crv1.PointY(i)
                                             Next i
+        If well.isESP Then
+            ' ESP curves output start here
+            crv_name = "Pcas_Hd": n = n + 2
+                                                Set crv1 = .curve(crv_name).ClonePointsToNum(num_points)
+                                                arr(offset, n) = crv1.xName
+                                                arr(offset, n + 1) = crv1.yName
+                                                For i = 1 To num_points
+                                                    arr(offset + i, n) = crv1.pointX(i)
+                                                    arr(offset + i, n + 1) = crv1.PointY(i)
+                                                Next i
+        End If
         well_out_arr = arr
         
     ' можно еще добавить сюда вывод кривых распределения давления и температуры по стволу и еще 4 параметров  (потом)
@@ -522,184 +533,238 @@ On Error GoTo err1:
 err1:
     Resume Next
 End Function
-''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-'' функция расчета линейного давления по забойному для скважины
-'' расчет снизу-вверх, простой и быстрый расчет
-'Public Function well_plin_pwf_atma( _
-'                 ByVal q_m3day As Double, _
-'                 ByVal fw_perc As Double, _
-'                 ByVal pwf_atma As Double, _
-'        Optional ByVal pcas_atma As Double = -1, _
-'        Optional ByVal str_well As String = WELL_DEFAULT, _
-'        Optional ByVal str_PVT As String = PVT_DEFAULT, _
-'        Optional ByVal str_ESP As String = 0, _
-'        Optional ByVal hydr_corr As H_CORRELATION = 0, _
-'        Optional ByVal ksep_fr As Double = 0, _
-'        Optional ByVal c_calibr_head_d As Double = 1, _
-'        Optional ByVal param_num As Integer = 1 _
-'                                    )
-'' исходные параметры
-'' q_m3day    - дебит жидкости, на поверхности
-'' fw_perc    - обводненность (объемная на поверхности)
-'' pwf_atma - забойное давление
-''
-'' pcas_atma - затрубное давление
-''     если не задано динамический уровень не рассчитывается
-'' str_well  - закодированные параметры конструкции скважины.
-''           Если не указано,
-''           используются свойства скважины по умолчанию.
-'' str_PVT - закодированные параметры флюидов. Если не указано,
-''          используются свойства флюида по умолчанию.
-'' str_ESP - закодированные параметры УЭЦН. Если
-''          не задано или задано значение 0
-''          то УЭЦН не учитывается, проводится расчет для
-''          фонтанирующей скважины.
-'' hydr_corr      - гидравлическая корреляция, H_CORRELATION
-''                   BeggsBrill = 0
-''                   Ansari = 1
-''                   Unified = 2
-''                   Gray = 3
-''                   HagedornBrown = 4
-''                   SakharovMokhov = 5
-'' ksep_fr - коэффициент сепарации.
-''           если задан - то используется вместо расчетного
-''           явное задание коэффициента серации ускоряет расчет
-'' c_calibr_head_d - коэффициент деградации УЭЦН
-'' param_num - параметры для вывода в качестве результата
-''           на нулевой позиции выходного массива,
-''           полный набор результатов выводится в виде массива
-'' ----------- результаты расчета
-'' массив параметры работы системы пласт - скважина - УЭЦН
-''description_end
-'
-'    Dim well As CWellESP
-'    ' read all data to well object
-'    Set well = well_init_data(q_m3day, fw_perc, pcas_atma, _
-'                             str_well, str_PVT, str_ESP, hydr_corr, ksep_fr, c_calibr_head_d)
-'    ' call calc method
-'    Call well.calc_plin_pwf_atma(pwf_atma)
-'    ' return results
-'    well_plin_pwf_atma = well_out_arr(well, param_num)
-'
-'End Function
-'
-'
-''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-'' функция расчета давления на приеме по забойному для скважины
-'' расчет снизу-вверх, считает только участок ниже насоса
-'Public Function well_pintake_pwf_atma( _
-'                 ByVal q_m3day As Double, _
-'                 ByVal fw_perc As Double, _
-'                 ByVal pwf_atma As Double, _
-'        Optional ByVal str_well As String = WELL_DEFAULT, _
-'        Optional ByVal str_PVT As String = PVT_DEFAULT, _
-'        Optional ByVal hydr_corr As H_CORRELATION = 0 _
-'                                    )
-'' исходные параметры
-'' q_m3day    - дебит жидкости, на поверхности
-'' fw_perc    - обводненность (объемная на поверхности)
-'' pwf_atma - забойное давление
-''
-'' str_well  - закодированные параметры конструкции скважины.
-''           Если не указано,
-''           используются свойства скважины по умолчанию.
-'' str_PVT - закодированные параметры флюидов. Если не указано,
-''          используются свойства флюида по умолчанию.
-'' hydr_corr  - гидравлическая корреляция, H_CORRELATION
-''                   BeggsBrill = 0,
-''                   Ansari = 1,
-''                   Unified = 2,
-''                   Gray = 3,
-''                   HagedornBrown = 4,
-''                   SakharovMokhov = 5,
-''                   Gas = 10.
-'' ----------- результаты расчета
-'' массив параметры работы системы пласт - скважина - УЭЦН
-''description_end
-'
-'    Dim well As CWellESP
-'    ' read all data to well object
-'    Set well = well_init_data(q_m3day, fw_perc, , _
-'                             str_well, str_PVT, "0", hydr_corr)
-'    ' return results
-'    well_pintake_pwf_atma = well.calc_Pintake_pwf_atma(pwf_atma)
-'
-'End Function
-'
-'
-''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-'' функция расчета забойного давления по устьевому для скважины
-'' расчет сверху-вниз, считает быстро за счет угадывания сепарации
-''                     температура только линейная или по градиенту
-'Public Function well_pwf_plin_atma( _
-'                 ByVal q_m3day As Double, _
-'                 ByVal fw_perc As Double, _
-'                 ByVal plin_atma As Double, _
-'        Optional ByVal pcas_atma As Double = -1, _
-'        Optional ByVal str_well As String = WELL_DEFAULT, _
-'        Optional ByVal str_PVT As String = PVT_DEFAULT, _
-'        Optional ByVal str_ESP As String = 0, _
-'        Optional ByVal hydr_corr As H_CORRELATION = 0, _
-'        Optional ByVal ksep_fr As Double = -1, _
-'        Optional ByVal p_ksep_atma As Double = 40, _
-'        Optional ByVal t_ksep_C As Double = 40, _
-'        Optional ByVal c_calibr_head_d As Double = 1, _
-'        Optional ByVal param_num As Integer = 5)
-'' q_m3day    - дебит жидкости, на поверхности
-'' fw_perc    - обводненность (объемная на поверхности)
-'' plin_atma - линейное (устьевое) давление
-''
-'' pcas_atma - затрубное давление
-''     если не задано динамический уровень не рассчитывается
-'' str_well  - закодированные параметры конструкции скважины.
-''           Если не указано,
-''           используются свойства скважины по умолчанию.
-'' str_PVT - закодированные параметры флюидов. Если не указано,
-''          используются свойства флюида по умолчанию.
-'' str_ESP - закодированные параметры УЭЦН. Если
-''          не задано или задано значение 0
-''          то УЭЦН не учитывается, проводится расчет для
-''          фонтанирующей скважины.
-'' hydr_corr      - гидравлическая корреляция:
-''                   BeggsBrill = 0;
-''                   Ansari = 1;
-''                   Unified = 2;
-''                   Gray = 3;
-''                   HagedornBrown = 4;
-''                   SakharovMokhov = 5.
-'' ksep_fr - коэффициент сепарации.
-''           если задан - то используется вместо расчетного
-''           явное задание коэффициента серации ускоряет расчет
-'' p_ksep_atma - давление сепарации
-'' t_ksep_C - температура сепарации
-''           при расчете сверху вниз неизвестны параметры сепарации
-''           если задать их явно (угадать)
-''           тогда расчет упрощается и ускоряется
-'' c_calibr_head_d - коэффициент деградации УЭЦН
-'' param_num - параметры для вывода в качестве результата
-''             если не задан выводятся все в виде массива
-'' ----------- результаты расчета
-'' массив параметры работы системы пласт - скважина - УЭЦН
-''description_end
-'
-'    Dim well As IWell
-'    Dim ar
-'
-'    ' read all data to well object
-'    Set well = well_init_data(q_m3day, fw_perc, pcas_atma, _
-'                             str_well, str_PVT, str_ESP, hydr_corr, ksep_fr, c_calibr_head_d)
-'    ' при расчете сверху вниз задаем какие то значения сепарации наугад
-'    If well.isESP Then
-'        Call well.Setksep_total_d(fullyManual, ksep_fr, 0, p_ksep_atma, t_ksep_C)
-'        well.isCalcCasing = True
-'    End If
-'
-'    ' проведем расчет
-'    Call well.calc_pwf_plin_atma(plin_atma, well.t_bh_C, fast:=True)
-'    ' в качестве результата выведем ряд расчитанных значений давления
-'    well_pwf_plin_atma = well_out_arr(well, param_num)
-'
-'End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Расчет устьевого давления скважины по давлению на приеме.
+' Расчет распределения давления и температуры в скважине
+' с использованием многофазных корреляций.
+Public Function wellESP_plin_pintake_atma( _
+                 ByVal qliq_sm3day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal pintake_atma As Double, _
+                 ByVal h_perf_m As Double, _
+        Optional ByVal pcas_atma As Double, _
+        Optional ByVal d_choke_mm As Double, _
+        Optional ByVal str_PVT As String = PVT_DEFAULT, _
+        Optional ByVal str_AL As String, _
+        Optional ByVal hmes_habs_list_m As Variant, _
+        Optional ByVal dtub_list_mm As Variant, _
+        Optional ByVal dcas_list_mm As Variant, _
+        Optional ByVal temp_list_C As Variant, _
+        Optional ByVal hydr_corr As H_CORRELATION = 0, _
+        Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+        Optional ByVal twf_C As Double, _
+        Optional ByVal c_calibr_grav = 1, _
+        Optional ByVal c_calibr_fric = 1, _
+        Optional ByVal roughness_m As Double = 0.0001, _
+        Optional ByVal q_gas_sm3day As Double = 0, _
+        Optional ByVal param_out As Integer = 1, _
+        Optional ByVal num_pt_crv As Integer = 21)
+' Обязательные параметры
+' qliq_sm3day - дебит жидкости в поверхностных условиях
+' fw_perc     - обводненность
+' pintake_atma- давление на приеме с которого начинается расчет, атм
+'               граничное значение для проведения расчета
+' h_perf_m    - измеренная глубина пласта (перфорации)
+'               точка узлового анализа при узле на забое скважины
+' pcas_atma   - затрубное давление (расчета Ндин)
+' d_choke_mm  - диаметр штуцера
+' str_PVT     - закодированная строка с параметрами PVT.
+'               если задана - перекрывает другие значения
+' str_AL      - закодированная параметров мех добычи.
+'               строка параметров ЭЦН либо строка параметров газлифта
+' hmes_habs_list_m  - траектория скважины. range или таблица [0..N,0..1]
+' dtub_list_mm   - диаметр НКТ. range или таблица [0..N,0..1]
+' dcas_list_mm   - диаметр эксп колонны. range или таблица [0..N,0..1]
+' temp_list_C    - температура среды. range или таблица [0..N,0..1]
+' hydr_corr    - гидравлическая корреляция, H_CORRELATION
+'                  BeggsBrill = 0
+'                  Ansari = 1
+'                  Unified = 2
+'                  Gray = 3
+'                  HagedornBrown = 4
+'                  SakharovMokhov = 5
+' temp_method  - температурная модель
+' twf_C         - температура флюида на забое
+'                 необходима для продвинутого учета температуры
+' c_calibr_grav - поправка на гравитационную составляющую
+'               перепада давления
+' c_calibr_fric - поправка на трение в перепаде давления
+' roughness_m   - шероховатость трубы
+' q_gas_sm3day  - свободный газ поступающие в трубу.
+' param_out     - номер параметра для вывода в ячейку [0,0]
+' num_pt_crv    - число параметров вывода массивов
+' результат   - число - давление на другом конце трубы atma.
+'description_end
+    
+    Dim well As CWellESP
+    Dim pwf_atma As Double
+On Error GoTo err1:
+            
+    Set well = well_load( _
+                    qliq_sm3day, _
+                    fw_perc, _
+                    h_perf_m, _
+                    pcas_atma, _
+                    d_choke_mm, _
+                    str_PVT, _
+                    str_AL, _
+                    hmes_habs_list_m, _
+                    dtub_list_mm, _
+                    dcas_list_mm, _
+                    temp_list_C, _
+                    hydr_corr, _
+                    temp_method, _
+                    c_calibr_grav, _
+                    c_calibr_fric, _
+                    roughness_m, _
+                    q_gas_sm3day)
+    
+    Dim res1
+    pwf_atma = well.calc_pwf_pint_atma(pintake_atma)
+    res1 = well.calc_plin_pwf_atma(pwf_atma, twf_C, saveCurve:=allCurves)
+    wellESP_plin_pintake_atma = well_out_arr(well, param_out, num_pt_crv)
+    'well_plin_pwf_new_atma = res1
+    Exit Function
+err1:
+    wellESP_plin_pintake_atma = Array(-1, "error")
+    addLogMsg "Error:wellESP_plin_pintake_atma:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Расчет забойного давления по узловому анализу,
+' скважины и пласта.
+Public Function nodal_pwf_atma( _
+                 ByVal PI_sm3dayatm As Double, _
+                 ByVal pres_atma As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal h_perf_m As Double, _
+        Optional ByVal plin_atma As Double, _
+        Optional ByVal pcas_atma As Double, _
+        Optional ByVal d_choke_mm As Double, _
+        Optional ByVal str_PVT As String = PVT_DEFAULT, _
+        Optional ByVal str_AL As String, _
+        Optional ByVal hmes_habs_list_m As Variant, _
+        Optional ByVal dtub_list_mm As Variant, _
+        Optional ByVal dcas_list_mm As Variant, _
+        Optional ByVal temp_list_C As Variant, _
+        Optional ByVal hydr_corr As H_CORRELATION = 0, _
+        Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+        Optional ByVal twf_C As Double, _
+        Optional ByVal c_calibr_grav = 1, _
+        Optional ByVal c_calibr_fric = 1, _
+        Optional ByVal roughness_m As Double = 0.0001, _
+        Optional ByVal q_gas_sm3day As Double = 0, _
+        Optional ByVal param_out As Integer = 1, _
+        Optional ByVal num_pt_crv As Integer = 21)
+' Обязательные параметры
+' qliq_sm3day - дебит жидкости в поверхностных условиях
+' fw_perc     - обводненность
+' pwf_atma    - забойное давление с которого начинается расчет, атм
+'               граничное значение для проведения расчета
+' h_perf_m    - измеренная глубина пласта (перфорации)
+'               точка узлового анализа при узле на забое скважины
+' pcas_atma   - затрубное давление (расчета Ндин)
+' d_choke_mm  - диаметр штуцера
+' str_PVT     - закодированная строка с параметрами PVT.
+'               если задана - перекрывает другие значения
+' str_AL      - закодированная параметров мех добычи.
+'               строка параметров ЭЦН либо строка параметров газлифта
+' hmes_habs_list_m  - траектория скважины. range или таблица [0..N,0..1]
+' dtub_list_mm   - диаметр НКТ. range или таблица [0..N,0..1]
+' dcas_list_mm   - диаметр эксп колонны. range или таблица [0..N,0..1]
+' temp_list_C    - температура среды. range или таблица [0..N,0..1]
+' hydr_corr    - гидравлическая корреляция, H_CORRELATION
+'                  BeggsBrill = 0
+'                  Ansari = 1
+'                  Unified = 2
+'                  Gray = 3
+'                  HagedornBrown = 4
+'                  SakharovMokhov = 5
+' temp_method  - температурная модель
+' twf_C         - температура флюида на забое
+'                 необходима для продвинутого учета температуры
+' c_calibr_grav - поправка на гравитационную составляющую
+'               перепада давления
+' c_calibr_fric - поправка на трение в перепаде давления
+' roughness_m   - шероховатость трубы
+' q_gas_sm3day  - свободный газ поступающие в трубу.
+' param_out     - номер параметра для вывода в ячейку [0,0]
+' num_pt_crv    - число параметров вывода массивов
+' результат   - число - давление на другом конце трубы atma.
+'description_end
+    
+    Dim PS As New CProdSys
+    Dim well As IWell
+    Dim res As New CReservoirVogel
+    
+    Dim pwf_atma As Double
+    Dim pb_atma As Double
+    Dim arr
+    Dim i As Integer
+    
+On Error GoTo err1:
+            
+    Set well = well_load( _
+                    , _
+                    fw_perc, _
+                    h_perf_m, _
+                    pcas_atma, _
+                    d_choke_mm, _
+                    str_PVT, _
+                    str_AL, _
+                    hmes_habs_list_m, _
+                    dtub_list_mm, _
+                    dcas_list_mm, _
+                    temp_list_C, _
+                    hydr_corr, _
+                    temp_method, _
+                    c_calibr_grav, _
+                    c_calibr_fric, _
+                    roughness_m, _
+                    q_gas_sm3day)
+    
+    pb_atma = well.fluid.pb_atma
+    
+    If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
+    
+    res.InitProp pres_atma, pb_atma, fw_perc
+    res.PI_sm3dayatm = PI_sm3dayatm
+    
+    Set PS.Reservoir = res
+    Set PS.well = well
+    
+    Call PS.calc_nodal(plin_atma)
+    
+    ReDim arr(1 To num_pt_crv + 4, 1 To 3)
+    arr(1, 1) = PS.p_wfsol_atma
+    arr(1, 2) = PS.qsol_scm3day
+    
+    arr(2, 1) = "p_wfsol_atma"
+    arr(2, 2) = "qsol_scm3day"
+    
+    
+On Error Resume Next
+    Dim crv1 As CInterpolation
+    Dim crv_name As String
+    Dim n As Integer
+    Dim offset As Integer
+    n = 1
+    offset = 3
+    crv_name = "c_p_linQl_curves_":
+    Set crv1 = PS.curve(crv_name).ClonePointsToNum(num_pt_crv)
+    arr(offset, n + 1) = crv1.xName
+    arr(offset, n + 2) = crv1.yName
+    For i = 1 To num_pt_crv
+        arr(offset + i, n) = i
+        arr(offset + i, n + 1) = crv1.pointX(i)
+        arr(offset + i, n + 2) = crv1.PointY(i)
+    Next i
+      
+    nodal_pwf_atma = arr
+    Exit Function
+err1:
+    nodal_pwf_atma = Array(-1, "error")
+    addLogMsg "Error:nodal_pwf_atma:" & Err.Description
+End Function
 '
 ''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 '' функция адаптации модели скважины по данным эксплуатации
