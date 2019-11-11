@@ -4,9 +4,8 @@
 '2000 - 2019
 '
 '=======================================================================================
-'
+' Gaslift valve and gas line valve
 Option Explicit
-' Gaslift valve description
 Public h_mes_m As Double            ' глубина установки газлифтного клапана
 Public p_bellow_sc_atma As Double   ' давление зарядки сильфона на поверхности на поверхности
 Public p_in_atma As Double          ' casing pressure at gas valve
@@ -24,7 +23,6 @@ Public dext_mm As Double
 Public Ab_mm2 As Double
 Public Ap_mm2 As Double
 Public PREF As Double
-'Public dport_mm As Double
 Public IPO As Boolean
 Private d_vkr_mm_() As Double
 Private d_vkr_eff_mm_ As Double
@@ -139,6 +137,8 @@ Public Function calc_q_gas_sm3day(Optional p_intake_atma As Double = -1, _
     If (p_out_atma < p_intake_atma) And (d_port_mm_ > 0) And (d_vkr_eff_mm_ = 0) Then
         rslt = GLV_q_gas_sm3day(d_port_mm_, p_intake_atma, p_out_atma, fluid.gamma_g, t_in_C)
         calc_q_gas_sm3day = rslt(0)(0)
+        p_crit_atma = rslt(0)(1)
+        crit_flow = rslt(0)(2)
       '  p_v_atma = p_out_atma
     ElseIf (p_out_atma < p_intake_atma) And (d_port_mm_ > 0) And (d_vkr_eff_mm_ > 0) Then
         rslt = GLV_q_gas_vkr_sm3day(d_port_mm_, d_vkr_eff_mm_, p_intake_atma, p_out_atma, fluid.gamma_g, t_in_C)
@@ -202,4 +202,34 @@ Public Function calc_p_in_atma(p_out_atma As Double, q_gas_scm3day As Double)
     p_in_atma = res(0)(0)
     calc_p_in_atma = p_in_atma
 End Function
+Public Function table_pin(ByVal p_in_atma As Double, ByVal t_in_C As Double) As CInterpolation
+    ' calculate valve characteristics table for given d
+    Dim i As Integer
+    Dim q As Double
+    Dim tbl As New CInterpolation
+    Dim qeps As Double
+    Dim p As Double
+    qeps = 0.001
+    With tbl
+        q_gas_max_sm3day = Me.calc_q_gas_sm3day(p_in_atma, 1, t_in_C)
+        .AddPoint 1, q_gas_max_sm3day
+        .AddPoint p_crit_atma, q_gas_max_sm3day - qeps
+        .AddPoint p_in_atma, 0
+        Dim n As Integer
+        n = 10
+        For i = 1 To n - 1
+            p = p_in_atma - (p_in_atma - p_crit_atma) / n * i
+            q = Me.calc_q_gas_sm3day(p_in_atma, p, t_in_C)
+            .AddPoint p, q
+        Next i
+    End With
+    Set table_pin = tbl
+End Function
+Private Sub Class_Initialize()
+    d_vkr_eff_mm_ = 0
+    IPO = False
+    d_port_mm_ = 0
+    h_mes_m = 0
+    p_bellow_sc_atma = 0
+End Sub
 
