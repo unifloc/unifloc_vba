@@ -22,6 +22,422 @@ addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
+    def MF_CJT_Katm(self, p_atma,t_C,str_PVT=PVT_DEFAULT,qliq_sm3day=10,fw_perc=0):
+        """" функция расчета коэффициента Джоуля Томсона
+        
+                       p_atma - давление, атм    
+
+        t_c - температура, с.  опциональные аргументы функции    
+
+        str_pvt - encoded to string pvt properties of fluid    
+
+        qliq_sm3day - liquid rate (at surface)    
+
+        fw_perc - water fraction (watercut)  output - number    )  
+
+        """
+
+        self.f_MF_CJT_Katm = self.book.macro("MF_CJT_Katm")
+        return self.f_MF_CJT_Katm(p_atma,t_C,str_PVT,qliq_sm3day,fw_perc)
+
+    def MF_q_mix_rc_m3day(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
+        """" расчет объемного расхода газожидкостной смеси  для заданных термобарических условий
+        
+                       qliq_sm3day- дебит жидкости на поверхности    
+
+        fw_perc - объемная обводненность    
+
+        p_atma - давление, атм    
+
+        t_c - температура, с.  опциональные аргументы функции    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_q_mix_rc_m3day = self.book.macro("MF_q_mix_rc_m3day")
+        return self.f_MF_q_mix_rc_m3day(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
+
+    def MF_rho_mix_kgm3(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
+        """" расчет плотности газожидкостной смеси для заданных условий
+        
+                       qliq_sm3day- дебит жидкости на поверхности    
+
+        fw_perc - объемная обводненность    
+
+        p_atma - давление, атм    
+
+        t_c - температура, с.  опциональные аргументы функции    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_rho_mix_kgm3 = self.book.macro("MF_rho_mix_kgm3")
+        return self.f_MF_rho_mix_kgm3(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
+
+    def MF_mu_mix_cP(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
+        """" расчет вязкости газожидкостной смеси  для заданных термобарических условий
+        
+                       qliq_sm3day - дебит жидкости на поверхности    
+
+        fw_perc - объемная обводненность    
+
+        p_atma - давление, атм    
+
+        t_c - температура, с.  опциональные аргументы функции    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_mu_mix_cP = self.book.macro("MF_mu_mix_cP")
+        return self.f_MF_mu_mix_cP(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
+
+    def MF_gas_fraction_d(self, p_atma,t_C,fw_perc=0,str_PVT=PVT_DEFAULT):
+        """" расчет доли газа в потоке
+        
+                       p_atma - давление, атм    
+
+        t_c - температура, с.  опциональные аргументы функции    
+
+        fw_perc - обводненность объемная    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_gas_fraction_d = self.book.macro("MF_gas_fraction_d")
+        return self.f_MF_gas_fraction_d(p_atma,t_C,fw_perc,str_PVT)
+
+    def MF_p_gas_fraction_atma(self, FreeGas_d,t_C,fw_perc,str_PVT=PVT_DEFAULT):
+        """" расчет давления при котором  достигается заданная доля газа в потоке
+        
+                       freegas_d - допустимая доля газа в потоке;    
+
+        t_c - температура, с;    
+
+        fw_perc - объемная обводненность, проценты %;  опциональные аргументы функции    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения.    )  
+
+        """
+
+        self.f_MF_p_gas_fraction_atma = self.book.macro("MF_p_gas_fraction_atma")
+        return self.f_MF_p_gas_fraction_atma(FreeGas_d,t_C,fw_perc,str_PVT)
+
+    def MF_rp_gas_fraction_m3m3(self, FreeGas_d,p_atma,t_C,fw_perc,str_PVT=PVT_DEFAULT):
+        """" расчет газового фактора  при котором достигается заданная доля газа в потоке
+        
+                       freegas_d - допустимая доля газа в потоке    
+
+        p_atma - давление, атм    
+
+        t_c - температура, с.    
+
+        fw_perc - объемная обводненность, проценты %;  опциональные аргументы функции    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_rp_gas_fraction_m3m3 = self.book.macro("MF_rp_gas_fraction_m3m3")
+        return self.f_MF_rp_gas_fraction_m3m3(FreeGas_d,p_atma,t_C,fw_perc,str_PVT)
+
+    def MF_ksep_natural_d(self, qliq_sm3day,fw_perc,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120,str_PVT=PVT_DEFAULT):
+        """" расчет натуральной сепарации газа на приеме насоса
+        
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+        fw_perc - обводненность    
+
+        p_intake_atma - давление сепарации    
+
+        t_intake_c - температура сепарации    
+
+        d_intake_mm - диаметр приемной сетки    
+
+        d_cas_mm - диаметр эксплуатационной колонны    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_ksep_natural_d = self.book.macro("MF_ksep_natural_d")
+        return self.f_MF_ksep_natural_d(qliq_sm3day,fw_perc,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm,str_PVT)
+
+    def MF_ksep_total_d(self, SepNat,SepGasSep):
+        """" расчет общей сепарации на приеме насоса
+        
+                       sepnat - естественная сепарация    
+
+        sepgassep - искусственная сепарация (газосепаратор)  mf_ksep_total_d = sepnat + (1 - sepnat) * sepgassep end function    )  
+
+        """
+
+        self.f_MF_ksep_total_d = self.book.macro("MF_ksep_total_d")
+        return self.f_MF_ksep_total_d(SepNat,SepGasSep)
+
+    def MF_dpdl_atmm(self, d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,gamma_oil=const_go_,gamma_gas=const_gg_,eps_m=0.0001,theta_deg=90,ZNLF=False):
+        """"расчет градиента давления с использованием многофазных корреляций
+        
+                       d_m - диаметр трубы в которой идет поток    
+
+        p_atma - давление в точке расчета    
+
+        ql_rc_m3day - дебит жидкости в рабочих условиях    
+
+        qg_rc_m3day - дебит газа в рабочих условиях    
+
+        mu_oil_cp - вязкость нефти в рабочих условиях    
+
+        mu_gas_cp - вязкость газа в рабочих условиях    
+
+        sigma_oil_gas_nm - поверхностное натяжение  жидкость газ    
+
+        gamma_oil - удельная плотность нефти    
+
+        gamma_gas - удельная плотность газа    
+
+        eps_m - шероховатость    
+
+        theta_deg - угол от горизонтали    
+
+        znlf - флаг для расчета барботажа    )  
+
+        """
+
+        self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
+        return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,gamma_oil,gamma_gas,eps_m,theta_deg,ZNLF)
+
+    def MF_calibr_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
+        """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
+        
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+        fw_perc - обводненность    
+
+        length_m - длина трубы, измеренная, м    
+
+        pin_atma - давление на входе потока в трубу, атм  граничное значение для проведения расчета    
+
+        pout_atma - давление на выходе потока из трубы, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
+
+        d_mm - внутрнний диаметр трубы    
+
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+
+        t_in_c - температура на входе потока в трубу, с    
+
+        t_out_c - температура на выходе потока из трубы, с  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        calibr_type - тип калибровки  0 - подбор параметра c_calibr_grav  1 - подбор параметра c_calibr_fric  2 - подбор газового фактор  3 - подбор обводненности    )  
+
+        """
+
+        self.f_MF_calibr_pipe_m3day = self.book.macro("MF_calibr_pipe_m3day")
+        return self.f_MF_calibr_pipe_m3day(qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
+
+    def MF_fit_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
+        """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
+        
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+        fw_perc - обводненность    
+
+        length_m - длина трубы, измеренная, м    
+
+        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+
+        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  pcalc_atma - давление с которого начинается ..см.мануал   
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
+
+        d_mm - внутрнний диаметр трубы    
+
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+
+        t_in_c - температура на входе потока в трубу, с    
+
+        t_out_c - температура на выходе потока из трубы, с  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        calibr_type - тип калибровки  0 - подбор параметра c_calibr_grav  1 - подбор параметра c_calibr_fric  2 - подбор газового фактор  3 - подбор обводненности    )  
+
+        """
+
+        self.f_MF_fit_pipe_m3day = self.book.macro("MF_fit_pipe_m3day")
+        return self.f_MF_fit_pipe_m3day(qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
+
+    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,pcalc_atma,tcalc_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,temp_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
+        """" расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций
+        
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+        fw_perc - обводненность    
+
+        h_list_m - траектория трубы. range или таблица [0..n,0..1]    
+
+        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+
+   tcalc_c   
+
+        calc_along_coord - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  pcalc_atma - давление с которого начинается..см.мануал   
+
+   flow_along_coord   
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения  d_mm - внутрнний диаметр трубы    
+
+   diam_list_mm   
+
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  t_calc_c - температура в..см.мануал   
+
+   temp_c   
+
+   temp_methodtemp_calc_method   
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        q_gas_sm3day - свободный газ поступающие в трубу.    )  
+
+        """
+
+        self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
+        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,pcalc_atma,tcalc_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,temp_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
+
+    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_C=50,tother_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
+        """" расчет распределения давления и температуры в трубе  с использованием многофазных корреляций
+        
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+        fw_perc - обводненность    
+
+        length_m - длина трубы, измеренная, м    
+
+        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+
+        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  pcalc_atma - давление с которого начинается ..см.мануал   
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
+
+        d_mm - внутрнний диаметр трубы    
+
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+
+        t_calc_c - температура в точке где задано давление, с    
+
+        tother_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        q_gas_sm3day - свободный газ поступающие в трубу.    )  
+
+        """
+
+        self.f_MF_p_pipe_atma = self.book.macro("MF_p_pipe_atma")
+        return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_C,tother_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
+
+    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,pcalc_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+        """" расчет давления в штуцере
+        
+                      @qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+       @fw_perc - обводненность    
+
+       @dchoke_mm - диаметр штуцера (эффективный) опциональные аргументы функции    
+
+       @pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
+
+       @calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  ищется давление на выкиде по известному давлению на входе,  ищется линейное да..см.мануал   
+
+       @d_pipe_mm - диаметр трубы до и после штуцера    
+
+       @t_choke_c - температура, с.    
+
+       @c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки  q_choke_real = c_calibr_fr * q_choke_model    
+
+       @str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_p_choke_atma = self.book.macro("MF_p_choke_atma")
+        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,pcalc_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+
+    def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,dchoke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT):
+        """" расчет корректирующего фактора (множителя) модели штуцера под замеры
+        
+                       qliq_sm3day - дебит жидкости в пов условиях    
+
+        fw_perc - обводненность    
+
+        dchoke_mm - диаметр штуцера (эффективный)  опциональные аргументы функции    
+
+        p_in_atma - давление на входе (высокой стороне)    
+
+        p_out_atma - давление на выходе (низкой стороне)    
+
+        d_pipe_mm - диаметр трубы до и после штуцера    
+
+        t_choke_c - температура, с.    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_calibr_choke_fr = self.book.macro("MF_calibr_choke_fr")
+        return self.f_MF_calibr_choke_fr(qliq_sm3day,fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT)
+
+    def MF_qliq_choke_sm3day(self, fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+        """"  функция расчета дебита жидкости через штуцер   при заданном входном и выходном давлениях
+        
+                       fw_perc - обводненность    
+
+        dchoke_mm - диаметр штуцера (эффективный)    
+
+        p_in_atma - давление на входе (высокой стороне)    
+
+        p_out_atma - давление на выходе (низкой стороне)  опциональные аргументы функции    
+
+        d_pipe_mm - диаметр трубы до и после штуцера    
+
+        t_choke_c - температура, с.    
+
+        c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки (по умолчанию)  q_choke_real = c_calibr_fr * q_choke_model    
+
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+
+        """
+
+        self.f_MF_qliq_choke_sm3day = self.book.macro("MF_qliq_choke_sm3day")
+        return self.f_MF_qliq_choke_sm3day(fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+
     def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" функция расчета объемного коэффициента газа
         
@@ -660,383 +1076,7 @@ class API():
         self.f_PVT_ST_liqgas_Nm = self.book.macro("PVT_ST_liqgas_Nm")
         return self.f_PVT_ST_liqgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def MF_CJT_Katm(self, p_atma,t_C,str_PVT=PVT_DEFAULT,qliq_sm3day=10,fw_perc=0):
-        """" функция расчета коэффициента Джоуля Томсона
-        
-                       p_atma - давление, атм    
-
-        t_c - температура, с.  опциональные аргументы функции    
-
-        str_pvt - encoded to string pvt properties of fluid    
-
-        qliq_sm3day - liquid rate (at surface)    
-
-        fw_perc - water fraction (watercut)  output - number    )  
-
-        """
-
-        self.f_MF_CJT_Katm = self.book.macro("MF_CJT_Katm")
-        return self.f_MF_CJT_Katm(p_atma,t_C,str_PVT,qliq_sm3day,fw_perc)
-
-    def MF_q_mix_rc_m3day(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
-        """" расчет объемного расхода газожидкостной смеси  для заданных термобарических условий
-        
-                       qliq_sm3day- дебит жидкости на поверхности    
-
-        fw_perc - объемная обводненность    
-
-        p_atma - давление, атм    
-
-        t_c - температура, с.  опциональные аргументы функции    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_q_mix_rc_m3day = self.book.macro("MF_q_mix_rc_m3day")
-        return self.f_MF_q_mix_rc_m3day(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
-
-    def MF_rho_mix_kgm3(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
-        """" расчет плотности газожидкостной смеси для заданных условий
-        
-                       qliq_sm3day- дебит жидкости на поверхности    
-
-        fw_perc - объемная обводненность    
-
-        p_atma - давление, атм    
-
-        t_c - температура, с.  опциональные аргументы функции    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_rho_mix_kgm3 = self.book.macro("MF_rho_mix_kgm3")
-        return self.f_MF_rho_mix_kgm3(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
-
-    def MF_mu_mix_cP(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
-        """" расчет вязкости газожидкостной смеси  для заданных термобарических условий
-        
-                       qliq_sm3day - дебит жидкости на поверхности    
-
-        fw_perc - объемная обводненность    
-
-        p_atma - давление, атм    
-
-        t_c - температура, с.  опциональные аргументы функции    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_mu_mix_cP = self.book.macro("MF_mu_mix_cP")
-        return self.f_MF_mu_mix_cP(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
-
-    def MF_gas_fraction_d(self, p_atma,t_C,fw_perc=0,str_PVT=PVT_DEFAULT):
-        """" расчет доли газа в потоке
-        
-                       p_atma - давление, атм    
-
-        t_c - температура, с.  опциональные аргументы функции    
-
-        fw_perc - обводненность объемная    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_gas_fraction_d = self.book.macro("MF_gas_fraction_d")
-        return self.f_MF_gas_fraction_d(p_atma,t_C,fw_perc,str_PVT)
-
-    def MF_p_gas_fraction_atma(self, FreeGas_d,t_C,fw_perc,str_PVT=PVT_DEFAULT):
-        """" расчет давления при котором  достигается заданная доля газа в потоке
-        
-                       freegas_d - допустимая доля газа в потоке;    
-
-        t_c - температура, с;    
-
-        fw_perc - объемная обводненность, проценты %;  опциональные аргументы функции    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения.    )  
-
-        """
-
-        self.f_MF_p_gas_fraction_atma = self.book.macro("MF_p_gas_fraction_atma")
-        return self.f_MF_p_gas_fraction_atma(FreeGas_d,t_C,fw_perc,str_PVT)
-
-    def MF_rp_gas_fraction_m3m3(self, FreeGas_d,p_atma,t_C,fw_perc,str_PVT=PVT_DEFAULT):
-        """" расчет газового фактора  при котором достигается заданная доля газа в потоке
-        
-                       freegas_d - допустимая доля газа в потоке    
-
-        p_atma - давление, атм    
-
-        t_c - температура, с.    
-
-        fw_perc - объемная обводненность, проценты %;  опциональные аргументы функции    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_rp_gas_fraction_m3m3 = self.book.macro("MF_rp_gas_fraction_m3m3")
-        return self.f_MF_rp_gas_fraction_m3m3(FreeGas_d,p_atma,t_C,fw_perc,str_PVT)
-
-    def MF_ksep_natural_d(self, qliq_sm3day,fw_perc,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120,str_PVT=PVT_DEFAULT):
-        """" расчет натуральной сепарации газа на приеме насоса
-        
-                       qliq_sm3day - дебит жидкости в поверхностных условиях    
-
-        fw_perc - обводненность    
-
-        p_intake_atma - давление сепарации    
-
-        t_intake_c - температура сепарации    
-
-        d_intake_mm - диаметр приемной сетки    
-
-        d_cas_mm - диаметр эксплуатационной колонны    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_ksep_natural_d = self.book.macro("MF_ksep_natural_d")
-        return self.f_MF_ksep_natural_d(qliq_sm3day,fw_perc,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm,str_PVT)
-
-    def MF_ksep_total_d(self, SepNat,SepGasSep):
-        """" расчет общей сепарации на приеме насоса
-        
-                       sepnat - естественная сепарация    
-
-        sepgassep - искусственная сепарация (газосепаратор)  mf_ksep_total_d = sepnat + (1 - sepnat) * sepgassep end function    )  
-
-        """
-
-        self.f_MF_ksep_total_d = self.book.macro("MF_ksep_total_d")
-        return self.f_MF_ksep_total_d(SepNat,SepGasSep)
-
-    def MF_dpdl_atmm(self, d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,gamma_oil=const_go_,gamma_gas=const_gg_,eps_m=0.0001,theta_deg=90,ZNLF=False):
-        """"расчет градиента давления с использованием многофазных корреляций
-        
-                       d_m - диаметр трубы в которой идет поток    
-
-        p_atma - давление в точке расчета    
-
-        ql_rc_m3day - дебит жидкости в рабочих условиях    
-
-        qg_rc_m3day - дебит газа в рабочих условиях    
-
-        mu_oil_cp - вязкость нефти в рабочих условиях    
-
-        mu_gas_cp - вязкость газа в рабочих условиях    
-
-        sigma_oil_gas_nm - поверхностное натяжение  жидкость газ    
-
-        gamma_oil - удельная плотность нефти    
-
-        gamma_gas - удельная плотность газа    
-
-        eps_m - шероховатость    
-
-        theta_deg - угол от горизонтали    
-
-        znlf - флаг для расчета барботажа    )  
-
-        """
-
-        self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
-        return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,gamma_oil,gamma_gas,eps_m,theta_deg,ZNLF)
-
-    def MF_calibr_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
-        """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
-        
-                       qliq_sm3day - дебит жидкости в поверхностных условиях    
-
-        fw_perc - обводненность    
-
-        length_m - длина трубы, измеренная, м    
-
-        pin_atma - давление на входе потока в трубу, атм  граничное значение для проведения расчета    
-
-        pout_atma - давление на выходе потока из трубы, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
-
-        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
-
-        d_mm - внутрнний диаметр трубы    
-
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
-
-        t_in_c - температура на входе потока в трубу, с    
-
-        t_out_c - температура на выходе потока из трубы, с  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
-
-        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
-
-        c_calibr_fric - поправка на трение в перепаде давления    
-
-        roughness_m - шероховатость трубы    
-
-        calibr_type - тип калибровки  0 - подбор параметра c_calibr_grav  1 - подбор параметра c_calibr_fric  2 - подбор газового фактор  3 - подбор обводненности    )  
-
-        """
-
-        self.f_MF_calibr_pipe_m3day = self.book.macro("MF_calibr_pipe_m3day")
-        return self.f_MF_calibr_pipe_m3day(qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
-
-    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_C=50,tother_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
-        """" расчет распределения давления и температуры в трубе  с использованием многофазных корреляций
-        
-                       qliq_sm3day - дебит жидкости в поверхностных условиях    
-
-        fw_perc - обводненность    
-
-        length_m - длина трубы, измеренная, м    
-
-        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
-
-        calc_along_flow - флаг направления расчета относительно потока  если = true то расчет по потоку  если = false то расчет против потока  pcalc_atma - давление с которого начи..см.мануал   
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
-
-        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
-
-        d_mm - внутрнний диаметр трубы    
-
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
-
-        t_calc_c - температура в точке где задано давление, с    
-
-        tother_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
-
-        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
-
-        c_calibr_fric - поправка на трение в перепаде давления    
-
-        roughness_m - шероховатость трубы    
-
-        q_gas_sm3day - свободный газ поступающие в трубу.    )  
-
-        """
-
-        self.f_MF_p_pipe_atma = self.book.macro("MF_p_pipe_atma")
-        return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_C,tother_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
-
-    def MF_p_pipe_znlf_atma(self, qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_C=50,tother_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,Qgcas_free_scm3day=50):
-        """" расчет давления и распределения температуры в трубе  при барботаже (движение газа в затрубе при неподвижной жидкости)  с использованием многофазных корреляций
-        
-                       qliq_sm3day - дебит жидкости в поверхностных условиях  (учтется при расчете газа в затрубе)    
-
-        fw_perc - обводненность    
-
-        length_m - длина трубы, измеренная, м    
-
-        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
-
-        calc_along_flow - флаг направления расчета относительно потока  если = true то расчет по потоку  если = false то расчет против потока  pcalc_atma - давление с которого начи..см.мануал   
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
-
-        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба вверх)  может принимать отрицательные значения    
-
-        d_mm - внутрнний диаметр трубы    
-
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  для барботажа принудител..см.мануал   
-
-        t_calc_c - температура в точке где задано давление, с    
-
-        tother_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
-
-        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
-
-        c_calibr_fric - поправка на трение в перепаде давления    
-
-        roughness_m - шероховатость трубы    
-
-        qgcas_free_scm3day - количество газа в затрубе    )  
-
-        """
-
-        self.f_MF_p_pipe_znlf_atma = self.book.macro("MF_p_pipe_znlf_atma")
-        return self.f_MF_p_pipe_znlf_atma(qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_C,tother_C,c_calibr_grav,c_calibr_fric,roughness_m,Qgcas_free_scm3day)
-
-    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,pcalc_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
-        """" расчет давления в штуцере
-        
-                      @qliq_sm3day - дебит жидкости в поверхностных условиях    
-
-       @fw_perc - обводненность    
-
-       @dchoke_mm - диаметр штуцера (эффективный) опциональные аргументы функции    
-
-       @pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
-
-       @calc_along_flow - флаг направления расчета относительно потока  если = true то расчет по потоку  ищется давление на выкиде по известному давлению на входе,  ищется линейное..см.мануал   
-
-       @d_pipe_mm - диаметр трубы до и после штуцера    
-
-       @t_choke_c - температура, с.    
-
-       @c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки  q_choke_real = c_calibr_fr * q_choke_model    
-
-       @str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_p_choke_atma = self.book.macro("MF_p_choke_atma")
-        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,pcalc_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
-
-    def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,dchoke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT):
-        """" расчет корректирующего фактора (множителя) модели штуцера под замеры
-        
-                       qliq_sm3day - дебит жидкости в пов условиях    
-
-        fw_perc - обводненность    
-
-        dchoke_mm - диаметр штуцера (эффективный)  опциональные аргументы функции    
-
-        p_in_atma - давление на входе (высокой стороне)    
-
-        p_out_atma - давление на выходе (низкой стороне)    
-
-        d_pipe_mm - диаметр трубы до и после штуцера    
-
-        t_choke_c - температура, с.    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_calibr_choke_fr = self.book.macro("MF_calibr_choke_fr")
-        return self.f_MF_calibr_choke_fr(qliq_sm3day,fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT)
-
-    def MF_qliq_choke_sm3day(self, fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
-        """"  функция расчета дебита жидкости через штуцер   при заданном входном и выходном давлениях
-        
-                       fw_perc - обводненность    
-
-        dchoke_mm - диаметр штуцера (эффективный)    
-
-        p_in_atma - давление на входе (высокой стороне)    
-
-        p_out_atma - давление на выходе (низкой стороне)  опциональные аргументы функции    
-
-        d_pipe_mm - диаметр трубы до и после штуцера    
-
-        t_choke_c - температура, с.    
-
-        c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки (по умолчанию)  q_choke_real = c_calibr_fr * q_choke_model    
-
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
-
-        """
-
-        self.f_MF_qliq_choke_sm3day = self.book.macro("MF_qliq_choke_sm3day")
-        return self.f_MF_qliq_choke_sm3day(fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
-
-    def IPR_qliq_sm3day(self, pi_sm3dayatm,Pres_atma,pwf_atma,fw_perc=0,pb_atma=-1):
+    def IPR_qliq_sm3day(self, PI_sm3dayatm,pres_atma,pwf_atma,fw_perc=0,pb_atma=-1):
         """" расчет дебита по давлению и продуктивности
         
                        pi_sm3dayatm - коэффициент продуктивности    
@@ -1052,9 +1092,9 @@ class API():
         """
 
         self.f_IPR_qliq_sm3day = self.book.macro("IPR_qliq_sm3day")
-        return self.f_IPR_qliq_sm3day(pi_sm3dayatm,Pres_atma,pwf_atma,fw_perc,pb_atma)
+        return self.f_IPR_qliq_sm3day(PI_sm3dayatm,pres_atma,pwf_atma,fw_perc,pb_atma)
 
-    def IPR_pwf_atma(self, pi_sm3dayatm,Pres_atma,qliq_sm3day,fw_perc=0,pb_atma=-1):
+    def IPR_pwf_atma(self, PI_sm3dayatm,pres_atma,qliq_sm3day,fw_perc=0,pb_atma=-1):
         """" расчет забойного давления по дебиту и продуктивности
         
                        pi_sm3dayatm - коэффициент продуктивности    
@@ -1070,14 +1110,14 @@ class API():
         """
 
         self.f_IPR_pwf_atma = self.book.macro("IPR_pwf_atma")
-        return self.f_IPR_pwf_atma(pi_sm3dayatm,Pres_atma,qliq_sm3day,fw_perc,pb_atma)
+        return self.f_IPR_pwf_atma(PI_sm3dayatm,pres_atma,qliq_sm3day,fw_perc,pb_atma)
 
-    def IPR_pi_sm3dayatm(self, Qtest_sm3day,p_wftest_atma,Pres_atma,fw_perc=0,pb_atma=-1):
+    def IPR_pi_sm3dayatm(self, Qtest_sm3day,pwf_test_atma,pres_atma,fw_perc=0,pb_atma=-1):
         """" расчет коэффициента продуктивности пласта  по данным тестовой эксплуатации
         
                        qtest_sm3day - тестовый дебит скважины    
 
-        p_wftest_atma - тестовое забойное давление    
+        pwf_test_atma - тестовое забойное давление    
 
         pres_atma - пластовое давление, атм  необязательные параметры    
 
@@ -1088,7 +1128,7 @@ class API():
         """
 
         self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
-        return self.f_IPR_pi_sm3dayatm(Qtest_sm3day,p_wftest_atma,Pres_atma,fw_perc,pb_atma)
+        return self.f_IPR_pi_sm3dayatm(Qtest_sm3day,pwf_test_atma,pres_atma,fw_perc,pb_atma)
 
     def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
         """" номинальный напор ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость
@@ -1610,7 +1650,7 @@ class API():
         self.f_GLV_q_gas_vkr_sm3day = self.book.macro("GLV_q_gas_vkr_sm3day")
         return self.f_GLV_q_gas_vkr_sm3day(d_port_mm,d_vkr_mm,p_in_atma,p_out_atma,gamma_g,t_C)
 
-    def GLV_p_vkr_atma(self, d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_alog_flow=False):
+    def GLV_p_vkr_atma(self, d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False):
         """" функция расчета давления на входе или на выходе  газлифтного клапана (простого) при закачке газа.  результат массив значений и подписей
         
                        d_port_mm - диаметр порта клапана, мм    
@@ -1625,14 +1665,14 @@ class API():
 
         t_c - температура в точке установки клапана    
 
-        calc_alog_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).    )  
+        calc_along_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).    )  
 
         """
 
         self.f_GLV_p_vkr_atma = self.book.macro("GLV_p_vkr_atma")
-        return self.f_GLV_p_vkr_atma(d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_alog_flow)
+        return self.f_GLV_p_vkr_atma(d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow)
 
-    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_alog_flow=False,p_open_atma=0):
+    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,p_open_atma=0):
         """" функция расчета давления на входе или на выходе  газлифтного клапана (простого) при закачке газа.  результат массив значений и подписей
         
                        d_mm - диаметр клапана, мм    
@@ -1645,14 +1685,14 @@ class API():
 
         t_c - температура в точке установки клапана    
 
-        calc_alog_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).    
+        calc_along_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).    
 
         p_open_atma - давление открытия/закрытия клапана, атм    )  
 
         """
 
         self.f_GLV_p_atma = self.book.macro("GLV_p_atma")
-        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_alog_flow,p_open_atma)
+        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,p_open_atma)
 
     def GLV_p_bellow_atma(self, p_atma,t_C):
         """" функция расчета давления зарядки сильфона на стенде при  стандартной температуре по данным рабочих давления и температуры
@@ -1722,7 +1762,7 @@ class API():
         self.f_GLV_IPO_p_open = self.book.macro("GLV_IPO_p_open")
         return self.f_GLV_IPO_p_open(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
 
-    def GLV_IPO_p_atma(self, p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_alog_flow=False,GLV_type=0,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+    def GLV_IPO_p_atma(self, p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow=False,GLV_type=0,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
         """"Функция расчета давления открытия газлифтного клапана R1
         
                        p_bellow_atma - давление зарядки сильфона на стенде, атма  p_out_atma - давление на выходе клапана (нкт), атма    
@@ -1735,7 +1775,7 @@ class API():
 
         t_c - температура клапана в рабочих условиях, с    
 
-   calc_alog_flow   
+   calc_along_flow   
 
         glv_type - тип газлифтного клапана (сейчас только r1)  d_port_mm - диаметр порта клапана    
 
@@ -1750,7 +1790,7 @@ class API():
         """
 
         self.f_GLV_IPO_p_atma = self.book.macro("GLV_IPO_p_atma")
-        return self.f_GLV_IPO_p_atma(p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_alog_flow,GLV_type,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
+        return self.f_GLV_IPO_p_atma(p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow,GLV_type,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
 
     def GLV_IPO_p_close(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
         """"Функция расчета давления закрытия газлифтного клапана R1
@@ -1779,7 +1819,7 @@ class API():
         return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
 
     def PVT_encode_string(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,gas_only=False):
-        """" Функция кодирования параметров PVT в строку,  для передачи PVT свойств в прикладных пользовательских функциях.
+        """" Функция кодирования параметров PVT в строку,  для передачи PVT свойств в прикладные функции Унифлок.
         
                        gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
 
@@ -1826,45 +1866,7 @@ class API():
         self.f_PVT_decode_string = self.book.macro("PVT_decode_string")
         return self.f_PVT_decode_string(str_PVT,getStr)
 
-    def well_encode_string(self, h_perf_m=2000,h_pump_m=1800,udl_m=0,d_cas_mm=150,dtub_mm=72,dchoke_mm=15,roughness_m=0.0001,t_bh_C=85,t_wh_C=25):
-        """" функция кодирования параметров конструкции скважины  в строку, которую можно потом использовать
-        
-                       h_perf_m - измеренная глубина верхних дыр перфорации  глубина пласта на которой рассчитывается  забойное давление    
-
-        h_pump_m - измеренная глубина спуска насоса    
-
-        udl_m - удлинение  разница между измеренной и вертикальной  глубиной пласта    
-
-        d_cas_mm - внутренний диаметр эксплуатационной колонны    
-
-        dtub_mm - внешний диаметр нкт    
-
-        dchoke_mm - диаметр штуцера    
-
-        roughness_m - шероховатость стенок нкт и эк    
-
-        t_bh_c - температура флюида на забое скважины    
-
-        t_wh_c - температура флюида на устье скважины  по умолчанию температурный расчет идет  такие образом, что температура флюида меняется  линейно относительно вертикальной глу..см.мануал   )  
-
-        """
-
-        self.f_well_encode_string = self.book.macro("well_encode_string")
-        return self.f_well_encode_string(h_perf_m,h_pump_m,udl_m,d_cas_mm,dtub_mm,dchoke_mm,roughness_m,t_bh_C,t_wh_C)
-
-    def well_decode_string(self, str_well,getStr=False):
-        """" функция расшифровки параметров конструкции скважины  закодированных в строке
-        
-                       str_well - строка с параметрами конструкции скважины    
-
-        getstr - флаг проверки работы функции  по умолчанию false (0) - функция выдает объект cwellesp  если задать true - функция раскодирует строку и снова закодирует  и выдаст с..см.мануал   )  
-
-        """
-
-        self.f_well_decode_string = self.book.macro("well_decode_string")
-        return self.f_well_decode_string(str_well,getStr)
-
-    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_degradation_type=0,c_calibr_head=0,c_calibr_rate=0,c_calibr_power=0,PKV_work_min=-1,PKV_stop_min=-1):
+    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ksep_manual_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1,PKV_work_min=-1,PKV_stop_min=-1):
         """" функция кодирования параметров работы УЭЦН в строку,  которую можно потом использовать для задания ЭЦН в прикладных функциях
         
                        esp_id - идентификатор насоса    
@@ -1882,6 +1884,8 @@ class API():
         t_dis_c - температура на выкиде насоса.  если = 0 и calc_along_flow = 1 то рассчитывается    
 
         ksepgs_fr - коэффициент сепарации газосепаратора уэцн    
+
+   ksep_manual_fr   
 
         esp_energy_fact_whday - фактическое потребление мощности эцн    
 
@@ -1904,7 +1908,7 @@ class API():
         """
 
         self.f_ESP_encode_string = self.book.macro("ESP_encode_string")
-        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power,PKV_work_min,PKV_stop_min)
+        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ksep_manual_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power,PKV_work_min,PKV_stop_min)
 
     def ESP_decode_string(self, str_ESP,getStr=False):
         """" функция расшифровки параметров работы ЭЦН закодированных в строке
@@ -1918,8 +1922,8 @@ class API():
         self.f_ESP_decode_string = self.book.macro("ESP_decode_string")
         return self.f_ESP_decode_string(str_ESP,getStr)
 
-    def wellGL_decode_string(self, well_GL_str,getStr=False):
-        """" функция расшифровки параметров работы  газлифтной скважины закодированных в строке
+    def GL_decode_string(self, well_GL_str,getStr=False):
+        """" функция расшифровки параметров газлифтной компоновки скважины
         
                        well_gl_str - строка с параметрами газлифтной скважины    
 
@@ -1927,222 +1931,228 @@ class API():
 
         """
 
-        self.f_wellGL_decode_string = self.book.macro("wellGL_decode_string")
-        return self.f_wellGL_decode_string(well_GL_str,getStr)
+        self.f_GL_decode_string = self.book.macro("GL_decode_string")
+        return self.f_GL_decode_string(well_GL_str,getStr)
 
-    def wellGL_encode_string(self, h_perf_m=2000,htub_m=1800,udl_m=0,d_cas_mm=150,dtub_mm=72,dchoke_mm=15,roughness_m=0.0001,t_bh_C=85,t_wh_C=25,HmesGLV_m=0,dGLV_mm=0,PsurfGLV_atma=0):
+    def GL_encode_string(self, q_gas_inj_sm3day=0,p_gas_inj_atma=0,d_gas_inj_mm=0,HmesGLV_m=0,dGLV_mm=0,PsurfGLV_atma=0):
         """" функция кодирования параметров работы скважины с газлифтом
         
-                       h_perf_m - измеренная глубина верхних дыр перфорации  глубина пласта на которой рассчитывается  забойное давление    
+                       q_gas_inj_sm3day - расход газа закачки    
 
-        htub_m - измеренная глубина спуска нкт    
+        p_gas_inj_atma - давление газа закачки на поверхности    
 
-        udl_m - удлинение  разница между измеренной и вертикальной  глубиной пласта    
+        d_gas_inj_mm - диаметр штуцера регулировки закачки газа на поверхности    
 
-        d_cas_mm - внутренний диаметр эксплуатационной колонны    
+        hmesglv_m - измеренные глубины установки газлифтных клапанов    
 
-        dtub_mm - внешний диаметр нкт    
+        dglv_mm - диаметры порта установленных газлифтных клапанов    
 
-        dchoke_mm - диаметр штуцера    
-
-        roughness_m - шероховатость стенок нкт и эк    
-
-        t_bh_c - температура флюида на забое скважины    
-
-        t_wh_c - температура флюида на устье скважины  по умолчанию температурный расчет идет  такие образом, что температура флюида меняется  линейно относительно вертикальной глу..см.мануал   
-
-        hmesglv_m -    
-
-        dglv_mm -    
-
-        psurfglv_atma -    )  
+        psurfglv_atma - давления зарядки газлифтных клапанов    )  
 
         """
 
-        self.f_wellGL_encode_string = self.book.macro("wellGL_encode_string")
-        return self.f_wellGL_encode_string(h_perf_m,htub_m,udl_m,d_cas_mm,dtub_mm,dchoke_mm,roughness_m,t_bh_C,t_wh_C,HmesGLV_m,dGLV_mm,PsurfGLV_atma)
+        self.f_GL_encode_string = self.book.macro("GL_encode_string")
+        return self.f_GL_encode_string(q_gas_inj_sm3day,p_gas_inj_atma,d_gas_inj_mm,HmesGLV_m,dGLV_mm,PsurfGLV_atma)
 
-    def well_plin_pwf_atma(self, q_m3day,fw_perc,pwf_atma,pcas_atma=-1,str_well=WELL_DEFAULT,str_PVT=PVT_DEFAULT,str_ESP=0,hydr_corr=H_CORRELATION,ksep_fr=0,c_calibr_head_d=1,param_num=1):
-        """" функция расчета линейного давления по забойному для скважины  расчет снизу-вверх, простой и быстрый расчет
+    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+        """" Расчет устьевого давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций.
         
-                       q_m3day - дебит жидкости, на поверхности    
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
 
-        fw_perc - обводненность (объемная на поверхности)    
+        fw_perc - обводненность    
 
-        pwf_atma - забойное давление    
+        pwf_atma - забойное давление с которого начинается расчет, атм  граничное значение для проведения расчета    
 
-        pcas_atma - затрубное давление  если не задано динамический уровень не рассчитывается    
+        h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
 
-        str_well - закодированные параметры конструкции скважины.  если не указано,  используются свойства скважины по умолчанию.    
+        pcas_atma - затрубное давление (расчета ндин)    
 
-        str_pvt - закодированные параметры флюидов. если не указано,  используются свойства флюида по умолчанию.    
+        d_choke_mm - диаметр штуцера    
 
-        str_esp - закодированные параметры уэцн. если  не задано или задано значение 0  то уэцн не учитывается, проводится расчет для  фонтанирующей скважины.    
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+        str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
 
-        ksep_fr - коэффициент сепарации.  если задан - то используется вместо расчетного  явное задание коэффициента серации ускоряет расчет    
+        hmes_habs_list_m - траектория скважины. range или таблица [0..n,0..1]    
 
-        c_calibr_head_d - коэффициент деградации уэцн    
+        dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
 
-        param_num - параметры для вывода в качестве результата  на нулевой позиции выходного массива,    )  
+        dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
+
+        temp_list_c - температура среды. range или таблица [0..n,0..1]    
+
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
+
+   temp_methodtemp_calc_method   
+
+        twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        q_gas_sm3day - свободный газ поступающие в трубу.    
+
+        param_out - номер параметра для вывода в ячейку [0,0]    
+
+        num_pt_crv - число параметров вывода массивов    )  
 
         """
 
         self.f_well_plin_pwf_atma = self.book.macro("well_plin_pwf_atma")
-        return self.f_well_plin_pwf_atma(q_m3day,fw_perc,pwf_atma,pcas_atma,str_well,str_PVT,str_ESP,hydr_corr,ksep_fr,c_calibr_head_d,param_num)
+        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
 
-    def well_pintake_pwf_atma(self, q_m3day,fw_perc,pwf_atma,str_well=WELL_DEFAULT,str_PVT=PVT_DEFAULT,hydr_corr=H_CORRELATION):
-        """" функция расчета давления на приеме по забойному для скважины  расчет снизу-вверх, считает только участок ниже насоса
+    def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
+        """" Расчет забойного давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций
         
-                       q_m3day - дебит жидкости, на поверхности    
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
 
-        fw_perc - обводненность (объемная на поверхности)    
+        fw_perc - обводненность    
 
-        pwf_atma - забойное давление    
+        plin_atma - линейное давление с которого начинается расчет, атм  граничное значение для проведения расчета    
 
-        str_well - закодированные параметры конструкции скважины.  если не указано,  используются свойства скважины по умолчанию.    
+        h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
 
-        str_pvt - закодированные параметры флюидов. если не указано,  используются свойства флюида по умолчанию.    
+        pcas_atma - затрубное давление (расчета ндин)    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    )  
+        d_choke_mm - диаметр штуцера    
 
-        """
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
-        self.f_well_pintake_pwf_atma = self.book.macro("well_pintake_pwf_atma")
-        return self.f_well_pintake_pwf_atma(q_m3day,fw_perc,pwf_atma,str_well,str_PVT,hydr_corr)
+        str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
 
-    def well_pwf_plin_atma(self, q_m3day,fw_perc,plin_atma,pcas_atma=-1,str_well=WELL_DEFAULT,str_PVT=PVT_DEFAULT,str_ESP=0,hydr_corr=H_CORRELATION,ksep_fr=-1,p_ksep_atma=40,t_ksep_C=40,c_calibr_head_d=1,param_num=5):
-        """" функция расчета забойного давления по устьевому для скважины  расчет сверху-вниз, считает быстро за счет угадывания сепарации  температура только линейная или по градиенту
-        
-                       q_m3day - дебит жидкости, на поверхности    
+        hmes_habs_list_m - траектория скважины. range или таблица [0..n,0..1]    
 
-        fw_perc - обводненность (объемная на поверхности)    
+        dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
 
-        plin_atma - линейное (устьевое) давление    
+        dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
 
-        pcas_atma - затрубное давление  если не задано динамический уровень не рассчитывается    
+        temp_list_c - температура среды. range или таблица [0..n,0..1]    
 
-        str_well - закодированные параметры конструкции скважины.  если не указано,  используются свойства скважины по умолчанию.    
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
 
-        str_pvt - закодированные параметры флюидов. если не указано,  используются свойства флюида по умолчанию.    
+   temp_methodtemp_calc_method   
 
-        str_esp - закодированные параметры уэцн. если  не задано или задано значение 0  то уэцн не учитывается, проводится расчет для  фонтанирующей скважины.    
+   twf_c   
 
-        hydr_corr - гидравлическая корреляция:  beggsbrill = 0;  ansari = 1;  unified = 2;  gray = 3;  hagedornbrown = 4;  sakharovmokhov = 5.    
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
 
-        ksep_fr - коэффициент сепарации.  если задан - то используется вместо расчетного  явное задание коэффициента серации ускоряет расчет    
+        c_calibr_fric - поправка на трение в перепаде давления    
 
-        p_ksep_atma - давление сепарации    
+        roughness_m - шероховатость трубы    
 
-        t_ksep_c - температура сепарации  при расчете сверху вниз неизвестны параметры сепарации  если задать их явно (угадать)  тогда расчет упрощается и ускоряется    
+        q_gas_sm3day - свободный газ поступающие в трубу.    
 
-        c_calibr_head_d - коэффициент деградации уэцн    
+        param_out - номер параметра для вывода в ячейку [0,0]    
 
-        param_num - параметры для вывода в качестве результата  если не задан выводятся все в виде массива    )  
+        num_pt_crv - число параметров вывода массивов    )  
 
         """
 
         self.f_well_pwf_plin_atma = self.book.macro("well_pwf_plin_atma")
-        return self.f_well_pwf_plin_atma(q_m3day,fw_perc,plin_atma,pcas_atma,str_well,str_PVT,str_ESP,hydr_corr,ksep_fr,p_ksep_atma,t_ksep_C,c_calibr_head_d,param_num)
+        return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
 
-    def well_calc_calibr_head_fr(self, q_m3day,fw_perc,pdown_atma,pbuf_atma,Pdown_at_intake=False,plin_atma=-1,pcas_atma=-1,str_well=WELL_DEFAULT,str_PVT=PVT_DEFAULT,str_ESP=0,hydr_corr=H_CORRELATION,ksep_fr=-1,c_calibr_head_d=1,param_num=0):
-        """" функция адаптации модели скважины по данным эксплуатации  подбирает коэффициента деградации УЭЦН и штуцера  по замера на поверхности и на забое/приеме насоса
+    def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+        """" Расчет устьевого давления скважины по давлению на приеме.  Расчет распределения давления и температуры в скважине  с использованием многофазных корреляций.
         
-                       q_m3day - дебит жидкости, на поверхности    
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
 
-        fw_perc - обводненность (объемная на поверхности)    
+        fw_perc - обводненность    
 
-        pdown_atma - давление ниже насоса (внизу) для расчета  либо забойное давление (по умолчанию)  либо давление на приеме    
+        pintake_atma- давление на приеме с которого начинается расчет, атм  граничное значение для проведения расчета    
 
-        pbuf_atma - буферное давление    
+        h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
 
-        определяется опциональным параметром pdown_at_intake  pbuf_atma - буферное давление    
+        pcas_atma - затрубное давление (расчета ндин)    
 
-        plin_atma - линейное давление  если не задано штуцер не учитывается    
+        d_choke_mm - диаметр штуцера    
 
-        pcas_atma - затрубное давление  если не задано динамический уровень не рассчитывается    
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
-        str_well - закодированные параметры конструкции скважины.  если не указано,  используются свойства скважины по умолчанию.    
+        str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
 
-        str_pvt - закодированные параметры флюидов. если не указано,  используются свойства флюида по умолчанию.    
+        hmes_habs_list_m - траектория скважины. range или таблица [0..n,0..1]    
 
-        str_esp - закодированные параметры уэцн. если  не задано или задано значение 0  то уэцн не учитывается, проводится расчет для  фонтанирующей скважины.    
+        dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+        dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
 
-        ksep_fr - коэффициент сепарации.  если задан - то используется вместо расчетного  явное задание коэффициента серации ускоряет расчет    
+        temp_list_c - температура среды. range или таблица [0..n,0..1]    
 
-        c_calibr_head_d - коэффициент деградации уэцн    
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
 
-        param_num - параметры для вывода в качестве результата  если не задан выводятся все в виде массива    )  
+   temp_methodtemp_calc_method   
+
+        twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        q_gas_sm3day - свободный газ поступающие в трубу.    
+
+        param_out - номер параметра для вывода в ячейку [0,0]    
+
+        num_pt_crv - число параметров вывода массивов    )  
 
         """
 
-        self.f_well_calc_calibr_head_fr = self.book.macro("well_calc_calibr_head_fr")
-        return self.f_well_calc_calibr_head_fr(q_m3day,fw_perc,pdown_atma,pbuf_atma,Pdown_at_intake,plin_atma,pcas_atma,str_well,str_PVT,str_ESP,hydr_corr,ksep_fr,c_calibr_head_d,param_num)
+        self.f_wellESP_plin_pintake_atma = self.book.macro("wellESP_plin_pintake_atma")
+        return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
 
-    def well_pwf_hdyn_atma(self, q_m3day,fw_perc,pcas_atma,h_dyn_m,str_well=WELL_DEFAULT,str_PVT=PVT_DEFAULT,str_ESP=0,hydr_corr=H_CORRELATION,ksep_fr=0,c_calibr_head_d=1,param_num=0):
-        """" функция расчета забойного давления скважины по динамическому уровню
+    def nodal_pwf_atma(self, PI_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,num_pt_crv=21):
+        """" Расчет забойного давления по узловому анализу,  скважины и пласта.
         
-                       q_m3day - дебит жидкости, на поверхности    
-
-        fw_perc - обводненность (объемная на поверхности)    
-
-        pcas_atma - затрубное давление    
-
-        h_dyn_m - динамический уровень (при данном затрубном)    
-
-        str_well - закодированные параметры конструкции скважины.  если не указано,  используются свойства скважины по умолчанию.    
-
-        str_pvt - закодированные параметры флюидов. если не указано,  используются свойства флюида по умолчанию.    
-
-        str_esp - закодированные параметры уэцн. если  не задано или задано значение 0  то уэцн не учитывается, проводится расчет для  фонтанирующей скважины.    
-
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
-
-        ksep_fr - коэффициент сепарации.  если задан - то используется вместо расчетного  явное задание коэффициента серации ускоряет расчет    
-
-        c_calibr_head_d - коэффициент деградации уэцн    
-
-        param_num - параметры для вывода в качестве результата  если не задан выводятся все в виде массива    )  
-
-        """
-
-        self.f_well_pwf_hdyn_atma = self.book.macro("well_pwf_hdyn_atma")
-        return self.f_well_pwf_hdyn_atma(q_m3day,fw_perc,pcas_atma,h_dyn_m,str_well,str_PVT,str_ESP,hydr_corr,ksep_fr,c_calibr_head_d,param_num)
-
-    def nodal_qliq_sm3day(self, pi_sm3dayatm,plin_atma,fw_perc,Pres_atma=250,pcas_atma=10,str_well=WELL_DEFAULT,str_PVT=PVT_DEFAULT,str_ESP=0,hydr_corr=H_CORRELATION,ksep_fr=0,c_calibr_head_d=1,param_num=23):
-        """" функция расчета узлового анализа системы пласт - скважина - УЭЦН  по заданным параетрам пласта, скважины и УЭЦН  определяется рабочий дебит и забойное давление
-        
-                       pi_sm3dayatm - коэффициент продуктивности пласта    
-
-        plin_atma - линейное давление    
-
-        fw_perc - обводненность (объемная на поверхности)    
+                       pi_sm3dayatm - коэффициент продуктивности    
 
         pres_atma - пластовое давление    
 
-        pcas_atma - затрубное давление (для определения ндин)    
+        fw_perc - обводненность  pwf_atma - забойное давление с которого начинается расчет, атм  граничное значение для проведения расчета    
 
-        str_well - закодированные параметры конструкции скважины.  если не указано,  используются свойства скважины по умолчанию.    
+        h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
 
-        str_pvt - закодированные параметры флюидов. если не указано,  используются свойства флюида по умолчанию.    
+   plin_atma   
 
-        str_esp - закодированные параметры уэцн. если  не задано или задано значение 0  то уэцн не учитывается, проводится расчет для  фонтанирующей скважины.    
+        pcas_atma - затрубное давление (расчета ндин)    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+        d_choke_mm - диаметр штуцера    
 
-        ksep_fr - коэффициент сепарации.  если задан - то используется вместо расчетного  явное задание коэффициента серации ускоряет расчет    
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
-        c_calibr_head_d - коэффициент деградации уэцн    
+        str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
 
-        param_num - параметры для вывода в качестве результата  если не задан выводятся все в виде массива    )  
+        hmes_habs_list_m - траектория скважины. range или таблица [0..n,0..1]    
+
+        dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
+
+        dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
+
+        temp_list_c - температура среды. range или таблица [0..n,0..1]    
+
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
+
+   temp_methodtemp_calc_method   
+
+        twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
+
+        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+
+        c_calibr_fric - поправка на трение в перепаде давления    
+
+        roughness_m - шероховатость трубы    
+
+        q_gas_sm3day - свободный газ поступающие в трубу.    
+
+        num_pt_crv - число параметров вывода массивов    )  
 
         """
 
-        self.f_nodal_qliq_sm3day = self.book.macro("nodal_qliq_sm3day")
-        return self.f_nodal_qliq_sm3day(pi_sm3dayatm,plin_atma,fw_perc,Pres_atma,pcas_atma,str_well,str_PVT,str_ESP,hydr_corr,ksep_fr,c_calibr_head_d,param_num)
+        self.f_nodal_pwf_atma = self.book.macro("nodal_pwf_atma")
+        return self.f_nodal_pwf_atma(PI_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,num_pt_crv)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """" функция поиска значения функции по заданным табличным данным (интерполяция)

@@ -15,12 +15,15 @@ import re
 import glob
 import os
 
-file_name = ["u7_Excel_functions.txt",
+
+file_name = ["u7_Excel_functions_MF.txt",
+             "u7_Excel_functions_PVT.txt",
+             "u7_Excel_functions_IPR.txt",
              "u7_Excel_functions_ESP.txt",
              "u7_Excel_functions_GL.txt",
              "u7_Excel_functions_service.txt",
              "u7_Excel_functions_well.txt",
-             "u7_Excel_functions_curves.txt",
+			 "u7_Excel_functions_crv.txt",
              "u7_Excel_functions_transient.txt"]
 
 path_vba_txt = 'modules_txt/'
