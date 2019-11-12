@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.12  Apodemus agrarius                                           khabibullin.ra@gubkin.ru
+'Unifloc 7.13  Lepus                                           khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -18,7 +18,7 @@ Public ZeroCoordMes_m As Double                        ' начальная координата тр
 Public ZeroCoordVert_m As Double                       ' начальная координата трубы, вертикальная, от которой будут отсчитываться координаты в выходных массивах
 Public fluid As CPVT                                   ' базовый флюид в трубе. Определяет свойства и расходы и фазовый состав
 Public ambient_formation As New CAmbientFormation      ' порода за пределями скважины
-Public curves As New CCurves                           ' все кривые планируется прятать тут
+Public curve As New CCurves                           ' все кривые планируется прятать тут
 'Public curves As New CCurves
 Public t_calc_C As Double                              ' начальная температура флюида для расчета с учетом эмисии тепла
 Public p_result_atma As Double                         ' давление - результат расчета для отчета
@@ -49,9 +49,9 @@ Private Sub Class_Initialize()
    ZeroCoordVert_m = 0
    legth_total_m_ = 100
    ReDim flow_params_out_(0) As PIPE_FLOW_PARAMS
-   curves("c_Roughness").isStepFunction = True ' шероховатость и диаметр трубы меняют ступенчато и не интерполируются
-   curves("c_Diam").isStepFunction = True
-   curves("c_fpat").isStepFunction = True
+   curve("c_Roughness").isStepFunction = True ' шероховатость и диаметр трубы меняют ступенчато и не интерполируются
+   curve("c_Diam").isStepFunction = True
+   curve("c_fpat").isStepFunction = True
    Set fluid = New CPVT
    With param
        .correlation = Ansari
@@ -72,6 +72,17 @@ End Property
 Public Property Let param(val As PARAMCALC)
    param_ = val
 End Property
+Public Sub set_param(Optional ByVal calc_along_coord As Boolean, _
+                     Optional ByVal flow_along_coord As Boolean, _
+                     Optional ByVal hcor As H_CORRELATION, _
+                     Optional ByVal temp_method As TEMP_CALC_METHOD)
+    If Not IsMissing(calc_along_coord) Then param_.CalcAlongCoord = calc_along_coord
+    If Not IsMissing(flow_along_coord) Then param_.FlowAlongCoord = flow_along_coord
+    If Not IsMissing(hcor) Then param_.correlation = hcor
+    If Not IsMissing(temp_method) Then param_.temp_method = temp_method
+    
+    param = param_
+End Sub
 Public Property Get c_calibr_grav() As Double
    c_calibr_grav = c_calibr_grav_
 End Property
@@ -150,9 +161,9 @@ Public Sub InitTlinear(ByVal Tstart_C As Double, ByVal Tend_C As Double)
        If legth_total_m_ > 0 Then
            dTdLinit_ = (Tend_C - Tstart_C) / legth_total_m_
        End If
-       curves("c_Tinit").ClearPoints
-       curves("c_Tinit").AddPoint ZeroCoordMes_m, Tstart_C
-       curves("c_Tinit").AddPoint ZeroCoordMes_m + length_mes_m, Tend_C
+       curve("c_Tinit").ClearPoints
+       curve("c_Tinit").AddPoint ZeroCoordMes_m, Tstart_C
+       curve("c_Tinit").AddPoint ZeroCoordMes_m + length_mes_m, Tend_C
 End Sub
 Private Function dTdL_linear_Cm(lmes_m As Double) As Double
     ' возвращает градиент температуры исходя из линейного приближения
@@ -160,7 +171,7 @@ Private Function dTdL_linear_Cm(lmes_m As Double) As Double
 End Function
 Private Function t_linear_C(lmes_m As Double) As Double
    ' возвращает температуру исходя из линейного приближения
-   t_linear_C = curves("c_Tinit").getPoint(lmes_m)
+   t_linear_C = curve("c_Tinit").getPoint(lmes_m)
 End Function
 Private Function t_amb_C(lmes_m As Double) As Double
    ' возвращает температуру исходя из окружения скважины
@@ -190,27 +201,27 @@ End Function
     
 Public Function d_hmes_mm(ByVal z As Double) As Double
 ' функция возвращает внутренний диаметр трубы по заданной абсолютной измеренной глубине (если труба проходит по этой глубине)
-   d_hmes_mm = curves("c_Diam").getPoint(z)
+   d_hmes_mm = curve("c_Diam").getPoint(z)
 End Function
 Public Function roughness_h_mes_m(ByVal z As Double) As Double
 ' возвращает шероховатость по измеренной глубине
-   roughness_h_mes_m = curves("c_Roughness").getPoint(z)
+   roughness_h_mes_m = curve("c_Roughness").getPoint(z)
 End Function
 Public Function angle_hmes_deg(ByVal z As Double) As Double
 ' возвращает угол по измеренной глубине
-   angle_hmes_deg = curves("c_Theta").getPoint(z)
+   angle_hmes_deg = curve("c_Theta").getPoint(z)
 End Function
 Public Function h_vert_h_mes_m(ByVal z As Double) As Double
 ' возвращает угол по измеренной глубине
-   h_vert_h_mes_m = curves("c_Hvert").getPoint(z)
+   h_vert_h_mes_m = curve("c_Hvert").getPoint(z)
 End Function
 Public Function p_h_mes_atma(ByVal z As Double) As Double
 ' возвращает угол по измеренной глубине
-   p_h_mes_atma = curves("c_P").getPoint(z)
+   p_h_mes_atma = curve("c_P").getPoint(z)
 End Function
 Public Function t_h_mes_C(ByVal z As Double) As Double
 ' возвращает угол по измеренной глубине
-   t_h_mes_C = curves("c_T").getPoint(z)
+   t_h_mes_C = curve("c_T").getPoint(z)
 End Function
 ' инициализация трубы через данные по траектории скважины
 Public Sub init_pipe_constr_by_trajectory( _
@@ -226,7 +237,7 @@ Public Sub init_pipe_constr_by_trajectory( _
     If IsMissing(HmesStart_m) Then HmesStart_m = tr.h_mes_m(0)
     If IsMissing(HmesEnd_m) Then HmesEnd_m = tr.h_mes_m(tr.num_points - 1)
     
-    curves("c_Diam").isStepFunction = True
+    curve("c_Diam").isStepFunction = True
     ZeroCoordMes_m = HmesStart_m
     ZeroCoordVert_m = tr.h_abs_hmes_m(HmesStart_m)
     p_pipe_segments_num = tr.num_points - 1
@@ -242,19 +253,19 @@ Public Sub init_pipe_constr_by_trajectory( _
          If h >= HmesStart_m And h <= HmesEnd_m Then
             ' теперь  заполним кривые соответствующие траектории скважины  - в первый раз пишем нулевую точку
             If Not IsMissing(tr_cas) Then
-                curves("c_Diam").AddPoint h, tr.diam_hmes_m(h)   ' НКТ
+                curve("c_Diam").AddPoint h, tr.diam_hmes_m(h)   ' НКТ
             Else
-                curves("c_Diam").AddPoint h, tr_cas.diam_hmes_m(h) - tr.diam_hmes_m(h)  ' затруб
+                curve("c_Diam").AddPoint h, tr_cas.diam_hmes_m(h) - tr.diam_hmes_m(h)  ' затруб
             End If
-            curves("c_Roughness").AddPoint h, tr.roughness_m
-            curves("c_Theta").AddPoint h, tr.ang_hmes_deg(h)
-            curves("c_Hvert").AddPoint h, tr.h_abs_hmes_m(h)
+            curve("c_Roughness").AddPoint h, tr.roughness_m
+            curve("c_Theta").AddPoint h, tr.ang_hmes_deg(h)
+            curve("c_Hvert").AddPoint h, tr.h_abs_hmes_m(h)
          End If
     Next i
-    curves("c_Diam").protected = True
-    curves("c_Roughness").protected = True
-    curves("c_Theta").protected = True
-    curves("c_Hvert").protected = True
+    curve("c_Diam").protected = True
+    curve("c_Roughness").protected = True
+    curve("c_Theta").protected = True
+    curve("c_Hvert").protected = True
     
     legth_total_m_ = HmesEnd_m - HmesStart_m
     depth_vert_total_m_ = tr.h_abs_hmes_m(HmesEnd_m) - tr.h_abs_hmes_m(HmesStart_m)
@@ -571,22 +582,22 @@ On Error GoTo err1:
     calc_dPipe_2d.t_C = y(M - 1, 1)
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
-        curves("c_P").ClearPoints
-        curves("c_T").ClearPoints
-        curves("c_Tamb").ClearPoints
+        curve("c_P").ClearPoints
+        curve("c_T").ClearPoints
+        curve("c_Tamb").ClearPoints
         For i = 0 To M - 1
             stPt = i = 0 Or i = M - 1
-            curves("c_P").AddPoint x(i), y(i, 0), stPt
-            curves("c_T").AddPoint x(i), y(i, 1), stPt
+            curve("c_P").AddPoint x(i), y(i, 0), stPt
+            curve("c_T").AddPoint x(i), y(i, 1), stPt
             If param.temp_method = AmbientTemp Then
-                curves("c_Tamb").AddPoint x(i), ambient_formation.amb_temp_C(curves("c_Hvert").getPoint(x(i))), stPt
+                curve("c_Tamb").AddPoint x(i), ambient_formation.amb_temp_C(curve("c_Hvert").getPoint(x(i))), stPt
             Else
-                curves("c_Tamb").AddPoint x(i), y(i, 1), stPt
+                curve("c_Tamb").AddPoint x(i), y(i, 1), stPt
             End If
         Next i
-        curves("c_P").protected = True
-        curves("c_T").protected = True
-        curves("c_Tamb").protected = True
+        curve("c_P").protected = True
+        curve("c_T").protected = True
+        curve("c_Tamb").protected = True
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -672,18 +683,18 @@ On Error GoTo err1:
     calc_dPipe_1d.t_C = t_init_C(x(M - 1))
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
-        curves("c_P").ClearPoints
-        curves("c_T").ClearPoints
-        curves("c_Tamb").ClearPoints
+        curve("c_P").ClearPoints
+        curve("c_T").ClearPoints
+        curve("c_Tamb").ClearPoints
         For i = 0 To M - 1
             stPt = i = 0 Or i = M - 1
-            curves("c_P").AddPoint x(i), y(i, 0), stPt
-            curves("c_T").AddPoint x(i), t_init_C(x(i)), stPt
-            curves("c_Tamb").AddPoint x(i), t_init_C(x(i)), stPt
+            curve("c_P").AddPoint x(i), y(i, 0), stPt
+            curve("c_T").AddPoint x(i), t_init_C(x(i)), stPt
+            curve("c_Tamb").AddPoint x(i), t_init_C(x(i)), stPt
         Next i
-        curves("c_P").protected = True
-        curves("c_T").protected = True
-        curves("c_Tamb").protected = True
+        curve("c_P").protected = True
+        curve("c_T").protected = True
+        curve("c_Tamb").protected = True
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -707,47 +718,47 @@ Private Sub FillDetailedCurve()
     Dim i As Integer
     Dim M As Integer
     Dim FlowParams_out As PIPE_FLOW_PARAMS
-    M = curves("c_P").num_points
-    Call curves.ClearPoints_unprotected
+    M = curve("c_P").num_points
+    Call curve.ClearPoints_unprotected
     For i = 1 To M
-        FlowParams_out = calc_grad(curves("c_P").pointX(i), _
-                                    curves("c_P").PointY(i), _
-                                    curves("c_T").PointY(i))
+        FlowParams_out = calc_grad(curve("c_P").pointX(i), _
+                                    curve("c_P").PointY(i), _
+                                    curve("c_T").PointY(i))
         With FlowParams_out
-            curves("c_udl_m").AddPoint .md_m, .md_m - .vd_m
-            curves("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
-            curves("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
-            curves("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
-            curves("c_vsl").AddPoint .md_m, .v_sl_msec
-            curves("c_vsg").AddPoint .md_m, .v_sg_msec
-            curves("c_Hl").AddPoint .md_m, .h_l_d
-            curves("c_fpat").AddPoint .md_m, .fpat
-            curves("c_Theta").AddPoint .md_m, .thete_deg
-            curves("c_Roughness").AddPoint .md_m, .roughness_m
-            curves("c_Rs").AddPoint .md_m, .rs_m3m3
-            curves("c_gasfrac").AddPoint .md_m, .gasfrac
-            curves("c_muo").AddPoint .md_m, .mu_oil_cP
-            curves("c_muw").AddPoint .md_m, .mu_wat_cP
-            curves("c_mug").AddPoint .md_m, .mu_gas_cP
-            curves("c_mumix").AddPoint .md_m, .mu_mix_cP
-            curves("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
-            curves("c_rhow").AddPoint .md_m, .Rhow_kgm3
-            curves("c_rhol").AddPoint .md_m, .rhol_kgm3
-            curves("c_rhog").AddPoint .md_m, .Rhog_kgm3
-            curves("c_rhomix").AddPoint .md_m, .rhomix_kgm3
-            curves("c_qo").AddPoint .md_m, .q_oil_m3day
-            curves("c_qw").AddPoint .md_m, .qw_m3day
-            curves("c_qg").AddPoint .md_m, .Qg_m3day
-            curves("c_mo").AddPoint .md_m, .mo_kgsec
-            curves("c_mw").AddPoint .md_m, .mw_kgsec
-            curves("c_mg").AddPoint .md_m, .mg_kgsec
-            curves("c_vl").AddPoint .md_m, .vl_msec
-            curves("c_vg").AddPoint .md_m, .vg_msec
+            curve("c_udl_m").AddPoint .md_m, .md_m - .vd_m
+            curve("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
+            curve("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
+            curve("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
+            curve("c_vsl").AddPoint .md_m, .v_sl_msec
+            curve("c_vsg").AddPoint .md_m, .v_sg_msec
+            curve("c_Hl").AddPoint .md_m, .h_l_d
+            curve("c_fpat").AddPoint .md_m, .fpat
+            curve("c_Theta").AddPoint .md_m, .thete_deg
+            curve("c_Roughness").AddPoint .md_m, .roughness_m
+            curve("c_Rs").AddPoint .md_m, .rs_m3m3
+            curve("c_gasfrac").AddPoint .md_m, .gasfrac
+            curve("c_muo").AddPoint .md_m, .mu_oil_cP
+            curve("c_muw").AddPoint .md_m, .mu_wat_cP
+            curve("c_mug").AddPoint .md_m, .mu_gas_cP
+            curve("c_mumix").AddPoint .md_m, .mu_mix_cP
+            curve("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
+            curve("c_rhow").AddPoint .md_m, .Rhow_kgm3
+            curve("c_rhol").AddPoint .md_m, .rhol_kgm3
+            curve("c_rhog").AddPoint .md_m, .Rhog_kgm3
+            curve("c_rhomix").AddPoint .md_m, .rhomix_kgm3
+            curve("c_qo").AddPoint .md_m, .q_oil_m3day
+            curve("c_qw").AddPoint .md_m, .qw_m3day
+            curve("c_qg").AddPoint .md_m, .Qg_m3day
+            curve("c_mo").AddPoint .md_m, .mo_kgsec
+            curve("c_mw").AddPoint .md_m, .mw_kgsec
+            curve("c_mg").AddPoint .md_m, .mg_kgsec
+            curve("c_vl").AddPoint .md_m, .vl_msec
+            curve("c_vg").AddPoint .md_m, .vg_msec
         End With
     Next i
 End Sub
 Public Property Get p_curve() As CInterpolation
-    Set p_curve = curves("c_P")
+    Set p_curve = curve("c_P")
 End Property
 Public Function array_out(Optional ByVal num_points As Integer = 20)
 ' подготовка массива для вывода в Excel
@@ -762,7 +773,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     offset = 2
 On Error Resume Next
     Dim crv1 As CInterpolation
-    Set crv1 = curves("c_P").ClonePointsToNum(num_points)
+    Set crv1 = curve("c_P").ClonePointsToNum(num_points)
     M = crv1.num_points
     
     ReDim arr(M + offset, 6)
@@ -782,248 +793,12 @@ On Error Resume Next
     For i = 1 To M
         arr(offset + i, 0) = i
         arr(offset + i, 1) = crv1.pointX(i)
-        arr(offset + i, 2) = curves("c_Hvert").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 2) = curve("c_Hvert").ClonePointsToNum(num_points).PointY(i)
         arr(offset + i, 3) = crv1.PointY(i)
-        arr(offset + i, 4) = curves("c_T").ClonePointsToNum(num_points).PointY(i)
-        arr(offset + i, 5) = curves("c_Hl").ClonePointsToNum(num_points).PointY(i)
-        arr(offset + i, 6) = curves("c_fpat").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 4) = curve("c_T").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 5) = curve("c_Hl").ClonePointsToNum(num_points).PointY(i)
+        arr(offset + i, 6) = curve("c_fpat").ClonePointsToNum(num_points).PointY(i)
     Next i
     array_out = arr
 End Function
-'Private Sub fillcurves()
-'Dim i As Integer
-'    curves("c_Hvert").ClearPoints
-'    curves("c_P").ClearPoints
-'    curves("c_T").ClearPoints
-'    curves("c_dpdl_g").ClearPoints
-'    curves("c_dpdl_f").ClearPoints
-'    curves("c_dpdl_a").ClearPoints
-'    curves("c_vsl").ClearPoints
-'    curves("c_vsg").ClearPoints
-'    curves("c_Hl").ClearPoints
-'    curves("c_fpat").ClearPoints
-'    curves("c_Rs").ClearPoints
-'    curves("c_gasfrac").ClearPoints
-'    curves("c_muo").ClearPoints
-'    curves("c_muw").ClearPoints
-'    curves("c_mug").ClearPoints
-'    curves("c_mumix").ClearPoints
-'    curves("c_rhoo").ClearPoints
-'    curves("c_rhow").ClearPoints
-'    curves("c_rhol").ClearPoints
-'    curves("c_rhog").ClearPoints
-'    curves("c_rhomix").ClearPoints
-'    curves("c_qo").ClearPoints
-'    curves("c_qw").ClearPoints
-'    curves("c_qg").ClearPoints
-'    curves("c_mo").ClearPoints
-'    curves("c_mw").ClearPoints
-'    curves("c_mg").ClearPoints
-'    curves("c_vl").ClearPoints
-'    curves("c_vg").ClearPoints
-'
-'
-'    For i = LBound(flow_params_out_) To UBound(flow_params_out_)
-'     With flow_params_out_(i)
-'        curves("c_Hvert").AddPoint .md_m, .vd_m
-'        curves("c_P").AddPoint .md_m, .p_atma
-'        curves("c_T").AddPoint .md_m, .T_C
-'        curves("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
-'        curves("c_dpdl_f").AddPoint .md_m, .dpdl_f_atmm
-'        curves("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
-'        curves("c_vsl").AddPoint .md_m, .v_sl_msec
-'        curves("c_vsg").AddPoint .md_m, .v_sg_msec
-'        curves("c_Hl").AddPoint .md_m, .h_l_d
-'        curves("c_fpat").AddPoint .md_m, .fpat
-'        curves("c_Theta").AddPoint .md_m, .thete_deg
-'        curves("c_Roughness").AddPoint .md_m, .roughness_m
-'
-'        curves("c_Rs").AddPoint .md_m, .rs_m3m3
-'        curves("c_gasfrac").AddPoint .md_m, .gasfrac
-'        curves("c_muo").AddPoint .md_m, .mu_oil_cP
-'        curves("c_muw").AddPoint .md_m, .mu_wat_cP
-'        curves("c_mug").AddPoint .md_m, .mu_gas_cP
-'        curves("c_mumix").AddPoint .md_m, .mu_mix_cP
-'        curves("c_rhoo").AddPoint .md_m, .Rhoo_kgm3
-'        curves("c_rhow").AddPoint .md_m, .Rhow_kgm3
-'        curves("c_rhol").AddPoint .md_m, .rhol_kgm3
-'        curves("c_rhog").AddPoint .md_m, .Rhog_kgm3
-'        curves("c_rhomix").AddPoint .md_m, .rhomix_kgm3
-'        curves("c_qo").AddPoint .md_m, .q_oil_m3day
-'        curves("c_qw").AddPoint .md_m, .Qw_m3day
-'        curves("c_qg").AddPoint .md_m, .Qg_m3day
-'        curves("c_mo").AddPoint .md_m, .mo_kgsec
-'        curves("c_mw").AddPoint .md_m, .mw_kgsec
-'        curves("c_mg").AddPoint .md_m, .mg_kgsec
-'        curves("c_vl").AddPoint .md_m, .vl_msec
-'        curves("c_vg").AddPoint .md_m, .vg_msec
-'     End With
-'    Next i
-'End Sub
-'
-' свойста класса служебные
-'Property get ZeroCoordMes_m() As Double
-'    ZeroCoordMes_m = ZeroCoordMes_m
-'End Property
-'
-'Property Let ZeroCoordMes_m(val As Double)
-'    ZeroCoordMes_m = val
-'End Property
-'
-'Property get ZeroCoordVert_m() As Double
-'    ZeroCoordVert_m = ZeroCoordVert_m
-'End Property
-'
-'Property Let ZeroCoordVert_m(val As Double)
-'    ZeroCoordVert_m = val
-'End Property
-'' флаг целостности данных. показвает взаимную согласованность данных класса. только для чтения
-' Public Property get calculated() As Boolean
-'   calculated = p_Calculated
-' End Property
-'' Метод прямой инициализации конструкции трубы из массивов или исходных данных
-''
-'Public Sub init_pipe_constr(ByVal arr_d_m, _
-'                          ByVal arr_length_m, _
-'                          ByVal arr_theta_deg, _
-'                          ByVal arr_roughness_m)
-'    Dim length_
-'    Dim tot_length As Double
-'    Dim tot_length_mes As Double
-'    Dim i As Integer
-'    Dim p_pipe_segments_num As Integer
-'
-'    i = 0
-'    tot_length = 0
-'    depth_vert_total_m_ = 0
-'    tot_length_mes = ZeroCoordMes_m   ' повторно начнем использовать переменную для отсчета глубины
-'    If (IsObject(arr_length_m)) Then  ' length is specified as range
-'        For Each length_ In arr_length_m   'calculate total length
-'            tot_length = tot_length + length_
-'            i = i + 1
-'        Next
-'    Else
-'        If IsArray(arr_length_m) Then
-'            i = UBound(arr_length_m)
-'        Else
-'            i = 0
-'        End If
-'    End If
-'
-'    If i > 0 Then
-'        p_pipe_segments_num = i + 1
-'        legth_total_m_ = tot_length
-'        For i = 0 To p_pipe_segments_num - 1
-'            ' теперь  заполним кривые соответствующие траектории скважины  - в первый раз пишем нулевую точку
-'            curves("c_Diam").AddPoint tot_length_mes, arr_d_m(i)
-'            curves("c_Theta").AddPoint tot_length_mes, arr_theta_deg(i)
-'            curves("c_Roughness").AddPoint tot_length_mes, arr_roughness_m(i)
-'            curves("c_Hvert").AddPoint tot_length_mes, depth_vert_total_m_
-'            tot_length_mes = tot_length_mes + arr_length_m(i)
-'            depth_vert_total_m_ = depth_vert_total_m_ + arr_length_m(i) * sind(arr_theta_deg(i))
-'        Next i
-'        i = p_pipe_segments_num - 1
-'        curves("c_Diam").AddPoint tot_length_mes, arr_d_m(i)
-'        curves("c_Theta").AddPoint tot_length_mes, arr_theta_deg(i)
-'        curves("c_Roughness").AddPoint tot_length_mes, arr_roughness_m(i)
-'        curves("c_Hvert").AddPoint tot_length_mes, depth_vert_total_m_
-'        i = p_pipe_segments_num - 1
-'        legth_total_m_ = tot_length_mes
-'    Else  ' just numbers
-'        p_pipe_segments_num = 1
-'        Dim parr_arr_d_m, parr_arr_theta_deg, parr_arr_roughness_m, parr_arr_length_m
-'        If IsArray(arr_length_m) Then
-'            parr_arr_length_m = arr_length_m(0)
-'            parr_arr_d_m = arr_d_m(0)
-'            parr_arr_theta_deg = arr_theta_deg(0)
-'            parr_arr_roughness_m = arr_roughness_m(0)
-'            legth_total_m_ = arr_length_m(0)
-'            depth_vert_total_m_ = legth_total_m_ * sind(arr_theta_deg(0))
-'        Else
-'            parr_arr_length_m = arr_length_m
-'            parr_arr_d_m = arr_d_m
-'            parr_arr_theta_deg = arr_theta_deg
-'            parr_arr_roughness_m = arr_roughness_m
-'            legth_total_m_ = arr_length_m
-'            depth_vert_total_m_ = legth_total_m_ * sind(arr_theta_deg)
-'        End If
-'        i = 0
-'        curves("c_Diam").AddPoint tot_length_mes, parr_arr_d_m
-'        curves("c_Theta").AddPoint tot_length_mes, parr_arr_theta_deg
-'        curves("c_Roughness").AddPoint tot_length_mes, parr_arr_roughness_m
-'        curves("c_Hvert").AddPoint tot_length_mes, ZeroCoordVert_m
-'        tot_length_mes = tot_length_mes + parr_arr_length_m
-'        curves("c_Diam").AddPoint tot_length_mes, parr_arr_d_m
-'        curves("c_Theta").AddPoint tot_length_mes, parr_arr_theta_deg
-'        curves("c_Roughness").AddPoint tot_length_mes, parr_arr_roughness_m
-'        curves("c_Hvert").AddPoint tot_length_mes, depth_vert_total_m_
-'    End If
-'    Call SetHmes_insert    ' после инициализации конструкции добавляем обязательные точки, которые надо добавить
-'    StepHmCurve = 100    ' ставим заведомо большой шаг для сохранения, чтобы сохранить только крайние точки
-'End Sub
-'
-        '  curves("c_Hvert")                   ' кривая зависимость вертикальной глубины от измеренной (траектория скважины)
-        '  curves("c_Theta")                   ' зенитный угол в зависимости от измеренной глубины
-        '  curves("c_Roughness")               ' шероховатость от измеренной глубины
-        '  curves("c_Diam")                    ' диаметр трубы от измеренной глубины
-        '  curves("c_Tinit")                   ' распределение температуры по которой инициализировалась труба
-        ' набор кривых с базовыми свойствами
-        '  curves("c_P")                       ' кривая с давлениями
-        '  curves("c_T")
-        '  curves("c_Tamb")
-        '  curves("c_dpdl_g")
-        '  curves("c_dpdl_f")
-        '  curves("c_dpdl_a")
-        '  curves("c_vsl")
-        '  curves("c_vsg")
-        '  curves("c_Hl")
-        '  curves("c_fpat")
-        '   дополнительные выводные параметры по трубам
-        '  curves("c_Rs")
-        '  curves("c_gasfrac")
-        '  curves("c_muo")
-        '  curves("c_muw")
-        '  curves("c_mug")
-        '  curves("c_mumix")
-        '  curves("c_rhoo")
-        '  curves("c_rhow")
-        '  curves("c_rhol")
-        '  curves("c_rhog")
-        '  curves("c_rhomix")
-        '  curves("c_qo")
-        '  curves("c_qw")
-        '  curves("c_qg")
-        '  curves("c_mo")
-        '  curves("c_mw")
-        '  curves("c_mg")
-        '  curves("c_vl")
-        '  curves("c_vg")
-'Property Get t_calc_C() As Double
-'    t_calc_C = t_calc_C_
-'End Property
-'
-'Property Let t_calc_C(val As Double)
-'    t_calc_C_ = val
-'End Property
-'Property Get t_in_C() As Double
-'   ' If PARAM.FlowDirection = FlowAlongCoord Then
-'        t_in_C = curves("c_Tinit").getPoint(ZeroCoordMes_m)
-'   ' Else
-'   '     t_in_C = curves("c_Tinit").getPoint(ZeroCoordMes_m + length_mes_m)
-'   ' End If
-'End Property
-'Property Get t_out_C() As Double
-'    t_out_C = curves("c_Tinit").getPoint(ZeroCoordMes_m + length_mes_m)
-'End Property
-' Public Property get dTdLinit() As Double
-'    dTdLinit = dTdLinit_
-' End Property
-'
-' Public Property Let dTdLinit(val As Double)
-'    dTdLinit_ = val
-' End Property
- 
-' Public Function TinitZ(ByVal z As Double) As Double
-'    TinitZ = curves("c_Tinit").getPoint(z)
-' End Function
 
