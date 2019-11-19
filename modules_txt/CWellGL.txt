@@ -138,7 +138,9 @@ Public Property Let c_calibr_grav(val As Double)
             pipe.c_calibr_grav = val
         Next pipe
         c_calibr_grav_ = val
-        If val <> 1 Then addLogMsg_debug "CWellGL.c_calibr_grav = " & str(val) & " warning. correction to multiphase flow correlation active!"
+        If val <> 1 Then
+            addLogMsg_debug "CWellGL.c_calibr_grav = " & str(val) & " warning. correction to multiphase flow correlation active!"
+        End If
    Else
         addLogMsg_debug "CWellGL.c_calibr_grav: value " & str(val) & " not set. Out of range"
    End If
@@ -146,7 +148,7 @@ End Property
  
 Public Property Let c_calibr_fric(val As Double)
    Dim pipe As CPipe
-   If val > 0 And val < 2 Then
+   If val >= 0 And val < 2 Then
    ' не стоит подстрочный коэффициент менять слишком сильно - если что тут можно поправить
         For Each pipe In PipesProd
             pipe.c_calibr_fric = val
@@ -587,9 +589,13 @@ On Error GoTo err3:
     ' 4. Расчет линейного давления по штуцеру
     If choke.d_choke_m > 0 Then      ' пока отключено
         Set choke.fluid = pipe.fluid   ' take fluid from last pipe
-        PT_lin_ = choke.calc_choke_p_lin(PT_buf_)
-        If PT_lin_.p_atma < 0 Then
-            PT_lin_.p_atma = 1
+        If PT_buf_.p_atma > 0 Then
+            PT_lin_ = choke.calc_choke_p_lin(PT_buf_)
+            If PT_lin_.p_atma < 0 Then
+                PT_lin_.p_atma = 0     ' 0 - means calculation were wrong
+            End If
+        Else
+            PT_lin_ = PT_buf_
         End If
     End If
 On Error GoTo err1:
@@ -821,19 +827,12 @@ Public Sub FillWellConstructionTr()
         End If
     Next j
        
-'   Hvd_m = Trajectory.h_tubing_m ' определим глубину спуска установки
-'   p_Hspvert_m = Trajectory.h_abs_hmes_m(h_sp_m_)    ' в том числе по вертикали
-'   Call pipe_HspHvd_.init_pipe_constr_by_trajectory(Trajectory, Trajectory.h_tubing_m, Trajectory.h_perf_m, 1)
     choke.d_up_m = 0.06
     choke.d_down_m = 0.06
-'    For Each pipe In PipesProd
-'        Set pipe.ambient_formation = ambient_formation
-'    Next pipe
-'    For Each pipe In PipesInj
-'        Set pipe.ambient_formation = ambient_formation
-'    Next pipe
-    
     Set ambient_formation = ambient_formation
+    ' repopulate calibration values to new pipes
+    c_calibr_fric = c_calibr_fric
+    c_calibr_grav = c_calibr_grav
 End Sub
  
  
