@@ -53,12 +53,12 @@ Private Sub Class_Initialize()
    curve("c_Diam").isStepFunction = True
    curve("c_fpat").isStepFunction = True
    Set fluid = New CPVT
-   With param
-       .correlation = Ansari
-'       .FlowDirection = FlowAgainstCoord
-       .FlowAlongCoord = False
-       .temp_method = StartEndTemp
-   End With
+   
+   param_ = set_calc_flow_param(calc_along_coord:=True, _
+                                flow_along_coord:=True, _
+                                hcor:=Ansari, _
+                                temp_method:=StartEndTemp, _
+                                length_gas_m:=0)
    Set h_mes_insert_m_ = New CInterpolation
    Call h_mes_insert_m_.AddPoint(0, 0)
    Call h_mes_insert_m_.AddPoint(length_mes_m, 0)
@@ -70,19 +70,13 @@ Public Property Get param() As PARAMCALC
    param = param_
 End Property
 Public Property Let param(val As PARAMCALC)
-   param_ = val
+    param_ = val
+    If val.length_gas_m > 0 Then
+        ' if correlation division point given - stable points in pipe have to be updated
+        Call add_h_mes_save_m(val.length_gas_m)
+        StepHmCurve = StepHmCurve
+    End If
 End Property
-Public Sub set_param(Optional ByVal calc_along_coord As Boolean, _
-                     Optional ByVal flow_along_coord As Boolean, _
-                     Optional ByVal hcor As H_CORRELATION, _
-                     Optional ByVal temp_method As TEMP_CALC_METHOD)
-    If Not IsMissing(calc_along_coord) Then param_.CalcAlongCoord = calc_along_coord
-    If Not IsMissing(flow_along_coord) Then param_.FlowAlongCoord = flow_along_coord
-    If Not IsMissing(hcor) Then param_.correlation = hcor
-    If Not IsMissing(temp_method) Then param_.temp_method = temp_method
-    
-    param = param_
-End Sub
 Public Property Get c_calibr_grav() As Double
    c_calibr_grav = c_calibr_grav_
 End Property
@@ -143,19 +137,7 @@ End Property
 Public Property Get depth_vert_m() As Double
     depth_vert_m = depth_vert_total_m_
 End Property
-Property Let correlation(cor As H_CORRELATION)
-    param_.correlation = cor
-End Property
-Property Get correlation() As H_CORRELATION
-    correlation = param.correlation
-End Property
-Property Let temp_method(cor As TEMP_CALC_METHOD)
-    param_.temp_method = cor
-End Property
-Property Get temp_method() As TEMP_CALC_METHOD
-    temp_method = param_.temp_method
-End Property
-    
+   
 Public Sub InitTlinear(ByVal Tstart_C As Double, ByVal Tend_C As Double)
 ' начальная инициализация распределения температуры в трубе
        If legth_total_m_ > 0 Then
@@ -194,7 +176,7 @@ Private Function dTdL_amb_Cm(lmes_m As Double) As Double
    ' возвращает градиент температуры исходя из окружения
    Dim theta_deg As Double
    Dim Hv_m As Double
-   theta_deg = angle_hmes_deg(lmes_m)    ' определяем наклон на заданной глубине
+   theta_deg = angle_hmes_deg(lmes_m)         ' определяем наклон на заданной глубине
    Hv_m = h_vert_h_mes_m(lmes_m)              ' определяем вертикальную глубину для заданной измеренной глубины
    dTdL_amb_Cm = ambient_formation.amb_temp_grad_Cm(Hv_m) * sind(theta_deg)
 End Function
@@ -228,7 +210,8 @@ Public Sub init_pipe_constr_by_trajectory( _
                             ByVal tr As CPipeTrajectory, _
                    Optional ByVal HmesStart_m As Variant, _
                    Optional ByVal HmesEnd_m As Variant, _
-                   Optional tr_cas As CPipeTrajectory)
+                   Optional tr_cas As CPipeTrajectory, _
+                   Optional ByVal srv_points_step As Integer = 100)
                    
     Dim i As Integer
     Dim h As Double
@@ -272,7 +255,9 @@ Public Sub init_pipe_constr_by_trajectory( _
     h_mes_insert_m_.ClearPoints
     h_mes_insert_m_.AddPoint ZeroCoordMes_m, 0
     h_mes_insert_m_.AddPoint ZeroCoordMes_m + length_mes_m, 0
-    StepHmCurve = 100    ' ставим заведомо большой шаг для сохранения, чтобы сохранить только крайние точки
+    Call add_h_mes_save_m(param_.length_gas_m)
+    
+    StepHmCurve = srv_points_step
 End Sub
 Public Function init_pipe(ByVal d_mm, _
                          ByVal length_m, _
@@ -309,8 +294,7 @@ Public Function calc_grad(l_m As Double, _
                          p_atma As Double, _
                          t_C As Double, _
                          Optional calc_dtdl As Boolean = True, _
-                         Optional pcas_atma As Double = 0.95, _
-                         Optional flow_along_coord As Boolean = False) As PIPE_FLOW_PARAMS
+                         Optional pcas_atma As Double = 0.95) As PIPE_FLOW_PARAMS
 ' функция расчета градиента давления и температуры в скважине при заданных параметрах
 ' возвращает все параметры потока в заданной точке трубы при заданых термобарических условиях.
 '
@@ -339,7 +323,7 @@ Dim Hv_m As Double
 Dim dp_dl As Double, dp_dl_arr
 Dim dt_dl As Double
 Dim v As Double, dvdL As Double
-If flow_along_coord Then
+If param_.FlowAlongCoord Then
     theta_sign = -1
 Else
     theta_sign = 1
@@ -369,8 +353,15 @@ With fluid
     dp_dl_arr(5) = 0
     dp_dl_arr(6) = 0
     dp_dl_arr(7) = 101
-  
-    Select Case param.correlation
+    
+    Dim corr As H_CORRELATION
+    If l_m < param_.length_gas_m Then
+        corr = gas
+    Else
+        corr = param_.correlation
+    End If
+    
+    Select Case corr
         Case BeggsBrill
             dp_dl_arr = unf_BegsBrillGradient(d_m, theta_deg, rough_m, .qliq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
                                   .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, 0, 1, c_calibr_grav, c_calibr_fric)
@@ -480,9 +471,9 @@ Public Function calc_dPipe(ByVal p_atma As Double, _
     Dim PTres As PTtype
     
     If fluid.gas_only Then
-        correlation = gas
+        param_.correlation = gas
     ElseIf fluid.qliq_sm3day < const_ZNLF_rate Then
-        param.correlation = Ansari
+        param_.correlation = Ansari
         fluid.ZNLF = True
     End If
     
@@ -563,7 +554,7 @@ On Error GoTo err1:
     i = 0
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
-        pfp = calc_grad(State.x, State.y(0), State.y(1), flow_along_coord:=param.FlowAlongCoord)    ' Application.Run(FuncName, State.X, State.Y, CoeffA)
+        pfp = calc_grad(State.x, State.y(0), State.y(1))    ' Application.Run(FuncName, State.X, State.Y, CoeffA)
         State.DY(0) = pfp.dp_dl
         State.DY(1) = pfp.dt_dl
         i = i + 1
@@ -665,7 +656,7 @@ On Error GoTo err1:
             State.RepTerminationType = 2
             Rtn = False
         End If
-        pfp = calc_grad(State.x, State.y(0), t_init_C(State.x), calc_dtdl:=False, flow_along_coord:=param.FlowAlongCoord)
+        pfp = calc_grad(State.x, State.y(0), t_init_C(State.x), calc_dtdl:=False)
         State.DY(0) = pfp.dp_dl
         i = i + 1
     Loop
@@ -688,7 +679,12 @@ On Error GoTo err1:
         curve("c_T").ClearPoints
         curve("c_Tamb").ClearPoints
         For i = 0 To M - 1
-            stPt = i = 0 Or i = M - 1
+'            stPt = h_mes_insert_m_.TestPoint(x(i)) >= 0
+            If h_mes_insert_m_.TestPoint(x(i)) >= 0 Then
+                stPt = True
+            Else
+                stPt = False
+            End If
             curve("c_P").AddPoint x(i), y(i, 0), stPt
             curve("c_T").AddPoint x(i), t_init_C(x(i)), stPt
             curve("c_Tamb").AddPoint x(i), t_init_C(x(i)), stPt

@@ -36,28 +36,13 @@ Public rwb_m As Double           ' –адиус цементного кольца вокруг скважины
 Public t_calc_hr As Double               ' врем€ на которое вычисл€етс€ распределение давлени€
 'Private td_d_ As Double                ' безразмерное врем€ расчета
 'Private TD_ As Double                  ' безразмерное температура
-Public amb_temp_curve As CInterpolation
+Public amb_temp_curve As New CInterpolation
 Public TGeoGrad_C100m_ As Double
 Public h_vert_data_m As Double
-Public amb_temp_data_C As Double
+Public reservoir_temp_data_C As Double
+Public surf_temp_data_C As Double
 Public h_dyn_m As Double
 Public h_pump_m As Double
-' градиент давлени€ от температуры
-Public Function amb_temp_grad_Cm(h_vert_m As Double) As Double
-    If amb_temp_curve Is Nothing Then
-        amb_temp_grad_Cm = TGeoGrad_C100m_ / 100
-    Else
-        amb_temp_grad_Cm = (amb_temp_curve.getPoint(h_vert_m + 1) - amb_temp_curve.getPoint(h_vert_m)) / 1
-    End If
-End Function
-' температура на глубине
-Public Function amb_temp_C(h_vert_m As Double) As Double
-    If amb_temp_curve Is Nothing Then
-        amb_temp_C = amb_temp_data_C + (h_vert_m - h_vert_data_m) * amb_temp_grad_Cm(h_vert_m)
-    Else
-        amb_temp_C = amb_temp_curve.getPoint(h_vert_m)
-    End If
-End Function
 Private Sub Class_Initialize()
      thermal_conductivity_formation_WmC = 2.4252    ' теплопроводность породы ƒж/сек/м/—
      sp_heat_capacity_formation_JkgC = 200        ' теплоемкость породы
@@ -80,15 +65,35 @@ Private Sub Class_Initialize()
     
      ' исходные данные по умолчанию, чтобы все считало
      h_vert_data_m = 2500
-     amb_temp_data_C = 95
+     reservoir_temp_data_C = 95
+     surf_temp_data_C = 25
      t_calc_hr = 10 * 24   ' задаем по умолчанию врем€ расчета распределени€ температуры через 10 дней
      h_dyn_m = -1
      h_pump_m = -1
      
-     TGeoGrad_C100m_ = const_TGeoGrad_C100m
+     amb_temp_curve.AddPoint 0, surf_temp_data_C
+     amb_temp_curve.AddPoint h_vert_data_m, reservoir_temp_data_C
      
-     Set amb_temp_curve = Nothing
+     TGeoGrad_C100m_ = h_vert_data_m / 100 / (reservoir_temp_data_C - surf_temp_data_C)
+  
+     
 End Sub
+' градиент давлени€ от температуры
+Public Function amb_temp_grad_Cm(h_vert_m As Double) As Double
+    If amb_temp_curve Is Nothing Then
+        amb_temp_grad_Cm = TGeoGrad_C100m_ / 100
+    Else
+        amb_temp_grad_Cm = (amb_temp_curve.getPoint(h_vert_m + 1) - amb_temp_curve.getPoint(h_vert_m)) / 1
+    End If
+End Function
+' температура на глубине
+Public Function amb_temp_C(h_vert_m As Double) As Double
+    If amb_temp_curve Is Nothing Then
+        amb_temp_C = reservoir_temp_data_C + (h_vert_m - h_vert_data_m) * amb_temp_grad_Cm(h_vert_m)
+    Else
+        amb_temp_C = amb_temp_curve.getPoint(h_vert_m)
+    End If
+End Function
 Private Property Get td_d() As Double
     td_d = thermal_conductivity_formation_WmC * t_calc_hr * const_convert_hr_sec / density_formation_kgm3 / sp_heat_capacity_formation_JkgC / (rwb_m ^ 2)
 End Property

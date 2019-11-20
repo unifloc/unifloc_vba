@@ -163,39 +163,6 @@ Public Property Let c_calibr_fric(val As Double)
    End If
 End Property
  
-Public Property Get hydraulic_correlation() As H_CORRELATION
-    hydraulic_correlation = param.correlation
-End Property
-Public Property Let hydraulic_correlation(val As H_CORRELATION)
-    Dim prm As PARAMCALC
-    prm = param
-    prm.correlation = val
-    param = prm
-End Property
- 
-Public Property Get temp_correlation() As TEMP_CALC_METHOD
-    temp_correlation = param.temp_method
-End Property
- 
-Public Property Let temp_correlation(val As TEMP_CALC_METHOD)
-    Dim prm As PARAMCALC
-    prm = param
-    prm.temp_method = val
-    param = prm
-End Property
- 
-Public Sub set_param(Optional ByVal calc_along_coord As Boolean, _
-                     Optional ByVal flow_along_coord As Boolean, _
-                     Optional ByVal hcor As H_CORRELATION, _
-                     Optional ByVal temp_method As TEMP_CALC_METHOD)
-    If Not IsMissing(calc_along_coord) Then param_.CalcAlongCoord = calc_along_coord
-    If Not IsMissing(flow_along_coord) Then param_.FlowAlongCoord = flow_along_coord
-    If Not IsMissing(hcor) Then param_.correlation = hcor
-    If Not IsMissing(temp_method) Then param_.temp_method = temp_method
-    
-    param = param_
-End Sub
- 
 Public Property Get param() As PARAMCALC
     param = param_
 End Property
@@ -317,10 +284,22 @@ End Property
  Public Function clone() As CWellGL
     Dim wl As New CWellGL
     Dim i As Integer
+    wl.h_perf_m = h_perf_m
+    wl.h_tub_m = h_tub_m
+    wl.isCalcCasing = isCalcCasing
+    
+    ' todo full clone needs to be done
+    ' for now trajectories and ambient formation shared here to clone object
     Set wl.trajectory_tub = trajectory_tub
     Set wl.trajectory_cas = trajectory_cas
+    
     Call wl.choke.Copy(choke)
+   ' Set wl.choke_inj = choke_inj
+    
     Set wl.fluid = fluid.clone
+    Set wl.ambient_formation = ambient_formation
+    
+    Call wl.FillWellConstructionTr
     Set clone = wl
  End Function
     
@@ -340,7 +319,11 @@ On Error GoTo err1:
     ' все другие режимы расчета используют объект ambient_formation_ и не зависят от этой инициализации
     Dim TempGrad As Double
     Dim t_int_C As Double
-    TempGrad = (t_bh_C_ - t_wh_C_) / h_perf_m
+    If h_perf_m > 0 Then
+        TempGrad = (t_bh_C_ - t_wh_C_) / h_perf_m
+    Else
+        TempGrad = 0
+    End If
     
      
     Dim i As Integer
@@ -516,21 +499,22 @@ On Error GoTo err1:
     p_cas_atma_ = pinj_atma
             
     ' 2. calculate pressure distribution in annulus
-    PTcas_temp = SetPT(p_cas_atma_, t_wh_C_)
+    PTcas_temp = set_PT(p_cas_atma_, t_wh_C_)
     For i = PipesInj.Count To 1 Step -1
         Set pipe = PipesInj(i)
-        If temp_correlation = AmbientTemp Then
+        If param_.temp_method = AmbientTemp Then
             ' AmbientTemp correlation not work with gas injection in this version
             ' with relatively small gas injection rates errors should not be significant
             ' with temprature distribution taken as ambient temperature      rnt2019
             temp_corr_inj = GeoGradTemp
         Else
-            temp_corr_inj = temp_correlation
+            temp_corr_inj = param_.temp_method
         End If
         pipe.param = set_calc_flow_param(calc_along_coord:=True, _
                                          flow_along_coord:=True, _
                                          hcor:=gas, _
-                                         temp_method:=temp_corr_inj)
+                                         temp_method:=temp_corr_inj, _
+                                         length_gas_m:=param_.length_gas_m)
         PTcas_temp = pipe.calc_dPipe(PTcas_temp.p_atma, , saveCurve)
         If Not pipe.GLVin Is Nothing Then
             ' if  there is a valve - save PT in casing at valve intake
@@ -577,8 +561,9 @@ On Error GoTo err1:
         ' считаем снизу в сторону буферного
         pipe.param = set_calc_flow_param(calc_along_coord:=False, _
                                          flow_along_coord:=False, _
-                                         hcor:=hydraulic_correlation, _
-                                         temp_method:=temp_correlation)
+                                         hcor:=param_.correlation, _
+                                         temp_method:=param_.temp_method, _
+                                         length_gas_m:=param_.length_gas_m)
         PT_temp = pipe.calc_dPipe(PT_temp.p_atma, PT_temp.t_C, saveCurve)
     Next i
     q_gas_inj_scm3day_ = Qgfree_tot_scm3day - fluid.q_gas_free_sm3day
@@ -752,7 +737,7 @@ On Error GoTo err1:
     End If
     
    ' Call set_qgas_inj(Pcas_inj_atma, Qgas_inj_scm3day)
-    PT_lin_ = SetPT(calc_plin_pwf_atma(PT_wf_.p_atma, t_bh_C, saveCurve:=saveCurve), t_buf_C)
+    PT_lin_ = set_PT(calc_plin_pwf_atma(PT_wf_.p_atma, t_bh_C, saveCurve:=saveCurve), t_buf_C)
     
     If Abs(p_line_atma - plin_atma) > const_well_P_tolerance Then
        addLogMsg "CWellGL.calc_pwf_plin_atma: BHP estimation error exceeds tolerance " & const_well_P_tolerance & ". Equal = " & Abs(Me.p_line_atma - plin_atma)
@@ -846,6 +831,12 @@ End Property
 Public Property Let p_gas_inj_atma(val As Double)
     p_gas_inj_atma_ = val
 End Property
+Private Property Set IWell_AmbFormation(RHS As CAmbientFormation)
+    Set ambient_formation_ = RHS
+End Property
+Private Property Get IWell_AmbFormation() As CAmbientFormation
+    Set IWell_AmbFormation = ambient_formation_
+End Property
 ' ======================================================================
 ' Iwell implementation
 ' ======================================================================
@@ -922,13 +913,13 @@ Private Property Get IWell_PTbuf() As PTtype
     IWell_PTbuf = PT_buf_
 End Property
 Private Property Get IWell_PTcas() As PTtype
-    IWell_PTcas = SetPT(p_cas_atma_, t_wh_C_)
+    IWell_PTcas = set_PT(p_cas_atma_, t_wh_C_)
 End Property
 Private Property Get IWell_PTdis() As PTtype
-    IWell_PTdis = SetPT(0, 0)  'PT_int_
+    IWell_PTdis = set_PT(0, 0)  'PT_int_
 End Property
 Private Property Get IWell_PTintake() As PTtype
-    IWell_PTintake = SetPT(0, 0) 'PT_int_
+    IWell_PTintake = set_PT(0, 0) 'PT_int_
 End Property
 Private Property Get IWell_PTline() As PTtype
     IWell_PTline = PT_lin_
@@ -1066,8 +1057,8 @@ End Property
 '   ' initialise trajectory (same as ESP well class)
 '   Me.h_perf_m = h_perf_m
 '   Me.h_tub_m = h_tub_m
-'   Call trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
-'   Call trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
+'   Call trajectory_tub.init_from_curves(habs_curve_m, dtub_curve_mm)
+'   Call trajectory_cas.init_from_curves(habs_curve_m, dcas_curve_mm)
 '
 '   Call FillWellConstructionTr
 '
@@ -1105,8 +1096,8 @@ End Property
 '
 '   Me.h_perf_m = h_perf_m
 '   Me.h_tub_m = h_tub_m
-'   Call trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
-'   Call trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
+'   Call trajectory_cas.init_from_curves(habs_curve_m, dcas_curve_mm)
+'   Call trajectory_tub.init_from_curves(habs_curve_m, dtub_curve_mm)
 '   Call FillWellConstructionTr
 '
 '   Exit Sub

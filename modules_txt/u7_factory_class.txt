@@ -5,70 +5,155 @@
 '
 '=======================================================================================
 ' class factory functions
-'
-' вспомогательные функции для генерации объектов и изменения объектов в разных ситуациях
-'
-Option Explicit
 ' модуль для функций поддержки работы классов
 ' содержит функции для того чтобы можно было создавать экземпляры классов из других файлов
-Public Function new_trajectory(Optional hmes_habs_list_m, Optional dcas_list_mm) As CPipeTrajectory
+Option Explicit
+' функция генерации нового объекта траектории трубопровода или скважины
+Public Function new_trajectory(hmes_habs_list_m, _
+                               d_list_mm, _
+                Optional ByVal roughness_m As Double = 0.0001) As CPipeTrajectory
+' hmes_habs_list_m - инклинометрия - range или двухмерный массив или число,
+'                    зависимость значений вертикальной глубины от измеренной,
+'                    первый столбец - измеренная глубина, м
+'                    второй столбец - вертикальная глубина, м
+'                    если передано одно число - то будет задана вертикальная
+'                    траектория заданной глубины
+' d_list_mm - значения диаметров от измеренной глубины
+'             range или двухмерный массив или число
+'             первый столбец - измеренная глубина, м
+'             второй столбец - диаметр трубы, мм
+'             применяется от текущего значения глубины и до следующего
+'             если передано одно число - то будет задан постоянный диаметр
+'roughness_m - шероховатость, м. Задается одна для всей траектории.
+' все параметры обязательно должны быть заданы
     Set new_trajectory = New CPipeTrajectory
-    If Not (IsMissing(hmes_habs_list_m) Or IsMissing(dcas_list_mm)) Then
-        Call new_trajectory.init_from_vert_range(hmes_habs_list_m, dcas_list_mm)
-    End If
-End Function
-Public Function new_pipeline( _
-                   Optional ByVal tr As CPipeTrajectory, _
-                   Optional ByVal HmesStart_m As Variant, _
-                   Optional ByVal HmesEnd_m As Variant, _
-                   Optional ByVal tr_cas As CPipeTrajectory) As CPipe
-    Set new_pipeline = New CPipe
-    If Not IsMissing(tr) Then
-        new_pipeline.init_pipe_constr_by_trajectory tr, HmesStart_m, HmesEnd_m, tr_cas
-    End If
+    Call new_trajectory.init_from_vert_range(hmes_habs_list_m, d_list_mm)
+    new_trajectory.roughness_m = roughness_m
     
 End Function
-Public Function new_reservoir(Optional ProdIndex, _
-                              Optional Pres, _
-                              Optional Pb, _
-                              Optional fw) As CReservoirVogel
-    Set new_reservoir = New CReservoirVogel
-    If Not (IsMissing(ProdIndex) Or IsMissing(Pres) Or IsMissing(Pb) Or IsMissing(fw)) Then
-        new_reservoir.InitProp Pres, Pb, fw
-        new_reservoir.PI_sm3dayatm = ProdIndex
+' функция генерации нового объекта - трубопровода или участка скважины
+Public Function new_pipeline(ByVal tr As CPipeTrajectory, _
+                    Optional ByVal hmes_start_m As Variant, _
+                    Optional ByVal hmes_end_m As Variant, _
+                    Optional ByVal tr_cas As CPipeTrajectory, _
+                    Optional ByVal fluid As CPVT, _
+                    Optional ByVal amb As CAmbientFormation) As CPipe
+' tr             - объект траектории трубопровода или скважины
+' hmes_start_m   - начало трубы - измеренная длина по траектории
+'                  если не задана то берется начало траектории
+' hmes_end_m     - конец трубы - измеренная длина по траектории
+'                  если не задана то берется конец траектории
+' tr_cas         - дополнительная траектория с внешними диаметрами
+'                  для скважины - траектория обсадной колонны
+' fluid          - объект с параметрами флюида и потока в трубе
+'                  если не задан то будет флюид с параметрами по умолчанию
+' amb            - объект с параметрами теплообмена с окружающей средой
+'                  если не задан то будет объект с параметрами по умолчанию
+' результат      - на выходе объект трубопровода пригодный для проведения
+'                  расчетов - все данные и параметры заданы
+    Set new_pipeline = New CPipe
+    new_pipeline.init_pipe_constr_by_trajectory tr, hmes_start_m, hmes_end_m, tr_cas
+    If Not IsMissing(fluid) Then
+        Set new_pipeline.fluid = fluid
+    End If
+    If Not IsMissing(amb) Then
+        Set new_pipeline.ambient_formation = amb
     End If
 End Function
+' функция генерации нового объекта - пласта (заканчивания скважины)
+Public Function new_reservoir(ByVal prod_index_sm3dayatm As Double, _
+                              ByVal pres_atma As Double, _
+                              ByVal fluid As CPVT _
+                              ) As CReservoirVogel
+' prod_index_sm3dayatm - коэффициент продуктивности
+' pres_atma            - пластовое давление
+' fluid                - объект с параметрами флюида и потока в пласте
+    Set new_reservoir = New CReservoirVogel
+    new_reservoir.InitProp pres_atma, fluid.pb_atma, fluid.fw_perc
+    new_reservoir.PI_sm3dayatm = prod_index_sm3dayatm
+End Function
+' функция генерации нового объекта описывающего температуру окружающей среды и параметры теплообмена
 Public Function new_ambient_formation(Optional ByVal h_perf_abs_m As Double = 3000, _
                                       Optional ByVal t_bh_C As Double = 100, _
                                       Optional ByVal t_wh_C As Double = 30, _
                                       Optional ByVal tamb_arr_hmes_m, _
                                       Optional ByVal tamb_arr_C) As CAmbientFormation
+'h_perf_abs_m    - вертикальная глубина пласта (самая низкая точка по вертикали где задана температура)
+'t_bh_C          - температура пласта (самой низкой точки по вертикали)
+'t_wh_C          - температура поверхности (самой высокой точки по вертикали)
+'tamb_arr_hmes_m - значения глубина для которых заданы температуры tamb_arr_C
+'                  если задан то предполагается, что данные переданы одномерным массивом или range
+'tamb_arr_C      - кривая распределения температуры по вертикали
+'                  range или двумерный массив - температуры от вертикальной глубины (если не задан tamb_arr_hmes_m)
+'                  range или одномерный массив - температуры, если задан tamb_arr_hmes_m
+'если tamb_arr_C не задан - то объект инициализируется по точечным значениям h_perf_abs_m, t_bh_C, t_wh_C
+'                если задан, то точечные значения игнорируются
     Set new_ambient_formation = New CAmbientFormation
     Call new_ambient_formation.init_amb_temp(h_perf_abs_m, t_bh_C, t_wh_C, tamb_arr_hmes_m, tamb_arr_C)
 End Function
-Public Function new_ESP_sys() As CESPsystemSimple
-    Set new_ESP_sys = New CESPsystemSimple
-End Function
-Public Function new_well() As CWellESP
-    Set new_well = New CWellESP
-End Function
-Public Function new_well_GL() As CWellGL
-    Set new_well_GL = New CWellGL
-End Function
-Public Function NewChoke() As Cchoke
-   Set NewChoke = New Cchoke
-End Function
-Public Function NewCPVT() As CPVT
-   Set NewCPVT = New CPVT
-End Function
-Public Function NewCurve() As CInterpolation
-   Set NewCurve = New CInterpolation
-End Function
-Public Function NewCPipe() As CPipe
-    Set NewCPipe = New CPipe
-End Function
-Public Function NewTRFacade() As C_TR_Facade
-    Set NewTRFacade = New C_TR_Facade
+' функция генерации нового объекта описывающего параметры флюида и потока
+Public Function new_PVT_fluid( _
+                    Optional ByVal qliq_sm3day As Double = 0, _
+                    Optional ByVal fw_perc As Double = 0, _
+                    Optional ByVal gamma_gas As Double = const_gg_, _
+                    Optional ByVal gamma_oil As Double = const_go_, _
+                    Optional ByVal gamma_wat As Double = const_gw_, _
+                    Optional ByVal rsb_m3m3 = const_rsb_default, _
+                    Optional ByVal rp_m3m3 = -1, _
+                    Optional ByVal pb_atma = -1, _
+                    Optional ByVal tres_C = const_tres_default, _
+                    Optional ByVal bob_m3m3 = -1, _
+                    Optional ByVal muob_cP = -1, _
+                    Optional ByVal PVTcorr = Standing_based, _
+                    Optional ByVal ksep_fr = 0, _
+                    Optional ByVal p_ksep_atma = -1, _
+                    Optional ByVal t_ksep_C = -1, _
+                    Optional ByVal gas_only As Boolean = False) As CPVT
+' qliq_sm3day - дебит жидкости
+' fw_perc   - обводненность
+' gamma_gas - удельная плотность газа, по воздуху.
+'             По умолчанию const_gg_ = 0.6
+' gamma_oil - удельная плотность нефти, по воде.
+'             По умолчанию const_go_ = 0.86
+' gamma_wat - удельная плотность воды, по воде.
+'             По умолчанию const_gw_ = 1
+' rsb_m3m3  - газосодержание при давлении насыщения, м3/м3.
+'             По умолчанию const_rsb_default = 100
+' rp_m3m3 - замерной газовый фактор, м3/м3.
+'           Имеет приоритет перед rsb если rp < rsb
+' pb_atma - давление насыщения при  температуре tres_C, атма.
+'           Опциональный калибровочный параметр,
+'           если не задан или = 0, то рассчитается по корреляции.
+' tres_C  - пластовая температура, С.
+'           Учитывается при расчете давления насыщения.
+'           По умолчанию  const_tres_default = 90
+' bob_m3m3 - объемный коэффициент нефти при давлении насыщения
+'            и пластовой температуре, м3/м3.
+'            По умолчанию рассчитывается по корреляции.
+' muob_cP  - вязкость нефти при давлении насыщения.
+'            и пластовой температуре, сП.
+'            По умолчанию рассчитывается по корреляции.
+' PVTcorr - номер набора PVT корреляций для расчета:
+'           0 - на основе корреляции Стендинга;
+'           1 - на основе кор-ии Маккейна;
+'           2 - на основе упрощенных зависимостей.
+' ksep_fr - коэффициент сепарации - определяет изменение свойств
+'           нефти после сепарации части свободного газа.
+'           Зависит от давления и температуры
+'           сепарации газа, которые должны быть явно заданы.
+' p_ksep_atma - давление при которой была сепарация
+' t_ksep_C    - температура при которой была сепарация
+' gas_only   - флаг - в потоке только газ
+'              по умолчанию False (нефть вода и газ)
+    Dim PVT As New CPVT
+    PVT.Init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, tres_C, rp_m3m3, muob_cP
+    PVT.gas_only = gas_only
+    If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
+        Call PVT.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, GasGoesIntoSolution)
+    End If
+    PVT.qliq_sm3day = qliq_sm3day
+    PVT.fw_perc = fw_perc
+    Set new_PVT_fluid = PVT ' создаем объект с базовым флюидом, с которым будем работать далее
 End Function
 ' генерация класса скважины с простыми свойствами
 Public Function new_well_factory( _
@@ -85,7 +170,8 @@ Public Function new_well_factory( _
                  Optional ByVal dtub_arr_hmes_m As Variant, _
                  Optional ByVal dtub_arr_mm As Variant, _
                  Optional ByVal tr_cas As CPipeTrajectory, _
-                 Optional ByVal tr_tub As CPipeTrajectory _
+                 Optional ByVal tr_tub As CPipeTrajectory, _
+                 Optional ByVal amb As CAmbientFormation _
                                 ) As Variant
 ' универсальный метод генерации объетов скважины (как ESP так и GL)
 ' можно задавать скважину несколькими вариантами
@@ -165,8 +251,8 @@ On Error GoTo err1:
                 dtub_curve_mm.AddPoint 0, d_tub_mm
                 dtub_curve_mm.AddPoint h_tub_m, d_tub_mm
             End If
-            Call .trajectory_tub.init_trajectory_h_abs(habs_curve_m, dtub_curve_mm)
-            Call .trajectory_cas.init_trajectory_h_abs(habs_curve_m, dcas_curve_mm)
+            Call .trajectory_tub.init_from_curves(habs_curve_m, dtub_curve_mm)
+            Call .trajectory_cas.init_from_curves(habs_curve_m, dcas_curve_mm)
         Else
             Set .trajectory_tub = tr_tub
             Set .trajectory_cas = tr_cas
@@ -175,6 +261,9 @@ On Error GoTo err1:
         .h_tub_m = .trajectory_tub.bottom_m
         
         Call .FillWellConstructionTr
+        If Not IsMissing(amb) Then
+             Set .ambient_formation = amb
+        End If
     End With
     Set new_well_factory = well
     Exit Function
@@ -183,11 +272,28 @@ err1:
    Err.Raise kErrInitCalc, Err.Source, errmsg
     
 End Function
-Function test1(a, Optional b)
-    Dim rng As range
-    If Not IsNumeric(b) Then
-        Set rng = a
-        test1 = rng.Columns.Count
-    End If
+Public Function NewCPVT() As CPVT
+   Set NewCPVT = New CPVT
+End Function
+Public Function new_ESP_sys() As CESPsystemSimple
+    Set new_ESP_sys = New CESPsystemSimple
+End Function
+Public Function new_well() As CWellESP
+    Set new_well = New CWellESP
+End Function
+Public Function new_well_GL() As CWellGL
+    Set new_well_GL = New CWellGL
+End Function
+Public Function NewChoke() As Cchoke
+   Set NewChoke = New Cchoke
+End Function
+Public Function NewCurve() As CInterpolation
+   Set NewCurve = New CInterpolation
+End Function
+Public Function NewCPipe() As CPipe
+    Set NewCPipe = New CPipe
+End Function
+Public Function NewTRFacade() As C_TR_Facade
+    Set NewTRFacade = New C_TR_Facade
 End Function
 

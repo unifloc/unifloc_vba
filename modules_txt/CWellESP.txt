@@ -130,35 +130,6 @@ Public Property Let c_calibr_fric(val As Double)
        addLogMsg_debug "CWellESP.c_calibr_fric: value " & str(val) & " not set. Out of range"
    End If
 End Property
-Public Property Get hydraulic_correlation() As H_CORRELATION
-    hydraulic_correlation = param.correlation
-End Property
-Public Property Let hydraulic_correlation(val As H_CORRELATION)
-    Dim prm As PARAMCALC
-    prm = param
-    prm.correlation = val
-    param = prm
-End Property
-Public Property Get temp_correlation() As TEMP_CALC_METHOD
-    temp_correlation = param.temp_method
-End Property
-Public Property Let temp_correlation(val As TEMP_CALC_METHOD)
-    Dim prm As PARAMCALC
-    prm = param
-    prm.temp_method = val
-    param = prm
-End Property
-Public Sub set_param(Optional calc_along_coord As Boolean, _
-                     Optional flow_along_coord As Boolean, _
-                     Optional ByVal hcor As H_CORRELATION, _
-                     Optional temp_method As TEMP_CALC_METHOD)
-    If Not IsMissing(calc_along_coord) Then param_.CalcAlongCoord = calc_along_coord
-    If Not IsMissing(flow_along_coord) Then param_.FlowAlongCoord = flow_along_coord
-    If Not IsMissing(hcor) Then param_.correlation = hcor
-    If Not IsMissing(temp_method) Then param_.temp_method = temp_method
-    
-    param = param_
-End Sub
 Public Property Get param() As PARAMCALC
     param = param_
 End Property
@@ -333,8 +304,9 @@ On Error GoTo err1:
     '    pipe_HspHvd_ - труба от забоя до приема, задаем расчет параметров снизу-вверх
     pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
-                                             temp_method:=temp_correlation)
+                                             hcor:=param_.correlation, _
+                                             temp_method:=param_.temp_method, _
+                                             length_gas_m:=param_.length_gas_m)
     ' Расчитываем давление на приеме (p_wf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
     pipe_HspHvd_.t_calc_C = t_bh_C
     PT_int_ = pipe_HspHvd_.calc_dPipe(pwf_atma)
@@ -360,8 +332,9 @@ On Error GoTo err1:
     t_int_C = PT_int_.t_C
     pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
-                                             temp_method:=temp_correlation)
+                                             hcor:=param_.correlation, _
+                                             temp_method:=param_.temp_method, _
+                                             length_gas_m:=param_.length_gas_m)
     ' Расчитываем давление на приеме (p_wf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
     ' todo 30/07/2019 надо тут разобраться с температурой
     PT_wf_ = pipe_HspHvd_.calc_dPipe(pintake_atma)
@@ -396,8 +369,9 @@ On Error GoTo err1:
     '    pipe_HspHvd_ - труба от забоя до приема, задаем расчет параметров снизу-вверх
     pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=False, _
                                              flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
-                                             temp_method:=temp_correlation)
+                                             hcor:=param_.correlation, _
+                                             temp_method:=param_.temp_method, _
+                                             length_gas_m:=param_.length_gas_m)
     ' Расчитываем давление на приеме (p_wf - забойное давление на работающей скважине, Pws - забойное давление на неработающей скважине,)
     'pipe_HspHvd_.t_calc_C = t_bh_C
     PT_int_ = pipe_HspHvd_.calc_dPipe(PT_wf_.p_atma, t_bh_C_, saveCurve:=saveCurve)
@@ -412,7 +386,7 @@ On Error GoTo err1:
         Call ESP.calc_separation(PT_int_.p_atma, PT_int_.t_C)
         ESP.t_int_C = PT_int_.t_C
         Call ESP.calc_ESPsys(PT_int_.p_atma, calc_temperature:=isCalcESPtemp)
-        PT_dis_ = SetPT(ESP.ESP_pump.p_dis_atma, ESP.ESP_pump.t_dis_C)
+        PT_dis_ = set_PT(ESP.ESP_pump.p_dis_atma, ESP.ESP_pump.t_dis_C)
         Set pipe_WHeadHsp_Tubing_.fluid = ESP.fluid_tub       ' учитываем что выше насоса пойдет модифицированный флюид
         Set pipe_WHeadHsp_Casing_.fluid = ESP.fluid_cas
         Set pipe_WHeadHsp_Casing_Gas_.fluid = ESP.fluid_cas
@@ -426,8 +400,9 @@ On Error GoTo err1:
     ' 7. Расчет распределения давления в НКТ и расчет буферного давления c учетом движения в НКТ нефти после сепарации PVTtub
     pipe_WHeadHsp_Tubing_.param = set_calc_flow_param(calc_along_coord:=False, _
                                                       flow_along_coord:=False, _
-                                                      hcor:=hydraulic_correlation, _
-                                                      temp_method:=temp_correlation)
+                                                    hcor:=param_.correlation, _
+                                                    temp_method:=param_.temp_method, _
+                                                    length_gas_m:=param_.length_gas_m)
     pipe_WHeadHsp_Tubing_.t_calc_C = PT_dis_.t_C
     PT_buf_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_dis_.p_atma, PT_dis_.t_C, saveCurve)     'calc_Pipe_PIncl_atma(p_dis_atma_, t_dis_C_)
     ' 8. Расчет линейного давления по штуцеру
@@ -467,7 +442,7 @@ Public Function calc_pwf_plin_atma(ByVal plin_atma As Double, _
 ' тут смотрим можно ли провести расчет быстро
 ' или надо вызывать медленный метод (итерациями снизу вверх)
    ' надо сделать приближение по расчету давления - чтобы сработала сепарация
-   If p_int_atma = 0 Then PT_int_ = SetPT(50, t_bh_C)
+   If p_int_atma = 0 Then PT_int_ = set_PT(50, t_bh_C)
    If fast And param_.temp_method <> AmbientTemp Then
       calc_pwf_plin_atma = fast_pwf_plin_atma(plin_atma, t_bh_C, saveCurve)
    Else
@@ -703,15 +678,17 @@ On Error GoTo err_casing:
         ' 1. Расчет расхода свободного газа двигающегося через затрубное пространство после сепарации
         ' для затруба считаем снизу вверх
         pipe_WHeadHsp_Casing_.param = set_calc_flow_param(calc_along_coord:=False, _
-                                             flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
-                                             temp_method:=temp_correlation)
+                                                          flow_along_coord:=False, _
+                                                          hcor:=param_.correlation, _
+                                                          temp_method:=param_.temp_method, _
+                                                          length_gas_m:=param_.length_gas_m)
         PT_cas__temp = pipe_WHeadHsp_Casing_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, maincurves)
         ' 2. для затруба считаем распределение давления в газовом столбе сверху вниз
         pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=True, _
-                                             flow_along_coord:=True, _
-                                             hcor:=gas, _
-                                             temp_method:=temp_correlation)
+                                                              flow_along_coord:=True, _
+                                                              hcor:=gas, _
+                                                              temp_method:=param_.temp_method, _
+                                                              length_gas_m:=param_.length_gas_m)
         p_PTintgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_cas_.p_atma, PT_cas_.t_C, maincurves)
         ' 3. найдем пересечение  распределений газа и жидкости в затрубе по давлению
         Set cas_crv = pipe_WHeadHsp_Casing_.p_curve.SubtractCurve(pipe_WHeadHsp_Casing_Gas_.p_curve)
@@ -743,7 +720,8 @@ On Error GoTo err_casing:
             pipe_WHeadHsp_Casing_Gas_.param = set_calc_flow_param(calc_along_coord:=False, _
                                                                   flow_along_coord:=False, _
                                                                   hcor:=gas, _
-                                                                  temp_method:=temp_correlation)
+                                                                  temp_method:=param_.temp_method, _
+                                                                  length_gas_m:=param_.length_gas_m)
             p_PTcasgas_temp = pipe_WHeadHsp_Casing_Gas_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, maincurves)
             If PT_cas_.p_atma >= p_PTcasgas_temp.p_atma Then
                 H_dyn_m_ = h_sp_m_
@@ -883,8 +861,8 @@ err1:
 '       оценочные значения давления и температуры на приеме УЭЦН p_int_atma t_int_C для объекта расчета
 '       расчет температуры по заданной извне температурной корреляции, которая должны быть простой
 On Error GoTo err1:
-    If temp_correlation = AmbientTemp Then
-        temp_correlation = GeoGradTemp
+    If param_.temp_method = AmbientTemp Then
+        param_.temp_method = GeoGradTemp
     End If
     ' 1. если есть ЭЦН пытаемся оценить сепарацию и модификацию флюида на основе предполагаемого давления на приеме насоса
     If ESP_on Then
@@ -904,23 +882,25 @@ On Error GoTo err1:
     End If
     ' 4. Расчет давления на выкиде по буферному
     pipe_WHeadHsp_Tubing_.param = set_calc_flow_param(calc_along_coord:=True, _
-                                             flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
-                                             temp_method:=temp_correlation)
+                                                      flow_along_coord:=False, _
+                                                      hcor:=param_.correlation, _
+                                                      temp_method:=param_.temp_method, _
+                                                      length_gas_m:=param_.length_gas_m)
     PT_dis_ = pipe_WHeadHsp_Tubing_.calc_dPipe(PT_buf_.p_atma, PT_buf_.t_C, saveCurve)
     ' 5. если есть ЭЦН то считаем давление на приеме по давлению на выкиде сверху вниз
     If ESP_on Then                                                 ' Если есть насос
         ' расчитываются параметры насоса включая сепарацию и модификацию флюидов
         Call ESP.calc_ESPsys(PT_dis_.p_atma, calc_along_flow:=False)
-        PT_int_ = SetPT(ESP.ESP_pump.p_int_atma, ESP.ESP_pump.t_int_C)
+        PT_int_ = set_PT(ESP.ESP_pump.p_int_atma, ESP.ESP_pump.t_int_C)
     Else                                                            ' Если насоса нет, то совпадают
         PT_int_ = PT_dis_
     End If
     ' 6. По давлению на приеме считаем забойное давление
     pipe_HspHvd_.param = set_calc_flow_param(calc_along_coord:=True, _
                                              flow_along_coord:=False, _
-                                             hcor:=hydraulic_correlation, _
-                                             temp_method:=temp_correlation)
+                                             hcor:=param_.correlation, _
+                                             temp_method:=param_.temp_method, _
+                                             length_gas_m:=param_.length_gas_m)
     PT_wf_ = pipe_HspHvd_.calc_dPipe(PT_int_.p_atma, PT_int_.t_C, saveCurve)
     fast_pwf_plin_atma = PT_wf_.p_atma
     ' 7. если надо считаем затруб
@@ -1310,6 +1290,12 @@ Public Sub Setksep_total_d(calc_method As SEPAR_CALC_METHOD, ksep_nat_fr As Doub
    ' если заданы значения давления и температуры, то они будут использоваться в расчете
     Call ESP.setksep_total(calc_method, ksep_nat_fr, KsepGS_fr, p_ksep_atma, t_ksep_C)
 End Sub
+Private Property Set IWell_AmbFormation(RHS As CAmbientFormation)
+    Set ambient_formation_ = RHS
+End Property
+Private Property Get IWell_AmbFormation() As CAmbientFormation
+    Set IWell_AmbFormation = ambient_formation_
+End Property
 ' ======================================================================
 ' Iwell implementation
 ' ======================================================================
