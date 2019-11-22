@@ -2,110 +2,89 @@
 'Unifloc 7.13  Lepus                                           khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
-'
+'                                                                      good (11/21/2019)
 '=======================================================================================
+' class describes reservoir properties and IPR
+' allows to work with IPR data based on production test data
+' use Vogel's correction for IPR with watercut and composite IPR
 '
+' reference
+' 1. Brown, Kermit (1984). The Technology of Artificial Lift Methods. Volume 4.
+'    Production Optimization of Oil and Gas Wells by Nodal System Analysis.
+'    Tulsa, Oklahoma: PennWellBookss.
+' 2. Vogel, J.V. 1968. Inflow Performance Relationships for Solution-Gas Drive Wells.
+'    J Pet Technol 20 (1): 83–92. SPE 1476-PA. http://dx.doi.org/10.2118/1476-PA
 Option Explicit
-' класс для описания свойств пласта
 Implements IReservoir
-' параметры флюида
  
- Private pi_sm3dayatm_ As Double
- Private p_res_atma_ As Double
+Public pi_sm3dayatm As Double
+Public p_res_atma As Double
+Public fluid As CPVT    ' take bubble point pressure and watercut from fluid
+Private IPR_curve_ As CInterpolation
+Public Property Get pb_atma() As Double
+   pb_atma = fluid.pb_atma
+End Property
+Public Property Get fw_perc() As Double
+   fw_perc = fluid.fw_perc
+End Property
  
- Private fluid_ As CPVT
- ' флюид нужен чтобы определить давление насыщения и обводненность
- 
- 
- Private IPR_curve_ As CInterpolation
- ' блок оценки качества данных
- 'Public' LogMsg As New CLogger                ' логгер
- Public Sub InitProp(pres_atma, pb_atma, fw_perc)
- '   p_fw_perc = fw_perc
-    p_res_atma_ = pres_atma
- '   pb_atma_ = pb_atma
-    
-    Set fluid = New CPVT
-    
-    fluid.pb_atma = pb_atma
-    fluid.fw_perc = fw_perc
- 
- End Sub
- 
- Public Property Get fluid() As CPVT
-    Set fluid = fluid_
- End Property
- 
- Public Property Set fluid(val As CPVT)
-    Set fluid_ = val
- End Property
- 
- Public Property Get pb_atma() As Double
-    pb_atma = fluid.pb_atma
- End Property
- 
- Public Property Get fw_perc() As Double
-    fw_perc = fluid.fw_perc
- End Property
- 
- 
- Property Get IPRCurve() As CInterpolation
+' IPR curve
+' must be generated before access with proper sub
+Public Property Get IPRCurve() As CInterpolation
     IPRCurve = IPR_curve_
  End Property
  
- Property Let PI_sm3dayatm(pi_val As Double)
-    pi_sm3dayatm_ = pi_val
- End Property
- 
- Property Get PI_sm3dayatm() As Double
-   PI_sm3dayatm = pi_sm3dayatm_
- End Property
-Public Property Get pres_atma() As Double
-    pres_atma = p_res_atma_
-End Property
-Public Property Let pres_atma(val As Double)
-    p_res_atma_ = val
-End Property
-Public Function calc_qliq_sm3day(ByVal Ptest_atma As Double)
- calc_qliq_sm3day = calc_Q_IPR_m3Day(Ptest_atma, pres_atma, pb_atma, PI_sm3dayatm, fw_perc)
+' ==================================================================
+' main calculation functions and subroutines
+' ==================================================================
+' initialisation sub - set IPR properties from minimal data set
+Public Sub InitProp(p_res_atma, pb_atma, fw_perc)
+' p_res_atma - reservoir pressure
+' pb_atma   - bubble point pressure
+' fw_perc   - fraction of water in flow (watercut)
+    p_res_atma = p_res_atma
+    Set fluid = New CPVT
+    fluid.pb_atma = pb_atma
+    fluid.fw_perc = fw_perc
+End Sub
+' calculate liquid rate from BHP with IPR given
+Public Function calc_qliq_sm3day(ByVal Pwf_atma As Double)
+' Pwf_atma - bottom hole pressure
+    calc_qliq_sm3day = calc_Q_IPR_m3Day(Pwf_atma, p_res_atma, pb_atma, pi_sm3dayatm, fw_perc)
 End Function
+' calculate BHP  from liquid rate with IPR given
 Public Function calc_pwf_atma(ByVal qtest As Double)
- 
- calc_pwf_atma = calc_pwf_IPres_atma(qtest, pres_atma, pb_atma, PI_sm3dayatm, fw_perc)
+' qtest - liquid rate
+    calc_pwf_atma = calc_pwf_IPres_atma(qtest, p_res_atma, pb_atma, pi_sm3dayatm, fw_perc)
 End Function
+' calculate productivity index by test rate and BHP
 Public Function calc_pi_sm3dayatm(ByVal qtest As Double, ByVal Ptest As Double)
-PI_sm3dayatm = calc_pi_IPR_m3DayAtm(qtest, Ptest, pres_atma, pb_atma, fw_perc)
-calc_pi_sm3dayatm = PI_sm3dayatm
+' qtest  - test liquid rate
+' Ptest  - test bottom hole pressure
+    pi_sm3dayatm = calc_pi_IPR_m3DayAtm(qtest, Ptest, p_res_atma, pb_atma, fw_perc)
+    calc_pi_sm3dayatm = pi_sm3dayatm
 End Function
+' generate IPR curve as CInterpolation object
 Public Function Build_IPRcurve() As CInterpolation
-    Set IPR_curve_ = New CInterpolation
-    
-    Const IPRNumPoints = 30
-    
     Dim i As Integer
     Dim Qstep As Double
     Dim p_wf As Double
     Dim Qliq_reserv As Double
     Dim maxQ As Double
+    Set IPR_curve_ = New CInterpolation
+    Const IPRNumPoints = 30
     
     maxQ = calc_qliq_sm3day(0)
-    
-    
-    
     Qstep = maxQ / IPRNumPoints
-    
     For i = 0 To IPRNumPoints
-     
-     p_wf = calc_pwf_atma(i * Qstep)
-     IPR_curve_.AddPoint i * Qstep, p_wf
-     
+        p_wf = calc_pwf_atma(i * Qstep)
+        IPR_curve_.AddPoint i * Qstep, p_wf
     Next i
-        
     Set Build_IPRcurve = IPR_curve_
 End Function
-Private Sub Class_Initialize()
-  'Set' LogMsg = getLogMsg
-End Sub
+' ==============================================================================
+' interface properties and functions implementation
+' ==============================================================================
 Private Function IReservoir_CalcPI(ByVal qtest As Double, ByVal Ptest As Double) As Variant
     IReservoir_CalcPI = calc_pi_sm3dayatm(qtest, Ptest)
 End Function
@@ -116,54 +95,54 @@ Private Function IReservoir_CalcQliq(ByVal Ptest_atma As Double) As Variant
     IReservoir_CalcQliq = calc_qliq_sm3day(Ptest_atma)
 End Function
 Private Property Let IReservoir_pi(RHS As Double)
-    pi_sm3dayatm_ = RHS
+    pi_sm3dayatm = RHS
 End Property
 Private Property Get IReservoir_pi() As Double
-    IReservoir_pi = pi_sm3dayatm_
+    IReservoir_pi = pi_sm3dayatm
 End Property
 Private Property Let IReservoir_Pres(RHS As Double)
-    p_res_atma_ = RHS
+    p_res_atma = RHS
 End Property
 Private Property Get IReservoir_Pres() As Double
-    IReservoir_Pres = p_res_atma_
+    IReservoir_Pres = p_res_atma
 End Property
+' =======================================================================
+' private vogel's correlation functions
+' =======================================================================
 Private Function calc_Q_IPR_m3Day(ByVal Ptest As Double, ByVal Pr As Double, _
                           ByVal Pb As Double, ByVal Pi As Double, ByVal Wc As Double, Optional calc_method As Integer = 1)
-'
-If Ptest >= Pr Then
- addLogMsg "Предупреждение. функция calc_Q_IPR_m3Day. тестовое забойное давление " & Ptest & " больше или равно пластового " & Pr & ". дебит 0"
- calc_Q_IPR_m3Day = 0
- Exit Function
-End If
-Select Case calc_method
- Case 1
- calc_Q_IPR_m3Day = calc_QliqVogel_m3Day(Ptest, Pr, Pb, Pi, Wc)
-End Select
+    If Ptest >= Pr Then
+     addLogMsg "Предупреждение. функция calc_Q_IPR_m3Day. тестовое забойное давление " & Ptest & " больше или равно пластового " & Pr & ". дебит 0"
+     calc_Q_IPR_m3Day = 0
+     Exit Function
+    End If
+    
+    Select Case calc_method
+     Case 1
+     calc_Q_IPR_m3Day = calc_QliqVogel_m3Day(Ptest, Pr, Pb, Pi, Wc)
+    End Select
 End Function
 Private Function calc_pwf_IPres_atma(ByVal qtest As Double, ByVal Pr As Double, _
                           ByVal Pb As Double, ByVal Pi As Double, ByVal Wc As Double, Optional calc_method As Integer = 1)
-Select Case calc_method
- Case 1
- calc_pwf_IPres_atma = calc_p_wfVogel_atma(qtest, Pr, Pb, Pi, Wc)
-End Select
+    Select Case calc_method
+     Case 1
+     calc_pwf_IPres_atma = calc_p_wfVogel_atma(qtest, Pr, Pb, Pi, Wc)
+    End Select
 End Function
 Private Function calc_pi_IPR_m3DayAtm(ByVal qtest As Double, ByVal Ptest As Double, _
                                 ByVal Pr As Double, ByVal Pb As Double, ByVal Wc As Double, Optional calc_method As Integer = 1)
-If Ptest >= Pr Then
- addLogMsg "Ошибка. функция calc_pi_IPR_m3DayAtm. тестовое забойное давление " & Ptest & " больше чем пластовое давление " & Pr & ". расчет продуктивности невозможен"
- calc_pi_IPR_m3DayAtm = -1
- Exit Function
-End If
-Select Case calc_method
- Case 1
- calc_pi_IPR_m3DayAtm = calc_PIVogel_m3DayAtm(qtest, Ptest, Pr, Pb, Wc)
-End Select
+    If Ptest >= Pr Then
+     addLogMsg "Ошибка. функция calc_pi_IPR_m3DayAtm. тестовое забойное давление " & Ptest & " больше чем пластовое давление " & Pr & ". расчет продуктивности невозможен"
+     calc_pi_IPR_m3DayAtm = -1
+     Exit Function
+    End If
+    
+    Select Case calc_method
+     Case 1
+     calc_pi_IPR_m3DayAtm = calc_PIVogel_m3DayAtm(qtest, Ptest, Pr, Pb, Wc)
+    End Select
 End Function
 'Расчет забойного давления по Вогелю с учетом поправки на обводненность
-'
-'
-'
-'
 Private Function calc_QliqVogel_m3Day(ByVal P_test As Double, ByVal Pr As Double, _
                           ByVal Pb As Double, ByVal Pi As Double, ByVal Wc As Double)
  '
@@ -181,73 +160,69 @@ Private Function calc_QliqVogel_m3Day(ByVal P_test As Double, ByVal Pr As Double
  Dim fw As Double
  Dim fo As Double
  
- If P_test < 0 Then
-  calc_QliqVogel_m3Day = "P_test<0!"
-  Exit Function
- End If
- If Pr < 0 Then
-  calc_QliqVogel_m3Day = "Pr<0!"
-  Exit Function
- End If
- If Pb < 0 Then
-  calc_QliqVogel_m3Day = "Pb<0!"
-  Exit Function
- End If
- If Pi < 0 Then
-  calc_QliqVogel_m3Day = "PI<0!"
-  Exit Function
- End If
- If Pr < Pb Then
-  Pb = Pr
- End If
- 
- ' вычисляем дебит при давлении равном давлению насыщения.
- qb = Pi * (Pr - Pb)
- If Wc > 100 Then
-   Wc = 100
- End If
- If Wc < 0 Then
-  Wc = 0
- End If
- 
- If (Wc = 100) Or (P_test >= Pb) Then
- 
-   calc_QliqVogel_m3Day = Pi * (Pr - P_test)
- 
- Else
-   fw = Wc / 100
-   fo = 1 - fw
-   ' максимальный дебит чистой нефти
-   qo_max = qb + (Pi * Pb) / 1.8
- '  Dim pwf_g As Double
-   p_wfg = fw * (Pr - qo_max / Pi)
-   
-   If P_test > p_wfg Then
-     Dim a As Double: Dim b As Double: Dim c As Double: Dim D As Double
-     a = 1 + (P_test - (fw * Pr)) / (0.125 * fo * Pb)
-     b = fw / (0.125 * fo * Pb * Pi)
-     c = (2 * a * b) + 80 / (qo_max - qb)
-     D = (a ^ 2) - (80 * qb / (qo_max - qb)) - 81
-     If b = 0 Then
-       calc_QliqVogel_m3Day = Abs(D / c)
-     Else
-       calc_QliqVogel_m3Day = (-c + ((c * c - 4 * b * b * D) ^ 0.5)) / (2 * b ^ 2)
-     End If
-     
-   Else
-      CG = 0.001 * qo_max
-      cd = fw * (CG / Pi) + _
-           fo * 0.125 * Pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
-      calc_QliqVogel_m3Day = (p_wfg - P_test) / (cd / CG) + qo_max
-   End If
-   
- End If
+    If P_test < 0 Then
+     calc_QliqVogel_m3Day = "P_test<0!"
+     Exit Function
+    End If
+    If Pr < 0 Then
+     calc_QliqVogel_m3Day = "Pr<0!"
+     Exit Function
+    End If
+    If Pb < 0 Then
+     calc_QliqVogel_m3Day = "Pb<0!"
+     Exit Function
+    End If
+    If Pi < 0 Then
+     calc_QliqVogel_m3Day = "PI<0!"
+     Exit Function
+    End If
+    If Pr < Pb Then
+     Pb = Pr
+    End If
+    
+    ' вычисляем дебит при давлении равном давлению насыщения.
+    qb = Pi * (Pr - Pb)
+    If Wc > 100 Then
+      Wc = 100
+    End If
+    If Wc < 0 Then
+     Wc = 0
+    End If
+    
+    If (Wc = 100) Or (P_test >= Pb) Then
+    
+      calc_QliqVogel_m3Day = Pi * (Pr - P_test)
+    
+    Else
+      fw = Wc / 100
+      fo = 1 - fw
+      ' максимальный дебит чистой нефти
+      qo_max = qb + (Pi * Pb) / 1.8
+    '  Dim pwf_g As Double
+      p_wfg = fw * (Pr - qo_max / Pi)
+      
+      If P_test > p_wfg Then
+        Dim a As Double: Dim b As Double: Dim c As Double: Dim D As Double
+        a = 1 + (P_test - (fw * Pr)) / (0.125 * fo * Pb)
+        b = fw / (0.125 * fo * Pb * Pi)
+        c = (2 * a * b) + 80 / (qo_max - qb)
+        D = (a ^ 2) - (80 * qb / (qo_max - qb)) - 81
+        If b = 0 Then
+          calc_QliqVogel_m3Day = Abs(D / c)
+        Else
+          calc_QliqVogel_m3Day = (-c + ((c * c - 4 * b * b * D) ^ 0.5)) / (2 * b ^ 2)
+        End If
+        
+      Else
+         CG = 0.001 * qo_max
+         cd = fw * (CG / Pi) + _
+              fo * 0.125 * Pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
+         calc_QliqVogel_m3Day = (p_wfg - P_test) / (cd / CG) + qo_max
+      End If
+      
+    End If
 End Function
 ' Расчет забойного давления по Вогелю с учетом поправки на обводненность
-'
-'
-'
-'
 Private Function calc_p_wfVogel_atma(ByVal Q_test As Double, ByVal Pr As Double, _
                           ByVal Pb As Double, ByVal Pi As Double, ByVal Wc As Double)
  '
@@ -267,59 +242,60 @@ Private Function calc_p_wfVogel_atma(ByVal Q_test As Double, ByVal Pr As Double,
  
  'проверка  данных
  
- If Pr < Pb Then
-  Pb = Pr
- End If
- 
- If Q_test < 0 Then
-  calc_p_wfVogel_atma = "Q<0!"
-  Exit Function
- End If
- If Pr <= 0 Then
-  calc_p_wfVogel_atma = "Pr<=0!"
-  Exit Function
- End If
- If Pb < 0 Then
-  calc_p_wfVogel_atma = "Pb<0!"
-  Exit Function
- End If
- If Pi <= 0 Then
-  calc_p_wfVogel_atma = "PI<=0!"
-  Exit Function
- End If
- 
- ' вычисляем дебит при давлении равном давлению насыщения.
- qb = Pi * (Pr - Pb)
- If Wc > 100 Then
-   Wc = 100
- End If
- If Wc < 0 Then
-  Wc = 0
- End If
- If (Wc = 100) Or (Q_test <= qb) Or (Pb = 0) Then
- 
-   calc_p_wfVogel_atma = (Pr - Q_test / Pi)
-   
- Else
-   fw = Wc / 100
-   fo = 1 - fw
-   ' максимальный дебит чистой нефти
-   qo_max = qb + (Pi * Pb) / 1.8
-   
-   If Q_test < qo_max Then
+     If Pr < Pb Then
+      Pb = Pr
+     End If
      
-     calc_p_wfVogel_atma = fw * (Pr - Q_test / Pi) + _
-                 fo * 0.125 * Pb * (-1 + (1 - 80 * ((Q_test - qo_max) / (qo_max - qb))) ^ 0.5)
-   Else
-      CG = 0.001 * qo_max
-      cd = fw * (CG / Pi) + _
-           fo * 0.125 * Pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
-      calc_p_wfVogel_atma = fw * (Pr - qo_max / Pi) - (Q_test - qo_max) * (cd / CG)
-   End If
- End If
- If calc_p_wfVogel_atma < 0 Then
-       calc_p_wfVogel_atma = 0
- End If
+     If Q_test < 0 Then
+      calc_p_wfVogel_atma = "Q<0!"
+      Exit Function
+     End If
+     If Pr <= 0 Then
+      calc_p_wfVogel_atma = "Pr<=0!"
+      Exit Function
+     End If
+     If Pb < 0 Then
+      calc_p_wfVogel_atma = "Pb<0!"
+      Exit Function
+     End If
+     If Pi <= 0 Then
+      calc_p_wfVogel_atma = "PI<=0!"
+      Exit Function
+     End If
+     
+     ' вычисляем дебит при давлении равном давлению насыщения.
+     qb = Pi * (Pr - Pb)
+     If Wc > 100 Then
+       Wc = 100
+     End If
+     If Wc < 0 Then
+      Wc = 0
+     End If
+     If (Wc = 100) Or (Q_test <= qb) Or (Pb = 0) Then
+     
+       calc_p_wfVogel_atma = (Pr - Q_test / Pi)
+       
+     Else
+       fw = Wc / 100
+       fo = 1 - fw
+       ' максимальный дебит чистой нефти
+       qo_max = qb + (Pi * Pb) / 1.8
+       
+       If Q_test < qo_max Then
+         
+         calc_p_wfVogel_atma = fw * (Pr - Q_test / Pi) + _
+                     fo * 0.125 * Pb * (-1 + (1 - 80 * ((Q_test - qo_max) / (qo_max - qb))) ^ 0.5)
+    
+       Else
+          CG = 0.001 * qo_max
+          cd = fw * (CG / Pi) + _
+               fo * 0.125 * Pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
+          calc_p_wfVogel_atma = fw * (Pr - qo_max / Pi) - (Q_test - qo_max) * (cd / CG)
+       End If
+     End If
+     If calc_p_wfVogel_atma < 0 Then
+           calc_p_wfVogel_atma = 0
+     End If
 End Function
 ' определение продуктивности по Вогелю с коррекцией на обводненность
 Private Function calc_PIVogel_m3DayAtm(ByVal Q_test As Double, ByVal P_test As Double, _
@@ -328,45 +304,45 @@ Private Function calc_PIVogel_m3DayAtm(ByVal Q_test As Double, ByVal P_test As D
  Dim j As Double
  Dim Q_calibr As Double
  
- If P_test < 0 Then
-  P_test = 0
-  calc_PIVogel_m3DayAtm = 0
-  Exit Function
- End If
-  
- If Pres < Pb Then
-  Pb = Pres
- End If
- 
- If Q_test <= 0 Then
-  calc_PIVogel_m3DayAtm = 0 ' "Q<=0!"
-  addLogMsg "calc_PIVogel_m3DayAtm  ошибка Q<=0!"
-  Exit Function
- End If
- If P_test <= 0 Then
-  calc_PIVogel_m3DayAtm = 0
-  addLogMsg "calc_PIVogel_m3DayAtm  ошибка P_test<=0!"
-  Exit Function
- End If
- If Pb < 0 Then
-  calc_PIVogel_m3DayAtm = 0
-  addLogMsg "calc_PIVogel_m3DayAtm  ошибка Pb<0!!"
-  Exit Function
- End If
- If Pres <= 0 Then
-  calc_PIVogel_m3DayAtm = 0
-  addLogMsg "calc_PIVogel_m3DayAtm  ошибка Pres<=0!"
-  Exit Function
- End If
- ' первое приближение для Кпр считаем
- j = Q_test / (Pres - P_test)
- ' оцениваем его
- Q_calibr = calc_QliqVogel_m3Day(P_test, Pres, Pb, j, Wc)
- ' кривая нелинейная надо подбирать значение
- j = j / ((Q_calibr) / Q_test)
- Q_calibr = calc_QliqVogel_m3Day(P_test, Pres, Pb, j, Wc)
- If Abs(Q_calibr - Q_test) > 0.001 Then Debug.Assert False   ' если сработало, то алгоритм сломался
- calc_PIVogel_m3DayAtm = j
+    If P_test < 0 Then
+     P_test = 0
+     calc_PIVogel_m3DayAtm = 0
+     Exit Function
+    End If
+     
+    If Pres < Pb Then
+     Pb = Pres
+    End If
+    
+    If Q_test <= 0 Then
+     calc_PIVogel_m3DayAtm = 0 ' "Q<=0!"
+     addLogMsg "calc_PIVogel_m3DayAtm  ошибка Q<=0!"
+     Exit Function
+    End If
+    If P_test <= 0 Then
+     calc_PIVogel_m3DayAtm = 0
+     addLogMsg "calc_PIVogel_m3DayAtm  ошибка P_test<=0!"
+     Exit Function
+    End If
+    If Pb < 0 Then
+     calc_PIVogel_m3DayAtm = 0
+     addLogMsg "calc_PIVogel_m3DayAtm  ошибка Pb<0!!"
+     Exit Function
+    End If
+    If Pres <= 0 Then
+     calc_PIVogel_m3DayAtm = 0
+     addLogMsg "calc_PIVogel_m3DayAtm  ошибка Pres<=0!"
+     Exit Function
+    End If
+    ' первое приближение для Кпр считаем
+    j = Q_test / (Pres - P_test)
+    ' оцениваем его
+    Q_calibr = calc_QliqVogel_m3Day(P_test, Pres, Pb, j, Wc)
+    ' кривая нелинейная надо подбирать значение
+    j = j / ((Q_calibr) / Q_test)
+    Q_calibr = calc_QliqVogel_m3Day(P_test, Pres, Pb, j, Wc)
+    If Abs(Q_calibr - Q_test) > 0.001 Then Debug.Assert False   ' если сработало, то алгоритм сломался
+    calc_PIVogel_m3DayAtm = j
   
 End Function
 

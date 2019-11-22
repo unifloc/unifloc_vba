@@ -177,6 +177,25 @@ Public Property Let param(val As PARAMCALC)
         pipe.param = val
     Next pipe
 End Property
+Public Sub set_param( _
+                Optional ByVal calc_along_coord As Boolean = False, _
+                Optional ByVal flow_along_coord As Boolean = False, _
+                Optional ByVal hcor As H_CORRELATION = Ansari, _
+                Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+                Optional ByVal length_gas_m As Double = 0)
+' calc_along_coord - calculation direction flag
+' flow_along_coord - flow direction relative to coordinate
+' hcor             - hydraulic correlation selector
+' temp_method      - temperature method selector
+' length_gas_m     - boundary of gas correlation application in flow
+    Dim prm As PARAMCALC
+    prm.CalcAlongCoord = calc_along_coord
+    prm.FlowAlongCoord = flow_along_coord
+    prm.correlation = hcor
+    prm.temp_method = temp_method
+    prm.length_gas_m = length_gas_m
+    param = prm
+End Sub
  
 '------------------------------------------------------------
 ' temperature general properties
@@ -225,9 +244,9 @@ Public Property Get pbuf_atma() As Double
 ' buffer pressure
    pbuf_atma = PT_buf_.p_atma
 End Property
-Public Property Get pwf_atma() As Double
+Public Property Get Pwf_atma() As Double
 ' давление на забое
-   pwf_atma = PT_wf_.p_atma
+   Pwf_atma = PT_wf_.p_atma
 End Property
 Public Property Get pcas_atma() As Double
     pcas_atma = p_cas_atma_
@@ -388,7 +407,7 @@ Public Sub set_qgas_inj(Optional ByVal pcas_inj_atma As Double = 1, _
     q_gas_inj_scm3day_ = qgas_inj_scm3day
     p_gas_inj_atma_ = pcas_inj_atma
 End Sub
-Public Function calc_plin_pwf_atma(ByVal pwf_atma As Double, _
+Public Function calc_plin_pwf_atma(ByVal Pwf_atma As Double, _
                           Optional ByVal t_C As Double, _
                           Optional ByVal saveCurve As CALC_RESULTS = nocurves) As Double
 ' calculate PWH based on BHP
@@ -410,11 +429,11 @@ Dim n As Integer
 Dim q As Double
 Dim p As Double
     If q_gas_inj_scm3day_ > 0 Then
-        calc_plin_pwf_atma = estimate_plin_pwf_atma(pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
+        calc_plin_pwf_atma = estimate_plin_pwf_atma(Pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
     Else
         If p_gas_inj_atma_ > 0 Then
             If d_gas_inj_mm_ <= 0 Then
-                calc_plin_pwf_atma = estimate_plin_pwf_atma(pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
+                calc_plin_pwf_atma = estimate_plin_pwf_atma(Pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
             Else
                 ' surface valve acounting complicated - make it here
                 ' 1. estime valve curve
@@ -427,7 +446,7 @@ Dim p As Double
                 n = 20
                 Do
                     pcas = p_gas_inj_atma_ * (n - i) / n
-                    plin = estimate_plin_pwf_atma(pwf_atma, pcas, 0, t_C, saveCurve)
+                    plin = estimate_plin_pwf_atma(Pwf_atma, pcas, 0, t_C, saveCurve)
                     surf_inj_crv.AddPoint pcas, q_gas_inj_scm3day_
                     i = i + 1
                 Loop While i < n And plin > 0
@@ -436,21 +455,21 @@ Dim p As Double
                 If sol_crv.FindSolutions(0) = 1 Then
                     p = sol_crv.SolutionPointX(1)
                     q = surf_inj_crv.getPoint(p)
-                    calc_plin_pwf_atma = estimate_plin_pwf_atma(pwf_atma, p, 0, t_C, saveCurve)
+                    calc_plin_pwf_atma = estimate_plin_pwf_atma(Pwf_atma, p, 0, t_C, saveCurve)
                 Else
                     ' there are no intersections or too many of them
                     addLogMsg "CWellGL.calc_plin_pwf_atma: not fuond solution for surface valve injection rate"
-                    calc_plin_pwf_atma = estimate_plin_pwf_atma(pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
+                    calc_plin_pwf_atma = estimate_plin_pwf_atma(Pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
                 End If
             End If
         Else
-            calc_plin_pwf_atma = estimate_plin_pwf_atma(pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
+            calc_plin_pwf_atma = estimate_plin_pwf_atma(Pwf_atma, p_gas_inj_atma_, q_gas_inj_scm3day_, t_C, saveCurve)
         End If
     End If
     valves_.p_gas_inj_atma = p_gas_inj_atma_
     valves_.q_gas_inj_sm3day = q_gas_inj_scm3day_
 End Function
-Private Function estimate_plin_pwf_atma(ByVal pwf_atma As Double, _
+Private Function estimate_plin_pwf_atma(ByVal Pwf_atma As Double, _
                                Optional ByVal pinj_atma As Double, _
                                Optional ByVal qinj_atma As Double, _
                                Optional ByVal tbh_C As Double, _
@@ -480,7 +499,7 @@ On Error GoTo err1:
     Set fluid_Pipe_Below = fluid ' first initialize temp fluid with general one
     ' 1. prepare initial data for calculation from p_wf, Tbh
     Qgfree_tot_scm3day = fluid.q_gas_free_sm3day
-    PT_wf_.p_atma = pwf_atma
+    PT_wf_.p_atma = Pwf_atma
     If Not IsMissing(tbh_C) Then t_bh_C_ = tbh_C
     PT_wf_.t_C = t_bh_C_
     
@@ -846,12 +865,12 @@ Private Function IWell_CalcDown(p_line_atma As Double, _
                        Optional saveCurve As CALC_RESULTS = 0&) As Double
     IWell_CalcDown = calc_pwf_plin_atma(p_line_atma, twf_C, saveCurve:=saveCurve)
 End Function
-Private Function IWell_CalcUp(pwf_atma As Double, _
+Private Function IWell_CalcUp(Pwf_atma As Double, _
                               twf_C As Double, _
                               Optional saveCurve As CALC_RESULTS = 0&) As Double
-    IWell_CalcUp = calc_plin_pwf_atma(pwf_atma, twf_C, saveCurve:=saveCurve)
+    IWell_CalcUp = calc_plin_pwf_atma(Pwf_atma, twf_C, saveCurve:=saveCurve)
 End Function
-Private Function IWell_CalcWell(pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
+Private Function IWell_CalcWell(Pwf_atma As Double, Optional saveCurve As CALC_RESULTS = 0&) As Double
 End Function
 Private Property Get IWell_cfBettaFric() As Double
     IWell_cfBettaFric = c_calibr_fric

@@ -17,16 +17,18 @@ Public Enum H_CORRELATION
     gas = 10
     Water = 11
 End Enum
-' PVT correlation set to be used
+' PVT correlations set to be used
 Public Enum PVT_CORRELATION
     Standing_based = 0 '
     McCain_based = 1 '
     straigth_line = 2
 End Enum
+' z factor (gas compressibility) options
 Public Enum Z_CORRELATION
     z_BB = 0
     z_Dranchuk = 1
 End Enum
+' type determines the method of temperature calculation in well
 Public Enum TEMP_CALC_METHOD
     StartEndTemp = 0
     GeoGradTemp = 1
@@ -49,18 +51,27 @@ Public Enum GLV_R1_PORT_SIZE
 End Enum
 ' multiphase flow in pipe and well calculation method
 Public Type PARAMCALC
-     correlation As H_CORRELATION
-     CalcAlongCoord As Boolean
-     FlowAlongCoord As Boolean
-     temp_method As TEMP_CALC_METHOD          ' temperature caclulation method
-     length_gas_m As Double                     ' length in pipe where correlation changes. before - gas, after - correlation
+     correlation As H_CORRELATION         ' multiphase hydraulic correlation
+     CalcAlongCoord As Boolean            ' calculation direction flag
+                                          ' if True - pressure at lowest coordinate is given
+                                          '           pressure at higher coordinate calculated
+                                          '           for well (0 coord at top, hmes at bottom)
+                                          '           equal to calc from top to bottom
+                                          '    False - otherwise
+     FlowAlongCoord As Boolean            ' flow direction flag
+     temp_method As TEMP_CALC_METHOD      ' temperature caclulation method
+     length_gas_m As Double               ' length in pipe where correlation changes.
+                                          ' for points with cooed less then  length_gas_m
+                                          ' gas correlation applied,
+                                          ' other points - multiphase correlation applied
+                                          ' allows to model easily static level in well
 End Type
-' тип для описания термобарических условий  (для расчетов)
-' используется для передачи данных. Поддерживает только один вариант размерности
+' type to describe thermobaric conditions (for calculations)
 Public Type PTtype
     p_atma As Double
     t_C As Double
 End Type
+' type for storing data about dynamic level
 Public Type PCAS_HDYN_type
     p_cas_atma As Double
     hdyn_m As Double
@@ -68,25 +79,26 @@ Public Type PCAS_HDYN_type
     pump_off_condition As Boolean
     correct As Boolean
 End Type
-' тип для описания параметров работы электрического двигателя
+' Type for describing the operation of an electric motor
 Public Type MOTOR_DATA
-    U_lin_V As Double       ' напряжение линейное (между фазами)
-    I_lin_A As Double       ' ток линейный (в линии)
-    U_phase_V As Double     ' напряжение фазное (между фазой и нулем)
-    I_phase_A As Double     ' ток фазный (в обмотке)
-    f_Hz As Double          ' частота синхронная (вращение поля)
-    eff_d As Double         ' КПД
-    Cosphi As Double       ' коэффициент мощности
-    S_d As Double           ' проскользывание
-    Pshaft_kW As Double     ' мощность на валу механическая
-    Pelectr_kW As Double    ' мощность подводимая электрическая
-    Mshaft_Nm As Double     ' момент на валу - механический
-    load_d As Double        ' загрузка двигателя
+    U_lin_V As Double       ' voltage linear (between phases)
+    I_lin_A As Double       ' Linear current (in line)
+    U_phase_V As Double     ' phase voltage (between phase and zero)
+    I_phase_A As Double     ' phase current (in winding)
+    f_Hz As Double          ' frequency synchronous (field rotation)
+    eff_d As Double         ' Efficiency
+    cosphi As Double        ' power factor
+    s_d As Double           ' slippage
+    Pshaft_kW As Double     ' mechanical power on the shaft
+    Pelectr_kW As Double    ' power supply electric
+    Mshaft_Nm As Double     ' torque on the shaft - mechanical
+    load_d As Double        ' motor load
 End Type
+' type of extended description of multiphase flow parameters at a point
 Public Type PIPE_FLOW_PARAMS
   md_m As Double         ' pipe measured depth (from start - top)
   vd_m As Double         ' pipe vertical depth from start - top
-  p_atma As Double        ' pipe pressure at measured depth
+  p_atma As Double       ' pipe pressure at measured depth
   t_C As Double          ' pipe temp at measured depth
   
   dp_dl As Double
@@ -95,84 +107,67 @@ Public Type PIPE_FLOW_PARAMS
   dpdl_g_atmm As Double  ' gravity gradient at measured depth
   dpdl_f_atmm As Double  ' friction gradient at measured depth
   dpdl_a_atmm As Double  ' acceleration gradient at measured depth
-  v_sl_msec As Double        ' superficial liquid velosity
-  v_sg_msec As Double        ' superficial gas velosity
-  h_l_d As Double            ' liquid hold up
-  fpat As Double             ' flow pattern code
+  v_sl_msec As Double    ' superficial liquid velosity
+  v_sg_msec As Double    ' superficial gas velosity
+  h_l_d As Double        ' liquid hold up
+  fpat As Double         ' flow pattern code
   thete_deg As Double
   roughness_m As Double
   
-  rs_m3m3 As Double         ' растворенный газ в нефти в потоке
-  gasfrac As Double         ' расходное содержание газа в потоке
+  rs_m3m3 As Double     ' dissolved gas in oil in the stream
+  gasfrac As Double     ' gas flow rate
   
-  mu_oil_cP As Double          ' вязкость нефть в потоке
-  mu_wat_cP As Double          ' вязкость воды в потоке
-  mu_gas_cP As Double          ' вязкость газа в потоке
-  mu_mix_cP As Double        ' вязкость смеси в потоке
+  mu_oil_cP As Double   ' oil viscosity in flow
+  mu_wat_cP As Double   ' water viscosity in the flow
+  mu_gas_cP As Double   ' gas viscosity in flow
+  mu_mix_cP As Double   ' viscosity of the mixture in the flow
   
-  Rhoo_kgm3 As Double       ' плотность нефти
-  Rhow_kgm3 As Double       ' плотность воды
-  rhol_kgm3 As Double       ' плотность жидкости
-  Rhog_kgm3 As Double       ' плотность газа
-  rhomix_kgm3 As Double     ' плотность смеси в потоке
+  Rhoo_kgm3 As Double   ' oil Density
+  Rhow_kgm3 As Double   ' water Density
+  rhol_kgm3 As Double   ' liquid density
+  Rhog_kgm3 As Double   ' gas Density
+  rhomix_kgm3 As Double ' density of the mixture in the thread
   
-  q_oil_m3day As Double        ' расход нефти в рабочих условиях
-  qw_m3day As Double        ' расход воды в рабочих условиях
-  Qg_m3day As Double        ' расход газа в рабочих условиях
+  q_oil_m3day As Double ' oil consumption in working conditions
+  qw_m3day As Double    ' water consumption in working conditions
+  Qg_m3day As Double    ' gas flow rate under operating conditions
   
-  mo_kgsec As Double        ' массовый расход нефти в рабочих условиях
-  mw_kgsec As Double        ' массовый расход воды в рабочих условиях
-  mg_kgsec As Double        ' массовый расход газа в рабочих условиях
+  mo_kgsec As Double    ' mass flow rate of oil in working conditions
+  mw_kgsec As Double    ' mass flow rate in working conditions
+  mg_kgsec As Double    ' mass flow rate of gas under operating conditions
   
-  vl_msec As Double         ' скорость жидкости реальная
-  vg_msec As Double         ' скорость газа реальная
+  vl_msec As Double     ' fluid velocity is real
+  vg_msec As Double     ' real gas velocity
 End Type
-'Public Enum VAL_FROM_SHEET
-'    VAL_DOUBLE = 0
-'    VAL_STRING = 1
-'    VAL_CURVE = 2
-'    VAL_BOOLEAN = 3
-'End Enum
+' type of description of free gas behavior when increasing the pressure
+' relevant for ESPs where pressure rises
+' The free gas can either dissolve into the stream or simply compress
 Public Enum GAS_INTO_SOLUTION
     GasGoesIntoSolution = 1
     GasnotGoesIntoSolution = 0
 End Enum
-'Public Type CONTEXT_DATA
-'    Description As String   ' описание текущего контекста выполняемых действий
-'    method As String
-'    Class As String
-'    description_out As String ' внешний контекст
-'End Type
-' уровни влияния сообщения - могут быть использованы для оценки достоверности расчетов
-'Public Enum MESSAGE_LEVEL
-'    mlCritical = 0
-'    mlModerate = 1
-'    mlStandard = 2
-'    mlLow = 3
-'End Enum
+' type showing the way of saving the extended calculation results
+' determines which set of calculated distribution curves will be saved
 Public Enum CALC_RESULTS
     nocurves = 0
     maincurves = 1
     allCurves = 2
 End Enum
-'Public Type WELL_DESCRIPTION_SIMPLE
-'     h_perf_m As Double
-'     h_pump_m As Double
-'     udl_m As Double
-'     d_cas_mm As Double
-'     dtub_mm As Double
-'     dchoke_mm As Double
-'     roughness_m As Double
-'End Type
 '=========================================================================================
 'types support functions
 '=========================================================================================
+' flow parameter setting function in the pipe or well
 Public Function set_calc_flow_param( _
                 Optional ByVal calc_along_coord As Boolean = False, _
                 Optional ByVal flow_along_coord As Boolean = False, _
                 Optional ByVal hcor As H_CORRELATION = Ansari, _
                 Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
                 Optional ByVal length_gas_m As Double = 0) As PARAMCALC
+' calc_along_coord - calculation direction flag
+' flow_along_coord - flow direction relative to coordinate
+' hcor             - hydraulic correlation selector
+' temp_method      - temperature method selector
+' length_gas_m     - boundary of gas correlation application in flow
     Dim prm As PARAMCALC
     prm.CalcAlongCoord = calc_along_coord
     prm.FlowAlongCoord = flow_along_coord
