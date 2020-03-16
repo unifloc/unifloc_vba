@@ -248,7 +248,7 @@ class API():
         self.f_MF_calibr_pipe_m3day = self.book.macro("MF_calibr_pipe_m3day")
         return self.f_MF_calibr_pipe_m3day(qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
 
-    def MF_fit_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
+    def MF_fit_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -257,9 +257,9 @@ class API():
 
         length_m - длина трубы, измеренная, м    
 
-        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+        p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
 
-        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  pcalc_atma - давление с которого начинается ..см.мануал   
+        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_atma - давление с которого начинается..см.мануал   
 
         str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
@@ -284,9 +284,9 @@ class API():
         """
 
         self.f_MF_fit_pipe_m3day = self.book.macro("MF_fit_pipe_m3day")
-        return self.f_MF_fit_pipe_m3day(qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
+        return self.f_MF_fit_pipe_m3day(qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
 
-    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,pcalc_atma,tcalc_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,temp_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
+    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,p_calc_atma,tcalc_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,temp_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
         """" расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -295,11 +295,11 @@ class API():
 
         h_list_m - траектория трубы. range или таблица [0..n,0..1]    
 
-        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+        p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
 
    tcalc_c   
 
-        calc_along_coord - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  pcalc_atma - давление с которого начинается..см.мануал   
+        calc_along_coord - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_atma - давление с которого начинаетс..см.мануал   
 
    flow_along_coord   
 
@@ -324,9 +324,9 @@ class API():
         """
 
         self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
-        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,pcalc_atma,tcalc_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,temp_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
+        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,p_calc_atma,tcalc_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,temp_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
 
-    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_C=50,tother_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
+    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_C=50,t_other_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
         """" расчет распределения давления и температуры в трубе  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -335,9 +335,9 @@ class API():
 
         length_m - длина трубы, измеренная, м    
 
-        pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+        p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
 
-        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  pcalc_atma - давление с которого начинается ..см.мануал   
+        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_atma - давление с которого начинается..см.мануал   
 
         str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
@@ -349,7 +349,7 @@ class API():
 
         t_calc_c - температура в точке где задано давление, с    
 
-        tother_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
+        t_other_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
 
         c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
 
@@ -362,9 +362,9 @@ class API():
         """
 
         self.f_MF_p_pipe_atma = self.book.macro("MF_p_pipe_atma")
-        return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,pcalc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_C,tother_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
+        return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_C,t_other_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
 
-    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,pcalc_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,p_calc_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
         """" расчет давления в штуцере
         
                       @qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -373,7 +373,7 @@ class API():
 
        @dchoke_mm - диаметр штуцера (эффективный) опциональные аргументы функции    
 
-       @pcalc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
+       @p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
 
        @calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  ищется давление на выкиде по известному давлению на входе,  ищется линейное да..см.мануал   
 
@@ -388,7 +388,7 @@ class API():
         """
 
         self.f_MF_p_choke_atma = self.book.macro("MF_p_choke_atma")
-        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,pcalc_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,p_calc_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
 
     def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,dchoke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT):
         """" расчет корректирующего фактора (множителя) модели штуцера под замеры
@@ -1076,54 +1076,54 @@ class API():
         self.f_PVT_ST_liqgas_Nm = self.book.macro("PVT_ST_liqgas_Nm")
         return self.f_PVT_ST_liqgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def IPR_qliq_sm3day(self, PI_sm3dayatm,pres_atma,pwf_atma,fw_perc=0,pb_atma=-1):
+    def IPR_qliq_sm3day(self, pi_sm3dayatm,pres_atma,Pwf_atma,fw_perc=0,pb_atma=-1):
         """" расчет дебита по давлению и продуктивности
         
-                       pi_sm3dayatm - коэффициент продуктивности    
+                       pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
 
-        pres_atma - пластовое давление, атм    
+        pres_atma - пластовое давление, абс. атм    
 
-        pwf_atma - забойное давление    
+        pwf_atma - забойное давление, абс. атм    
 
-        fw_perc - обводненность    
+        fw_perc - обводненность, %    
 
-        pb_atma - давление насыщения    )  
+        pb_atma - давление насыщения, абс. атм    )  
 
         """
 
         self.f_IPR_qliq_sm3day = self.book.macro("IPR_qliq_sm3day")
-        return self.f_IPR_qliq_sm3day(PI_sm3dayatm,pres_atma,pwf_atma,fw_perc,pb_atma)
+        return self.f_IPR_qliq_sm3day(pi_sm3dayatm,pres_atma,Pwf_atma,fw_perc,pb_atma)
 
-    def IPR_pwf_atma(self, PI_sm3dayatm,pres_atma,qliq_sm3day,fw_perc=0,pb_atma=-1):
+    def IPR_pwf_atma(self, pi_sm3dayatm,pres_atma,qliq_sm3day,fw_perc=0,pb_atma=-1):
         """" расчет забойного давления по дебиту и продуктивности
         
-                       pi_sm3dayatm - коэффициент продуктивности    
+                       pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
 
-        pres_atma - пластовое давление, атм    
+        pres_atma - пластовое давление, абс. атм    
 
-        qliq_sm3day - дебит жидкости скважины на поверхности  необязательные параметры    
+        qliq_sm3day - дебит жидкости скважины на поверхности, ст.м3/сут    
 
-        fw_perc - обводненность    
+        fw_perc - обводненность, %    
 
-        pb_atma - давление насыщения    )  
+        pb_atma - давление насыщения, абс. атм    )  
 
         """
 
         self.f_IPR_pwf_atma = self.book.macro("IPR_pwf_atma")
-        return self.f_IPR_pwf_atma(PI_sm3dayatm,pres_atma,qliq_sm3day,fw_perc,pb_atma)
+        return self.f_IPR_pwf_atma(pi_sm3dayatm,pres_atma,qliq_sm3day,fw_perc,pb_atma)
 
     def IPR_pi_sm3dayatm(self, Qtest_sm3day,pwf_test_atma,pres_atma,fw_perc=0,pb_atma=-1):
         """" расчет коэффициента продуктивности пласта  по данным тестовой эксплуатации
         
-                       qtest_sm3day - тестовый дебит скважины    
+                       qtest_sm3day - тестовый дебит скважины, ст.м3/сут    
 
-        pwf_test_atma - тестовое забойное давление    
+        pwf_test_atma - тестовое забойное давление, абс. атм    
 
-        pres_atma - пластовое давление, атм  необязательные параметры    
+        pres_atma - пластовое давление, абс. атм    
 
-        fw_perc - обводненность    
+        fw_perc - обводненность, %    
 
-        pb_atma - давление насыщения    )  
+        pb_atma - давление насыщения, абс. атм    )  
 
         """
 
@@ -1244,14 +1244,14 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q)
 
-    def ESP_p_atma(self, qliq_sm3day,fw_perc,pcalc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
         """"функция расчета давления на выходе/входе ЭЦН в рабочих условиях
         
                        qliq_sm3day - дебит жидкости на поверхности    
 
         fw_perc - обводненность    
 
-        pcalc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
+        p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
 
         num_stages - количество ступеней    
 
@@ -1278,16 +1278,16 @@ class API():
         """
 
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,pcalc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power)
+        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power)
 
-    def ESP_dp_atm(self, qliq_sm3day,fw_perc,pcalc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_dp_atm(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
         """" функция расчета перепада давления ЭЦН в рабочих условиях
         
                        qliq_sm3day - дебит жидкости на поверхности    
 
         fw_perc - обводненность    
 
-        pcalc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
+        p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
 
         num_stages - количество ступеней    
 
@@ -1314,7 +1314,7 @@ class API():
         """
 
         self.f_ESP_dp_atm = self.book.macro("ESP_dp_atm")
-        return self.f_ESP_dp_atm(qliq_sm3day,fw_perc,pcalc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power)
+        return self.f_ESP_dp_atm(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power)
 
     def ESP_calibr_calc(self, qliq_sm3day,fw_perc,p_intake_atma,p_discharge_atma,str_PVT,str_ESP):
         """" расчет подстроечных параметров системы УЭЦН
@@ -1336,14 +1336,14 @@ class API():
         self.f_ESP_calibr_calc = self.book.macro("ESP_calibr_calc")
         return self.f_ESP_calibr_calc(qliq_sm3day,fw_perc,p_intake_atma,p_discharge_atma,str_PVT,str_ESP)
 
-    def ESP_system_calc(self, qliq_sm3day,fw_perc,pcalc_atma,str_PVT,str_ESP,calc_along_flow=1):
+    def ESP_system_calc(self, qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow=1):
         """" расчет производительности системы УЭЦН  считает перепад давления, электрические параметры и деградацию КПД
         
                        qliq_sm3day - дебит жидкости на поверхности    
 
         fw_perc - обводненность    
 
-        pcalc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
+        p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
 
         str_pvt - набор данных pvt    
 
@@ -1354,7 +1354,7 @@ class API():
         """
 
         self.f_ESP_system_calc = self.book.macro("ESP_system_calc")
-        return self.f_ESP_system_calc(qliq_sm3day,fw_perc,pcalc_atma,str_PVT,str_ESP,calc_along_flow)
+        return self.f_ESP_system_calc(qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow)
 
     def motor_M_slip_Nm(self, S,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
         """" функция расчета момента двигателя от проскальзования
@@ -1954,7 +1954,7 @@ class API():
         self.f_GL_encode_string = self.book.macro("GL_encode_string")
         return self.f_GL_encode_string(q_gas_inj_sm3day,p_gas_inj_atma,d_gas_inj_mm,HmesGLV_m,dGLV_mm,PsurfGLV_atma)
 
-    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
         """" Расчет устьевого давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций.
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -2002,7 +2002,7 @@ class API():
         """
 
         self.f_well_plin_pwf_atma = self.book.macro("well_plin_pwf_atma")
-        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
 
     def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
         """" Расчет забойного давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций
@@ -2104,7 +2104,7 @@ class API():
         self.f_wellESP_plin_pintake_atma = self.book.macro("wellESP_plin_pintake_atma")
         return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
 
-    def nodal_pwf_atma(self, PI_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,num_pt_crv=21):
+    def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,num_pt_crv=21):
         """" Расчет забойного давления по узловому анализу,  скважины и пласта.
         
                        pi_sm3dayatm - коэффициент продуктивности    
@@ -2152,7 +2152,7 @@ class API():
         """
 
         self.f_nodal_pwf_atma = self.book.macro("nodal_pwf_atma")
-        return self.f_nodal_pwf_atma(PI_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,num_pt_crv)
+        return self.f_nodal_pwf_atma(pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,num_pt_crv)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """" функция поиска значения функции по заданным табличным данным (интерполяция)
@@ -2454,7 +2454,7 @@ class API():
         self.f_transient_def_t_day = self.book.macro("transient_def_t_day")
         return self.f_transient_def_t_day(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-    def transient_def_pd(self, pwf_atma,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+    def transient_def_pd(self, Pwf_atma,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """" расчет безразмерного давления (определение)
         
                        pwf_atma - забойное давление, атма    
@@ -2474,7 +2474,7 @@ class API():
         """
 
         self.f_transient_def_pd = self.book.macro("transient_def_pd")
-        return self.f_transient_def_pd(pwf_atma,qliq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+        return self.f_transient_def_pd(Pwf_atma,qliq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
 
     def transient_def_pwf_atma(self, pd,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """" расчет безразмерного давления (определение)
