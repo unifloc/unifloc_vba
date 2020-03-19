@@ -329,8 +329,8 @@ Public Function MF_calibr_pipe( _
         ByVal qliq_sm3day As Double, _
         ByVal fw_perc As Double, _
         ByVal length_m As Double, _
-        ByVal p_in_atma As Double, _
-        ByVal p_out_atma As Double, _
+        ByVal pin_atma As Double, _
+        ByVal pout_atma As Double, _
         Optional ByVal str_PVT As String = PVT_DEFAULT, _
         Optional ByVal theta_deg As Double = 90, _
         Optional ByVal d_mm As Double = 60, _
@@ -345,9 +345,9 @@ Public Function MF_calibr_pipe( _
 ' qliq_sm3day - дебит жидкости в поверхностных условиях
 ' fw_perc     - обводненность
 ' Length_m    - Длина трубы, измеренная, м
-' p_in_atma    - давление на входе потока в трубу, атм
+' pin_atma    - давление на входе потока в трубу, атм
 '               граничное значение для проведения расчета
-' p_out_atma   - давление на выходе потока из трубы, атм
+' pout_atma   - давление на выходе потока из трубы, атм
 '               граничное значение для проведения расчета
 ' Необязательные параметры
 ' стандартные набор PVT параметров
@@ -378,8 +378,7 @@ Public Function MF_calibr_pipe( _
 '             1 - подбор параметра c_calibr_fric
 '             2 - подбор газового фактор
 '             3 - подбор обводненности
-' результат   - число - подобранный параметр,
-'             - массив - расширенный набор результата расчета
+' результат   - число - давление на другом конце трубы atma.
 'description_end
     
     
@@ -388,7 +387,6 @@ Public Function MF_calibr_pipe( _
     Dim TM As TEMP_CALC_METHOD
     Dim prm As New CSolveParam
     Dim coeffA(0 To 2)
-    Dim out, out_desc, out_par
 On Error GoTo err1:
     
     length_m = Abs(length_m) ' length must be positive
@@ -400,6 +398,7 @@ On Error GoTo err1:
     
     Set pipe.fluid = PVT_decode_string(str_PVT) ' initialize PVT properties
     With pipe.fluid
+    
         .qliq_sm3day = qliq_sm3day ' set liquid rate and watercut
         .fw_perc = fw_perc
     End With
@@ -412,18 +411,14 @@ On Error GoTo err1:
                                              flow_along_coord:=theta_deg < 0, _
                                              hcor:=hydr_corr, _
                                              temp_method:=StartEndTemp)
-        ' temperature init connected with coordinate system - so we need to acount flow direction relative to coord
-        If Not .param.FlowAlongCoord Then
-            .InitTlinear t_out_C, t_in_C
-        Else
-            .InitTlinear t_in_C, t_out_C
-        End If
+        .InitTlinear t_out_C, t_in_C
+   '     .InitTlinear t_in_C, t_out_C
         .c_calibr_grav = c_calibr_grav
     End With
     ' prepare solution function
     Set coeffA(0) = pipe
-        coeffA(1) = p_in_atma
-        coeffA(2) = p_out_atma
+        coeffA(1) = pin_atma
+        coeffA(2) = pout_atma
     Dim func As String
     Dim val_min As Double, val_max As Double
     Select Case calibr_type
@@ -431,66 +426,35 @@ On Error GoTo err1:
             func = "calc_pipe_dp_error_calibr_grav_atm"
             val_min = 0.5
             val_max = 1.5
-            out_par = "calibr_grav"
         Case 1
             func = "calc_pipe_dp_error_calibr_fric_atm"
             val_min = 0.5
             val_max = 1.5
-            out_par = "calibr_fric"
         Case 2
             func = "calc_pipe_dp_error_rp_atm"
             val_min = pipe.fluid.rp_m3m3 * 0.5
             val_max = pipe.fluid.rp_m3m3 * 2
-            out_par = "rp_frac"
         Case 3
             func = "calc_pipe_dp_error_fw_atm"
             val_min = pipe.fluid.fw_fr * 0.5
             val_max = pipe.fluid.fw_fr * 2
             If val_max > 1 Then val_max = 1
-            out_par = "fw_frac"
     End Select
-    
-    With pipe
     
     If solve_equation_bisection(func, val_min, val_max, coeffA, prm) Then
     
-        out = Array(prm.x_solution, _
-                    prm.y_solution, _
-                    prm.iterations, _
-                    prm.msg, _
-                    .p_res_in_atma, _
-                    .t_res_in_C, _
-                    .p_res_out_atma, _
-                    .t_res_out_C, _
-                    .c_calibr_grav, _
-                    .c_calibr_fric)
+        MF_calibr_pipe = Array(prm.x_solution, _
+                                     prm.y_solution, _
+                                     prm.iterations, _
+                                     prm.msg)
         
     Else
-       out = Array("no solution", _
-                    prm.y_solution, _
-                    prm.iterations, _
-                    prm.msg, _
-                    .p_res_in_atma, _
-                    .t_res_in_C, _
-                    .p_res_out_atma, _
-                    .t_res_out_C, _
-                    .c_calibr_grav, _
-                    .c_calibr_fric)
+       MF_calibr_pipe = Array("no solution", _
+                                    prm.y_solution, _
+                                    prm.iterations, _
+                                    prm.msg)
     End If
-          
-    out_desc = Array(out_par, _
-                     "prm.y_solution", _
-                     "prm.iterations", _
-                     "prm.msg", _
-                     "p_in_atma", _
-                     "t_in_C", _
-                     "p_out_atma", _
-                     "t_out_C", _
-                     "c_calibr_grav", _
-                     "c_calibr_fric")
-    End With
-'
-    MF_calibr_pipe = Array(out, out_desc)
+    
     Exit Function
 err1:
     MF_calibr_pipe = Array(-1, "error")
@@ -584,7 +548,7 @@ Public Function MF_p_pipeline_atma( _
         Optional ByVal str_PVT As String = PVT_DEFAULT, _
         Optional ByVal diam_list_mm As Variant, _
         Optional ByVal hydr_corr As H_CORRELATION = 0, _
-        Optional ByVal temp_C As Variant, _
+        Optional ByVal t_amb_list_C As Variant, _
         Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
         Optional ByVal c_calibr_grav = 1, _
         Optional ByVal c_calibr_fric = 1, _
@@ -595,18 +559,20 @@ Public Function MF_p_pipeline_atma( _
 '              если qliq_sm3day =0 и q_gas_sm3day > 0
 '              тогда считается барботаж газа через жидкость
 ' fw_perc     - обводненность
-' h_list_m    - траектория трубы. range или таблица [0..N,0..1]
+' h_list_m    - траектория трубы.
+'               число, range или таблица [0..N,0..1]
+' p_calc_from_atma  - давление с которого начинается расчет, атм
+'               граничное значение для проведения расчета
+' t_calc_from_C - температура в точке где задано давление расчета
 ' calc_along_coord - флаг направления расчета относительно потока
 '     если = 1 то расчет по потоку
 '     если = 0 то расчет против потока
-' p_calc_from_atma  - давление с которого начинается расчет, атм
-'               граничное значение для проведения расчета
-' Необязательные параметры
-' стандартные набор PVT параметров
+' flow_along_coord
 ' str_PVT     - закодированная строка с параметрами PVT.
 '               если задана - перекрывает другие значения
 '        если задан флаг gas_only = 1 то жидкость не учитывается
-' d_mm        - внутрнний диаметр трубы
+' diam_list_mm  - внутрнний диаметр трубы
+'               число, range или таблица [0..N,0..1]
 ' hydr_corr   - гидравлическая корреляция, H_CORRELATION
 '                  BeggsBrill = 0
 '                  Ansari = 1
@@ -614,10 +580,12 @@ Public Function MF_p_pipeline_atma( _
 '                  Gray = 3
 '                  HagedornBrown = 4
 '                  SakharovMokhov = 5
-' t_calc_C    - температура в точке где задано давление, С
-' t_other_C   - температура на другом конце трубы
-'               по умолчанию температура вдоль трубы постоянна
-'               если задано то меняется линейно по трубе
+' t_amb_list_C - температура окружающей среды, С
+'                range или таблица [0..N,0..1]
+' temp_method  - метод расчета температуры
+'           0 - линейное распределение по длине
+'           1 - температура равна температуре окружающей среды
+'           2 - расчет температуры с учетом эмиссии в окр. среду
 ' c_calibr_grav - поправка на гравитационную составляющую
 '               перепада давления
 ' c_calibr_fric - поправка на трение в перепаде давления
@@ -633,6 +601,7 @@ Public Function MF_p_pipeline_atma( _
     Dim tr As New CPipeTrajectory
     Dim amb As New CAmbientFormation
     Dim temp_crv As New CInterpolation
+    Dim prm As PARAMCALC
 On Error GoTo err1:
     
     
@@ -655,11 +624,13 @@ On Error GoTo err1:
     pipe.InitTlinear t_calc_from_C, t_calc_from_C
     pipe.t_calc_C = t_calc_from_C
     
-    If Not IsMissing(temp_C) Then
-        Call temp_crv.load_from_range(temp_C)
+    If Not IsMissing(t_amb_list_C) Then
+        Call temp_crv.load_from_range(t_amb_list_C)
         Set amb.amb_temp_curve = temp_crv
         Set pipe.ambient_formation = amb
-        pipe.param.temp_method = temp_method
+        prm = pipe.param
+        prm.temp_method = temp_method
+        pipe.param = prm
     End If
     
     ' set calibration properties
@@ -783,25 +754,24 @@ On Error GoTo err1:
         PTout.p_atma = p_calc_from_atma
         PTout.t_C = t_calc_from_C
     End If
-    With pipe
-        out = Array(PTcalc.p_atma, _
-                    PTcalc.t_C, _
-                    .p_res_in_atma, _
-                    .t_res_in_C, _
-                    .p_res_out_atma, _
-                    .t_res_out_C, _
-                    .c_calibr_grav, _
-                    .c_calibr_fric)
-        
-        out_desc = Array("p_calc_atma", _
-                         "t_calc_C", _
-                         "p_in_atma", _
-                         "t_in_C", _
-                         "p_out_atma", _
-                         "t_out_C", _
-                         "c_calibr_grav", _
-                         "c_calibr_fric")
-    End With
+    
+    out = Array(PTcalc.p_atma, _
+                PTcalc.t_C, _
+                PTin.p_atma, _
+                PTin.t_C, _
+                PTout.p_atma, _
+                PTout.t_C, _
+                pipe.c_calibr_grav, _
+                pipe.c_calibr_fric)
+    
+    out_desc = Array("p_calc_atma", _
+                     "t_calc_C", _
+                     "p_in_atma", _
+                     "t_in_C", _
+                     "p_out_atma", _
+                     "t_out_C", _
+                     "c_calibr_grav", _
+                     "c_calibr_fric")
     
     MF_p_pipe_atma = Array(out, out_desc)
   
