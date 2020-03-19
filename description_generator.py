@@ -7,8 +7,12 @@ Created on Mon May  6 12:57:40 2019
 Unifloc 7 manual 
 Listings generator 
 
-Read automitically saved VBA code file and prepares code listings for manual
+Read automitically saved VBA code file and prepares code code descriptions
+used in VBA as promt helpers
+generate /description_generated/u7_descriptions.txt which is read by VBA
+
 """
+
 # TODO где " имя параметра" используется для "имя параметра2" возникает неправильное определение нескольких строк
 # TODO перевод в нижний регистр позволяет все прочитать без ошибок, но если заккомитить .lower() можно будет переименовать переменные
 import re

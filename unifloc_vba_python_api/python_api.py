@@ -210,7 +210,7 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,gamma_oil,gamma_gas,eps_m,theta_deg,ZNLF)
 
-    def MF_calibr_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
+    def MF_calibr_pipe(self, qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -245,48 +245,48 @@ class API():
 
         """
 
-        self.f_MF_calibr_pipe_m3day = self.book.macro("MF_calibr_pipe_m3day")
-        return self.f_MF_calibr_pipe_m3day(qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
+        self.f_MF_calibr_pipe = self.book.macro("MF_calibr_pipe")
+        return self.f_MF_calibr_pipe(qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
 
-    def MF_fit_pipe_m3day(self, qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
+    def MF_fit_pipe_m3day(self, ''qliq_sm3day,'fw_perc,'length_m,'p_calc_atma,'calc_along_flow,'str_PVT=PVT_DEFAULT,'theta_deg=90,'d_mm=60,'hydr_corr=H_CORRELATION,'t_in_C=50,'t_out_C=-1,'c_calibr_grav=1,'c_calibr_fric=1,'roughness_m=0.0001,'calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
         
-                       qliq_sm3day - дебит жидкости в поверхностных условиях    
+                  qliq_sm3day   
 
-        fw_perc - обводненность    
+   fw_perc   
 
-        length_m - длина трубы, измеренная, м    
+   length_m   
 
-        p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+   p_calc_atma   
 
-        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_atma - давление с которого начинается..см.мануал   
+   calc_along_flow   
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+   str_pvt   
 
-        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
+   theta_deg   
 
-        d_mm - внутрнний диаметр трубы    
+   d_mm   
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+   hydr_corr   
 
-        t_in_c - температура на входе потока в трубу, с    
+   t_in_c   
 
-        t_out_c - температура на выходе потока из трубы, с  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
+   t_out_c   
 
-        c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+   c_calibr_grav   
 
-        c_calibr_fric - поправка на трение в перепаде давления    
+   c_calibr_fric   
 
-        roughness_m - шероховатость трубы    
+   roughness_m   
 
-        calibr_type - тип калибровки  0 - подбор параметра c_calibr_grav  1 - подбор параметра c_calibr_fric  2 - подбор газового фактор  3 - подбор обводненности    )  
+   calibr_type   )  
 
         """
 
         self.f_MF_fit_pipe_m3day = self.book.macro("MF_fit_pipe_m3day")
-        return self.f_MF_fit_pipe_m3day(qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
+        return self.f_MF_fit_pipe_m3day(''qliq_sm3day,'fw_perc,'length_m,'p_calc_atma,'calc_along_flow,'str_PVT,'theta_deg,'d_mm,'hydr_corr,'t_in_C,'t_out_C,'c_calibr_grav,'c_calibr_fric,'roughness_m,'calibr_type)
 
-    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,p_calc_atma,tcalc_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,temp_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
+    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,p_calc_from_atma,t_calc_from_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,temp_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
         """" расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -295,15 +295,15 @@ class API():
 
         h_list_m - траектория трубы. range или таблица [0..n,0..1]    
 
-        p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+        p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
 
-   tcalc_c   
+   t_calc_from_c   
 
-        calc_along_coord - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_atma - давление с которого начинаетс..см.мануал   
+        calc_along_coord - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_from_atma - давление с которого начи..см.мануал   
 
    flow_along_coord   
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения  d_mm - внутрнний диаметр трубы    
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения  если задан флаг gas_only = 1 то жидкость не учитывается  d_mm - внутрнний диа..см.мануал   
 
    diam_list_mm   
 
@@ -319,14 +319,14 @@ class API():
 
         roughness_m - шероховатость трубы    
 
-        q_gas_sm3day - свободный газ поступающие в трубу.    )  
+        если qliq_sm3day =0 и q_gas_sm3day > 0  тогда считается барботаж газа через жидкость  fw_perc - обводненность  h_list_m - траектория трубы. range или таблица [0..n,0..1]  ..см.мануал   )  
 
         """
 
         self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
-        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,p_calc_atma,tcalc_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,temp_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
+        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,p_calc_from_atma,t_calc_from_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,temp_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
 
-    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_C=50,t_other_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
+    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,p_calc_from_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_from_C=50,t_calc_to_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0):
         """" расчет распределения давления и температуры в трубе  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -335,21 +335,21 @@ class API():
 
         length_m - длина трубы, измеренная, м    
 
-        p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+       p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
 
-        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока  p_calc_atma - давление с которого начинается..см.мануал   
+        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  если = 0 то расчет против потока p_calc_from_atma - давление с которого начина..см.мануал   
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения  если задан флаг gas_only = 1 то жидкость не учитывается    
 
-        theta_deg - угол направления потока к горизонтали  (90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
+        theta_deg - угол направления потока к горизонтали  ( 90 - вертикальная труба поток вверх  -90 - вертикальная труба поток вниз)  может принимать отрицательные значения    
 
         d_mm - внутрнний диаметр трубы    
 
         hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
 
-        t_calc_c - температура в точке где задано давление, с    
+        t_calc_from_c - температура в точке где задано давление, с    
 
-        t_other_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
+        t_calc_to_c - температура на другом конце трубы  по умолчанию температура вдоль трубы постоянна  если задано то меняется линейно по трубе    
 
         c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
 
@@ -357,38 +357,38 @@ class API():
 
         roughness_m - шероховатость трубы    
 
-        q_gas_sm3day - свободный газ поступающие в трубу.    )  
+        если qliq_sm3day =0 и q_gas_sm3day > 0  тогда считается барботаж газа через жидкость  fw_perc - обводненность  length_m - длина трубы, измеренная, м  calc_along_flow - фла..см.мануал   )  
 
         """
 
         self.f_MF_p_pipe_atma = self.book.macro("MF_p_pipe_atma")
-        return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,p_calc_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_C,t_other_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
+        return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,p_calc_from_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_from_C,t_calc_to_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day)
 
-    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,p_calc_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,p_calc_from_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
         """" расчет давления в штуцере
         
-                      @qliq_sm3day - дебит жидкости в поверхностных условиях    
+                       qliq_sm3day - дебит жидкости в поверхностных условиях    
 
-       @fw_perc - обводненность    
+        fw_perc - обводненность    
 
-       @dchoke_mm - диаметр штуцера (эффективный) опциональные аргументы функции    
+        dchoke_mm - диаметр штуцера (эффективный)    
 
-       @p_calc_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
+        p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
 
-       @calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  ищется давление на выкиде по известному давлению на входе,  ищется линейное да..см.мануал   
+        calc_along_flow - флаг направления расчета относительно потока  если = 1 то расчет по потоку  ищется давление на выкиде по известному давлению на входе,  ищется линейное да..см.мануал   
 
-       @d_pipe_mm - диаметр трубы до и после штуцера    
+        d_pipe_mm - диаметр трубы до и после штуцера    
 
-       @t_choke_c - температура, с.    
+        t_choke_c - температура, с.    
 
-       @c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки  q_choke_real = c_calibr_fr * q_choke_model    
+        c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки  q_choke_real = c_calibr_fr * q_choke_model    
 
-       @str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
 
         """
 
         self.f_MF_p_choke_atma = self.book.macro("MF_p_choke_atma")
-        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,p_calc_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,p_calc_from_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
 
     def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,dchoke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT):
         """" расчет корректирующего фактора (множителя) модели штуцера под замеры
