@@ -210,7 +210,7 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,gamma_oil,gamma_gas,eps_m,theta_deg,ZNLF)
 
-    def MF_calibr_pipe(self, qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
+    def MF_calibr_pipe(self, qliq_sm3day,fw_perc,length_m,p_in_atma,p_out_atma,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_in_C=50,t_out_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -219,9 +219,9 @@ class API():
 
         length_m - длина трубы, измеренная, м    
 
-        pin_atma - давление на входе потока в трубу, атм  граничное значение для проведения расчета    
+        p_in_atma - давление на входе потока в трубу, атм  граничное значение для проведения расчета    
 
-        pout_atma - давление на выходе потока из трубы, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
+        p_out_atma - давление на выходе потока из трубы, атм  граничное значение для проведения расчета  необязательные параметры  стандартные набор pvt параметров    
 
         str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
 
@@ -246,7 +246,7 @@ class API():
         """
 
         self.f_MF_calibr_pipe = self.book.macro("MF_calibr_pipe")
-        return self.f_MF_calibr_pipe(qliq_sm3day,fw_perc,length_m,pin_atma,pout_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
+        return self.f_MF_calibr_pipe(qliq_sm3day,fw_perc,length_m,p_in_atma,p_out_atma,str_PVT,theta_deg,d_mm,hydr_corr,t_in_C,t_out_C,c_calibr_grav,c_calibr_fric,roughness_m,calibr_type)
 
     def MF_fit_pipe_m3day(self, ''qliq_sm3day,'fw_perc,'length_m,'p_calc_atma,'calc_along_flow,'str_PVT=PVT_DEFAULT,'theta_deg=90,'d_mm=60,'hydr_corr=H_CORRELATION,'t_in_C=50,'t_out_C=-1,'c_calibr_grav=1,'c_calibr_fric=1,'roughness_m=0.0001,'calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
