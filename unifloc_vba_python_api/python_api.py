@@ -1954,7 +1954,7 @@ class API():
         self.f_GL_encode_string = self.book.macro("GL_encode_string")
         return self.f_GL_encode_string(q_gas_inj_sm3day,p_gas_inj_atma,d_gas_inj_mm,HmesGLV_m,dGLV_mm,PsurfGLV_atma)
 
-    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
         """" Расчет устьевого давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций.
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -1991,7 +1991,7 @@ class API():
 
         c_calibr_fric - поправка на трение в перепаде давления    
 
-        roughness_m - шероховатость трубы    
+        c_calibr_choke - поправка на штуцер    
 
         q_gas_sm3day - свободный газ поступающие в трубу.    
 
@@ -2002,9 +2002,9 @@ class API():
         """
 
         self.f_well_plin_pwf_atma = self.book.macro("well_plin_pwf_atma")
-        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
-    def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
+    def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
         """" Расчет забойного давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -2041,7 +2041,7 @@ class API():
 
         c_calibr_fric - поправка на трение в перепаде давления    
 
-        roughness_m - шероховатость трубы    
+        c_calibr_choke - поправка на штуцер  roughness_m - шероховатость трубы    
 
         q_gas_sm3day - свободный газ поступающие в трубу.    
 
@@ -2052,9 +2052,9 @@ class API():
         """
 
         self.f_well_pwf_plin_atma = self.book.macro("well_pwf_plin_atma")
-        return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
-    def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
         """" Расчет устьевого давления скважины по давлению на приеме.  Расчет распределения давления и температуры в скважине  с использованием многофазных корреляций.
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -2091,7 +2091,7 @@ class API():
 
         c_calibr_fric - поправка на трение в перепаде давления    
 
-        roughness_m - шероховатость трубы    
+        c_calibr_choke - поправка на штуцер  roughness_m - шероховатость трубы    
 
         q_gas_sm3day - свободный газ поступающие в трубу.    
 
@@ -2102,9 +2102,9 @@ class API():
         """
 
         self.f_wellESP_plin_pintake_atma = self.book.macro("wellESP_plin_pintake_atma")
-        return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
-    def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,num_pt_crv=21):
+    def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,num_pt_crv=21):
         """" Расчет забойного давления по узловому анализу,  скважины и пласта.
         
                        pi_sm3dayatm - коэффициент продуктивности    
@@ -2143,7 +2143,7 @@ class API():
 
         c_calibr_fric - поправка на трение в перепаде давления    
 
-        roughness_m - шероховатость трубы    
+        c_calibr_choke - поправка на штуцер    
 
         q_gas_sm3day - свободный газ поступающие в трубу.    
 
@@ -2152,7 +2152,7 @@ class API():
         """
 
         self.f_nodal_pwf_atma = self.book.macro("nodal_pwf_atma")
-        return self.f_nodal_pwf_atma(pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,num_pt_crv)
+        return self.f_nodal_pwf_atma(pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,num_pt_crv)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """" функция поиска значения функции по заданным табличным данным (интерполяция)
