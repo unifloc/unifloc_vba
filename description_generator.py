@@ -10,7 +10,7 @@ Listings generator
 Read automitically saved VBA code file and prepares code code descriptions
 used in VBA as promt helpers
 generate /description_generated/u7_descriptions.txt which is read by VBA
-
+also generate python_api.py file 
 """
 
 # TODO где " имя параметра" используется для "имя параметра2" возникает неправильное определение нескольких строк
