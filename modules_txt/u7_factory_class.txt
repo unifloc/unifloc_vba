@@ -60,6 +60,136 @@ Public Function new_pipeline(ByVal tr As CPipeTrajectory, _
         Set new_pipeline.ambient_formation = amb
     End If
 End Function
+' функция генерация трубы из стандартного набора данных
+' включает и параметры потока в трубе
+' нужна для упрощения пользовательских функций
+Public Function new_pipeline_with_stream( _
+                 ByVal qliq_sm3day As Double, _
+                 ByVal fw_perc As Double, _
+                 ByVal h_list_m As Variant, _
+        Optional ByVal t_calc_from_C As Double = 50, _
+        Optional ByVal calc_along_coord As Boolean = False, _
+        Optional ByVal flow_along_coord As Boolean = False, _
+        Optional ByVal str_PVT As String = PVT_DEFAULT, _
+        Optional ByVal diam_list_mm As Variant, _
+        Optional ByVal hydr_corr As H_CORRELATION = 0, _
+        Optional ByVal t_amb_list_C As Variant, _
+        Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+        Optional ByVal c_calibr_grav = 1, _
+        Optional ByVal c_calibr_fric = 1, _
+        Optional ByVal roughness_m As Double = 0.0001, _
+        Optional ByVal q_gas_sm3day As Double = 0 _
+                         ) As CPipe
+    Dim pipe As New CPipe
+    Dim PVT As New CPVT
+    Dim PTcalc As PTtype
+    Dim TM As TEMP_CALC_METHOD
+    Dim angle As Double
+    Dim tr As New CPipeTrajectory
+    Dim amb As New CAmbientFormation
+    Dim temp_crv As New CInterpolation
+    Dim prm As PARAMCALC
+On Error GoTo err1:
+    
+    
+    Call tr.init_from_vert_range(h_list_m, diam_list_mm)
+    
+    Call pipe.init_pipe_constr_by_trajectory(tr)
+   
+    
+    Set PVT = PVT_decode_string(str_PVT) ' initialize PVT properties
+    
+    PVT.qliq_sm3day = qliq_sm3day ' set liquid rate and watercut
+    PVT.fw_perc = fw_perc
+    PVT.q_gas_free_sm3day = q_gas_sm3day
+    Set pipe.fluid = PVT
+    
+    pipe.param = set_calc_flow_param(calc_along_coord, _
+                                     flow_along_coord, _
+                                     hcor:=hydr_corr, _
+                                     temp_method:=StartEndTemp)
+    pipe.InitTlinear t_calc_from_C, t_calc_from_C
+    pipe.t_calc_C = t_calc_from_C
+    
+    If Not IsMissing(t_amb_list_C) Then
+        Call temp_crv.load_from_range(t_amb_list_C)
+        Set amb.amb_temp_curve = temp_crv
+        Set pipe.ambient_formation = amb
+        prm = pipe.param
+        prm.temp_method = temp_method
+        pipe.param = prm
+    End If
+    
+    ' set calibration properties
+    pipe.c_calibr_grav = c_calibr_grav
+    pipe.c_calibr_fric = c_calibr_fric
+    
+    Set new_pipeline_with_stream = pipe
+    
+    Exit Function
+err1:
+    new_pipeline_with_stream = Array(-1, "error")
+    addLogMsg "Error:new_pipeline_with_stream:" & Err.Description
+                         
+End Function
+' функция генерация трубы из стандартного набора данных
+' включает и параметры потока в трубе
+' нужна для упрощения пользовательских функций
+Public Function new_pipe_with_stream( _
+            ByVal qliq_sm3day As Double, _
+            ByVal fw_perc As Double, _
+            ByVal length_m As Double, _
+            ByVal calc_along_flow As Boolean, _
+            Optional ByVal str_PVT As String = PVT_DEFAULT, _
+            Optional ByVal theta_deg As Double = 90, _
+            Optional ByVal d_mm As Double = 60, _
+            Optional ByVal hydr_corr As H_CORRELATION = 0, _
+            Optional ByVal t_calc_from_C As Double = 50, _
+            Optional ByVal t_calc_to_C As Double = -1, _
+            Optional ByVal c_calibr_grav = 1, _
+            Optional ByVal c_calibr_fric = 1, _
+            Optional ByVal roughness_m As Double = 0.0001, _
+            Optional ByVal q_gas_sm3day As Double = 0 _
+                         ) As CPipe
+                         
+    Dim pipe As New CPipe
+    Dim PVT As New CPVT
+    Dim PTcalc As PTtype
+    Dim PTin As PTtype
+    Dim PTout As PTtype
+    Dim TM As TEMP_CALC_METHOD
+    Dim out, out_desc
+    Dim out_curves_type As CALC_RESULTS
+    Dim res
+    ' initialize stream properties
+    Set PVT = PVT_decode_string(str_PVT)    ' create atream object from given string
+    PVT.qliq_sm3day = qliq_sm3day           ' set liquid rate to stream
+    PVT.fw_perc = fw_perc                   ' set watercut - fraction of water in stream
+    PVT.q_gas_free_sm3day = q_gas_sm3day    ' set gas rate if given. additional gas to main stream
+    Set pipe.fluid = PVT                    ' assign stream to pipe
+    
+    ' initialize pipe geometry
+    Call pipe.init_pipe(d_mm, length_m, theta_deg, roughness_m)
+    ' Pcalc and Tcalc position depends on calc_along_flow
+    pipe.param = set_calc_flow_param(calc_along_coord:=Not calc_along_flow, _
+                                     flow_along_coord:=theta_deg < 0, _
+                                     hcor:=hydr_corr, _
+                                     temp_method:=StartEndTemp)
+    ' check temp distribution. if second temp not given - set uniform
+    If t_calc_to_C < 0 Then t_calc_to_C = t_calc_from_C
+    ' temperature initialisation depend on calc direction because initialisation procedure depends on coord direction
+    ' check flow direction
+    If calc_along_flow Then
+        pipe.InitTlinear t_calc_to_C, t_calc_from_C
+    Else
+        pipe.InitTlinear t_calc_from_C, t_calc_to_C
+    End If
+    ' set calibration properties
+    pipe.c_calibr_grav = c_calibr_grav
+    pipe.c_calibr_fric = c_calibr_fric
+    Set new_pipe_with_stream = pipe
+    
+End Function
 ' функция генерации нового объекта - пласта (заканчивания скважины)
 Public Function new_reservoir(ByVal prod_index_sm3dayatm As Double, _
                               ByVal pres_atma As Double, _
@@ -217,7 +347,7 @@ On Error GoTo err1:
              Set well = New CWellGL
     End Select
     With well
-        If IsMissing(tr_cas) Or IsMissing(tr_tub) Then
+        If IsMissing(tr_cas) Or tr_cas Is Nothing Or IsMissing(tr_tub) Or tr_tub Is Nothing Then
             ' проверим сначала конструкцию и инклинометрию скважины
             ' не делаем лишних проверок - ожидаем что прочитать получится
             If Not IsMissing(incl_h_mes_m) And IsMissing(incl_h_vert_m) Then
@@ -274,7 +404,7 @@ On Error GoTo err1:
     Exit Function
 err1:
    errmsg = "new_well_factory: Ошибка простой инициализации скважины " & sDELIM & Err.Description
-   Err.Raise kErrInitCalc, Err.Source, errmsg
+   Err.Raise kErrInitCalc, Err.source, errmsg
     
 End Function
 ' функция генерации нового объекта описывающего параметры газлифтной системы
@@ -324,11 +454,11 @@ On Error GoTo err1:
         Set new_GLV_set = glv_set
 err1:
    errmsg = "new_GLV_set: Ошибка инициализации набора клапанов " & sDELIM & Err.Description
-   Err.Raise kErrInitCalc, Err.Source, errmsg
+   Err.Raise kErrInitCalc, Err.source, errmsg
     
 End Function
 ' ==================================================
-' empty onjects factory functions
+' empty objects factory functions
 ' ==================================================
 Public Function NewCPVT() As CPVT
    Set NewCPVT = New CPVT

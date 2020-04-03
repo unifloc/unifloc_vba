@@ -8,24 +8,37 @@
 '
 Option Explicit
 ' набор глобоальный объектов создаваемых в памяти при работе с базой насосов
+' глобальные переменные позволяют загрузить один раз базу и работать с ней
+' без необходимости постоянно перезагружать ее с листа Excel
 Public ESPbase As CESPBase
 Public ESP As CESPpump
 Public ESPsys As New CESPsystemSimple
 Public motor As New CESPMotor
+Const ESP_db_workbook_name = "ESP_db.xlsx"
+Const SpreadSheetName_ESP = "ESPbase"
 Public Function loadESPbase() As Boolean
 ' загрузка насоса с нужным ID из базы насосов
     Dim numESP As Integer
 On Error GoTo err1:
     addLogMsg "Загружаем базу насосов"
-    Set ESPbase = New CESPBase
-    numESP = ESPbase.num_pumps
-    addLogMsg "Базу насосов загрузили, всего найдено " & numESP & " насосов"
     
-'    Set ESP = ESPbase.get_pump(ID) ' ESPcollection.Item(CStr(ID))
-    loadESPbase = True
-Exit Function
+    With GetObject(ThisWorkbook.Path & "\" & ESP_db_workbook_name)
+        ' открываем базу насосов через GetObject
+        ' вроде все работает. база остается открытой
+        ' чтобы ее увидеть можно посмотреть - вид - окно - отобразить
+        ' workbooks.open тут не работает совсем
+        '
+        Set ESPbase = New CESPBase
+        ESPbase.load_db_ESP .Sheets(SpreadSheetName_ESP)
+        numESP = ESPbase.num_pumps
+        addLogMsg "Базу насосов загрузили, всего найдено " & numESP & " насосов"
+    
+        loadESPbase = True
+        .Close False
+    End With
+    Exit Function
 err1:
-    addLogMsg "Не удалось загрузить базу насосов."
+    addLogMsg "Не удалось загрузить базу насосов. " & Err.Description
     loadESPbase = False
 End Function
 Public Function checkID_ESP(ID) As Boolean
@@ -36,7 +49,7 @@ On Error GoTo err1:
         Set ESP = ESPbase.get_pump(ID) ' ESPcollection.Item(CStr(ID))
         checkID_ESP = True
     End If
-    If ESP.ID = ID Then
+    If ESP.db.ID = ID Then
         checkID_ESP = True
     Else
         Set ESP = ESPbase.get_pump(ID) ' ESPcollection.Item(CStr(ID))

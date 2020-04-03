@@ -49,60 +49,110 @@ Private Sub clear_db()
                                         ' automatically, remove the first
   Next                                  ' member on each iteration.
 End Sub
-Private Sub load_db_ESP()
-    Dim i As Long
+Public Sub load_db_ESP(ESP_sheet)
+' load all pumps from db here
+    Dim i As Long, j As Integer, num As Integer
     Dim StartCell As Long
     Dim EndCell As Long
     Dim currID As Integer, currIDnew As Integer
     Dim frNom As Double
     Dim num_pumps As Integer
-    num_pumps = 0
+    Dim esp_db As ESP_PARAMS
     Dim rateRange
     Dim headRange
     Dim powerRange
     Dim effRange
     Dim Item
     Dim Index
+                Dim zero_found As Boolean
+                Dim res
+           
+    num_pumps = 0
     Call clear_db
     i = 4   ' все начинается с 4 строки
     
-    With ThisWorkbook.Worksheets(SpreadSheetName_ESP_)
-    Do
-        StartCell = i
-        currID = .Cells(i, 2)
+    With ESP_sheet
         Do
-            EndCell = i
-            i = i + 1
-            currIDnew = .Cells(i, 2)
-        Loop Until currIDnew <> currID Or currID = 0
-        
-        If EndCell - StartCell > 3 Then
-            rateRange = .range(.Cells(StartCell, 12), .Cells(EndCell, 12))
-            headRange = .range(.Cells(StartCell, 13), .Cells(EndCell, 13))
-            powerRange = .range(.Cells(StartCell, 14), .Cells(EndCell, 14))
-            effRange = .range(.Cells(StartCell, 15), .Cells(EndCell, 15))
-            frNom = .Cells(StartCell, 10)
+            StartCell = i
+            currID = .Cells(i, 2)
+            Do
+                EndCell = i
+                i = i + 1
+                currIDnew = .Cells(i, 2)
+            Loop Until currIDnew <> currID Or currID = 0
             
-            Set ESPload = New CESPpump
-            Call ESPload.loadESP_points("test", rateRange, headRange, powerRange, effRange, frNom)
-            ESPload.ID = currID
-            ESPload.stage_num = 1
-            ESPload.freq_Hz = .Cells(StartCell, 10)
-            ESPload.manufacturer_name = .Cells(StartCell, 3)
-            ESPload.pump_name = .Cells(StartCell, 4)
-            ESPload.max_stages_number = .Cells(StartCell, 5)
-            ESPload.nom_rate_m3day = .Cells(StartCell, 6)
-            ESPload.optimum_min_rate_m3day = .Cells(StartCell, 7)
-            ESPload.optimum_max_rate_m3day = .Cells(StartCell, 8)
-            ESPcollection.Add ESPload, CStr(currID)
-            num_pumps = num_pumps + 1
-        End If
-    Loop Until currID = 0
+            If EndCell - StartCell > 3 Then
+       On Error GoTo err_load_pump:
+                Set ESPload = New CESPpump
+                
+                num = EndCell - StartCell + 1 ' num point in pump characteristic
+                rateRange = .range(.Cells(StartCell, 12), .Cells(EndCell, 12)).Value2
+                headRange = .range(.Cells(StartCell, 13), .Cells(EndCell, 13)).Value2
+                powerRange = .range(.Cells(StartCell, 14), .Cells(EndCell, 14)).Value2
+                effRange = .range(.Cells(StartCell, 15), .Cells(EndCell, 15)).Value2
+                
+                frNom = .Cells(StartCell, 10).Value2
+                esp_db.freq_Hz = frNom
+                
+                ReDim esp_db.head_points(1 To num)
+                ReDim esp_db.rate_points(1 To num)
+                ReDim esp_db.power_points(1 To num)
+                ReDim esp_db.eff_points(1 To num)
+                                
+                For j = 1 To num
+                       esp_db.head_points(j) = headRange(j, 1)
+                       esp_db.rate_points(j) = rateRange(j, 1)
+                       esp_db.power_points(j) = powerRange(j, 1)
+                       esp_db.eff_points(j) = effRange(j, 1)
+                Next j
+                ' read all data from furst line in DB table
+                esp_db.ID = currID
+                esp_db.manufacturer = .Cells(StartCell, 3).Value2
+                esp_db.name = .Cells(StartCell, 4).Value2
+                esp_db.stages_max = .Cells(StartCell, 5).Value2
+                esp_db.rate_nom_m3day = .Cells(StartCell, 6).Value2
+                esp_db.rate_opt_min_m3day = .Cells(StartCell, 7).Value2
+                esp_db.rate_opt_max_m3day = .Cells(StartCell, 8).Value2
+                esp_db.w_nom_slip_rpm = .Cells(StartCell, 9).Value2
+                esp_db.eff_max = .Cells(StartCell, 11).Value2
+                
+                
+                ' оценим максимальную точку характеристики заданной в базе
+                
+                esp_db.rate_max_m3day = 0
+                zero_found = False
+                For j = 1 To num
+                    If esp_db.rate_max_m3day < esp_db.rate_points(j) Then
+                        esp_db.rate_max_m3day = esp_db.rate_points(j)
+                        If esp_db.head_points(j) = 0 Then
+                            zero_found = True
+                            Exit For
+                        End If
+                    End If
+                Next j
+                If Not zero_found Then
+                ' найдем zero
+                    res = crv_solve(esp_db.rate_points, esp_db.head_points, 0)
+                    esp_db.rate_max_m3day = res(1)
+                End If
+                
+                ESPload.db = esp_db
+                ESPcollection.Add ESPload, CStr(currID)
+                num_pumps = num_pumps + 1
+next_pump:
+            End If
+        Loop Until currID = 0
     End With
+    Exit Sub
+    
+err_load_pump:
+   ' On Error Resume Next
+    addLogMsg "Problem while loading pump . " & CStr(currID) & " " & Err.Description
+    Resume next_pump:
 End Sub
 Private Sub Class_Initialize()
     SpreadSheetName_ESP_ = "ESPbase"
-    Call load_db_ESP
+    'Call load_db_ESP
     SpreadSheetName_Motor_ = "База двигателей"
 End Sub
 Public Function get_pump(ByVal ID As Integer) As CESPpump

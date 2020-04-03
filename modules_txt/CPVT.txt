@@ -36,6 +36,7 @@ Option Explicit
  Private bob_m3m3_ As Double                       ' объемный коэффициент при давлении насыщения
  Private tres_C_ As Double                         ' пластовая температура при которой заданые значения давления насыщения и объемного коэффициента
  ' расчетные параметры нефти
+ Private rsb_calc_m3m3_ As Double                  ' расчетное значение газосодержания при давлении насыщения - может отличаться от исходного если то не допустимо
  Private pb_calc_atma_ As Double                   ' расчетное значение давления насыщения по корреляции
  Private rs_m3m3_ As Double                        ' расчетное значение газосодержания в нефти при текущих условиях
  Private bo_m3m3_ As Double                        ' объемный коэффициент нефти при рабочих условиях
@@ -162,6 +163,7 @@ Option Explicit
            ' сообщение генерируем только если большая разница
             addLogMsg "CPVT.q_gas_insitu_sm3day: warning: q_gas_insitu_sm3day < 0,  q_gas_sm3day = " & S(q_gas_sm3day) & _
                   ", rs_m3m3 = " & S(rs_m3m3) & _
+                  ", rp_m3m3 = " & S(rp_m3m3) & _
                   ", q_oil_sm3day = " & S(q_oil_sm3day) & _
                   "  q_gas_insitu_sm3day set to 0"
         End If
@@ -502,8 +504,8 @@ Property Let rp_m3m3(val As Double)
     If (val >= 0) Then
         rp_m3m3_ = val
         If rp_m3m3_ < rsb_m3m3_ Then   ' проверим, что газовый фактор должен быть больше чем газосодержание
-            addLogMsg "Газовый фактор при вводе больше газосодержания Rp = " & Format(rp_m3m3_, "####0.00") & " < rsb = " & Format(rsb_m3m3_, "#0.00") & ". Газосодержание исправлено"
-            rsb_m3m3_ = rp_m3m3_
+            'addLogMsg "Газовый фактор при вводе больше газосодержания Rp = " & Format(rp_m3m3_, "####0.00") & " < rsb = " & Format(rsb_m3m3_, "#0.00") & ". Газосодержание исправлено"
+            rsb_calc_m3m3_ = rp_m3m3_
         End If
     Else
         ' унифицированная реакция на ошибочный ввод ключевых параметров класса
@@ -519,12 +521,16 @@ End Property
 Public Property Get rsb_m3m3() As Double
     rsb_m3m3 = rsb_m3m3_
 End Property
+Public Property Get rsb_calc_m3m3() As Double
+    rsb_calc_m3m3 = rsb_calc_m3m3_
+End Property
 Property Let rsb_m3m3(val As Double)
     If (val >= 0) Then
         rsb_m3m3_ = val
+        rsb_calc_m3m3_ = val
         If rp_m3m3_ < rsb_m3m3_ Then   ' проверим, что газовый фактор должен быть больше чем газосодержание
-            addLogMsg "газосодержания при вводе меньше газового фактора  Rp = " & Format(rp_m3m3_, "#0.00") & " < rsb = " & Format(rsb_m3m3_, "#0.00") & ". Газосодержание исправлено"
-            rsb_m3m3_ = rp_m3m3_
+            'addLogMsg "газосодержания при вводе меньше газового фактора  Rp = " & Format(rp_m3m3_, "#0.00") & " < rsb = " & Format(rsb_m3m3_, "#0.00") & ". Газосодержание исправлено"
+            rsb_calc_m3m3_ = rp_m3m3_
         End If
     Else
         ' унифицированная реакция на ошибочный ввод ключевых параметров класса
@@ -546,17 +552,20 @@ Public Function set_rp_rsb(ByVal Rpval_m3m3 As Double, ByVal Rsbval_m3m3 As Doub
             Else
                 rsb_m3m3_ = Rpval_m3m3
             End If
+            rsb_calc_m3m3_ = rsb_m3m3_
             set_rp_rsb = True
         Else
-            addLogMsg "CPVT.set_rp_rsb: Газосодержание при вводе больше газового фактора  Rp = " & Format(Rpval_m3m3, "#0.00") & " < rsb = " & Format(Rsbval_m3m3, "#0.00") & ". Газосодержание исправлено"
+            'addLogMsg "CPVT.set_rp_rsb: Газосодержание при вводе больше газового фактора  Rp = " & Format(Rpval_m3m3, "#0.00") & " < rsb = " & Format(Rsbval_m3m3, "#0.00") & ". Газосодержание исправлено"
             rp_m3m3_ = Rpval_m3m3
-            rsb_m3m3_ = Rpval_m3m3
+            rsb_calc_m3m3_ = Rpval_m3m3
+            rsb_m3m3_ = Rsbval_m3m3
             set_rp_rsb = True
         End If
     Else
         If Rpval_m3m3 <= 0 And Rsbval_m3m3 > 0 Then
             rp_m3m3_ = Rsbval_m3m3
             rsb_m3m3_ = Rsbval_m3m3
+            rsb_calc_m3m3_ = rsb_m3m3_
             set_rp_rsb = True
         Else
             set_rp_rsb = False
@@ -568,12 +577,26 @@ Public Function set_rp_rsb(ByVal Rpval_m3m3 As Double, ByVal Rsbval_m3m3 As Doub
 End Function
 '----- Pb -----------------------------------------------------------------------------------------
 Public Property Get pb_atma() As Double
+' функция выдает давление насыщения, которое было задано при инициализации
+' если не было задано - то оно рассчитывается и выдается расчитанное
     If pb_atma_ > 0 Then       ' ноль не допустим, это значит что значение отсутствует
     ' если известно калибровочное значение при пластовой температуре, то возвращаем его
         pb_atma = pb_atma_
     Else
     ' иначе считаем что получится из расчета по корреляции по газосодержанию
         pb_atma = calc_pb_atma(rsb_m3m3, tres_C)
+    End If
+End Property
+Public Property Get pb_calc_atma() As Double
+' функция выдает давление насыщения, которое было получено в ходе расчетов
+' может отличатся от того, что было задано при инициализации, если оно было не допустимо
+' если не было задано - то оно рассчитывается и выдается расчитанное
+    If pb_calc_atma_ > 0 Then       ' ноль не допустим, это значит что значение отсутствует
+    ' если известно калибровочное значение при пластовой температуре, то возвращаем его
+        pb_calc_atma = pb_calc_atma_
+    Else
+    ' иначе считаем что получится из расчета по корреляции по газосодержанию
+        pb_calc_atma = calc_pb_atma(rsb_m3m3, tres_C)
     End If
 End Property
 Property Let pb_atma(val As Double)
@@ -728,6 +751,7 @@ End Property
         cg_JkgC_ = 2200
         zCorr = z_Kareem
         gas_only = False
+        pb_calc_atma_ = 0
  End Sub
  
  
@@ -783,7 +807,7 @@ Public Sub calc_PVT_PT(pt As PTtype)
         Call calc_PVT(pt.p_atma, pt.t_C)
 End Sub
 Public Sub calc_PVT(ByVal p_atma As Double, ByVal t_C As Double)
-' расчет свойств воды нефти и газа при заданных давлении и температуре
+ ' расчет свойств воды нефти и газа при заданных давлении и температуре
     Dim T_K As Double  ' internal K temp
     'PVT properties
     Dim rho_o As Double
@@ -809,7 +833,7 @@ On Error GoTo err1:
     T_K = t_C + const_t_K_min
     PT_calc_.p_atma = p_atma
     PT_calc_.t_C = t_C
-    rsb_calbr_m3m3 = rsb_m3m3
+    rsb_calbr_m3m3 = rsb_calc_m3m3_
     Bo_calbr_m3m3 = bob_m3m3
     muo_calibr_cP = muob_cP
     P_MPa = p_atma * const_convert_atma_MPa
@@ -955,7 +979,7 @@ On Error GoTo err1:
     End If
     'Assign output variables
     pb_calc_atma_ = p_bi / p_fact / const_convert_atma_MPa
-    pb_atma_ = pb_calc_atma_   ' corrected by issue #34
+   ' pb_atma_ = pb_calc_atma_   ' corrected by issue #34
     rs_m3m3_ = r_si
     mu_deadoil_cP_ = mu_deadoil_cP
     q_oil_rc_m3day_ = qliq_sm3day_ * (1 - fw_fr_) * bo_m3m3_   ' для ускорения расчетов потом все что можно подсчитаем тут
@@ -1041,7 +1065,8 @@ Public Function calc_rs_m3m3(ByVal p_atma As Double, ByVal t_C As Double) As Dou
 End Function
 Public Function calc_pb_atma(ByVal rsb_m3m3 As Double, ByVal t_C As Double) As Double
 'function calculates oil bubble point pressure
-    rsb_m3m3_ = rsb_m3m3
+    Call set_rp_rsb(rsb_m3m3, rsb_m3m3)
+'    rsb_m3m3_ = rsb_m3m3
     Call calc_PVT(1, t_C)
     calc_pb_atma = pb_calc_atma_
 End Function
@@ -1111,14 +1136,18 @@ Public Function rp_gas_fraction_m3m3(FreeGas, p_atma As Double, t_C As Double, O
     Dim max_iter As Integer, i As Integer
     Dim E As Double
     Dim p_gas As Double, g As Double
+    Dim rsb_back As Double
     max_iter = 100
     E = 0.0001
     G1 = Rp_init_m3m3
     g2 = 0
+    rsb_back = rsb_m3m3_
 On Error GoTo err1:
     For i = 1 To max_iter
         g = (G1 + g2) / 2
-        rp_m3m3 = g
+        Call set_rp_rsb(g, rsb_back)
+'        rsb_m3m3 = rsb_back
+'        rp_m3m3 = g
         Call calc_PVT(p_atma, t_C)
         p_gas = gas_fraction_d(Es)
         If Abs(p_gas - FreeGas) <= E Then Exit For
