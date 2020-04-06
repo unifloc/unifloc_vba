@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.13  Lepus                                      khabibullin.ra@gubkin.ru
+'Unifloc 7.17  Test                                     khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -371,7 +371,7 @@ Public Function MF_calibr_pipeline( _
 '               перепада давления
 ' c_calibr_fric - поправка на трение в перепаде давления
 ' roughness_m  - шероховатость трубы
-' q_gas_sm3day - свободный газ поступающие в трубу.
+' q_gas_sm3day  - свободный газ. дополнительный к PVT потоку.
 ' out_curves_num_points - количество точек для вывода значений
 '                   между концами трубы.
 ' calibr_type - тип калибровки
@@ -522,7 +522,7 @@ Public Function MF_calibr_pipe( _
 '                   перепада давления
 ' c_calibr_fric   - поправка на трение в перепаде давления
 ' roughness_m     - шероховатость трубы
-' q_gas_sm3day    - свободный газ поступающие в трубу.
+' q_gas_sm3day    - свободный газ. дополнительный к PVT потоку.
 ' calibr_type - тип калибровки
 '             0 - подбор параметра c_calibr_grav
 '             1 - подбор параметра c_calibr_fric
@@ -743,8 +743,8 @@ Public Function MF_p_pipeline_atma( _
 ' c_calibr_grav - поправка на гравитационную составляющую
 '               перепада давления
 ' c_calibr_fric - поправка на трение в перепаде давления
-' roughness_m  - шероховатость трубы
-' q_gas_sm3day - свободный газ поступающие в трубу.
+' roughness_m   - шероховатость трубы
+' q_gas_sm3day  - свободный газ. дополнительный к PVT потоку.
 ' out_curves_num_points - количество точек для вывода значений
 '                   между концами трубы.
 ' результат    - число - давление на другом конце трубы atma.
@@ -834,7 +834,7 @@ Public Function MF_p_pipe_atma( _
 '                   перепада давления
 ' c_calibr_fric   - поправка на трение в перепаде давления
 ' roughness_m     - шероховатость трубы
-' q_gas_sm3day    - свободный газ поступающие в трубу.
+' q_gas_sm3day    - свободный газ. дополнительный к PVT потоку.
 ' out_curves      - флаг определяет вывод расчетных значений
 '                   между концами трубы.
 '                   вывод может замедлять расчет (не сильно)
@@ -928,16 +928,17 @@ End Function
 Public Function MF_p_choke_atma( _
             ByVal qliq_sm3day As Double, _
             ByVal fw_perc As Double, _
-            ByVal dchoke_mm As Double, _
+            ByVal d_choke_mm As Double, _
             Optional ByVal p_calc_from_atma As Double = -1, _
             Optional ByVal calc_along_flow As Boolean = True, _
             Optional ByVal d_pipe_mm As Double = 70, _
             Optional ByVal t_choke_C As Double = 20, _
             Optional ByVal c_calibr_fr As Double = 1, _
-            Optional ByVal str_PVT As String = PVT_DEFAULT)
+            Optional ByVal str_PVT As String = PVT_DEFAULT, _
+            Optional ByVal q_gas_sm3day As Double = 0)
 ' qliq_sm3day   - дебит жидкости в поверхностных условиях
 ' fw_perc       - обводненность
-' dchoke_mm     - диаметр штуцера (эффективный)
+' d_choke_mm     - диаметр штуцера (эффективный)
 ' p_calc_from_atma    - давление с которого начинается расчет, атм
 '                 граничное значение для проведения расчета
 '                 либо давление на входе, либое на выходе
@@ -955,12 +956,14 @@ Public Function MF_p_choke_atma( _
 '                 Q_choke_real = c_calibr_fr * Q_choke_model
 ' str_PVT        - закодированная строка с параметрами PVT.
 '                 если задана - перекрывает другие значения
+' q_gas_sm3day  - свободный газ. дополнительный к PVT потоку.
 ' результат     - число - давления на штуцере на расчетной стороне.
 '                массив значений с параметрами штуцера
 'description_end
 On Error GoTo err1:
     Dim choke As New Cchoke
     Dim pt As PTtype
+    Dim pres As Double
     Dim PVT As CPVT
     Dim out, out_desc
     Dim p_in_atma As Double
@@ -968,29 +971,43 @@ On Error GoTo err1:
     
     
     Set PVT = PVT_decode_string(str_PVT)
+    PVT.q_gas_free_sm3day = q_gas_sm3day
     Set choke.fluid = PVT
     choke.fluid.qliq_sm3day = qliq_sm3day
     choke.fluid.fw_perc = fw_perc
     choke.d_down_m = d_pipe_mm / 1000
     choke.d_up_m = d_pipe_mm / 1000
-    choke.d_choke_m = dchoke_mm / 1000
+    choke.d_choke_m = d_choke_mm / 1000
     choke.c_calibr_fr = c_calibr_fr
-    
-    If calc_along_flow Then
-        p_in_atma = p_calc_from_atma
-        pt = choke.calc_choke_p_lin(set_PT(p_in_atma, t_choke_C))
-        out = pt.p_atma
-        p_out_atma = out
-        out_desc = "Pout, atma"
+    If PVT.gas_only Then
+        pres = GLV_p_atma(d_choke_mm, p_calc_from_atma, q_gas_sm3day, PVT.gamma_g, t_choke_C, calc_along_flow)(0)(0)
+        out = pres
+        If calc_along_flow Then
+            p_in_atma = p_calc_from_atma
+            p_out_atma = out
+            out_desc = "Pout, atma"
+        Else
+            p_out_atma = p_calc_from_atma
+            p_in_atma = out
+            out_desc = "Pin, atma"
+        End If
     Else
-        p_out_atma = p_calc_from_atma
-        pt = choke.calc_choke_p_buf(set_PT(p_out_atma, t_choke_C))
-        out = pt.p_atma
-        p_in_atma = out
-        out_desc = "Pin, atma"
+        If calc_along_flow Then
+            p_in_atma = p_calc_from_atma
+            pt = choke.calc_choke_p_lin(set_PT(p_in_atma, t_choke_C))
+            out = pt.p_atma
+            p_out_atma = out
+            out_desc = "Pout, atma"
+        Else
+            p_out_atma = p_calc_from_atma
+            pt = choke.calc_choke_p_buf(set_PT(p_out_atma, t_choke_C))
+            out = pt.p_atma
+            p_in_atma = out
+            out_desc = "Pin, atma"
+        End If
     End If
-    MF_p_choke_atma = Array(Array(out, p_in_atma, p_out_atma, t_choke_C, choke.c_calibr_fr), _
-                           Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))  ' на выходе выдаем массив
+    MF_p_choke_atma = Array(Array(out, p_in_atma, p_out_atma, t_choke_C, choke.c_calibr_fr, PVT.q_gas_sm3day), _
+                           Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr", "q_gas_sm3day"))  ' на выходе выдаем массив
     Exit Function
 err1:
     MF_p_choke_atma = -1
@@ -1001,21 +1018,23 @@ End Function
 Public Function MF_calibr_choke_fr( _
             ByVal qliq_sm3day As Double, _
             ByVal fw_perc As Double, _
-            ByVal dchoke_mm As Double, _
+            ByVal d_choke_mm As Double, _
             Optional ByVal p_in_atma As Double = -1, _
             Optional ByVal p_out_atma As Double = -1, _
             Optional ByVal d_pipe_mm As Double = 70, _
             Optional ByVal t_choke_C As Double = 20, _
-            Optional ByVal str_PVT As String = PVT_DEFAULT)
-' qliq_sm3day    - дебит жидкости в пов условиях
+            Optional ByVal str_PVT As String = PVT_DEFAULT, _
+            Optional ByVal q_gas_sm3day As Double = 0)
+' qliq_sm3day   - дебит жидкости в ст. условиях
 ' fw_perc       - обводненность
-' dchoke_mm     - диаметр штуцера (эффективный)
-' p_in_atma      - давление на входе (высокой стороне)
-' p_out_atma     - давление на выходе (низкой стороне)
-' d_pipe_mm      - диаметр трубы до и после штуцера
-' t_choke_C      - температура, С.
-' str_PVT        - закодированная строка с параметрами PVT.
+' d_choke_mm    - диаметр штуцера (эффективный), мм
+' p_in_atma     - давление на входе (высокой стороне)
+' p_out_atma    - давление на выходе (низкой стороне)
+' d_pipe_mm     - диаметр трубы до и после штуцера, мм
+' t_choke_C     - температура, С.
+' str_PVT       - закодированная строка с параметрами PVT,
 '                 если задана - перекрывает другие значения
+' q_gas_sm3day  - свободный газ. дополнительный к PVT потоку.
 ' результат     - число - калибровочный коэффициент для модели.
 '                 штуцера  - множитель на дебит через штуцер
 'description_end
@@ -1026,12 +1045,13 @@ On Error GoTo err1:
     Dim out, out_desc
     
     Set PVT = PVT_decode_string(str_PVT)
+    PVT.q_gas_free_sm3day = q_gas_sm3day
     Set choke.fluid = PVT
     choke.fluid.qliq_sm3day = qliq_sm3day
     choke.fluid.fw_perc = fw_perc
     choke.d_down_m = d_pipe_mm / 1000
     choke.d_up_m = d_pipe_mm / 1000
-    choke.d_choke_m = dchoke_mm / 1000
+    choke.d_choke_m = d_choke_mm / 1000
     
     If p_in_atma > p_out_atma And p_out_atma >= 1 Then
         Call choke.calc_choke_calibration(p_in_atma, p_out_atma, t_choke_C)
@@ -1048,9 +1068,9 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
  ' функция расчета дебита жидкости через штуцер
  ' при заданном входном и выходном давлениях
-Public Function MF_qliq_choke_sm3day( _
+Public Function MF_q_choke_sm3day( _
         ByVal fw_perc As Double, _
-        ByVal dchoke_mm As Double, _
+        ByVal d_choke_mm As Double, _
         ByVal p_in_atma As Double, _
         ByVal p_out_atma As Double, _
         Optional ByVal d_pipe_mm As Double = 70, _
@@ -1058,7 +1078,7 @@ Public Function MF_qliq_choke_sm3day( _
         Optional ByVal c_calibr_fr As Double = 1, _
         Optional ByVal str_PVT As String = PVT_DEFAULT)
 ' fw_perc      - обводненность
-' dchoke_mm    - диаметр штуцера (эффективный)
+' d_choke_mm    - диаметр штуцера (эффективный)
 ' p_in_atma    - давление на входе (высокой стороне)
 ' p_out_atma   - давление на выходе (низкой стороне)
 ' d_pipe_mm    - диаметр трубы до и после штуцера
@@ -1068,26 +1088,33 @@ Public Function MF_qliq_choke_sm3day( _
 '                 Q_choke_real = c_calibr_fr * Q_choke_model
 ' str_PVT      - закодированная строка с параметрами PVT.
 '                 если задана - перекрывает другие значения
+' результат    - расход и массив результатов
 'description_end
 On Error GoTo err1:
     Dim choke As New Cchoke
     Dim PVT As CPVT
-    Dim Qliq As Double
+    Dim Q As Double
     
     Set PVT = PVT_decode_string(str_PVT)
     Set choke.fluid = PVT
     choke.d_down_m = d_pipe_mm / 1000
     choke.d_up_m = d_pipe_mm / 1000
-    choke.d_choke_m = dchoke_mm / 1000
+    choke.d_choke_m = d_choke_mm / 1000
     choke.fluid.fw_perc = fw_perc
     choke.c_calibr_fr = c_calibr_fr
-    Qliq = choke.calc_choke_qliq_sm3day(p_in_atma, p_out_atma, t_choke_C)
+    If PVT.gas_only Then
+        Q = GLV_q_gas_sm3day(d_choke_mm, p_in_atma, p_out_atma, PVT.gamma_g, t_choke_C, c_calibr_fr)(0)(0)
+        MF_q_choke_sm3day = Array(Array(Q, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
+                            Array("Qgas", "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))
+    Else
+        Q = choke.calc_choke_qliq_sm3day(p_in_atma, p_out_atma, t_choke_C)
+        MF_q_choke_sm3day = Array(Array(Q, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
+                            Array("Qliq", "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))
+    End If
     
-    MF_qliq_choke_sm3day = Array(Array(Qliq, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
-                           Array("Qliq", "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))
     Exit Function
 err1:
-    MF_qliq_choke_sm3day = -1
-    addLogMsg "Error:MF_qliq_choke_sm3day:" & Err.Description
+    MF_q_choke_sm3day = -1
+    addLogMsg "Error:MF_q_choke_sm3day:" & Err.Description
 End Function
 

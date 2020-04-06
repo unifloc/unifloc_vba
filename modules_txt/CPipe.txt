@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.13  Lepus                                           khabibullin.ra@gubkin.ru
+'Unifloc 7.17  Test                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -181,9 +181,9 @@ Private Function dTdL_amb_Cm(lmes_m As Double) As Double
    dTdL_amb_Cm = ambient_formation.amb_temp_grad_Cm(Hv_m) * sind(theta_deg)
 End Function
     
-Public Function d_hmes_mm(ByVal z As Double) As Double
+Public Function d_hmes_m(ByVal z As Double) As Double
 ' функция возвращает внутренний диаметр трубы по заданной абсолютной измеренной глубине (если труба проходит по этой глубине)
-   d_hmes_mm = curve("c_Diam").getPoint(z)
+   d_hmes_m = curve("c_Diam").getPoint(z)
 End Function
 Public Function roughness_h_mes_m(ByVal z As Double) As Double
 ' возвращает шероховатость по измеренной глубине
@@ -235,10 +235,10 @@ Public Sub init_pipe_constr_by_trajectory( _
          End If
          If h >= HmesStart_m And h <= HmesEnd_m Then
             ' теперь  заполним кривые соответствующие траектории скважины  - в первый раз пишем нулевую точку
-            If Not IsMissing(tr_cas) Then
-                curve("c_Diam").AddPoint h, tr.diam_hmes_m(h)   ' НКТ
+            If IsMissing(tr_cas) Or tr_cas Is Nothing Then
+                curve("c_Diam").AddPoint h, tr.diam_hmes_m(h)    ' НКТ
             Else
-                curve("c_Diam").AddPoint h, tr_cas.diam_hmes_m(h) - tr.diam_hmes_m(h)  ' затруб
+                curve("c_Diam").AddPoint h, tr_cas.diam_hmes_m(h) - tr.diam_hmes_m(h)   ' затруб
             End If
             curve("c_Roughness").AddPoint h, tr.roughness_m
             curve("c_Theta").AddPoint h, tr.ang_hmes_deg(h)
@@ -328,7 +328,7 @@ If param_.FlowAlongCoord Then
 Else
     theta_sign = 1
 End If
-d_m = d_hmes_mm(l_m)                ' определяем диаметр на указанной глубине
+d_m = d_hmes_m(l_m)                ' определяем диаметр на указанной глубине
 theta_deg = theta_sign * angle_hmes_deg(l_m)   ' определяем наклон на заданной глубине
 rough_m = roughness_h_mes_m(l_m)       ' определяем шероховатость на заданной глубине
 Hv_m = h_vert_h_mes_m(l_m)              ' определяем вертикальную глубину для заданной измеренной глубины
@@ -423,6 +423,7 @@ With fluid
  
          res.md_m = l_m                                 ' pipe measured depth (from start - top)
          res.vd_m = Hv_m                                ' pipe vertical depth from start - top
+         res.diam_mm = d_m * 1000
          res.dpdl_a_atmm = dpdla_out                    ' acceleration gradient at measured depth
          res.dpdl_f_atmm = dpdlf_out                    ' friction gradient at measured depth
          res.dpdl_g_atmm = dpdlg_out                    ' gravity gradient at measured depth
@@ -701,15 +702,6 @@ err1:
     addLogMsg ("CPipe.calc_dPipe_1d: ошибка какая то")
     Err.Raise Err.Number, Err.source, Err.Description
 End Function
-'Public Function calc_dPipeZNLF(pt As PTtype, Optional saveCurve As CALC_RESULTS = nocurves) As PTtype
-'
-'    ' расчет перепада давления в неподвижной колонне с газом
-'    ' единственное отличие - флюид имеет флаг znlf что меняет дебит
-'    ' для расчета должна применяться механистическая корреляция
-'    param.correlation = Ansari
-'    fluid.ZNLF = True
-'    calc_dPipeZNLF = calc_dPipe_1d(pt.p_atma, saveCurve)
-'End Function
 Private Sub FillDetailedCurve()
 ' функция расчета  детальных распределений параметров по длине трубы
     Dim i As Integer
@@ -766,27 +758,20 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     Dim FlowParams_out As PIPE_FLOW_PARAMS
     Dim offset As Integer
     Dim i As Integer
+    Dim hh As Double
     
     offset = 2
 On Error Resume Next
     Dim crv_P As CInterpolation
     Dim crv_T As CInterpolation
-    Dim crv_Tamb As CInterpolation
-    Dim crv_Hl As CInterpolation
-    Dim crv_fpat As CInterpolation
-    Dim crv_Hvert As CInterpolation
     
     ' rearrange output curves one time here - will be used later
     Set crv_P = curve("c_P").ClonePointsToNum(num_points)
     Set crv_T = curve("c_T").ClonePointsToNum(num_points)
-    Set crv_Tamb = curve("c_Tamb").ClonePointsToNum(num_points)
-    Set crv_Hl = curve("c_Hl").ClonePointsToNum(num_points)
-    Set crv_fpat = curve("c_fpat").ClonePointsToNum(num_points)
-    Set crv_Hvert = curve("c_Hvert").ClonePointsToNum(num_points)
     
     M = crv_P.num_points
     
-    ReDim arr(M + offset, 7)
+    ReDim arr(M + offset, 8)
     
     arr(0, 0) = p_result_atma
     arr(0, 1) = t_result_C
@@ -796,6 +781,7 @@ On Error Resume Next
     arr(0, 5) = crv_T.PointY(M)
     arr(0, 6) = c_calibr_grav_
     arr(0, 7) = c_calibr_fric_
+    arr(0, 8) = fluid.q_gas_sm3day
     
     arr(1, 0) = "p_result_atma"
     arr(1, 1) = "t_result_C"
@@ -805,6 +791,7 @@ On Error Resume Next
     arr(1, 5) = "t_2, C"
     arr(1, 6) = "c_calibr_grav"
     arr(1, 7) = "c_calibr_fric"
+    arr(1, 8) = "q_gas_sm3day"
     
     arr(offset, 0) = "num"
     arr(offset, 1) = "h,m"
@@ -814,15 +801,18 @@ On Error Resume Next
     arr(offset, 5) = "Hl"
     arr(offset, 6) = "fpat"
     arr(offset, 7) = "t_amb, C"
+    arr(offset, 8) = "diam, mm"
     For i = 1 To M
         arr(offset + i, 0) = i
-        arr(offset + i, 1) = crv_P.pointX(i)
-        arr(offset + i, 2) = crv_Hvert.PointY(i)
+        hh = crv_P.pointX(i)
+        arr(offset + i, 1) = hh
+        arr(offset + i, 2) = curve("c_Hvert").getPoint(hh)
         arr(offset + i, 3) = crv_P.PointY(i)
-        arr(offset + i, 4) = crv_T.PointY(i)
-        arr(offset + i, 5) = crv_Hl.PointY(i)
-        arr(offset + i, 6) = crv_fpat.PointY(i)
-        arr(offset + i, 7) = crv_Tamb.PointY(i)
+        arr(offset + i, 4) = curve("c_T").getPoint(hh)
+        arr(offset + i, 5) = curve("c_Hl").getPoint(hh)
+        arr(offset + i, 6) = curve("c_fpat").getPoint(hh)
+        arr(offset + i, 7) = curve("c_Tamb").getPoint(hh)
+        arr(offset + i, 8) = curve("c_Diam").getPoint(hh)
     Next i
     array_out = arr
 End Function

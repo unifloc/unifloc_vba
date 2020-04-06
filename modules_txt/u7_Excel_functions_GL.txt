@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.13  Lepus                                           khabibullin.ra@gubkin.ru
+'Unifloc 7.17  Test                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -126,14 +126,14 @@ Option Explicit
 ' link in K Brawn AL 2A - Craft, Holden, Graves (p.111)
 ' also found in Mischenko book
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расчета расхода газа через газлифтный клапан
-' с учетом наличия вкруток на выходе клапана
+' функция расчета расхода газа через газлифтный клапан/штуцер
 ' результат массив значений и подписей
-Public Function GLV_q_gas_sm3day(d_mm As Double, _
-                                p_in_atma As Double, _
-                                p_out_atma As Double, _
-                                gamma_g As Double, _
-                                t_C As Double)
+Public Function GLV_q_gas_sm3day(ByVal d_mm As Double, _
+                                 ByVal p_in_atma As Double, _
+                                 ByVal p_out_atma As Double, _
+                                 ByVal gamma_g As Double, _
+                                 ByVal t_C As Double, _
+                        Optional ByVal c_calibr As Double = 1)
 ' d_mm        - диаметр основного порта клапана, мм
 ' p_in_atma   - давление на входе в клапан (затруб), атма
 ' p_out_atma  - давление на выходе клапана (НКТ), атма
@@ -185,7 +185,7 @@ On Error GoTo err1:
     C1 = (Pd_Pu_crit ^ (2 / K) - Pd_Pu_crit ^ (1 + 1 / K)) ^ 0.5
     C2 = (2 * g * K / (K - 1)) ^ 0.5
     Qg_crit = 155.5 * cd * a * Pu_psi * C1 * C2 / (gamma_g * (Tu_F + 460)) ^ 0.5 'critical flow ratio, Mcf/d
-    
+    Qg_crit = Qg_crit * c_calibr
     p_crit_out_atma = p_in_atma * Pd_Pu_crit
     
     If Pd_Pu <= Pd_Pu_crit Then
@@ -358,7 +358,8 @@ Public Function GLV_p_atma(ByVal d_mm As Double, _
                            Optional ByVal gamma_g As Double = 0.6, _
                            Optional ByVal t_C As Double = 25, _
                            Optional ByVal calc_along_flow As Boolean = False, _
-                           Optional ByVal p_open_atma As Double = 0)
+                           Optional ByVal p_open_atma As Double = 0, _
+                           Optional ByVal c_calibr As Double = 1)
 ' d_mm          - диаметр клапана, мм
 ' p_calc_atma   - давление на входе (выходе) клапана, атма
 ' q_gas_sm3day  - расход газа, ст. м3/сут
@@ -380,7 +381,7 @@ On Error GoTo err1:
     Dim crit As Boolean
     
     Dim prm As New CSolveParam
-    Dim coeffA(4) As Double
+    Dim coeffA(5) As Double
     Dim func As String
     
     K = 1.31   ' = Cp/Cv (approx 1.31 for natural gases(R Brown) or 1.25 (Mischenko) )
@@ -389,6 +390,7 @@ On Error GoTo err1:
     coeffA(1) = d_mm
     coeffA(3) = gamma_g
     coeffA(4) = t_C
+    coeffA(5) = c_calibr
     prm.y_tolerance = 0.1
     
     If calc_along_flow Then
@@ -653,5 +655,90 @@ Public Function GLV_IPO_p_close(ByVal p_bellow_atma As Double, _
     GLV.p_bellow_sc_atma = p_bellow_atma
     GLV.t_C = t_C
     GLV_IPO_p_close = GLV.p_open_atma
+End Function
+Function GL_dPgasPipe_atmg(ByVal h_m As Double, ByVal P_atmg As Double, ByVal t_C As Double, _
+                               Optional ByVal d_cas_mm As Double = 125, _
+                               Optional ByVal dtub_mm As Double = 73, _
+                               Optional ByVal gamma_gas As Double = 0.8, _
+                               Optional ByVal q_gas_scm3day As Double = 10000, _
+                               Optional ByVal roughness As Double = 0.001, _
+                               Optional ByVal THETA As Double = 90 _
+                               ) As Double
+  
+'de - external diameter, m
+'di - interior diameter, m
+'gamma_gas - relative density of gas
+'qg_sc - gas flow, m3/d
+'eps - pipe roughness, m
+'theta - ,degree
+'length - pipe length, m
+'T - temperature, C
+'P - pressure, atma
+On Error GoTo err1:
+Dim de, Di, qg_sc, eps, length, t, p
+de = d_cas_mm / 1000
+Di = dtub_mm / 1000
+qg_sc = q_gas_scm3day
+eps = roughness
+length = h_m
+t = t_C
+p = P_atmg
+    
+    'convert m3/d to scf/d
+    qg_sc = qg_sc * 3.28 ^ 3
+    
+    Dim P_MPa As Double, P_psi As Double
+    P_MPa = p * 0.1013 'convert atma to Mpa
+    P_psi = p * 14.696 ' convert atma to psi
+    
+    
+    Dim T_K As Double, t_F As Double
+    T_K = t + 273 'convert Celcsius to Kelvin
+    t_F = (9 / 5) * t + 32 'convert Celcsius to Fahrengheit
+     
+    Dim T_pc As Double
+    Dim p_pc As Double
+    Dim z As Double
+    
+'        T_pc = PseudoTemperatureStanding(gamma_gas)
+'        p_pc = PseudoPressureStanding(gamma_gas)
+'        Z = ZFactorDranchuk(T_K / T_pc, P_MPa / p_pc)
+    z = unf_calc_Zgas_d(T_K, P_MPa, gamma_gas)
+    
+    eps = eps * 39.3701 'convert m to in
+    
+    Dim de_in As Double, di_in As Double
+    di_in = Di * 39.3701 'convert m to in
+    de_in = de * 39.3701 'convert m to in
+    Dim dh As Double, DA As Double, deq As Double
+    dh = de_in - di_in
+    DA = (de_in ^ 2 - di_in ^ 2) ^ 0.5
+    If di_in = 0 Then
+        deq = de_in
+    Else
+        deq = (de_in ^ 2 + di_in ^ 2 - (de_in ^ 2 - di_in ^ 2) / Log(de_in / di_in)) / (de_in - di_in)
+    End If
+    Dim mu_g As Double
+    mu_g = unf_calc_mu_gas_cP(T_K, P_MPa, z, gamma_gas)
+    Dim Re As Double
+    Re = 0.020107 * gamma_gas * Abs(qg_sc) * deq / mu_g / DA ^ 2
+    Dim a As Double, b As Double
+    a = (2.457 * Log(1 / ((7 / Re) ^ 0.9 + 0.27 * eps / deq))) ^ 16
+    b = (37530 / Re) ^ 16
+    Dim f_moody As Double
+    f_moody = 8 * ((8 / Re) ^ 12 + 1 / ((a + b) ^ 1.5)) ^ (1 / 12)
+    
+    Dim gradP As Double
+    
+    gradP = -0.018786 * gamma_gas * (P_psi + 14.7) * Sin(THETA * Application.Pi / 180) / (t_F + 460) / z + (1.2595 * 10 ^ (-11)) * f_moody * (t_F + 460) * z * gamma_gas * (qg_sc ^ 2) / (P_psi + 14.7) / dh / DA ^ 4
+    gradP = gradP * 0.068 / 0.3048 'convert psi/ft to atma/m
+    
+    GL_dPgasPipe_atmg = p + gradP * length
+    
+    Exit Function
+err1:
+    GL_dPgasPipe_atmg = -1
+    addLogMsg "error in function : GL_dPgasPipe_atmg"
+    
 End Function
 
