@@ -126,7 +126,7 @@ class API():
         self.f_MF_p_gas_fraction_atma = self.book.macro("MF_p_gas_fraction_atma")
         return self.f_MF_p_gas_fraction_atma(free_gas_d,t_C,fw_perc,str_PVT)
 
-    def MF_rp_gas_fraction_m3m3(self, free_gas_d,p_atma,t_C,fw_perc,str_PVT=PVT_DEFAULT):
+    def MF_rp_gas_fraction_m3m3(self, free_gas_d,p_atma,t_C,fw_perc,str_PVT=PVT_DEFAULT,Rp_limit_m3m3=500):
         """" расчет газового фактора  при котором достигается заданная доля газа в потоке
         
                        free_gas_d - допустимая доля газа в потоке    
@@ -137,12 +137,14 @@ class API():
 
         fw_perc - объемная обводненность, проценты %;    
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+        rp_limit_m3m3 - верхняя граница оценки гф    )  
 
         """
 
         self.f_MF_rp_gas_fraction_m3m3 = self.book.macro("MF_rp_gas_fraction_m3m3")
-        return self.f_MF_rp_gas_fraction_m3m3(free_gas_d,p_atma,t_C,fw_perc,str_PVT)
+        return self.f_MF_rp_gas_fraction_m3m3(free_gas_d,p_atma,t_C,fw_perc,str_PVT,Rp_limit_m3m3)
 
     def MF_ksep_natural_d(self, qliq_sm3day,fw_perc,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120,str_PVT=PVT_DEFAULT):
         """" расчет натуральной сепарации газа на приеме насоса
@@ -420,14 +422,14 @@ class API():
         self.f_MF_p_pipe_atma = self.book.macro("MF_p_pipe_atma")
         return self.f_MF_p_pipe_atma(qliq_sm3day,fw_perc,length_m,p_calc_from_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_from_C,t_calc_to_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,out_curves,out_curves_num_points)
 
-    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,dchoke_mm,p_calc_from_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+    def MF_p_choke_atma(self, qliq_sm3day,fw_perc,d_choke_mm,p_calc_from_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT,q_gas_sm3day=0):
         """" расчет давления в штуцере
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
 
         fw_perc - обводненность    
 
-        dchoke_mm - диаметр штуцера (эффективный)    
+        d_choke_mm - диаметр штуцера (эффективный)    
 
         p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либое на выходе    
 
@@ -439,43 +441,47 @@ class API():
 
         c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки  q_choke_real = c_calibr_fr * q_choke_model    
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+        q_gas_sm3day - свободный газ. дополнительный к pvt потоку.    )  
 
         """
 
         self.f_MF_p_choke_atma = self.book.macro("MF_p_choke_atma")
-        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,dchoke_mm,p_calc_from_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+        return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,d_choke_mm,p_calc_from_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT,q_gas_sm3day)
 
-    def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,dchoke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT):
+    def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT,q_gas_sm3day=0):
         """" расчет корректирующего фактора (множителя) модели штуцера под замеры
         
-                       qliq_sm3day - дебит жидкости в пов условиях    
+                       qliq_sm3day - дебит жидкости в ст. условиях    
 
         fw_perc - обводненность    
 
-        dchoke_mm - диаметр штуцера (эффективный)    
+        d_choke_mm - диаметр штуцера (эффективный), мм    
 
         p_in_atma - давление на входе (высокой стороне)    
 
         p_out_atma - давление на выходе (низкой стороне)    
 
-        d_pipe_mm - диаметр трубы до и после штуцера    
+        d_pipe_mm - диаметр трубы до и после штуцера, мм    
 
         t_choke_c - температура, с.    
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+        str_pvt - закодированная строка с параметрами pvt,  если задана - перекрывает другие значения    
+
+        q_gas_sm3day - свободный газ. дополнительный к pvt потоку.    )  
 
         """
 
         self.f_MF_calibr_choke_fr = self.book.macro("MF_calibr_choke_fr")
-        return self.f_MF_calibr_choke_fr(qliq_sm3day,fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT)
+        return self.f_MF_calibr_choke_fr(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day)
 
-    def MF_qliq_choke_sm3day(self, fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+    def MF_q_choke_sm3day(self, fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
         """"  функция расчета дебита жидкости через штуцер   при заданном входном и выходном давлениях
         
                        fw_perc - обводненность    
 
-        dchoke_mm - диаметр штуцера (эффективный)    
+        d_choke_mm - диаметр штуцера (эффективный)    
 
         p_in_atma - давление на входе (высокой стороне)    
 
@@ -491,8 +497,8 @@ class API():
 
         """
 
-        self.f_MF_qliq_choke_sm3day = self.book.macro("MF_qliq_choke_sm3day")
-        return self.f_MF_qliq_choke_sm3day(fw_perc,dchoke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+        self.f_MF_q_choke_sm3day = self.book.macro("MF_q_choke_sm3day")
+        return self.f_MF_q_choke_sm3day(fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
 
     def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" функция расчета объемного коэффициента газа
@@ -1290,7 +1296,7 @@ class API():
         self.f_ESP_optRate_m3day = self.book.macro("ESP_optRate_m3day")
         return self.f_ESP_optRate_m3day(freq_Hz,pump_id)
 
-    def ESP_id_by_rate(self, q):
+    def ESP_id_by_rate(self, Q):
         """" функция возвращает идентификатор типового насоса по значению  номинального дебита
         
                        if q > 0 and q < 20 then esp_id_by_rate = 738:  эцн5-15  if q >= 20 and q < 40 then esp_id_by_rate = 740:  эцн5-30  if q >= 40 and q < 60 then esp_id_by_rate = 1005:  эцн5-5..см.мануал   )  
@@ -1298,7 +1304,7 @@ class API():
         """
 
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
-        return self.f_ESP_id_by_rate(q)
+        return self.f_ESP_id_by_rate(Q)
 
     def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
         """"функция расчета давления на выходе/входе ЭЦН в рабочих условиях
@@ -1668,8 +1674,8 @@ class API():
         self.f_ESP_gasseparator_name = self.book.macro("ESP_gasseparator_name")
         return self.f_ESP_gasseparator_name(gsep_type_TYPE)
 
-    def GLV_q_gas_sm3day(self, d_mm,p_in_atma,p_out_atma,gamma_g,t_C):
-        """" функция расчета расхода газа через газлифтный клапан  с учетом наличия вкруток на выходе клапана  результат массив значений и подписей
+    def GLV_q_gas_sm3day(self, d_mm,p_in_atma,p_out_atma,gamma_g,t_C,c_calibr=1):
+        """" функция расчета расхода газа через газлифтный клапан/штуцер  результат массив значений и подписей
         
                        d_mm - диаметр основного порта клапана, мм    
 
@@ -1679,12 +1685,14 @@ class API():
 
         gamma_g - удельная плотность газа    
 
-        t_c - температура клапана, с    )  
+        t_c - температура клапана, с    
+
+   c_calibr   )  
 
         """
 
         self.f_GLV_q_gas_sm3day = self.book.macro("GLV_q_gas_sm3day")
-        return self.f_GLV_q_gas_sm3day(d_mm,p_in_atma,p_out_atma,gamma_g,t_C)
+        return self.f_GLV_q_gas_sm3day(d_mm,p_in_atma,p_out_atma,gamma_g,t_C,c_calibr)
 
     def GLV_q_gas_vkr_sm3day(self, d_port_mm,d_vkr_mm,p_in_atma,p_out_atma,gamma_g,t_C):
         """" функция расчета расхода газа через газлифтный клапан  с учетом наличия вкруток на выходе клапана.  результат массив значений и подписей.
@@ -1728,7 +1736,7 @@ class API():
         self.f_GLV_p_vkr_atma = self.book.macro("GLV_p_vkr_atma")
         return self.f_GLV_p_vkr_atma(d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow)
 
-    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,p_open_atma=0):
+    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,p_open_atma=0,c_calibr=1):
         """" функция расчета давления на входе или на выходе  газлифтного клапана (простого) при закачке газа.  результат массив значений и подписей
         
                        d_mm - диаметр клапана, мм    
@@ -1743,12 +1751,14 @@ class API():
 
         calc_along_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).    
 
-        p_open_atma - давление открытия/закрытия клапана, атм    )  
+        p_open_atma - давление открытия/закрытия клапана, атм    
+
+   c_calibr   )  
 
         """
 
         self.f_GLV_p_atma = self.book.macro("GLV_p_atma")
-        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,p_open_atma)
+        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,p_open_atma,c_calibr)
 
     def GLV_p_bellow_atma(self, p_atma,t_C):
         """" функция расчета давления зарядки сильфона на стенде при  стандартной температуре по данным рабочих давления и температуры
