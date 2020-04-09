@@ -46,81 +46,113 @@ Private Sub clear_db()
                                         ' automatically, remove the first
   Next                                  ' member on each iteration.
 End Sub
-Public Sub load_db_ESP(ESP_sheet)
-' load all pumps from db here
+Private Function create_arr(line_from_file)
+    Dim num As Integer
+    Dim i As Integer
+    Dim ar   ' list of data items in line
+    Dim ar_out
+    Dim ar_temp
+    
+    ar = Split(line_from_file, ";")
+    num = UBound(ar) - LBound(ar) + 1
+    
+    ReDim ar_out(LBound(ar) To UBound(ar))
+    For i = LBound(ar) To UBound(ar)
+        ReDim ar_temp(0 To 0)
+        ar_temp(0) = CDbl_safe(ar(i))
+        ar_out(i) = ar_temp
+    Next i
+    create_arr = ar_out
+End Function
+Private Sub update_arr(line_from_file, ByRef arr_in)
+    Dim ar
+    Dim ar_out
+    Dim num As Integer
+    Dim num_in As Integer
+    Dim num_pt As Integer
+    Dim i As Integer
+    Dim ar_list
+    Dim ar_temp
+    
+    ar = Split(line_from_file, ";")
+    num = UBound(ar) - LBound(ar) + 1
+    num_in = UBound(arr_in(0)) - LBound(arr_in(0)) + 1
+    num_pt = UBound(arr_in) - LBound(arr_in) + 1
+    
+    If num > num_pt Then
+        Debug.Print "esp.db strange behavior detected"
+    End If
+    
+    ReDim Preserve arr_in(0 To num_pt)
+    For i = LBound(ar) To UBound(ar)
+        ar_temp = arr_in(i)
+        ReDim Preserve ar_temp(0 To num_in)
+        ar_temp(num_in) = CDbl_safe(ar(i))
+        arr_in(i) = ar_temp
+    Next i
+ 
+End Sub
+Public Sub load_db_file_ESP(ESP_db_file)
+' load all pumps from db file here
     Dim i As Long, j As Integer, num As Integer
-    Dim StartCell As Long
-    Dim EndCell As Long
-    Dim currID As Integer, currIDnew As Integer
-    Dim frNom As Double
     Dim num_pumps As Integer
     Dim esp_db As ESP_PARAMS
-    Dim rateRange
-    Dim headRange
-    Dim powerRange
-    Dim effRange
-    Dim Item
-    Dim Index
     Dim zero_found As Boolean
     Dim res
+    Dim line_from_file As String
+    Dim ar0, ar, ar2
+    Dim ID
            
+    ReDim ar2(0)
     num_pumps = 0
     Call clear_db
+On Error GoTo err_load_pump:
     i = 4   ' все начинается с 4 строки
-    
-    With ESP_sheet
-        Do
-            StartCell = i
-            currID = .Cells(i, 2)
-            Do
-                EndCell = i
-                i = i + 1
-                currIDnew = .Cells(i, 2)
-            Loop Until currIDnew <> currID Or currID = 0
-            
-            If EndCell - StartCell > 3 Then
-       On Error GoTo err_load_pump:
-                Set ESPload = New CESPpump
+    Open ESP_db_file For Input As #1
+    ' read first line with titles
+    Line Input #1, line_from_file
+    ar0 = Split(line_from_file, ";")
+    ID = ar0(0)
                 
-                num = EndCell - StartCell + 1 ' num point in pump characteristic
-                rateRange = .range(.Cells(StartCell, 12), .Cells(EndCell, 12)).Value2
-                headRange = .range(.Cells(StartCell, 13), .Cells(EndCell, 13)).Value2
-                powerRange = .range(.Cells(StartCell, 14), .Cells(EndCell, 14)).Value2
-                effRange = .range(.Cells(StartCell, 15), .Cells(EndCell, 15)).Value2
                 
-                frNom = .Cells(StartCell, 10).Value2
-                esp_db.freq_Hz = frNom
-                
+    Do While Not EOF(1)
+        Line Input #1, line_from_file
+        ar = Split(line_from_file, ";")
+        If ID <> ar(0) Then
+            If UBound(ar2) > 3 Then
+                num = UBound(ar2(10)) + 1
+                    
                 ReDim esp_db.head_points(1 To num)
                 ReDim esp_db.rate_points(1 To num)
                 ReDim esp_db.power_points(1 To num)
                 ReDim esp_db.eff_points(1 To num)
                                 
                 For j = 1 To num
-                       esp_db.head_points(j) = headRange(j, 1)
-                       esp_db.rate_points(j) = rateRange(j, 1)
-                       esp_db.power_points(j) = powerRange(j, 1)
-                       esp_db.eff_points(j) = effRange(j, 1)
+                       esp_db.head_points(j) = ar2(11)(j - 1)
+                       esp_db.rate_points(j) = ar2(10)(j - 1)
+                       esp_db.power_points(j) = ar2(12)(j - 1)
+                       esp_db.eff_points(j) = ar2(11)(j - 1)
                 Next j
+                       
                 ' read all data from furst line in DB table
-                esp_db.ID = currID
-                esp_db.manufacturer = .Cells(StartCell, 3).Value2
-                esp_db.name = .Cells(StartCell, 4).Value2
-                esp_db.stages_max = .Cells(StartCell, 5).Value2
-                esp_db.rate_nom_m3day = .Cells(StartCell, 6).Value2
-                esp_db.rate_opt_min_m3day = .Cells(StartCell, 7).Value2
-                esp_db.rate_opt_max_m3day = .Cells(StartCell, 8).Value2
-                esp_db.w_nom_slip_rpm = .Cells(StartCell, 9).Value2
-                esp_db.eff_max = .Cells(StartCell, 11).Value2
-                
-                
-                ' оценим максимальную точку характеристики заданной в базе
-                
-                esp_db.rate_max_m3day = 0
+                esp_db.ID = ar2(0)(0)
+                esp_db.manufacturer = ar2(1)(0)
+                esp_db.name = ar2(2)(0)
+                esp_db.stages_max = ar2(3)(0)
+                esp_db.rate_nom_sm3day = ar2(4)(0)
+                esp_db.rate_opt_min_sm3day = ar2(5)(0)
+                esp_db.rate_opt_max_sm3day = ar2(6)(0)
+                esp_db.w_nom_slip_rpm = ar2(7)(0)
+                esp_db.freq_Hz = ar2(8)(0)
+                esp_db.eff_max = ar2(9)(0)
+                    
+                    ' оценим максимальную точку характеристики заданной в базе
+                    
+                esp_db.rate_max_sm3day = 0
                 zero_found = False
                 For j = 1 To num
-                    If esp_db.rate_max_m3day < esp_db.rate_points(j) Then
-                        esp_db.rate_max_m3day = esp_db.rate_points(j)
+                    If esp_db.rate_max_sm3day < esp_db.rate_points(j) Then
+                        esp_db.rate_max_sm3day = esp_db.rate_points(j)
                         If esp_db.head_points(j) = 0 Then
                             zero_found = True
                             Exit For
@@ -130,21 +162,29 @@ Public Sub load_db_ESP(ESP_sheet)
                 If Not zero_found Then
                 ' найдем zero
                     res = crv_solve(esp_db.rate_points, esp_db.head_points, 0)
-                    esp_db.rate_max_m3day = res(1)
+                    esp_db.rate_max_sm3day = res(1)
                 End If
                 
+                Set ESPload = New CESPpump
                 ESPload.db = esp_db
-                ESPcollection.Add ESPload, CStr(currID)
+                ESPcollection.Add ESPload, CStr(esp_db.ID)
                 num_pumps = num_pumps + 1
-next_pump:
+                
             End If
-        Loop Until currID = 0
-    End With
+            
+            ar2 = create_arr(line_from_file)
+            ID = ar(0)
+        Else
+            update_arr line_from_file, ar2
+        End If
+next_pump:
+    Loop
+    Close #1
     Exit Sub
     
 err_load_pump:
    ' On Error Resume Next
-    addLogMsg "Problem while loading pump . " & CStr(currID) & " " & Err.Description
+    addLogMsg "Problem while loading pump . " & CStr(ID) & " " & Err.Description
     Resume next_pump:
 End Sub
 Private Sub Class_Initialize()
