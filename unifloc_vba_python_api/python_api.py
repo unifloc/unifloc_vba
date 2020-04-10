@@ -338,7 +338,7 @@ class API():
         self.f_MF_fit_pipe_m3day = self.book.macro("MF_fit_pipe_m3day")
         return self.f_MF_fit_pipe_m3day(''qliq_sm3day,'fw_perc,'length_m,'p_calc_atma,'calc_along_flow,'str_PVT,'theta_deg,'d_mm,'hydr_corr,'t_in_C,'t_out_C,'c_calibr_grav,'c_calibr_fric,'roughness_m,'calibr_type)
 
-    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,p_calc_from_atma,t_calc_from_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,t_amb_list_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,out_curves_num_points=20):
+    def MF_p_pipeline_atma(self, qliq_sm3day,fw_perc,h_list_m,p_calc_from_atma,t_calc_from_C=50,calc_along_coord=False,flow_along_coord=False,str_PVT=PVT_DEFAULT,diam_list_mm,hydr_corr=H_CORRELATION,t_amb_list_C,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,out_curves=1,out_curves_num_points=20):
         """" расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -373,14 +373,16 @@ class API():
 
         если qliq_sm3day =0 и q_gas_sm3day > 0  тогда считается барботаж газа через жидкость  fw_perc - обводненность  h_list_m - траектория трубы.  число, range или таблица [0..n..см.мануал   
 
+        out_curves - флаг вывод значений между концами трубы  1 основные, 2 все значения.  вывод может замедлять расчет (не сильно)    
+
         out_curves_num_points - количество точек для вывода значений  между концами трубы.    )  
 
         """
 
         self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
-        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,p_calc_from_atma,t_calc_from_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,t_amb_list_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,out_curves_num_points)
+        return self.f_MF_p_pipeline_atma(qliq_sm3day,fw_perc,h_list_m,p_calc_from_atma,t_calc_from_C,calc_along_coord,flow_along_coord,str_PVT,diam_list_mm,hydr_corr,t_amb_list_C,temp_methodTEMP_CALC_METHOD,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,out_curves,out_curves_num_points)
 
-    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,p_calc_from_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_from_C=50,t_calc_to_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,out_curves=True,out_curves_num_points=20):
+    def MF_p_pipe_atma(self, qliq_sm3day,fw_perc,length_m,p_calc_from_atma,calc_along_flow,str_PVT=PVT_DEFAULT,theta_deg=90,d_mm=60,hydr_corr=H_CORRELATION,t_calc_from_C=50,t_calc_to_C=-1,c_calibr_grav=1,c_calibr_fric=1,roughness_m=0.0001,q_gas_sm3day=0,out_curves=1,out_curves_num_points=20):
         """" расчет распределения давления и температуры в трубе  с использованием многофазных корреляций
         
                        qliq_sm3day - дебит жидкости в поверхностных условиях    
@@ -413,7 +415,7 @@ class API():
 
         если qliq_sm3day =0 и q_gas_sm3day > 0  тогда считается барботаж газа через жидкость  fw_perc - обводненность  length_m - длина трубы, измеренная, м p_calc_from_atma - дав..см.мануал   
 
-        out_curves - флаг определяет вывод расчетных значений  между концами трубы.  вывод может замедлять расчет (не сильно)    
+        out_curves - флаг вывод значений между концами трубы  0 минимум, 1 основныеб 2 все значения.  вывод может замедлять расчет (не сильно)    
 
         out_curves_num_points - количество точек для вывода значений  между концами трубы.    )  
 
@@ -1272,17 +1274,19 @@ class API():
         self.f_ESP_name = self.book.macro("ESP_name")
         return self.f_ESP_name(pump_id)
 
-    def esp_max_rate_m3day(self, freq_Hz=50,pump_id=674):
+    def ESP_rate_max_sm3day(self, freq_Hz=50,pump_id=674,mu_cSt=-1):
         """" максимальный дебит ЭЦН для заданной частоты  по номинальной кривой РНХ
         
                        freq_hz - частота вращения эцн    
 
-        pump_id - идентификатор насоса в базе данных    )  
+        pump_id - идентификатор насоса в базе данных    
+
+   mu_cst   )  
 
         """
 
-        self.f_esp_max_rate_m3day = self.book.macro("esp_max_rate_m3day")
-        return self.f_esp_max_rate_m3day(freq_Hz,pump_id)
+        self.f_ESP_rate_max_sm3day = self.book.macro("ESP_rate_max_sm3day")
+        return self.f_ESP_rate_max_sm3day(freq_Hz,pump_id,mu_cSt)
 
     def ESP_optRate_m3day(self, freq_Hz=50,pump_id=674):
         """" оптимальный дебит ЭЦН для заданной частоты  по номинальной кривой РНХ
@@ -1299,7 +1303,7 @@ class API():
     def ESP_id_by_rate(self, Q):
         """" функция возвращает идентификатор типового насоса по значению  номинального дебита
         
-                       if q > 0 and q < 20 then esp_id_by_rate = 738:  эцн5-15  if q >= 20 and q < 40 then esp_id_by_rate = 740:  эцн5-30  if q >= 40 and q < 60 then esp_id_by_rate = 1005:  эцн5-5..см.мануал   )  
+                  q   )  
 
         """
 

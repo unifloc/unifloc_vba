@@ -121,11 +121,17 @@ End Property
 Public Property Get w_radsec() As Double
    w_radsec = freq_Hz * 2 * const_Pi
 End Property
-Public Property Get rate_max_sm3day() As Double
-   rate_max_sm3day = db_.rate_max_sm3day * freq_Hz / db_.freq_Hz / corr_visc_q_
+Public Property Get rate_max_sm3day(Optional ByVal mu_cSt As Double = -1) As Double
+    If correct_visc_ And (mu_cSt > 0) Then        ' если большая вязкость - сделаем коррекцию
+        Call calc_CorrVisc_PetrInst(0, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
+    End If
+   rate_max_sm3day = db_.rate_max_sm3day * freq_Hz / db_.freq_Hz * corr_visc_q_
 End Property
-Public Property Get rate_nom_sm3day() As Double
-   rate_nom_sm3day = db_.rate_nom_sm3day * freq_Hz / db_.freq_Hz / corr_visc_q_
+Public Property Get rate_nom_sm3day(Optional ByVal mu_cSt As Double = -1) As Double
+    If correct_visc_ And (mu_cSt > 0) Then        ' если большая вязкость - сделаем коррекцию
+        Call calc_CorrVisc_PetrInst(0, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
+    End If
+   rate_nom_sm3day = db_.rate_nom_sm3day * freq_Hz / db_.freq_Hz * corr_visc_q_
 End Property
 Public Property Get gas_degr_type() As Integer
    gas_degr_type = gas_degr_type_
@@ -141,13 +147,15 @@ Private Function calc_ESP_head_nominal_m(ByVal q_m3day As Double, Optional ByVal
     With db_
         b = .freq_Hz / freq_Hz  ' определим отношение реальной частоты УЭЦН к номинальной для которой заданы характеристики
         calc_ESP_head_nominal_m = b ^ (-2) * stage_num * crv_interpolation(.rate_points, .head_points, b * q_m3day, 2)(1, 1)
-        calc_ESP_head_nominal_m = calc_ESP_head_nominal_m * corr_visc_h_  ' учтем коррекцию на вязкость
+        calc_ESP_head_nominal_m = calc_ESP_head_nominal_m '* corr_visc_h_  ' учтем коррекцию на вязкость
     End With
 End Function
 Public Function get_ESP_head_m(ByVal q_m3day As Double, Optional ByVal stage_num As Integer = -1, Optional ByVal mu_cSt As Double = -1) As Double
     Dim b As Double                 ' отношение частот
     Dim stage_num_to_calc As Integer ' число ступеней с которым будет проводиться расчет
     Dim maxQ As Double
+    Dim q_calc_m3day As Double
+    
     If q_m3day < 0 Then             ' проверим исходные данные на релевантность
         get_ESP_head_m = 0
         addLogMsg_debug "CPumpESP.get_ESP_head_m: расчет характеристики насоса с отрицательным дебитом  Q_m3day = " & Format(q_m3day, "###0.00") & "Напор установлен = 0"
@@ -159,19 +167,21 @@ Public Function get_ESP_head_m(ByVal q_m3day As Double, Optional ByVal stage_num
     Else                            ' иначе использует количество ступеней из характеристики насоса
         stage_num_to_calc = Me.stage_num
     End If
-    If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
+    If correct_visc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
         Call calc_CorrVisc_PetrInst(q_m3day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
     End If
-    q_m3day = q_m3day / corr_visc_q_    ' делаем коррекцию по вязкости для дебита
-    maxQ = rate_max_sm3day               ' здесь коррекция на вязкость тоже уже учтена
-    If q_m3day < maxQ Then
-        get_ESP_head_m = calc_ESP_head_nominal_m(q_m3day, stage_num_to_calc)
-    ElseIf maxQ - turb_rate_factor * (q_m3day - maxQ) > 0 Then
+    
+    q_calc_m3day = q_m3day / corr_visc_q_    ' делаем коррекцию по вязкости для дебита
+    maxQ = db_.rate_max_sm3day * freq_Hz / db_.freq_Hz                   ' здесь коррекция на вязкость тоже уже учтена
+    If q_calc_m3day < maxQ Then
+        get_ESP_head_m = calc_ESP_head_nominal_m(q_calc_m3day, stage_num_to_calc)
+    ElseIf maxQ - turb_rate_factor * (q_calc_m3day - maxQ) > 0 Then
         ' apply correction for far rigth interval
-        get_ESP_head_m = -turb_head_factor * calc_ESP_head_nominal_m(maxQ - turb_rate_factor * (q_m3day - maxQ), stage_num_to_calc)
+        get_ESP_head_m = -turb_head_factor * calc_ESP_head_nominal_m(maxQ - turb_rate_factor * (q_calc_m3day - maxQ), stage_num_to_calc)
     Else
         get_ESP_head_m = -turb_head_factor * calc_ESP_head_nominal_m(0, stage_num_to_calc)
     End If
+    get_ESP_head_m = get_ESP_head_m * corr_visc_h_
 End Function
 Public Function get_ESP_power_W(ByVal q_m3day As Double, _
                        Optional ByVal stage_num As Integer = -1, _
@@ -194,7 +204,7 @@ Public Function get_ESP_power_W(ByVal q_m3day As Double, _
     Else                        ' иначе использует количество ступеней из характеристики насоса
         stage_num_to_calc = Me.stage_num
     End If
-    If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
+    If correct_visc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
         Call calc_CorrVisc_PetrInst(q_m3day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
     End If
     q_m3day = q_m3day / corr_visc_q_   ' делаем коррекцию по вязкости
@@ -219,7 +229,7 @@ Public Function get_ESP_effeciency_fr(ByVal q_m3day As Double, Optional ByVal mu
         get_ESP_effeciency_fr = 0
         Exit Function
     End If
-    If CorrectVisc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
+    If correct_visc And (mu_cSt > 0) Then   ' если большая вязкость - сделаем коррекцию
         Call calc_CorrVisc_PetrInst(q_m3day, mu_cSt)   ' метод меняет константы класса, которые влияют на характеристики насоса
     End If
     q_m3day = q_m3day / corr_visc_q_   ' делаем коррекцию по вязкости
@@ -275,6 +285,7 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
     gascorr = 1
 On Error GoTo err1:
     If calc_from_dis Then
+        If t_dis_C < 0 Then t_dis_C = t_intake_C
         Tst_C = t_dis_C
         p_dis_atma_ = p_atma
         sign_int = -1
@@ -329,7 +340,7 @@ On Error GoTo err1:
                 End If
             End If
             Call .calc_PVT(Pst_atma + dPav, Tst_C + dTav)  ' делаем поправку на давление и температуру
-            If i = 0 Then
+            If i > 0 Then
                 gascorr = GasCorrection_d(.gas_fraction_d, gas_degr_type_)
             End If
             q_mix_ = .q_mix_rc_m3day
@@ -340,44 +351,49 @@ On Error GoTo err1:
             dPStage = .rho_mix_rc_kgm3 * head_mix * const_g * const_convert_Pa_atma
             Pst_atma = Pst_atma + sign_int * dPStage
             dPav = dPStage / 2 * sign_int
-            ' оценим работу совершаемую насосом по перекачке жидкости
-            PowfluidWt = q_mix_ * const_convert_m3day_m3sec * dPStage * const_convert_atma_Pa   ' мощность с поправкой на плотность ГЖС
-            PowfluidTot_Wt = PowfluidTot_Wt + PowfluidWt
-            ' оценим мощность потребляемую насосом с вала
-            PowESP_Wt = get_ESP_power_W(q_mix__degr, Nst, .mu_mix_cSt) * .rho_mix_rc_kgm3 / 1000 * c_calibr_power                ' мощность потребляемая одной ступенью на воде
-            PowESPTot_Wt = PowESPTot_Wt + PowESP_Wt
-            ' оценим КПД ступени в данных условиях
-            If (PowESPTot_Wt > 0) Then
-                EffESP_d = PowfluidTot_Wt / PowESPTot_Wt
-            Else: EffESP_d = 0
-            End If
-            
-            If (PowESP_Wt > 0) Then
-                EffStage = PowfluidWt / PowESP_Wt
-            Else: EffStage = 0
-            End If
-            
-            If t_dis_C <= 0 And (Not calc_from_dis) Then ' оценка температуры по ступеням
-                If EffStage > 0 Then
-                    dTpump_C = const_g * head_mix / .cmix_JkgC * (1 - EffStage) / EffStage
-                Else: dTpump_C = 0
+            If dPStage > 0 Then
+                ' оценим работу совершаемую насосом по перекачке жидкости
+                PowfluidWt = q_mix_ * const_convert_m3day_m3sec * dPStage * const_convert_atma_Pa   ' мощность с поправкой на плотность ГЖС
+                PowfluidTot_Wt = PowfluidTot_Wt + PowfluidWt
+                ' оценим мощность потребляемую насосом с вала
+                PowESP_Wt = get_ESP_power_W(q_mix__degr, Nst, .mu_mix_cSt) * .rho_mix_rc_kgm3 / 1000 * c_calibr_power                ' мощность потребляемая одной ступенью на воде
+                PowESPTot_Wt = PowESPTot_Wt + PowESP_Wt
+                ' оценим КПД ступени в данных условиях
+                If (PowESPTot_Wt > 0) Then
+                    EffESP_d = PowfluidTot_Wt / PowESPTot_Wt
+                Else: EffESP_d = 0
                 End If
+                
+                If (PowESP_Wt > 0) Then
+                    EffStage = PowfluidWt / PowESP_Wt
+                Else: EffStage = 0
+                End If
+                
+                If t_dis_C <= 0 And (Not calc_from_dis) Then ' оценка температуры по ступеням
+                    If EffStage > 0 Then
+                        dTpump_C = const_g * head_mix / .cmix_JkgC * (1 - EffStage) / EffStage
+                    Else: dTpump_C = 0
+                    End If
+                Else
+                    dTpump_C = (t_dis_C - t_intake_C) / stage_num * Nst
+                End If
+                
+                If Tst_C < 299 Then
+                    Tst_C = Tst_C + sign_int * dTpump_C
+                    dTav = sign_int * dTpump_C / 2
+                End If
+                
+                If Tst_C > 300 Then
+                    Tst_C = 299
+                    dTav = 0
+                End If
+                
+                dTpumpSum_C = dTpumpSum_C + dTpump_C
             Else
-                dTpump_C = (t_dis_C - t_intake_C) / stage_num * 1
+                PowfluidWt = 0
+                PowESP_Wt = 0
+                EffESP_d = 0
             End If
-            
-            If Tst_C < 299 Then
-                Tst_C = Tst_C + sign_int * dTpump_C
-                dTav = sign_int * dTpump_C / 2
-            End If
-            
-            If Tst_C > 300 Then
-                Tst_C = 299
-                dTav = 0
-            End If
-            
-            dTpumpSum_C = dTpumpSum_C + dTpump_C
-            
             If saveCurve Then
                 curves.Item("gas_fractionInPump").AddPoint n, .f_g
                 curves.Item("PressureInPump").AddPoint n, Pst_atma
@@ -462,8 +478,8 @@ Private Sub Class_Initialize()
     corr_visc_eff_ = 1             ' для КПД
     
     gas_degr_type_ = 0
-    turb_head_factor = 0.5
-    turb_rate_factor = 0.9
+    turb_head_factor = 1 ' 2 ' 0.5
+    turb_rate_factor = 1 ' 1.1 '0.9
 End Sub
 ' метод для построения кривых характеристик УЭЦН
 Public Sub build_curves(Optional ByVal Qliq As Double = -1)
@@ -533,10 +549,10 @@ Public Function Copy(pump As CESPpump) As Boolean
  c_calibr_power = pump.c_calibr_power
      
 End Function
-Public Property Get CorrectVisc() As Boolean
-    CorrectVisc = correct_visc_
+Public Property Get correct_visc() As Boolean
+    correct_visc = correct_visc_
 End Property
-Public Property Let CorrectVisc(val As Boolean)
+Public Property Let correct_visc(val As Boolean)
     correct_visc_ = val
     If Not correct_visc_ Then
         corr_visc_h_ = 1             ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
@@ -549,50 +565,63 @@ Private Sub calc_CorrVisc_PetrInst(ByVal q_mix_ As Double, ByVal nu_cSt As Doubl
 ' метод для расчета корректировки напорной характеристики УЭЦН на вязкость для текущего насоса
 ' расчет для одной ступени
     
+    Dim GAMMA As Double
+    Dim QwBEP_100gpm As Double, HwBEP_ft As Double
+    Dim Qstar As Double
+    Dim Q0 As Double, Q0_6 As Double, Q0_8 As Double, Q1_0 As Double, Q1_2 As Double, qmax As Double
+    Dim H0 As Double, H0_6 As Double, H0_8 As Double, H1_0 As Double, H1_2 As Double, Hmax As Double
+    
+    Dim corr_visc_h__                ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
+    Dim corr_visc_q__                ' для дебита
+    Dim corr_visc_pow__              ' для мощности
+    Dim corr_visc_eff__              ' для КПД
+    ' turn off object correction factors
     corr_visc_h_ = 1             ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
     corr_visc_q_ = 1               ' для дебита
     corr_visc_pow_ = 1             ' для мощности
     corr_visc_eff_ = 1             ' для КПД
     
-    If nu_cSt < 5 Then Exit Sub
+    ' turn off local corr factors as well
+    corr_visc_h__ = 1             ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
+    corr_visc_q__ = 1               ' для дебита
+    corr_visc_pow__ = 1             ' для мощности
+    corr_visc_eff__ = 1             ' для КПД
     
-    Dim GAMMA As Double
-    Dim QwBEP_100gpm As Double, HwBEP_ft As Double
-    'Dim nu_cSt As Double
-    Dim Qstar As Double
+    If nu_cSt < 5 Then Exit Sub
     
     QwBEP_100gpm = Me.rate_nom_sm3day * const_convert_m3day_gpm '/ 100   '   похоже к книге Такаса ошибка - не надо делить на 100 тут
     HwBEP_ft = Me.get_ESP_head_m(Me.rate_nom_sm3day, 1) * const_convert_m_ft
-    
-    'nu_cSt = visc_cP / fluid.rho_oil_sckgm3
-    
     GAMMA = -7.5946 + 6.6504 * Log(HwBEP_ft) + 12.8429 * Log(QwBEP_100gpm)
-    
     Qstar = Exp((39.5276 + 26.5606 * Log(nu_cSt) - GAMMA) / 51.6565)
+    corr_visc_q__ = 1 - 4.0327 * 10 ^ (-3) * Qstar - 1.724 * 10 ^ (-4) * Qstar ^ 2
     
-    corr_visc_q_ = 1 - 4.0327 * 10 ^ (-3) * Qstar - 1.724 * 10 ^ (-4) * Qstar ^ 2
-    
-    If (corr_visc_q_ < 0) Then
-        corr_visc_h_ = 0
+    If (corr_visc_q__ < 0) Then
+        corr_visc_h__ = 0
+        'exit without changes to object state
         Exit Sub
     End If
     
-    corr_visc_eff_ = 1 - 3.3075 * 10 ^ (-2) * Qstar + 2.8875 * 10 ^ (-4) * Qstar ^ 2
-    corr_visc_pow_ = 1 / corr_visc_eff_
+    corr_visc_eff__ = 1 - 3.3075 * 10 ^ (-2) * Qstar + 2.8875 * 10 ^ (-4) * Qstar ^ 2
+    corr_visc_pow__ = 1 / corr_visc_eff__
     
-    Dim Q0 As Double, Q0_6 As Double, Q0_8 As Double, Q1_0 As Double, Q1_2 As Double, qmax As Double
-    Dim H0 As Double, H0_6 As Double, H0_8 As Double, H1_0 As Double, H1_2 As Double, Hmax As Double
     
     Q0 = 0:
-    Q1_0 = rate_nom_sm3day * corr_visc_q_: H1_0 = 1 - 7.00763 * 10 ^ (-3) * Qstar - 1.41 * 10 ^ (-5) * Qstar ^ 2
-    Q0_8 = Q1_0 * 0.8: H0_8 = 1 - 4.4726 * 10 ^ (-3) * Qstar - 4.18 * 10 ^ (-5) * Qstar ^ 2
-    Q0_6 = Q1_0 * 0.6: H0_6 = 1 - 3.68 * 10 ^ (-3) * Qstar - 4.36 * 10 ^ (-5) * Qstar ^ 2
-    Q1_2 = Q1_0 * 1.2: H1_2 = 1 - 9.01 * 10 ^ (-3) * Qstar + 1.31 * 10 ^ (-5) * Qstar ^ 2
-    qmax = rate_max_sm3day * corr_visc_q_: Hmax = H1_2
+    ' rate_nom_sm3day has inside correction corr_visc_q_ - but not here
+    Q1_0 = rate_nom_sm3day * corr_visc_q__
+    H1_0 = 1 - 7.00763 * 10 ^ (-3) * Qstar - 1.41 * 10 ^ (-5) * Qstar ^ 2
+    Q0_8 = Q1_0 * 0.8
+    H0_8 = 1 - 4.4726 * 10 ^ (-3) * Qstar - 4.18 * 10 ^ (-5) * Qstar ^ 2
+    Q0_6 = Q1_0 * 0.6
+    H0_6 = 1 - 3.68 * 10 ^ (-3) * Qstar - 4.36 * 10 ^ (-5) * Qstar ^ 2
+    Q1_2 = Q1_0 * 1.2
+    H1_2 = 1 - 9.01 * 10 ^ (-3) * Qstar + 1.31 * 10 ^ (-5) * Qstar ^ 2
+    qmax = rate_max_sm3day * corr_visc_q__
+    Hmax = H1_2
     
     
     If qmax < Q1_2 Then
-       Debug.Assert False
+        addLogMsg "CESPpump.calc_CorrVisc_PetrInst error. qmax >= Qmom * 1.2. Correction neglected"
+        Exit Sub
        ' тут что то не так с характеристиков насоса - номинальный и максимальный дебит не соответствуют друг другу
     End If
     
@@ -607,8 +636,14 @@ Private Sub calc_CorrVisc_PetrInst(ByVal q_mix_ As Double, ByVal nu_cSt As Doubl
     If H0 < 0 Then H0 = H0_6
     Call h_corr_qd_curve_.AddPoint(Q0, H0)
     
-    corr_visc_h_ = h_corr_qd_curve_.getPoint(q_mix_)
-    'If corr_visc_h_ < 0 Then corr_visc_h_ = 0
+    If q_mix_ > qmax Then q_mix_ = qmax
+    
+    corr_visc_h__ = h_corr_qd_curve_.getPoint(q_mix_)
+    
+    corr_visc_h_ = corr_visc_h__             ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
+    corr_visc_q_ = corr_visc_q__               ' для дебита
+    corr_visc_pow_ = corr_visc_pow__             ' для мощности
+    corr_visc_eff_ = corr_visc_eff__             ' для КПД
 End Sub
 ' метод для доступа к кривой давления в насосе относительно измеренных глубин
 Public Property Get p_curve() As CInterpolation
