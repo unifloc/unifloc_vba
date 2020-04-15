@@ -1,0 +1,255 @@
+'=======================================================================================
+'Unifloc 7.17  Test                                          khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
+'
+'=======================================================================================
+' exercise testing procudures
+Option Explicit
+Sub run_test_file(f_test As String, f_key As String, _
+                  ByRef res As CTestResult)
+' testing procedure
+'
+'
+' run test from here
+    Dim wb_key As Workbook
+    Dim wb_test As Workbook
+    Dim wb_key_open As Boolean
+    Dim wb_test_open As Boolean
+    Dim err_msg As String
+    
+On Error GoTo err1:
+    ' check if workbook already open
+    On Error Resume Next
+    Set wb_key = Workbooks(GetFilenameFromPath(f_key))
+    Set wb_test = Workbooks(GetFilenameFromPath(f_test))
+    On Error GoTo 0
+    
+    If wb_key Is Nothing Then
+        err_msg = "run_test_file: key file " & f_key & " open error"
+        Set wb_key = Workbooks.Open(f_key, ReadOnly:=True)
+        wb_key_open = False
+    Else
+        wb_key_open = True
+    End If
+    
+    
+    If wb_test Is Nothing Then
+        err_msg = "run_test_file: key file " & f_key & " open error"
+        Set wb_test = Workbooks.Open(f_test, ReadOnly:=True)
+        wb_test_open = False
+    Else
+        wb_test_open = True
+    End If
+    
+    Set res = run_test_wb(wb_test, wb_key)
+    
+    addLogMsg "run_test_wb. done for key " & f_key & " and test " & f_test
+    
+    If Not wb_key_open Then wb_key.Close False
+    If Not wb_test_open Then wb_test.Close False
+    Exit Sub
+    
+err1:
+    addLogMsg "run_test_wb. error" & err_msg & ":" & Err.Description
+err2:
+    Set res = Nothing
+    
+   
+End Sub
+Function run_test_wb(wb_test As Workbook, wb_key As Workbook) As CTestResult
+    
+    Dim sheet_key As CSheetexercise
+    Dim sheet_keys As New Dictionary
+    Dim shkey As CSheetexercise
+    Dim keys_found As Boolean
+    Dim sheet_test_result As CSheetexercise
+    Dim sheet_solution As CSheetexercise
+    Dim sheet_to_test As CSheetexercise
+    Dim nm
+    Dim res
+    Dim res_all As New Dictionary
+    Dim test_result As New CTestResult
+    
+    Dim sh As Worksheet
+    Dim i As Integer
+    
+    Dim solution_sheet_found As Boolean
+    Dim test_result_sheet_found As Boolean
+    Dim exircise_sheet_found As Boolean
+    
+    Dim err_msg As String
+    
+    solution_sheet_found = False
+    test_result_sheet_found = False
+    exircise_sheet_found = False
+    keys_found = False
+    
+On Error GoTo err1:
+    keys_found = False
+    
+    ' first we find all the sheets in the key file.
+    For Each sh In wb_key.Sheets
+        Select Case sh.name
+            Case "solution":
+                Set sheet_solution = New CSheetexercise
+                Call sheet_solution.init(sh, wb_key)
+                solution_sheet_found = True
+            Case "test_result":
+                Set sheet_test_result = New CSheetexercise
+                Call sheet_test_result.init(sh, wb_key)
+                test_result_sheet_found = True
+            Case Else
+                nm = Split(sh.name, "_")
+                If nm(0) = "key" Then
+                    Set sheet_key = New CSheetexercise
+                    Call sheet_key.init(sh, wb_key)
+                    sheet_keys.Add nm(1), sheet_key
+                    keys_found = True
+                End If
+        End Select
+    Next sh
+    
+    If Not solution_sheet_found Then
+        err_msg = "run_test_wb. warning. solution sheet not found in key file."
+        addLogMsg err_msg
+        GoTo err3:
+    End If
+    If Not test_result_sheet_found Then
+        err_msg = " test_result sheet not found in key file."
+        addLogMsg err_msg
+        GoTo err3:
+    End If
+    If Not keys_found Then
+        err_msg = " keys sheets not found in key file."
+        addLogMsg err_msg
+        GoTo err3:
+    End If
+    
+    ' 2. find first sheet with exercise result
+    For Each sh In wb_test.Sheets
+        nm = Split(sh.name, "_")
+        If nm(0) = "exercise" Then
+            Set sheet_to_test = New CSheetexercise
+            Call sheet_to_test.init(sh, wb_test)
+            exircise_sheet_found = True
+            Exit For
+        End If
+    Next sh
+    If Not exircise_sheet_found Then
+        err_msg = " exircise sheets not found in test file."
+        addLogMsg err_msg
+        GoTo err3:
+    End If
+            
+    ' 3 check if algorithm can be checked
+    If Not sheet_solution Is Nothing And keys_found Then
+        For i = LBound(sheet_keys.Keys) To UBound(sheet_keys.Keys)
+            Set shkey = sheet_keys(sheet_keys.Keys(i))
+            res = test_calculation(sheet_to_test, sheet_test_result, shkey)
+            res_all.Add shkey.sheet.name, res
+        Next i
+    End If
+    
+    With test_result
+        Set .res = res_all
+        If sheet_to_test.is_test_res Then
+            .student_name = sheet_to_test.name_reported
+            .group = sheet_to_test.group_reported
+            .course = sheet_to_test.course_reported
+            .data = sheet_to_test.date_reported
+            .note = sheet_to_test.notes_reported
+            .unf_version = sheet_to_test.version_reported
+        End If
+    End With
+    
+    Set run_test_wb = test_result
+    Set sheet_keys = Nothing
+    Set sheet_key = Nothing
+    Set shkey = Nothing
+    Set sheet_test_result = Nothing
+    Set sheet_solution = Nothing
+    Set sheet_to_test = Nothing
+    Set res_all = Nothing
+    
+    Exit Function
+err1:
+    addLogMsg "run_test_wb. error " & Err.Description
+err2:
+    run_test_wb = Array("error")
+    Exit Function
+    
+err3:
+    Err.Raise kErrTester, , err_msg
+End Function
+' возможны два варианта тестов.
+'    1. тестируется расчетный модуль.
+'           в расчетный модуль подставляются входные данные
+'           и результат расчета сравнивается с сохраненным эталоном
+'    2. тестируются данные полученные в ходе результатов расчета
+'           исходные данные подставляются в эталонный расчетный модуль
+'           результат подставляется в форму сравнения
+'           расчитывается результат сравнения
+Private Function test_calculation(sheet_to_test As CSheetexercise, _
+                          sheet_test_result As CSheetexercise, _
+                          sheet_key As CSheetexercise)
+    Dim rng_nm
+    Dim rng_name
+    Dim res()
+    Dim ind, i
+    Dim rng1, rng2
+    Dim n
+On Error GoTo err1:
+    
+    copy_ranges sheet_key.rng_input, sheet_to_test.rng_input
+    copy_ranges sheet_to_test.rng_output, sheet_test_result.rng_outkey
+    copy_ranges sheet_key.rng_output, sheet_test_result.rng_output
+    
+  
+    ' пытаемся считать результаты сравнения из листа тестирования
+    n = sheet_test_result.rng_result.Count
+    If n > 0 Then
+        ReDim res(n - 1)
+        For i = 0 To n - 1
+            res(i) = sheet_test_result.rng_result.Items(i).RefersToRange.Value2
+        Next i
+    Else
+        addLogMsg "test_calculation. warning no result ranges in sheet_test_result " & sheet_test_result.sheet.name & " ."
+        GoTo err2:
+    End If
+    test_calculation = res
+    Exit Function
+err1:
+    addLogMsg "test_calculation. error" & Err.Description
+err2:
+    test_calculation = Array("error")
+End Function
+Sub copy_ranges(rng_from As Dictionary, rng_to As Dictionary)
+    Dim ind
+    Dim i
+    Dim rng1, rng2
+On Error GoTo err1:
+    ind = rng_from.Keys          ' все входные диапазоны в ключе
+    For i = LBound(ind) To UBound(ind)
+        Set rng1 = rng_from.Item(ind(i))
+        If rng_to.Exists(ind(i)) Then
+            Set rng2 = rng_to.Item(ind(i))
+            rng2.RefersToRange = rng1.RefersToRange.Value2
+        Else
+            addLogMsg "copy_ranges. warning no ranges in rng_to " & rng_from.Item(ind(i)).name & " named " & ind(i)
+        End If
+nextloop:
+    Next i
+    Exit Sub
+err1:
+    addLogMsg "copy_ranges: warning with " & rng1.name
+    Resume nextloop:
+End Sub
+Function GetFilenameFromPath(ByVal strPath As String) As String
+' Returns the rightmost characters of a string upto but not including the rightmost '\'
+' e.g. 'c:\winnt\win.ini' returns 'win.ini'
+    If Right$(strPath, 1) <> "\" And Len(strPath) > 0 Then
+        GetFilenameFromPath = GetFilenameFromPath(Left$(strPath, Len(strPath) - 1)) + Right$(strPath, 1)
+    End If
+End Function
+
