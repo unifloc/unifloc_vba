@@ -40,7 +40,7 @@ class API():
         self.f_MF_CJT_Katm = self.book.macro("MF_CJT_Katm")
         return self.f_MF_CJT_Katm(p_atma,t_C,str_PVT,qliq_sm3day,fw_perc)
 
-    def MF_q_mix_rc_m3day(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
+    def MF_q_mix_rc_m3day(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=PVT_DEFAULT):
         """" расчет объемного расхода газожидкостной смеси  для заданных термобарических условий
         
                        qliq_sm3day- дебит жидкости на поверхности    
@@ -58,7 +58,7 @@ class API():
         self.f_MF_q_mix_rc_m3day = self.book.macro("MF_q_mix_rc_m3day")
         return self.f_MF_q_mix_rc_m3day(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
 
-    def MF_rho_mix_kgm3(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
+    def MF_rho_mix_kgm3(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=PVT_DEFAULT):
         """" расчет плотности газожидкостной смеси для заданных условий
         
                        qliq_sm3day- дебит жидкости на поверхности    
@@ -76,7 +76,7 @@ class API():
         self.f_MF_rho_mix_kgm3 = self.book.macro("MF_rho_mix_kgm3")
         return self.f_MF_rho_mix_kgm3(qliq_sm3day,fw_perc,p_atma,t_C,str_PVT)
 
-    def MF_mu_mix_cP(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=""):
+    def MF_mu_mix_cP(self, qliq_sm3day,fw_perc,p_atma,t_C,str_PVT=PVT_DEFAULT):
         """" расчет вязкости газожидкостной смеси  для заданных термобарических условий
         
                        qliq_sm3day - дебит жидкости на поверхности    
@@ -293,12 +293,40 @@ class API():
 
         если qliq_sm3day =0 и q_gas_sm3day > 0  тогда считается барботаж газа через жидкость  fw_perc - обводненность  length_m - длина трубы, измеренная, м p_calc_from_atma - дав..см.мануал   
 
-        calibr_type - тип калибровки  0 - подбор параметра c_calibr_grav  1 - подбор параметра c_calibr_fric  2 - подбор газового фактор  3 - подбор обводненности    )  
+        calibr_type - тип калибровки  0 - подбор параметра c_calibr_grav  1 - подбор параметра c_calibr_fric  2 - подбор газового фактор  3 - подбор обводненности  4 - подбор деб..см.мануал   )  
 
         """
 
         self.f_MF_calibr_pipe = self.book.macro("MF_calibr_pipe")
         return self.f_MF_calibr_pipe(qliq_sm3day,fw_perc,length_m,p_calc_from_atma,p_calc_to_atma,calc_along_flow,str_PVT,theta_deg,d_mm,hydr_corr,t_calc_from_C,t_calc_to_C,c_calibr_grav,c_calibr_fric,roughness_m,q_gas_sm3day,calibr_type)
+
+    def MF_calibr_choke(self, qliq_sm3day,fw_perc,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT,q_gas_sm3day=0,calibr_type=0):
+        """" расчет корректирующего фактора (множителя) модели штуцера под замеры  медленный расчет - калибровка подбирается
+        
+                       qliq_sm3day - дебит жидкости в ст. условиях    
+
+        fw_perc - обводненность    
+
+        d_choke_mm - диаметр штуцера (эффективный), мм    
+
+        p_in_atma - давление на входе (высокой стороне)    
+
+        p_out_atma - давление на выходе (низкой стороне)    
+
+        d_pipe_mm - диаметр трубы до и после штуцера, мм    
+
+        t_choke_c - температура, с.    
+
+        str_pvt - закодированная строка с параметрами pvt,  если задана - перекрывает другие значения    
+
+        q_gas_sm3day - свободный газ. дополнительный к pvt потоку.    
+
+        calibr_type - тип калибровки  0 - подбор параметра c_calibr  1 - подбор диаметра штуцера  2 - подбор газового фактор  3 - подбор обводненности  4 - подбор дебита жидкости..см.мануал   )  
+
+        """
+
+        self.f_MF_calibr_choke = self.book.macro("MF_calibr_choke")
+        return self.f_MF_calibr_choke(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day,calibr_type)
 
     def MF_fit_pipe_m3day(self, ''qliq_sm3day,'fw_perc,'length_m,'p_calc_atma,'calc_along_flow,'str_PVT=PVT_DEFAULT,'theta_deg=90,'d_mm=60,'hydr_corr=H_CORRELATION,'t_in_C=50,'t_out_C=-1,'c_calibr_grav=1,'c_calibr_fric=1,'roughness_m=0.0001,'calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
@@ -452,8 +480,8 @@ class API():
         self.f_MF_p_choke_atma = self.book.macro("MF_p_choke_atma")
         return self.f_MF_p_choke_atma(qliq_sm3day,fw_perc,d_choke_mm,p_calc_from_atma,calc_along_flow,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT,q_gas_sm3day)
 
-    def MF_calibr_choke_fr(self, qliq_sm3day,fw_perc,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT,q_gas_sm3day=0):
-        """" расчет корректирующего фактора (множителя) модели штуцера под замеры
+    def MF_calibr_choke_fast(self, qliq_sm3day,fw_perc,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,str_PVT=PVT_DEFAULT,q_gas_sm3day=0):
+        """" расчет корректирующего фактора (множителя) модели штуцера под замеры  быстрый расчет - калибровка вычисляется
         
                        qliq_sm3day - дебит жидкости в ст. условиях    
 
@@ -475,10 +503,10 @@ class API():
 
         """
 
-        self.f_MF_calibr_choke_fr = self.book.macro("MF_calibr_choke_fr")
-        return self.f_MF_calibr_choke_fr(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day)
+        self.f_MF_calibr_choke_fast = self.book.macro("MF_calibr_choke_fast")
+        return self.f_MF_calibr_choke_fast(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day)
 
-    def MF_q_choke_sm3day(self, fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT):
+    def MF_q_choke_sm3day(self, fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT,q_gas_sm3day=0):
         """"  функция расчета дебита жидкости через штуцер   при заданном входном и выходном давлениях
         
                        fw_perc - обводненность    
@@ -495,12 +523,14 @@ class API():
 
         c_calibr_fr - поправочный коэффициент на штуцер  1 - отсутсвие поправки (по умолчанию)  q_choke_real = c_calibr_fr * q_choke_model    
 
-        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    )  
+        str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+        q_gas_sm3day - дополнительный поток свободного газа    )  
 
         """
 
         self.f_MF_q_choke_sm3day = self.book.macro("MF_q_choke_sm3day")
-        return self.f_MF_q_choke_sm3day(fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT)
+        return self.f_MF_q_choke_sm3day(fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT,q_gas_sm3day)
 
     def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """" функция расчета объемного коэффициента газа
@@ -1300,15 +1330,15 @@ class API():
         self.f_ESP_optRate_m3day = self.book.macro("ESP_optRate_m3day")
         return self.f_ESP_optRate_m3day(freq_Hz,pump_id)
 
-    def ESP_id_by_rate(self, Q):
+    def ESP_id_by_rate(self, q):
         """" функция возвращает идентификатор типового насоса по значению  номинального дебита
         
-                  q   )  
+                       q - номинальный дебит    )  
 
         """
 
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
-        return self.f_ESP_id_by_rate(Q)
+        return self.f_ESP_id_by_rate(q)
 
     def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
         """"функция расчета давления на выходе/входе ЭЦН в рабочих условиях

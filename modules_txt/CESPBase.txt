@@ -1,20 +1,20 @@
 '=======================================================================================
-'Unifloc 7.17  Test                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.20  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
 '=======================================================================================
 '
-' база характеристик погружного оборудования - ЭЦН и пр
-' умеет считывать базу и проводить по ней поиск и анализ
+' base of characteristics of submersible equipment - ESPs, etc.
+' knows how to read the database and search and analyze it
+ 
 Option Explicit
-' класс для доступа к базе насосов
 Private ESPload As CESPpump
 Private SpreadSheetName_ESP_ As String
-Private Motorload As CESPMotor   ' считыватель для двигателей
+Private Motorload As CESPMotor
 Private SpreadSheetName_Motor_ As String
 Public ESPcollection As New Collection
-Public MotorCollection As New Collection  ' список всех двигателей в базе
+Public MotorCollection As New Collection
 Public Function num_pumps() As Integer
     num_pumps = ESPcollection.Count
 End Function
@@ -92,9 +92,9 @@ Private Sub update_arr(line_from_file, ByRef arr_in)
     Next i
  
 End Sub
-Public Sub load_db_file_ESP(ESP_db_file)
-' load all pumps from db file here
-    Dim i As Long, j As Integer, num As Integer
+Public Sub load_db_file_ESP(ar_lines() As String)
+' load all pumps from db array here
+    Dim j As Integer, num As Integer
     Dim num_pumps As Integer
     Dim esp_db As ESP_PARAMS
     Dim zero_found As Boolean
@@ -102,89 +102,88 @@ Public Sub load_db_file_ESP(ESP_db_file)
     Dim line_from_file As String
     Dim ar0, ar, ar2
     Dim ID
+    Dim i As Integer
            
     ReDim ar2(0)
     num_pumps = 0
+    
     Call clear_db
-On Error GoTo err_load_pump:
-    i = 4   ' все начинается с 4 строки
-    Open ESP_db_file For Input As #1
-    ' read first line with titles
-    Line Input #1, line_from_file
-    ar0 = Split(line_from_file, ";")
+  
+    ar0 = Split(ar_lines(0), ";")
     ID = ar0(0)
                 
-                
-    Do While Not EOF(1)
-        Line Input #1, line_from_file
-        ar = Split(line_from_file, ";")
-        If ID <> ar(0) Then
-            If UBound(ar2) > 3 Then
-                num = UBound(ar2(10)) + 1
-                    
-                ReDim esp_db.head_points(1 To num)
-                ReDim esp_db.rate_points(1 To num)
-                ReDim esp_db.power_points(1 To num)
-                ReDim esp_db.eff_points(1 To num)
-                                
-                For j = 1 To num
-                       esp_db.head_points(j) = ar2(11)(j - 1)
-                       esp_db.rate_points(j) = ar2(10)(j - 1)
-                       esp_db.power_points(j) = ar2(12)(j - 1)
-                       esp_db.eff_points(j) = ar2(13)(j - 1)
-                Next j
-                       
-                ' read all data from furst line in DB table
-                esp_db.ID = ar2(0)(0)
-                esp_db.manufacturer = ar2(1)(0)
-                esp_db.name = ar2(2)(0)
-                esp_db.stages_max = ar2(3)(0)
-                esp_db.rate_nom_sm3day = ar2(4)(0)
-                esp_db.rate_opt_min_sm3day = ar2(5)(0)
-                esp_db.rate_opt_max_sm3day = ar2(6)(0)
-                esp_db.w_nom_slip_rpm = ar2(7)(0)
-                esp_db.freq_Hz = ar2(8)(0)
-                esp_db.eff_max = ar2(9)(0)
-                    
-                    ' оценим максимальную точку характеристики заданной в базе
-                    
-                esp_db.rate_max_sm3day = 0
-                zero_found = False
-                For j = 1 To num
-                    If esp_db.rate_max_sm3day < esp_db.rate_points(j) Then
-                        esp_db.rate_max_sm3day = esp_db.rate_points(j)
-                        If esp_db.head_points(j) = 0 Then
-                            zero_found = True
-                            Exit For
+    For i = 1 To UBound(ar_lines)
+On Error GoTo err_load_pump:
+        line_from_file = ar_lines(i)
+        If line_from_file <> "" Then
+            ar = Split(line_from_file, ";")
+            If ID <> ar(0) Then
+                If UBound(ar2) > 3 Then
+                    num = UBound(ar2(10)) + 1
+                        
+                    ReDim esp_db.head_points(1 To num)
+                    ReDim esp_db.rate_points(1 To num)
+                    ReDim esp_db.power_points(1 To num)
+                    ReDim esp_db.eff_points(1 To num)
+                                    
+                    For j = 1 To num
+                           esp_db.head_points(j) = ar2(11)(j - 1)
+                           esp_db.rate_points(j) = ar2(10)(j - 1)
+                           esp_db.power_points(j) = ar2(12)(j - 1)
+                           esp_db.eff_points(j) = ar2(13)(j - 1)
+                    Next j
+                           
+                    ' read all data from furst line in DB table
+                    esp_db.ID = ar2(0)(0)
+                    esp_db.manufacturer = ar2(1)(0)
+                    esp_db.name = ar2(2)(0)
+                    esp_db.stages_max = ar2(3)(0)
+                    esp_db.rate_nom_sm3day = ar2(4)(0)
+                    esp_db.rate_opt_min_sm3day = ar2(5)(0)
+                    esp_db.rate_opt_max_sm3day = ar2(6)(0)
+                    esp_db.w_nom_slip_rpm = ar2(7)(0)
+                    esp_db.freq_Hz = ar2(8)(0)
+                    esp_db.eff_max = ar2(9)(0)
+                        
+                        ' оценим максимальную точку характеристики заданной в базе
+                        
+                    esp_db.rate_max_sm3day = 0
+                    zero_found = False
+                    For j = 1 To num
+                        If esp_db.rate_max_sm3day < esp_db.rate_points(j) Then
+                            esp_db.rate_max_sm3day = esp_db.rate_points(j)
+                            If esp_db.head_points(j) = 0 Then
+                                zero_found = True
+                                Exit For
+                            End If
                         End If
+                    Next j
+                    If Not zero_found Then
+                    ' найдем zero
+                        res = crv_solve(esp_db.rate_points, esp_db.head_points, 0)
+                        esp_db.rate_max_sm3day = res(1)
                     End If
-                Next j
-                If Not zero_found Then
-                ' найдем zero
-                    res = crv_solve(esp_db.rate_points, esp_db.head_points, 0)
-                    esp_db.rate_max_sm3day = res(1)
+                    
+                    Set ESPload = New CESPpump
+                    ESPload.db = esp_db
+                    ESPcollection.Add ESPload, CStr(esp_db.ID)
+                    num_pumps = num_pumps + 1
+                    
                 End If
                 
-                Set ESPload = New CESPpump
-                ESPload.db = esp_db
-                ESPcollection.Add ESPload, CStr(esp_db.ID)
-                num_pumps = num_pumps + 1
-                
+                ar2 = create_arr(line_from_file)
+                ID = ar(0)
+            Else
+                update_arr line_from_file, ar2
             End If
-            
-            ar2 = create_arr(line_from_file)
-            ID = ar(0)
-        Else
-            update_arr line_from_file, ar2
         End If
 next_pump:
-    Loop
-    Close #1
+    Next i
     Exit Sub
     
 err_load_pump:
-   ' On Error Resume Next
-    addLogMsg "Problem while loading pump . " & CStr(ID) & " " & Err.Description
+    On Error GoTo 0
+    addLogMsg "Problem while loading pump . " & CStr(ID) & ", i= " & CStr(i) & ":" & line_from_file & Err.Description
     Resume next_pump:
 End Sub
 Private Sub Class_Initialize()
@@ -197,8 +196,8 @@ Public Function get_pump(ByVal ID As Integer) As CESPpump
         Set get_pump = ESPcollection.Item(CStr(ID))
     Exit Function
 err1:
-        addLogMsg "Ошибка при загрузке из базы насоса ID = " & ID & " ."
-        Err.Raise kErrESPbase, , "Не удалось найти насос " & ID & " в базе"
+       ' addLogMsg "CESPBase.get_pump Error when loading from the pump base ID = " & ID & " ."
+        Err.Raise kErrESPbase, , "CESPBase.get_pump Error when loading from the pump base ID = " & ID & " ."
 End Function
 Public Sub loadDB_Motor()
 ' метод загрузки базы двигателей

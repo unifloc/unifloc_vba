@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.17  Test                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.20  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -313,17 +313,25 @@ Public Function calc_choke_p(pt As PTtype, Optional calc_p_down As Integer = 0) 
     Dim P_en As Double
     Dim counter As Double
     Dim eps As Double
+    Dim eps_p As Double
     Const max_iters As Integer = 25
     Dim void As Double
     Dim q_l As Double
     Dim P_en_min As Double
     Dim P_en_max As Double
     Dim i As Integer
+    
+    Dim q_good As Boolean
+    Dim p_good As Boolean
+    
 On Error GoTo err1:
     p_sn = pt.p_atma
     t_u = pt.t_C
     counter = 0
-    eps = fluid.qliq_sm3day * 0.001 'set precision equal to 0.1%
+    
+    eps = fluid.qliq_sm3day * 0.0001 'set precision equal to 0.01%
+    eps_p = const_pressure_tolerance
+    
     If (calc_p_down = 0) Then 'Calculate upstream pressure given downstream
         'Solve for upstream pressure
         i = 1
@@ -354,7 +362,10 @@ On Error GoTo err1:
             Else
                 P_en_min = P_en
             End If
-        Loop Until Abs(fluid.qliq_sm3day - q_l) < eps Or counter > max_iters
+            q_good = Abs(fluid.qliq_sm3day - q_l) < eps
+            p_good = Abs(P_en_min - P_en_max) < eps_p
+        Loop Until (q_good And p_good) Or counter > max_iters
+        
         If (counter > max_iters) And (Abs(fluid.qliq_sm3day - q_l) > eps * 100) Then ' значит поиск дебита не увенчался успехом
             addLogMsg "calc_choke_P(calc_p_down = 0): number of iterations too much, no solution found for rate = " & Format(fluid.qliq_sm3day, "####0.00")
         End If
@@ -472,13 +483,13 @@ On Error GoTo err1:
     
     'Calculate mass fractions of flowing phases
     ' correction for gas solution ratio (obsolete?)
-    r_su = MinReal(fluid.rp_m3m3, r_su)
+    r_su = MinReal(fluid.rp_full_m3m3, r_su)
     ' mass for 1 liquid rate at surface
-    m_s = (1 - fw_fr) * (fluid.rho_oil_sckgm3 + fluid.rp_m3m3 * fluid.rho_gas_sckgm3) + fw_fr * fluid.rho_wat_sckgm3
+    m_s = (1 - fw_fr) * (fluid.rho_oil_sckgm3 + fluid.rp_full_m3m3 * fluid.rho_gas_sckgm3) + fw_fr * fluid.rho_wat_sckgm3
     ' mass oil fraction at specific condition (acounts for gas in oil)
     f_o = (1 - fw_fr) * (fluid.rho_oil_sckgm3 + r_su * fluid.rho_gas_sckgm3) / m_s
     ' mass gas fraction
-    f_g = (1 - fw_fr) * (fluid.rp_m3m3 - r_su) * fluid.rho_gas_sckgm3 / m_s
+    f_g = (1 - fw_fr) * (fluid.rp_full_m3m3 - r_su) * fluid.rho_gas_sckgm3 / m_s
     ' mass water fraction
     f_w = (fw_fr) * fluid.rho_wat_sckgm3 / m_s
     'Densities at upstream conditions

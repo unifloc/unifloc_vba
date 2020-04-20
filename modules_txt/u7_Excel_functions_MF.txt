@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.17  Test                                     khabibullin.ra@gubkin.ru
+'Unifloc 7.20  coronav                                     khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -427,7 +427,7 @@ On Error GoTo err1:
         Case 2
             func = "calc_pipe_dp_error_rp_atm"
             cal_type_string = "rp"
-            val_min = pipe.fluid.rp_m3m3 * 0.5
+            val_min = 20 'pipe.fluid.rp_m3m3 * 0.5
             val_max = pipe.fluid.rp_m3m3 * 2
             ' Расширить диапазон поиска по газовому фактору может быть опасно
             ' так как возможна неоднозначность решения
@@ -438,8 +438,23 @@ On Error GoTo err1:
             val_min = 0
             val_max = 1
             If val_max > 1 Then val_max = 1
+        Case 4
+            func = "calc_pipe_dp_error_qliq_atm"
+            cal_type_string = "qliq"
+            val_min = 0
+            val_max = pipe.fluid.qliq_sm3day * 1.5
+        Case 5
+            func = "calc_pipe_dp_error_qgas_atm"
+            cal_type_string = "qgas"
+            val_min = 0
+            If q_gas_sm3day > 0 Then
+                val_max = q_gas_sm3day * 2
+            Else
+                val_max = 10000
+            End If
     End Select
     
+    prm.y_tolerance = const_pressure_tolerance
     If solve_equation_bisection(func, val_min, val_max, coeffA, prm) Then
     
         out = Array(prm.x_solution, _
@@ -528,6 +543,8 @@ Public Function MF_calibr_pipe( _
 '             1 - подбор параметра c_calibr_fric
 '             2 - подбор газового фактор
 '             3 - подбор обводненности
+'             4 - подбор дебита жидкости
+'             5 - подбор дебита газа
 ' результат   - массив с подобранным парамером и подробностями.
 'description_end
     
@@ -571,7 +588,7 @@ On Error GoTo err1:
         Case 2
             func = "calc_pipe_dp_error_rp_atm"
             cal_type_string = "rp"
-            val_min = pipe.fluid.rp_m3m3 * 0.5
+            val_min = 20 'pipe.fluid.rp_m3m3 * 0.5
             val_max = pipe.fluid.rp_m3m3 * 2
             ' Расширить диапазон поиска по газовому фактору может быть опасно
             ' так как возможна неоднозначность решения
@@ -582,8 +599,23 @@ On Error GoTo err1:
             val_min = 0
             val_max = 1
             If val_max > 1 Then val_max = 1
+        Case 4
+            func = "calc_pipe_dp_error_qliq_atm"
+            cal_type_string = "qliq"
+            val_min = 0
+            val_max = pipe.fluid.qliq_sm3day * 1.5
+        Case 5
+            func = "calc_pipe_dp_error_qgas_atm"
+            cal_type_string = "qgas"
+            val_min = 0
+            If q_gas_sm3day > 0 Then
+                val_max = q_gas_sm3day * 2
+            Else
+                val_max = 10000
+            End If
     End Select
     
+    prm.y_tolerance = const_pressure_tolerance
     If solve_equation_bisection(func, val_min, val_max, coeffA, prm) Then
     
         out = Array(prm.x_solution, _
@@ -611,6 +643,145 @@ err1:
     MF_calibr_pipe = Array(-1, "error")
     addLogMsg "Error:MF_calibr_pipe:" & Err.Description
     
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет корректирующего фактора (множителя) модели штуцера под замеры
+' медленный расчет - калибровка подбирается
+Public Function MF_calibr_choke( _
+            ByVal qliq_sm3day As Double, _
+            ByVal fw_perc As Double, _
+            ByVal d_choke_mm As Double, _
+            Optional ByVal p_in_atma As Double = -1, _
+            Optional ByVal p_out_atma As Double = -1, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal t_choke_C As Double = 20, _
+            Optional ByVal str_PVT As String = PVT_DEFAULT, _
+            Optional ByVal q_gas_sm3day As Double = 0, _
+            Optional ByVal calibr_type As Integer = 0)
+            
+' qliq_sm3day   - дебит жидкости в ст. условиях
+' fw_perc       - обводненность
+' d_choke_mm    - диаметр штуцера (эффективный), мм
+' p_in_atma     - давление на входе (высокой стороне)
+' p_out_atma    - давление на выходе (низкой стороне)
+' d_pipe_mm     - диаметр трубы до и после штуцера, мм
+' t_choke_C     - температура, С.
+' str_PVT       - закодированная строка с параметрами PVT,
+'                 если задана - перекрывает другие значения
+' q_gas_sm3day  - свободный газ. дополнительный к PVT потоку.
+' calibr_type - тип калибровки
+'             0 - подбор параметра c_calibr
+'             1 - подбор диаметра штуцера
+'             2 - подбор газового фактор
+'             3 - подбор обводненности
+'             4 - подбор дебита жидкости
+'             5 - подбор дебита газа свободного
+' результат     - число - калибровочный коэффициент для модели.
+'                 штуцера  - множитель на дебит через штуцер
+'description_end
+On Error GoTo err1:
+    Dim choke As New Cchoke
+    Dim pt As PTtype
+    Dim PVT As CPVT
+    Dim out, out_desc
+    Dim coeffA(0 To 2)
+    Dim func As String
+    Dim cal_type_string As String
+    Dim val_min As Double, val_max As Double
+    Dim prm As New CSolveParam
+    
+    Set PVT = PVT_decode_string(str_PVT)
+    
+    If PVT.gas_only Then
+        MF_calibr_choke = "not implemented yet"
+        Exit Function
+    End If
+    
+    PVT.q_gas_free_sm3day = q_gas_sm3day
+    Set choke.fluid = PVT
+    choke.fluid.qliq_sm3day = qliq_sm3day
+    choke.fluid.fw_perc = fw_perc
+    choke.d_down_m = d_pipe_mm / 1000
+    choke.d_up_m = d_pipe_mm / 1000
+    choke.d_choke_m = d_choke_mm / 1000
+    choke.t_choke_C = t_choke_C
+    
+     ' prepare solution function
+    Set coeffA(0) = choke
+        coeffA(1) = p_in_atma
+        coeffA(2) = p_out_atma
+        
+    Select Case calibr_type
+        Case 0
+            func = "calc_choke_dp_error_calibr_grav_atm"
+            cal_type_string = "calibr"
+            val_min = 0.5
+            val_max = 1.5
+        Case 1
+            func = "calc_choke_dp_error_diam_atm"
+            cal_type_string = "diam_choke"
+            val_min = choke.d_choke_m / 2
+            val_max = choke.d_up_m
+        Case 2
+            func = "calc_choke_dp_error_rp_atm"
+            cal_type_string = "rp"
+            val_min = 20 'pipe.fluid.rp_m3m3 * 0.5
+            val_max = choke.fluid.rp_m3m3 * 2
+            ' Расширить диапазон поиска по газовому фактору может быть опасно
+            ' так как возможна неоднозначность решения
+            ' а текущий метод поиска работает только если есть одно решение
+        Case 3
+            func = "calc_choke_dp_error_fw_atm"
+            cal_type_string = "fw"
+            val_min = 0
+            val_max = 1
+            If val_max > 1 Then val_max = 1
+        Case 4
+            func = "calc_choke_dp_error_qliq_atm"
+            cal_type_string = "qliq"
+            val_min = 0
+            val_max = choke.fluid.qliq_sm3day * 1.5
+        Case 5
+            func = "calc_choke_dp_error_qgas_atm"
+            cal_type_string = "qgas_free"
+            val_min = 0
+            If q_gas_sm3day > 0 Then
+                val_max = q_gas_sm3day * 2
+            Else
+                val_max = 10000
+            End If
+    End Select
+   
+    prm.y_tolerance = const_pressure_tolerance
+    If solve_equation_bisection(func, val_min, val_max, coeffA, prm) Then
+    
+        out = Array(prm.x_solution, _
+                    cal_type_string, _
+                    prm.y_solution, _
+                    prm.iterations, _
+                    prm.msg)
+    Else
+        out = Array("no solution", _
+                    cal_type_string, _
+                    prm.y_solution, _
+                    prm.iterations, _
+                    prm.msg)
+    End If
+        
+        out_desc = Array("solution", _
+                         "cal_type", _
+                         "y_solution", _
+                         "iterations", _
+                         "description")
+        MF_calibr_choke = Array(out, out_desc)
+    
+    Exit Function
+   
+    
+    Exit Function
+err1:
+    MF_calibr_choke = -1
+    addLogMsg "Error:MF_calibr_choke:" & Err.Description
 End Function
 ''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ''  подбор параметров потока через трубу при известном
@@ -1028,7 +1199,8 @@ err1:
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет корректирующего фактора (множителя) модели штуцера под замеры
-Public Function MF_calibr_choke_fr( _
+' быстрый расчет - калибровка вычисляется
+Public Function MF_calibr_choke_fast( _
             ByVal qliq_sm3day As Double, _
             ByVal fw_perc As Double, _
             ByVal d_choke_mm As Double, _
@@ -1058,6 +1230,12 @@ On Error GoTo err1:
     Dim out, out_desc
     
     Set PVT = PVT_decode_string(str_PVT)
+    
+    If PVT.gas_only Then
+        MF_calibr_choke_fast = "not implemented yet"
+        Exit Function
+    End If
+    
     PVT.q_gas_free_sm3day = q_gas_sm3day
     Set choke.fluid = PVT
     choke.fluid.qliq_sm3day = qliq_sm3day
@@ -1071,12 +1249,12 @@ On Error GoTo err1:
         out = choke.c_calibr_fr
         out_desc = "c_calibr_fr"
     End If
-    MF_calibr_choke_fr = Array(Array(out, p_in_atma, p_out_atma, t_choke_C, choke.c_calibr_fr), _
-                         Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))  ' на выходе выдаем массив
+    MF_calibr_choke_fast = Array(Array(out, p_in_atma, p_out_atma, t_choke_C, choke.c_calibr_fr), _
+                           Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))  ' на выходе выдаем массив
     Exit Function
 err1:
-    MF_calibr_choke_fr = -1
-    addLogMsg "Error:MF_calibr_choke_fr:" & Err.Description
+    MF_calibr_choke_fast = -1
+    addLogMsg "Error:MF_calibr_choke_fast:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
  ' функция расчета дебита жидкости через штуцер
@@ -1089,9 +1267,10 @@ Public Function MF_q_choke_sm3day( _
         Optional ByVal d_pipe_mm As Double = 70, _
         Optional ByVal t_choke_C = 20, _
         Optional ByVal c_calibr_fr As Double = 1, _
-        Optional ByVal str_PVT As String = PVT_DEFAULT)
+        Optional ByVal str_PVT As String = PVT_DEFAULT, _
+        Optional ByVal q_gas_sm3day As Double = 0)
 ' fw_perc      - обводненность
-' d_choke_mm    - диаметр штуцера (эффективный)
+' d_choke_mm   - диаметр штуцера (эффективный)
 ' p_in_atma    - давление на входе (высокой стороне)
 ' p_out_atma   - давление на выходе (низкой стороне)
 ' d_pipe_mm    - диаметр трубы до и после штуцера
@@ -1101,12 +1280,13 @@ Public Function MF_q_choke_sm3day( _
 '                 Q_choke_real = c_calibr_fr * Q_choke_model
 ' str_PVT      - закодированная строка с параметрами PVT.
 '                 если задана - перекрывает другие значения
+' q_gas_sm3day - дополнительный поток свободного газа
 ' результат    - расход и массив результатов
 'description_end
 On Error GoTo err1:
     Dim choke As New Cchoke
     Dim PVT As CPVT
-    Dim Q As Double
+    Dim q As Double
     
     Set PVT = PVT_decode_string(str_PVT)
     Set choke.fluid = PVT
@@ -1114,17 +1294,18 @@ On Error GoTo err1:
     choke.d_up_m = d_pipe_mm / 1000
     choke.d_choke_m = d_choke_mm / 1000
     choke.fluid.fw_perc = fw_perc
+    choke.fluid.q_gas_free_sm3day = q_gas_sm3day
     choke.c_calibr_fr = c_calibr_fr
+    
     If PVT.gas_only Then
-        Q = GLV_q_gas_sm3day(d_choke_mm, p_in_atma, p_out_atma, PVT.gamma_g, t_choke_C, c_calibr_fr)(0)(0)
-        MF_q_choke_sm3day = Array(Array(Q, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
+        q = GLV_q_gas_sm3day(d_choke_mm, p_in_atma, p_out_atma, PVT.gamma_g, t_choke_C, c_calibr_fr)(0)(0)
+        MF_q_choke_sm3day = Array(Array(q, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
                             Array("Qgas", "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))
     Else
-        Q = choke.calc_choke_qliq_sm3day(p_in_atma, p_out_atma, t_choke_C)
-        MF_q_choke_sm3day = Array(Array(Q, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
+        q = choke.calc_choke_qliq_sm3day(p_in_atma, p_out_atma, t_choke_C)
+        MF_q_choke_sm3day = Array(Array(q, p_in_atma, p_out_atma, t_choke_C, c_calibr_fr), _
                             Array("Qliq", "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"))
     End If
-    
     Exit Function
 err1:
     MF_q_choke_sm3day = -1

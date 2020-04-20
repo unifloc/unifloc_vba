@@ -1,48 +1,73 @@
 '=======================================================================================
-'Unifloc 7.17  Test                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.20  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
 '=======================================================================================
-' Работа с базой насосов и погружного оборудования
+' Pump and submersible equipment base operation
 '
 Option Explicit
-' набор глобоальный объектов создаваемых в памяти при работе с базой насосов
-' глобальные переменные позволяют загрузить один раз базу и работать с ней
-' без необходимости постоянно перезагружать ее с листа Excel
+' set of global objects created in memory when working with the pump base
+' global variables allow you to load a database once and work with it
+' without having to constantly reboot it from the Excel sheet.
 Public ESPbase As CESPBase
 Public ESP As CESPpump
 Public ESPsys As New CESPsystemSimple
 Public motor As New CESPMotor
-Const ESP_db_name = "ESP.db"
+Const esp_db_name = "ESP.db"
 Public Function loadESPbase() As Boolean
-' загрузка насоса с нужным ID из базы насосов
+' loading all db content to internal variables
     Dim numESP As Integer
+    Dim esp_db_full_name As String
+    Dim line_from_file As String
+    Dim lines_all As String
+    Dim ar_lines() As String
 On Error GoTo err1:
-    addLogMsg "Загружаем базу насосов"
+    lines_all = ""
+    esp_db_full_name = ThisWorkbook.Path & "\" & esp_db_name ' file db name
     
+    addLogMsg "loadESPbase. ESP db from file " & esp_db_full_name & " to be loaded."
+    
+    'read file once here
+    Open esp_db_full_name For Input As #1
+    Do While Not EOF(1)
+        Line Input #1, line_from_file
+        lines_all = lines_all & line_from_file & vbCrLf
+    Loop
+    Close #1
+    ' store all data in array of strings
+    lines_all = Replace(lines_all, vbLf, vbCrLf)
+    ar_lines = Split(lines_all, vbCrLf)
+    addLogMsg "loadESPbase. ESP db file " & esp_db_full_name & " load done." & CStr(UBound(ar_lines) + 1) & " lines"
+On Error GoTo err2:
     Set ESPbase = New CESPBase
-    ESPbase.load_db_file_ESP ThisWorkbook.Path & "\" & ESP_db_name
+    ESPbase.load_db_file_ESP ar_lines
     numESP = ESPbase.num_pumps
-    addLogMsg "Базу насосов загрузили, всего найдено " & numESP & " насосов"
+    
+    addLogMsg "loadESPbase. ESP db created with " & numESP & " pump records"
     loadESPbase = True
     Exit Function
 err1:
-    addLogMsg "Не удалось загрузить базу насосов. " & Err.Description
+    addLogMsg "loadESPbase. error loading file. " & esp_db_full_name & ":" & Err.Description
     loadESPbase = False
+    Exit Function
+err2:
+    addLogMsg "loadESPbase. error db creation. " & esp_db_full_name & ":" & Err.Description
+    loadESPbase = False
+    Exit Function
 End Function
 Public Function checkID_ESP(ID) As Boolean
-' проверка соотвествует ли переданный ID тому который загружен во временную переменную
+' check if the passed ID matches the one loaded in the temporary variable
 On Error GoTo err1:
     If ESP Is Nothing Then
         If Not loadESPbase Then checkID_ESP = False
-        Set ESP = ESPbase.get_pump(ID) ' ESPcollection.Item(CStr(ID))
+        Set ESP = ESPbase.get_pump(ID)
         checkID_ESP = True
     End If
     If ESP.db.ID = ID Then
         checkID_ESP = True
     Else
-        Set ESP = ESPbase.get_pump(ID) ' ESPcollection.Item(CStr(ID))
+        Set ESP = ESPbase.get_pump(ID)
         checkID_ESP = True
     End If
 Exit Function
@@ -51,8 +76,8 @@ err1:
     checkID_ESP = False
 End Function
 Public Function getESP(ID) As CESPpump
-' возвращает ЭЦН с заданным номером из базы
-    Dim newESP As New CESPpump
+' returns an ESP with a specified number from the base
+   Dim newESP As New CESPpump
     If checkID_ESP(ID) Then
         Call newESP.Copy(ESP)
         Set getESP = newESP
@@ -61,16 +86,10 @@ End Function
 Public Function checkID_Motor(ID) As Boolean
     checkID_Motor = True
 End Function
-Public Function get_motor(ID) As CESPMotor
-' возвращает Двигатель для ЭЦН с заданным номером из базы
-End Function
 Public Function checkID_Cable(ID) As Boolean
     checkID_Cable = True
 End Function
 Public Function checkID_GasSep(ID) As Boolean
     checkID_GasSep = True
-End Function
-Public Function getGasSep(ID) As CESPGasSep
-' возвращает газосепаратор для УЭЦН с заданным номером из базы
 End Function
 
