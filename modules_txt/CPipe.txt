@@ -138,6 +138,18 @@ Public Property Get depth_vert_m() As Double
     depth_vert_m = depth_vert_total_m_
 End Property
    
+Public Sub InitTlinearSmart(ByVal t_from_C As Double, _
+                            ByVal t_to_C As Double, _
+                            ByVal calc_flow_direction As Integer)
+                            
+    If calc_flow_direction = 1 Or calc_flow_direction = 0 Then
+        InitTlinear t_to_C, t_from_C
+    Else
+        InitTlinear t_from_C, t_to_C
+    End If
+    
+End Sub
+   
 Public Sub InitTlinear(ByVal T_start_coord_C As Double, ByVal T_end_coord_C As Double)
 ' начальная инициализация распределения температуры в трубе
        If legth_total_m_ > 0 Then
@@ -414,7 +426,7 @@ With fluid
                   v = vg_msec    ' оценка сверху
                   dvdL = -v / p_atma * dp_dl
                   dt_dl = ambient_formation.calc_dtdl_Cm(Hv_m, sind(theta_deg), t_C, .wm_kgsec, .cmix_JkgC, _
-                                                          dp_dl, v, dvdL, .cJT_Katm, Not param_.FlowAlongCoord)
+                                                          dp_dl, v, dvdL, .cJT_Katm, param_.FlowAlongCoord)
         End Select
     End If
     ' тут надо записать в результаты все расчетные параметры
@@ -507,7 +519,7 @@ Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCur
 ' t_other_C  - опциональное значение температуры на другом конце трубы, необходимо при линейном
 '             распределении температуры
 Dim Y0(1) As Double   ' начальные значения для проведения расчета
-Dim n, M As Long
+Dim n, m As Long
 Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim Step As Double
@@ -519,23 +531,23 @@ Dim Rep As ODESolverReport
 Dim stPt As Boolean
 'ReDim Y0(1)
 On Error GoTo err1:
-    eps = 0.01
+    eps = const_pressure_tolerance '0.01
     Step = 10
     Y0(0) = p_atma
     Y0(1) = t_C
     n = 2                   ' размер системы  - две переменные - давление и температура
-    M = hm_curve_.num_points ' количество точек для которых надо выдать ответ
+    m = hm_curve_.num_points ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
-    ReDim x(M - 1)
+    ReDim x(m - 1)
     
     If param.CalcAlongCoord Then
-        For i = 0 To M - 1
+        For i = 0 To m - 1
             x(i) = hm_curve_.pointX(i + 1)
         Next i
     Else
-        For i = 0 To M - 1
-            x(i) = hm_curve_.pointX(M - i)
+        For i = 0 To m - 1
+            x(i) = hm_curve_.pointX(m - i)
         Next i
     End If
       ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
@@ -546,7 +558,7 @@ On Error GoTo err1:
         
  '   Y = solve_ode("calc_grad_2d", Y0, x, coeffA, Eps)
     
-    Call ODESolverRKCK(Y0(), n, x, M, eps, Step, State)
+    Call ODESolverRKCK(Y0(), n, x, m, eps, Step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
@@ -563,7 +575,7 @@ On Error GoTo err1:
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, y, Rep)
+    Call ODESolverResults(State, m, x, y, Rep)
     ' If necessary convert the AlgLib output array(s) to
     ' a form suitable for Excel.  In this case YA2 is
     ' a 2D base 0 array, which may be assigned to the
@@ -572,15 +584,15 @@ On Error GoTo err1:
     ' ODE = YA2
     
     ' подговим выходные результаты функции
-    calc_dPipe_2d.p_atma = y(M - 1, 0)
-    calc_dPipe_2d.t_C = y(M - 1, 1)
+    calc_dPipe_2d.p_atma = y(m - 1, 0)
+    calc_dPipe_2d.t_C = y(m - 1, 1)
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         curve("c_P").ClearPoints
         curve("c_T").ClearPoints
         curve("c_Tamb").ClearPoints
-        For i = 0 To M - 1
-            stPt = i = 0 Or i = M - 1
+        For i = 0 To m - 1
+            stPt = i = 0 Or i = m - 1
             curve("c_P").AddPoint x(i), y(i, 0), stPt
             curve("c_T").AddPoint x(i), y(i, 1), stPt
             If param.temp_method = AmbientTemp Then
@@ -606,7 +618,7 @@ Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESU
 ' основан на применении ODEsolver
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim Y0(0) As Double   ' начальные значения для проведения расчета
-Dim n, M As Long
+Dim n, m As Long
 Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim Step As Double
@@ -617,23 +629,23 @@ Dim pfp As PIPE_FLOW_PARAMS
 Dim Rep As ODESolverReport
 Dim stPt As Boolean
 On Error GoTo err1:
-    eps = 0.1
+    eps = const_pressure_tolerance  '0.001
     Step = 10
     Y0(0) = p_atma
     
 '    Y0(1) = PT.T_C
     n = 1                   ' размер системы  - одна переменные - давление и температура
-    M = hm_curve_.num_points ' количество точек для которых надо выдать ответ
+    m = hm_curve_.num_points ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
-    ReDim x(M - 1)
+    ReDim x(m - 1)
     If param.CalcAlongCoord Then
-        For i = 0 To M - 1
+        For i = 0 To m - 1
             x(i) = hm_curve_.pointX(i + 1)
         Next i
     Else
-        For i = 0 To M - 1
-            x(i) = hm_curve_.pointX(M - i)
+        For i = 0 To m - 1
+            x(i) = hm_curve_.pointX(m - i)
         Next i
     End If
       ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
@@ -641,7 +653,7 @@ On Error GoTo err1:
 '    If fluid.qliq_sm3day = 0 Then
 '        Y0(1) = ambient_formation.amb_temp_C(X(0))
 '    End If
-    Call ODESolverRKCK(Y0(), n, x, M, eps, Step, State)
+    Call ODESolverRKCK(Y0(), n, x, m, eps, Step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
@@ -664,23 +676,23 @@ On Error GoTo err1:
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
-    Call ODESolverResults(State, M, x, y, Rep)
+    Call ODESolverResults(State, m, x, y, Rep)
     ' If necessary convert the AlgLib output array(s) to
     ' a form suitable for Excel.  In this case YA2 is
     ' a 2D base 0 array, which may be assigned to the
     ' function return value without further processing.
     ' Assign the output array to the function return value
     ' ODE = YA2
-    
+   ' Debug.Print i    ' 133  iteration approximatly min
     ' подговим выходные результаты функции
-    calc_dPipe_1d.p_atma = y(M - 1, 0)
-    calc_dPipe_1d.t_C = t_init_C(x(M - 1))
+    calc_dPipe_1d.p_atma = y(m - 1, 0)
+    calc_dPipe_1d.t_C = t_init_C(x(m - 1))
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         curve("c_P").ClearPoints
         curve("c_T").ClearPoints
         curve("c_Tamb").ClearPoints
-        For i = 0 To M - 1
+        For i = 0 To m - 1
 '            stPt = h_mes_insert_m_.TestPoint(x(i)) >= 0
             If h_mes_insert_m_.TestPoint(x(i)) >= 0 Then
                 stPt = True
@@ -706,11 +718,11 @@ End Function
 Private Sub FillDetailedCurve()
 ' функция расчета  детальных распределений параметров по длине трубы
     Dim i As Integer
-    Dim M As Integer
+    Dim m As Integer
     Dim FlowParams_out As PIPE_FLOW_PARAMS
-    M = curve("c_P").num_points
+    m = curve("c_P").num_points
     Call curve.ClearPoints_unprotected
-    For i = 1 To M
+    For i = 1 To m
         FlowParams_out = calc_grad(curve("c_P").pointX(i), _
                                     curve("c_P").PointY(i), _
                                     curve("c_T").PointY(i))
@@ -756,7 +768,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20, _
 ' num_points - количество точек в выходных массивах для вывода
 '
     Dim arr()
-    Dim M As Integer
+    Dim m As Integer
     Dim FlowParams_out As PIPE_FLOW_PARAMS
     Dim offset As Integer
     Dim i As Integer
@@ -771,19 +783,19 @@ On Error Resume Next
     Set crv_P = curve("c_P").ClonePointsToNum(num_points)
     Set crv_T = curve("c_T").ClonePointsToNum(num_points)
     
-    M = crv_P.num_points
+    m = crv_P.num_points
     If Not all_curves_out Then
-        ReDim arr(M + offset, 8)
+        ReDim arr(m + offset, 8)
     Else
-        ReDim arr(M + offset, 40)    ' get ready to output all
+        ReDim arr(m + offset, 40)    ' get ready to output all
     End If
     
     arr(0, 0) = p_result_atma
     arr(0, 1) = t_result_C
     arr(0, 2) = crv_P.PointY(1)
     arr(0, 3) = crv_T.PointY(1)
-    arr(0, 4) = crv_P.PointY(M)
-    arr(0, 5) = crv_T.PointY(M)
+    arr(0, 4) = crv_P.PointY(m)
+    arr(0, 5) = crv_T.PointY(m)
     arr(0, 6) = c_calibr_grav_
     arr(0, 7) = c_calibr_fric_
     arr(0, 8) = fluid.q_gas_sm3day
@@ -913,7 +925,7 @@ On Error Resume Next
         arr(offset, 39) = "c_vg"
         arr(offset, 40) = "c_Rs"
     End If
-    For i = 1 To M
+    For i = 1 To m
         arr(offset + i, 0) = i
         hh = crv_P.pointX(i)
         arr(offset + i, 1) = hh

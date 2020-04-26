@@ -67,16 +67,14 @@ Public Function new_pipeline_with_stream( _
                  ByVal qliq_sm3day As Double, _
                  ByVal fw_perc As Double, _
                  ByVal h_list_m As Variant, _
-        Optional ByVal t_calc_from_C As Double = 50, _
-        Optional ByVal calc_along_coord As Boolean = False, _
-        Optional ByVal flow_along_coord As Boolean = False, _
+                 ByVal t_calc_from_C As Double, _
+                 ByVal calc_flow_direction As Integer, _
         Optional ByVal str_PVT As String = PVT_DEFAULT, _
         Optional ByVal diam_list_mm As Variant, _
         Optional ByVal hydr_corr As H_CORRELATION = 0, _
-        Optional ByVal t_amb_list_C As Variant, _
+        Optional ByVal t_val As Variant, _
         Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
-        Optional ByVal c_calibr_grav = 1, _
-        Optional ByVal c_calibr_fric = 1, _
+        Optional ByVal c_calibr = 1, _
         Optional ByVal roughness_m As Double = 0.0001, _
         Optional ByVal q_gas_sm3day As Double = 0 _
                          ) As CPipe
@@ -89,6 +87,9 @@ Public Function new_pipeline_with_stream( _
     Dim amb As New CAmbientFormation
     Dim temp_crv As New CInterpolation
     Dim prm As PARAMCALC
+    Dim c_calibr_grav As Double
+    Dim c_calibr_fric As Double
+    Dim clbr
 On Error GoTo err1:
     
     
@@ -104,23 +105,40 @@ On Error GoTo err1:
     PVT.q_gas_free_sm3day = q_gas_sm3day
     Set pipe.fluid = PVT
     
-    pipe.param = set_calc_flow_param(calc_along_coord, _
-                                     flow_along_coord, _
+    pipe.param = set_calc_flow_param(calc_along_coord:=calc_flow_direction \ 10 = 1, _
+                                     flow_along_coord:=calc_flow_direction Mod 10 = 1, _
                                      hcor:=hydr_corr, _
                                      temp_method:=StartEndTemp)
+                                     
     pipe.InitTlinear t_calc_from_C, t_calc_from_C
     pipe.t_calc_C = t_calc_from_C
     
-    If Not IsMissing(t_amb_list_C) Then
-        Call temp_crv.load_from_range(t_amb_list_C)
+    Dim tarr
+    Dim t_calc_to_C As Double
+    tarr = array_num_from_range(t_val, True)
+    If UBound(tarr, 1) = 1 And UBound(tarr, 2) = 1 Then
+        t_calc_to_C = tarr(1, 1)
+        
+        pipe.InitTlinearSmart t_calc_from_C, t_calc_to_C, calc_flow_direction
+    Else
+        Call temp_crv.load_from_range(t_val)
         Set amb.amb_temp_curve = temp_crv
         Set pipe.ambient_formation = amb
         prm = pipe.param
         prm.temp_method = temp_method
         pipe.param = prm
+        
     End If
     
+    
     ' set calibration properties
+    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+    c_calibr_grav = clbr(1)
+    If UBound(clbr) >= 2 Then
+        c_calibr_fric = clbr(2)
+    Else
+        c_calibr_fric = 1
+    End If
     pipe.c_calibr_grav = c_calibr_grav
     pipe.c_calibr_fric = c_calibr_fric
     
@@ -139,15 +157,14 @@ Public Function new_pipe_with_stream( _
             ByVal qliq_sm3day As Double, _
             ByVal fw_perc As Double, _
             ByVal length_m As Double, _
-            ByVal calc_along_flow As Boolean, _
+            ByVal calc_flow_direction As Integer, _
             Optional ByVal str_PVT As String = PVT_DEFAULT, _
             Optional ByVal theta_deg As Double = 90, _
             Optional ByVal d_mm As Double = 60, _
             Optional ByVal hydr_corr As H_CORRELATION = 0, _
             Optional ByVal t_calc_from_C As Double = 50, _
             Optional ByVal t_calc_to_C As Double = -1, _
-            Optional ByVal c_calibr_grav = 1, _
-            Optional ByVal c_calibr_fric = 1, _
+            Optional ByVal c_calibr = 1, _
             Optional ByVal roughness_m As Double = 0.0001, _
             Optional ByVal q_gas_sm3day As Double = 0 _
                          ) As CPipe
@@ -161,6 +178,9 @@ Public Function new_pipe_with_stream( _
     Dim out, out_desc
     Dim out_curves_type As CALC_RESULTS
     Dim res
+    Dim c_calibr_grav As Double
+    Dim c_calibr_fric As Double
+    Dim clbr
     ' initialize stream properties
     Set PVT = PVT_decode_string(str_PVT)    ' create atream object from given string
     PVT.qliq_sm3day = qliq_sm3day           ' set liquid rate to stream
@@ -171,20 +191,25 @@ Public Function new_pipe_with_stream( _
     ' initialize pipe geometry
     Call pipe.init_pipe(d_mm, length_m, theta_deg, roughness_m)
     ' Pcalc and Tcalc position depends on calc_along_flow
-    pipe.param = set_calc_flow_param(calc_along_coord:=Not calc_along_flow, _
-                                     flow_along_coord:=theta_deg < 0, _
+    pipe.param = set_calc_flow_param(calc_along_coord:=calc_flow_direction \ 10 = 1, _
+                                     flow_along_coord:=calc_flow_direction Mod 10 = 1, _
                                      hcor:=hydr_corr, _
                                      temp_method:=StartEndTemp)
     ' check temp distribution. if second temp not given - set uniform
     If t_calc_to_C < 0 Then t_calc_to_C = t_calc_from_C
     ' temperature initialisation depend on calc direction because initialisation procedure depends on coord direction
     ' check flow direction
-    If calc_along_flow Then
-        pipe.InitTlinear t_calc_to_C, t_calc_from_C
-    Else
-        pipe.InitTlinear t_calc_from_C, t_calc_to_C
-    End If
+    
+    pipe.InitTlinearSmart t_calc_from_C, t_calc_to_C, calc_flow_direction
+    
     ' set calibration properties
+    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+    c_calibr_grav = clbr(1)
+    If UBound(clbr) >= 2 Then
+        c_calibr_fric = clbr(2)
+    Else
+        c_calibr_fric = 1
+    End If
     pipe.c_calibr_grav = c_calibr_grav
     pipe.c_calibr_fric = c_calibr_fric
     Set new_pipe_with_stream = pipe

@@ -67,4 +67,216 @@ Exit Function
 err1:
     CDbl_safe = str_
 End Function
+Public Function array_from_range(var_input)
+' return array from range or from array or from number
+    Dim ar() As Variant
+    Dim rng As range
+    Dim d As Long
+    Dim i As Integer, j As Integer
+On Error GoTo err1:
+    If (TypeOf var_input Is range) Then
+        Set rng = var_input
+        If rng.Cells.Count = 1 Then
+            ReDim ar(1 To 1, 1 To 1)
+            ar(1, 1) = rng.Value
+        Else
+            ar = rng.Value2
+        End If
+    ElseIf IsArray(var_input) Then
+        d = getDimension(var_input)
+        If d = 2 Then
+            ReDim ar(1 To UBound(var_input, 1) - LBound(var_input, 1) + 1, 1 To UBound(var_input, 2) - LBound(var_input, 2) + 1)
+            For i = 1 To UBound(var_input, 1) - LBound(var_input, 1) + 1
+                For j = 1 To UBound(var_input, 2) - LBound(var_input, 2) + 1
+                    ar(i, j) = var_input(i + LBound(var_input, 1) - 1, j + LBound(var_input, 2) - 1)
+                Next
+            Next
+        ElseIf d = 1 Then
+            
+            ReDim ar(1 To UBound(var_input, 1) - LBound(var_input, 1) + 1, 1 To 1)
+            For i = 1 To UBound(var_input, 1) - LBound(var_input, 1) + 1
+                ar(i, 1) = var_input(i + LBound(var_input, 1) - 1)
+            Next
+        Else
+            GoTo err1:
+        End If
+    Else
+        ReDim ar(1 To 1, 1 To 1)
+        ar(1, 1) = var_input
+    End If
+    
+    array_from_range = ar
+    Exit Function
+err1:
+    Dim errmsg As String
+    errmsg = "Error:array_from_range:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kreadRangeError, "array_from_range", errmsg
+End Function
+Function getDimension(var As Variant) As Long
+    On Error GoTo Err
+    Dim i As Long
+    Dim tmp As Long
+    i = 0
+    Do While True
+        i = i + 1
+        tmp = UBound(var, i)
+    Loop
+Err:
+    getDimension = i - 1
+End Function
+Public Function array_num_from_range(var_input, Optional remove_zeros As Boolean = False)
+    Dim ar() As Variant
+    Dim ard() As Double
+    Dim ard2() As Double
+    Dim val As Double
+    Dim i As Integer, j As Integer
+    ar = array_from_range(var_input)
+On Error GoTo err1:
+    ReDim ard(1 To (UBound(ar, 1) - LBound(ar, 1) + 1), 1 To (UBound(ar, 2) - LBound(ar, 2) + 1))
+    For i = LBound(ar, 1) To UBound(ar, 1)
+        For j = LBound(ar, 2) To UBound(ar, 2)
+            val = Cdbl_(CStr(ar(i, j)))
+            ard(i, j) = val
+        Next
+    Next
+    Dim m As Double
+    If remove_zeros Then
+On Error GoTo err2:
+        ' transpose to delete zeros rows
+        ReDim ard2(1 To UBound(ard, 2), 1 To UBound(ard, 1))
+        For i = UBound(ard, 1) To LBound(ard, 1) Step -1
+            For j = UBound(ard, 2) To LBound(ard, 2) Step -1
+                ard2(j, i) = ard(i, j)
+            Next
+        Next
+        ' delete zero rows
+        For i = UBound(ard2, 2) To LBound(ard2, 2) Step -1
+            m = 0
+            For j = UBound(ard2, 1) To LBound(ard2, 1) Step -1
+                m = m + Abs(ard2(j, i))
+            Next
+            If m = 0 Then
+                ReDim Preserve ard2(1 To UBound(ard2, 1), 1 To i - 1)
+            Else
+                Exit For
+            End If
+        Next
+        ' transpose back
+        
+        ReDim ard(1 To UBound(ard2, 2), 1 To UBound(ard2, 1))
+        For i = UBound(ard2, 1) To LBound(ard2, 1) Step -1
+            For j = UBound(ard2, 2) To LBound(ard2, 2) Step -1
+                ard(j, i) = ard2(i, j)
+            Next
+        Next
+        
+        ' delete zero cols
+        For i = UBound(ard, 2) To LBound(ard, 2) Step -1
+            m = 0
+            For j = UBound(ard, 1) To LBound(ard, 1) Step -1
+                m = m + Abs(ard(j, i))
+            Next
+            If m = 0 Then
+                ReDim Preserve ard(1 To UBound(ard, 1), 1 To i - 1)
+            Else
+                Exit For
+            End If
+        Next
+        
+        
+    End If
+    
+    
+    array_num_from_range = ard
+        
+    Exit Function
+err1:
+    val = 0
+    Resume Next
+err2:
+    
+End Function
+Public Function array1d_from_range(var_input, _
+                        Optional ByVal num_only As Boolean = False, _
+                        Optional ByVal no_zero As Boolean = False)
+' return 1 d array from range or from array or from number
+    Dim ar
+    Dim arout() As Variant
+    Dim rng As range
+    Dim i As Integer
+    Dim j As Integer
+    Dim k As Integer
+    Dim num As Integer
+On Error GoTo err1:
+    If num_only And no_zero Then
+        ar = array_num_from_range(var_input, remove_zeros:=True)
+    ElseIf num_only Then
+        ar = array_num_from_range(var_input, remove_zeros:=False)
+    Else
+        ar = array_from_range(var_input)
+    End If
+    num = (UBound(ar, 1) - LBound(ar, 1) + 1) * (UBound(ar, 2) - LBound(ar, 2) + 1)
+    ReDim arout(1 To num)
+    k = 1
+    For i = LBound(ar, 1) To UBound(ar, 1)
+        For j = LBound(ar, 2) To UBound(ar, 2)
+            arout(k) = ar(i, j)
+            k = k + 1
+        Next
+    Next
+    array1d_from_range = arout
+    Exit Function
+err1:
+    Dim errmsg As String
+    errmsg = "Error:array1d_from_range:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kreadRangeError, "array1d_from_range", errmsg
+End Function
+Public Function readRange(rr)
+    Dim ar() As Variant
+    Dim arout() As Variant
+        Dim i As Integer
+        Dim j As Integer
+On Error GoTo err1:
+    If (TypeOf rr Is range) Or IsArray(rr) Then
+        j = 0
+        If (TypeOf rr Is range) Then
+            If rr.Cells.Count = 1 Then
+                ReDim ar(1 To 1, 1 To 1)
+                ar(1, 1) = rr.Value
+            Else
+                ar = rr.Value
+            End If
+            For i = LBound(ar) To UBound(ar)
+                If Not IsEmpty(ar(i, 1)) Then
+                    j = j + 1
+                    ReDim Preserve arout(1 To j)
+                    arout(j) = ar(i, 1)
+                End If
+            Next i
+        Else
+            ReDim arout(LBound(rr) To UBound(rr))
+            For i = LBound(rr) To UBound(rr)
+                arout(i) = rr(i)
+                j = j + 1
+            Next i
+        End If
+        If j = 0 Then
+        ' не газлифтная скважина
+            ReDim arout(1 To 1)
+            arout(1) = 0
+        End If
+    Else
+        ReDim arout(1 To 1)
+        arout(1) = rr
+    End If
+    readRange = arout
+    Exit Function
+err1:
+    Dim errmsg As String
+    errmsg = "Error:readRange:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kreadRangeError, "readRange", errmsg
+End Function
 
