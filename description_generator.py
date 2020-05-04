@@ -240,7 +240,7 @@ class VBA_Func_Header:
 
         not_nedeed_in_string = [self.func_name, "ByVal","-1", "const", "Optional", "Double", "Integer", "Boolean", "Long" , "Variant",
                                 "String", "Public", " As ", "Function", " _ ", " ", "=",  "\n", "\' ", "(_",
-                                "PVT_DEFAULT", "H_CORRELATION"]
+                                "PVT_DEFAULT", "H_CORRELATION", "TEMP_CALC_METHOD"]
         last_step = 0
         while string_contain_end_of_parametrs == False:
             math_object = re.search(r'\)', result_lines[string_number])

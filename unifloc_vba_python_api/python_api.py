@@ -243,9 +243,9 @@ class API():
 
         calc_flow_direction - направление расчета и потока относительно  координат. 11 расчет и поток по координате  10 расчет по коордиате, поток против  00 расчет и поток против ..см.мануал   
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0,  ansari = 1,  unified = 2,  gray = 3,  hagedornbrown = 4,  sakharovmokhov = 5  temp_method - метод..см.мануал   
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0,  ansari = 1,  unified = 2,  gray = 3,  hagedornbrown = 4,  sakharovmokhov = 5    
 
-   temp_methodtemp_calc_method   
+        temp_method - метод расчета температуры  0 - линейное распределение по длине  1 - температура равна температуре окружающей среды  2 - расчет температуры с учетом эмиссии в ..см.мануал   
 
         c_calibr - поправка на гравитационную составляющую  перепада давления, если дать ссылку на две ячейки,  то вторая будет поправка на трение.    
 
@@ -260,7 +260,7 @@ class API():
         """
 
         self.f_MF_calibr_pipeline = self.book.macro("MF_calibr_pipeline")
-        return self.f_MF_calibr_pipeline(p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_methodTEMP_CALC_METHOD,c_calibr,roughness_m,out_curves,out_curves_num_points,calibr_type)
+        return self.f_MF_calibr_pipeline(p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_method,c_calibr,roughness_m,out_curves,out_curves_num_points,calibr_type)
 
     def MF_calibr_pipe(self, p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,c_calibr=1,roughness_m=0.0001,calibr_type=0):
         """" подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций
@@ -391,9 +391,9 @@ class API():
 
         calc_flow_direction - направление расчета и потока относительно  координат. 11 расчет и поток по координате  10 расчет по коордиате, поток против  00 расчет и поток против ..см.мануал   
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0,  ansari = 1,  unified = 2,  gray = 3,  hagedornbrown = 4,  sakharovmokhov = 5  temp_method - метод..см.мануал   
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0,  ansari = 1,  unified = 2,  gray = 3,  hagedornbrown = 4,  sakharovmokhov = 5    
 
-   temp_methodtemp_calc_method   
+        temp_method - метод расчета температуры  0 - линейное распределение по длине  1 - температура равна температуре окружающей среды  2 - расчет температуры с учетом эмиссии в ..см.мануал   
 
         c_calibr - поправка на гравитационную составляющую  перепада давления, если дать ссылку на две ячейки,  то вторая будет поправка на трение.    
 
@@ -406,7 +406,7 @@ class API():
         """
 
         self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
-        return self.f_MF_p_pipeline_atma(p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_methodTEMP_CALC_METHOD,c_calibr,roughness_m,out_curves,out_curves_num_points)
+        return self.f_MF_p_pipeline_atma(p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_method,c_calibr,roughness_m,out_curves,out_curves_num_points)
 
     def MF_p_pipe_atma(self, p_calc_from_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20):
         """" расчет распределения давления и температуры в трубе  с использованием многофазных корреляций
@@ -2357,9 +2357,9 @@ class API():
 
         temp_list_c - температура среды. range или таблица [0..n,0..1]    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
 
-   temp_methodtemp_calc_method   
+        temp_method - температурная модель    
 
         twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
 
@@ -2378,7 +2378,7 @@ class API():
         """
 
         self.f_well_plin_pwf_atma = self.book.macro("well_plin_pwf_atma")
-        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
     def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
         """" Расчет забойного давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций
@@ -2407,9 +2407,9 @@ class API():
 
         temp_list_c - температура среды. range или таблица [0..n,0..1]    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
 
-   temp_methodtemp_calc_method   
+        temp_method - температурная модель    
 
    twf_c   
 
@@ -2428,7 +2428,7 @@ class API():
         """
 
         self.f_well_pwf_plin_atma = self.book.macro("well_pwf_plin_atma")
-        return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
     def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
         """" Расчет устьевого давления скважины по давлению на приеме.  Расчет распределения давления и температуры в скважине  с использованием многофазных корреляций.
@@ -2457,9 +2457,9 @@ class API():
 
         temp_list_c - температура среды. range или таблица [0..n,0..1]    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
 
-   temp_methodtemp_calc_method   
+        temp_method - температурная модель    
 
         twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
 
@@ -2478,7 +2478,7 @@ class API():
         """
 
         self.f_wellESP_plin_pintake_atma = self.book.macro("wellESP_plin_pintake_atma")
-        return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
     def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,num_pt_crv=21):
         """" Расчет забойного давления по узловому анализу,  скважины и пласта.
@@ -2509,9 +2509,9 @@ class API():
 
         temp_list_c - температура среды. range или таблица [0..n,0..1]    
 
-        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5  temp_method - температур..см.мануал   
+        hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
 
-   temp_methodtemp_calc_method   
+        temp_method - температурная модель    
 
         twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
 
@@ -2528,7 +2528,7 @@ class API():
         """
 
         self.f_nodal_pwf_atma = self.book.macro("nodal_pwf_atma")
-        return self.f_nodal_pwf_atma(pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_methodTEMP_CALC_METHOD,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,num_pt_crv)
+        return self.f_nodal_pwf_atma(pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,num_pt_crv)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """" функция поиска значения функции по заданным табличным данным (интерполяция)
