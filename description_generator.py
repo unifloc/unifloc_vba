@@ -62,7 +62,7 @@ start_classes_str = "import xlwings as xw\n" \
                     "" + tab_str + "def __init__(self, addin_name_str):\n" \
                     "" + 2 * tab_str + "self.book = xw.Book(addin_name_str)\n"
                     
-create_class_str = "UniflocVBA = API(addin_name_str)\n"
+create_class_str = "#UniflocVBA = API(addin_name_str)\n"
 
 api_const_string = "H_CORRELATION = 0 # 0 - BeggsBrill, 1 - Ansari and so on \n" \
                    "PVT_CORRELATION = 0 # 0 -Standing, 1 -McCain, 2 - linear \n" \
@@ -82,7 +82,9 @@ api_const_string = "H_CORRELATION = 0 # 0 - BeggsBrill, 1 - Ansari and so on \n"
                    "const_Bob_default = 1.2 \n" \
                    "const_tres_default = 90 \n" \
                    "const_Roughness_default = 0.0001 \n" \
-                   "Standing_based = 0 \n"
+                   "StartEndTemp = 0 \n" \
+                   "Standing_based = 0 \n" \
+                   " \n"
 
 
 
