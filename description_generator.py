@@ -93,17 +93,19 @@ API_func_str = ""
 
 def create_func_in_API(parameters_str, atributs_in_signature_str, func_name_str, func_from_book, func_description, description_string_lines):
     start_string_in_func = tab_str + "def " + func_name_str + "(self, " + atributs_in_signature_str + "):\n"
+    func_description = func_description.replace("\")","")
     func_description = func_description.replace("\"","   ")
     func_description = func_description.replace(", _", "")
     func_description = func_description.replace("\'", "")
-    func_description = func_description.replace("ArgumentDescriptions:=Array( ", "")
-    func_description = "        " + func_description + "        \"\"\"\n"
+    func_description = func_description.replace("        ArgumentDescriptions:=Array(", "")
+    func_description = " ==========  arguments  ============== \n" + func_description + "        \"\"\"\n"
     func_description = func_description.replace("\n", "\n\n")
     func_description = func_description.replace("\n\n\n\n", "")
 
-    description_string_lines = description_string_lines.replace(description_string, "")
+    description_string_lines = description_string_lines.replace(description_string, " ========== description ============== \n")
     description_string_lines = description_string_lines.replace(", _", "")
-    description_string_lines = "        \"\"\"" + description_string_lines + "        \n"
+    description_string_lines = description_string_lines.replace("\"", "")
+    description_string_lines = "        \"\"\"\n" + description_string_lines + "        \n"
     description_string_lines = description_string_lines.replace(" \"\n", "\n")
     description_string_lines = description_string_lines.replace("\'", "")
 
@@ -341,7 +343,7 @@ class VBA_Func_Header:
                         """
                         in this place parametr are found and description will be search in next lines before new parametr
                         """
-                        current_addition = "    \"" + self.edit_string(lower_current_string)
+                        current_addition = " \"" + self.edit_string(lower_current_string)
 
                         if current_string_number != last_number:
                             current_string_number_plus = current_string_number + 1
