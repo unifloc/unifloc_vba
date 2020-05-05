@@ -18,6 +18,7 @@ const_tres_default = 90
 const_Roughness_default = 0.0001 
 StartEndTemp = 0 
 Standing_based = 0 
+const_rho_air = 1.2217 
  
 import xlwings as xw
 addin_name_str = "UniflocVBA_7.xlam"
@@ -224,7 +225,7 @@ class API():
         self.f_MF_ksep_total_d = self.book.macro("MF_ksep_total_d")
         return self.f_MF_ksep_total_d(SepNat,SepGasSep)
 
-    def MF_dpdl_atmm(self, d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,gamma_oil=const_go_,gamma_gas=const_gg_,eps_m=0.0001,theta_deg=90,ZNLF=False):
+    def MF_dpdl_atmm(self, d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,rho_lrc_kgm3=const_go_*1000,rho_grc_kgm3=const_gg_*const_rho_air,eps_m=0.0001,theta_deg=90,hcorr=1,param_out=0,c_calibr_grav=1,c_calibr_fric=1):
         """
  ========== description ============== 
 расчет градиента давления с использованием многофазных корреляций 
@@ -245,20 +246,26 @@ class API():
 
      sigma_oil_gas_nm - поверхностное натяжение  жидкость газ    
 
-     gamma_oil - удельная плотность нефти    
+     rho_lrc_kgm3 - плотность нефти    
 
-     gamma_gas - удельная плотность газа    
+     rho_grc_kgm3 - плотность газа    
 
      eps_m - шероховатость    
 
      theta_deg - угол от горизонтали    
 
-     znlf - флаг для расчета барботажа   
+     hcorr - тип корреляции    
+
+     param_out - параметр для вывода    
+
+     c_calibr_grav - калибровка гравитации    
+
+     c_calibr_fric - калибровка трения   
 
         """
 
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
-        return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,gamma_oil,gamma_gas,eps_m,theta_deg,ZNLF)
+        return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,c_calibr_grav,c_calibr_fric)
 
     def MF_calibr_pipeline(self, p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,calibr_type=0):
         """

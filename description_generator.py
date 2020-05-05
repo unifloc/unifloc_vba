@@ -84,7 +84,8 @@ api_const_string = "H_CORRELATION = 0 # 0 - BeggsBrill, 1 - Ansari and so on \n"
                    "const_Roughness_default = 0.0001 \n" \
                    "StartEndTemp = 0 \n" \
                    "Standing_based = 0 \n" \
-                   " \n"
+                   "const_rho_air = 1.2217 \n" \
+                   " \n"    
 
 
 
