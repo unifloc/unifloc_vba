@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.23  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -17,23 +17,26 @@ Public Function ESP_head_m( _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
         Optional ByVal mu_cSt As Double = -1, _
-        Optional ByVal c_calibr_head As Double = 1, _
-        Optional ByVal c_calibr_rate As Double = 1, _
-        Optional ByVal c_calibr_power As Double = 1) As Double
+        Optional ByVal c_calibr = 1) As Double
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' num_stages  - количество ступеней
 ' freq_Hz    - частота вращения насоса
 ' pump_id    - номер насоса в базе данных
 ' mu_cSt     - вязкость жидкости, сСт;
-' c_calibr_head - поправочный коэффициент (множитель) на напор насоса.
-' c_calibr_rate - поправочный коэффициент (множитель) на подачу насоса.
-' c_calibr_power - поправочный коэффициент (множитель) на мощность.
+' c_calibr    - коэффициент поправки на напор.
+'               если массив то второе значение - поправыка на подачу (множитель)
+'               третье на мощность (множитель)
 'description_end
 On Error GoTo err1:
     If Not checkID_ESP(pump_id) Then
         ESP_head_m = 0
         Exit Function
     End If
+    
+    Dim c_calibr_head As Double
+    Dim c_calibr_rate As Double
+    Dim c_calibr_power As Double
+    Call read_ESP_calibr(c_calibr, c_calibr_head, c_calibr_rate, c_calibr_power)
     
     ESP.freq_Hz = freq_Hz
     ESP.stage_num = num_stages
@@ -54,16 +57,16 @@ Public Function ESP_power_W( _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
         Optional ByVal mu_cSt As Double = -1, _
-        Optional ByVal c_calibr_rate As Double = 1, _
-        Optional ByVal c_calibr_power As Double = 1) As Double
+        Optional ByVal c_calibr = 1) As Double
 ' мощность УЭЦН номинальная потребляемая
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' num_stages  - количество ступеней
 ' freq_Hz       - частота вращения насоса
 ' pump_id     - номер насоса в базе данных
 ' mu_cSt     - вязкость жидкости
-' c_calibr_rate - поправочный коэффициент (множитель) на подачу насоса.
-' c_calibr_power - поправочный коэффициент (множитель) на мощность.
+' c_calibr    - коэффициент поправки на напор.
+'               если массив то второе значение - поправыка на подачу (множитель)
+'               третье на мощность (множитель)
 'description_end
     
 On Error GoTo err1:
@@ -71,6 +74,11 @@ On Error GoTo err1:
         ESP_power_W = 0
         Exit Function
     End If
+    
+    Dim c_calibr_head As Double
+    Dim c_calibr_rate As Double
+    Dim c_calibr_power As Double
+    Call read_ESP_calibr(c_calibr, c_calibr_head, c_calibr_rate, c_calibr_power)
     
     ESP.freq_Hz = freq_Hz
     ESP.stage_num = num_stages
@@ -91,17 +99,15 @@ Public Function ESP_eff_fr( _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
         Optional ByVal mu_cSt As Double = -1, _
-        Optional ByVal c_calibr_head As Double = 1, _
-        Optional ByVal c_calibr_rate As Double = 1, _
-        Optional ByVal c_calibr_power As Double = 1) As Double
+        Optional ByVal c_calibr = 1) As Double
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
 ' num_stages  - количество ступеней
 ' freq_Hz       - частота вращения насоса
 ' pump_id     - номер насоса в базе данных
 ' mu_cSt     - вязкость жидкости
-' c_calibr_head - поправочный коэффициент (множитель) на напор насоса.
-' c_calibr_rate - поправочный коэффициент (множитель) на подачу насоса.
-' c_calibr_power - поправочный коэффициент (множитель) на мощность.
+' c_calibr    - коэффициент поправки на напор.
+'               если массив то второе значение - поправыка на подачу (множитель)
+'               третье на мощность (множитель)
 'description_end
     
 On Error GoTo err1:
@@ -111,9 +117,15 @@ On Error GoTo err1:
         Exit Function
     End If
     
+    Dim c_calibr_head As Double
+    Dim c_calibr_rate As Double
+    Dim c_calibr_power As Double
+    Call read_ESP_calibr(c_calibr, c_calibr_head, c_calibr_rate, c_calibr_power)
+    
     ESP.freq_Hz = freq_Hz
     ESP.stage_num = num_stages
     qliq_m3day = qliq_m3day / c_calibr_rate
+    ESP.correct_visc = True
     ESP_eff_fr = ESP.get_ESP_effeciency_fr(qliq_m3day, mu_cSt)
     ESP_eff_fr = ESP_eff_fr * c_calibr_head * c_calibr_rate / c_calibr_power
     Exit Function
@@ -218,9 +230,9 @@ Public Function ESP_p_atma( _
         Optional ByVal t_dis_C As Double = 50, _
         Optional ByVal calc_along_flow As Boolean = 1, _
         Optional ByVal ESP_gas_degradation_type As Integer = 0, _
-        Optional ByVal c_calibr_head As Double = 1, _
-        Optional ByVal c_calibr_rate As Double = 1, _
-        Optional ByVal c_calibr_power As Double = 1)
+        Optional ByVal c_calibr = 1, _
+        Optional ByVal out_curves_num_points As Integer = 20, _
+        Optional ByVal num_value As Integer = 0)
 ' qliq_sm3day       - дебит жидкости на поверхности
 ' fw_perc           - обводненность
 ' p_calc_atma        - давление для которого делается расчет
@@ -238,25 +250,25 @@ Public Function ESP_p_atma( _
 '                 calc_along_flow = True => p_atma давление на приеме
 '                 calc_along_flow = False => p_atma давление на выкиде
 ' ESP_gas_degradation_type  - тип насоса по работе с газом:
-'               0 нет коррекции;
-'               1 стандартный ЭЦН (предел 25%);
-'               2 ЭЦН с газостабилизирующим модулем (предел 50%);
-'               3 ЭЦН с осевым модулем (предел 75%);
-'               4 ЭЦН с модифицированным ступенями (предел 40%).
-'                 Предел по доле газа на входе в насос после сепарации
-'                 на основе статьи SPE 117414 (с корректировкой)
-'                 поправка дополнительная к деградации (суммируется).
-' c_calibr_head    - коэффициент поправки на напор (множитель)
-' c_calibr_rate    - коэффициент поправки на подачу (множитель)
-' c_calibr_power   - коэффициент поправки на мощность (множитель)
+'           0 нет коррекции;
+'           1 стандартный ЭЦН (предел 25%);
+'           2 ЭЦН с газостабилизирующим модулем (предел 50%);
+'           3 ЭЦН с осевым модулем (предел 75%);
+'           4 ЭЦН с модифицированным ступенями (предел 40%).
+'           5+, тогда модель n-5 применяется ко всем ступеням отдельно
+'           Предел по доле газа на входе в насос после сепарации
+'           на основе статьи SPE 117414 (с корректировкой)
+'           поправка дополнительная к деградации (суммируется).
+' c_calibr    - коэффициент поправки на напор.
+'               если массив то второе значение - поправыка на подачу (множитель)
+'               третье на мощность (множитель)
+' out_curves_num_points - количество точек для вывода значений
+'                   по ступеня.
+' num_value       - значение которое будет выводиться первым
 ' результат   - массив значений включающий
-'                   давления на входе/выходе
-'                   температура на входе/выходе
-'                   мощность потребляемая с вала, Вт
-'                   мощность гидравлическая по перекачке жидкости, Вт
-'                   КПД ЭЦН
 'description_end
     Dim fluid As CPVT
+    Dim arr
 On Error GoTo er1:
     ' check ESP loaded and ready
     If Not checkID_ESP(pump_id) Then
@@ -269,6 +281,24 @@ On Error GoTo er1:
         Set fluid = PVT_decode_string(str_PVT)
     End If
     
+    Dim clbr
+    
+    ' set calibration properties
+    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+    ESP.c_calibr_head = clbr(1)
+    If UBound(clbr) >= 2 Then
+        ESP.c_calibr_rate = clbr(2)
+    Else
+        ESP.c_calibr_rate = 1
+    End If
+    
+    If UBound(clbr) >= 3 Then
+        ESP.c_calibr_power = clbr(3)
+    Else
+        ESP.c_calibr_power = 1
+    End If
+    
+    
     fluid.qliq_sm3day = qliq_sm3day
     fluid.fw_perc = fw_perc
     
@@ -276,21 +306,23 @@ On Error GoTo er1:
     
     ESP.freq_Hz = freq_Hz
     ESP.stage_num = num_stages
-    ESP.c_calibr_head = c_calibr_head
-    ESP.c_calibr_rate = c_calibr_rate
-    ESP.c_calibr_power = c_calibr_power
     ESP.gas_degr_type = ESP_gas_degradation_type
     
-    Call ESP.calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow)
+    Call ESP.calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, True)
     
+    arr = ESP.array_out(out_curves_num_points)
     If calc_along_flow Then
-        ESP_p_atma = Array(Array(ESP.p_dis_atma, ESP.p_int_atma, ESP.p_dis_atma, ESP.t_int_C, ESP.t_dis_C, ESP.power_ESP_W, ESP.power_fluid_W, ESP.eff_ESP_d), _
-                           Array("p_dis_atma", "p_intake_atma", "p_dis_atma", "t_intake_C", "t_dis_C", "power_ESP_W", "power_fluid_W", "eff_d"))
+        arr(0, 0) = ESP.p_dis_atma
+        arr(1, 0) = "p_dis_atma"
     Else
-        ESP_p_atma = Array(Array(ESP.p_int_atma, ESP.p_int_atma, ESP.p_dis_atma, ESP.t_int_C, ESP.t_dis_C, ESP.power_ESP_W, ESP.power_fluid_W, ESP.eff_ESP_d), _
-                           Array("p_intake_atma", "p_intake_atma", "p_dis_atma", "t_intake_C", "t_dis_C", "power_ESP_W", "power_fluid_W", "eff_d"))
+        arr(0, 0) = ESP.p_int_atma
+        arr(1, 0) = "p_intake_atma"
     End If
-    ESP_p_atma = array_join(ESP_p_atma)
+    
+    arr(0, 0) = arr(0, num_value)
+    arr(1, 0) = arr(1, num_value)
+    
+    ESP_p_atma = arr
     Exit Function
 er1:
     ESP_p_atma = "error"
@@ -298,11 +330,12 @@ er1:
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расчета перепада давления ЭЦН в рабочих условиях
-Public Function ESP_dp_atm( _
+' расчет подстроечных параметров системы УЭЦН
+Public Function ESP_calibr_pump( _
                  ByVal qliq_sm3day As Double, _
                  ByVal fw_perc As Double, _
-                 ByVal p_calc_atma As Double, _
+                 ByVal p_int_atma As Double, _
+                 ByVal p_dis_atma As Double, _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal pump_id = 674, _
@@ -311,15 +344,12 @@ Public Function ESP_dp_atm( _
         Optional ByVal t_dis_C As Double = 50, _
         Optional ByVal calc_along_flow As Boolean = 1, _
         Optional ByVal ESP_gas_degradation_type As Integer = 0, _
-        Optional ByVal c_calibr_head As Double = 1, _
-        Optional ByVal c_calibr_rate As Double = 1, _
-        Optional ByVal c_calibr_power As Double = 1)
+        Optional ByVal c_calibr = 1, _
+        Optional ByVal calibr_type As Integer = 0)
 ' qliq_sm3day       - дебит жидкости на поверхности
 ' fw_perc           - обводненность
-' p_calc_atma        - давление для которого делается расчет
-'                     либо давление на приеме насоса
-'                     либо давление на выкиде насоса
-'                     определяется параметром calc_along_flow
+' p_int_atma        - давление на приеме насоса
+' p_dis_atma        - давление на выкиде насоса
 ' num_stages        - количество ступеней
 ' freq_Hz           - частота вращения вала ЭЦН, Гц
 ' pump_id           - идентификатор насоса
@@ -331,36 +361,60 @@ Public Function ESP_dp_atm( _
 '                 calc_along_flow = True => p_atma давление на приеме
 '                 calc_along_flow = False => p_atma давление на выкиде
 ' ESP_gas_degradation_type  - тип насоса по работе с газом:
-'               0 нет коррекции;
-'               1 стандартный ЭЦН (предел 25%);
-'               2 ЭЦН с газостабилизирующим модулем (предел 50%);
-'               3 ЭЦН с осевым модулем (предел 75%);
-'               4 ЭЦН с модифицированным ступенями (предел 40%).
-'                 Предел по доле газа на входе в насос после сепарации
-'                 на основе статьи SPE 117414 (с корректировкой)
-'                 поправка дополнительная к деградации (суммируется).
-' c_calibr_head    - коэффициент поправки на напор (множитель)
-' c_calibr_rate    - коэффициент поправки на подачу (множитель)
-' c_calibr_power   - коэффициент поправки на мощность (множитель)
+'           0 нет коррекции;
+'           1 стандартный ЭЦН (предел 25%);
+'           2 ЭЦН с газостабилизирующим модулем (предел 50%);
+'           3 ЭЦН с осевым модулем (предел 75%);
+'           4 ЭЦН с модифицированным ступенями (предел 40%).
+'           5+, тогда модель n-5 применяется ко всем ступеням отдельно
+'           Предел по доле газа на входе в насос после сепарации
+'           на основе статьи SPE 117414 (с корректировкой)
+'           поправка дополнительная к деградации (суммируется).
+' c_calibr    - коэффициент поправки на напор.
+'               если массив то второе значение - поправыка на подачу (множитель)
+'               третье на мощность (множитель)
+' calibr_type - тип калибровки
 ' результат   - массив значений включающий
-'                   перепад давления
-'                   перепад температур
-'                   мощность потребляемая с вала, Вт
-'                   мощность гидравлическая по перекачке жидкости, Вт
-'                   КПД ЭЦН
 'description_end
     Dim fluid As CPVT
+   ' Dim arr
+    Dim prm As New CSolveParam
+    
+    Dim coeffA(0 To 4)
+    Dim func As String
+    Dim cal_type_string As String
+    Dim val_min As Double, val_max As Double
+    Dim out, out_desc
+    
 On Error GoTo er1:
     ' check ESP loaded and ready
     If Not checkID_ESP(pump_id) Then
-        ESP_dp_atm = "ESP load error"
-        addLogMsg "ESP_dp_atm: ESP id = " & CInt(pump_id) & " load error"
+        ESP_calibr_pump = "ESP load error"
+        addLogMsg "ESP_calibr_pump: ESP id = " & CInt(pump_id) & " load error"
         Exit Function
     End If
     
     If str_PVT <> "" Then
         Set fluid = PVT_decode_string(str_PVT)
     End If
+    
+    Dim clbr
+    
+    ' set calibration properties
+    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+    ESP.c_calibr_head = clbr(1)
+    If UBound(clbr) >= 2 Then
+        ESP.c_calibr_rate = clbr(2)
+    Else
+        ESP.c_calibr_rate = 1
+    End If
+    
+    If UBound(clbr) >= 3 Then
+        ESP.c_calibr_power = clbr(3)
+    Else
+        ESP.c_calibr_power = 1
+    End If
+    
     
     fluid.qliq_sm3day = qliq_sm3day
     fluid.fw_perc = fw_perc
@@ -369,49 +423,56 @@ On Error GoTo er1:
     
     ESP.freq_Hz = freq_Hz
     ESP.stage_num = num_stages
-    ESP.c_calibr_head = c_calibr_head
-    ESP.c_calibr_rate = c_calibr_rate
-    ESP.c_calibr_power = c_calibr_power
     ESP.gas_degr_type = ESP_gas_degradation_type
-    If calc_along_flow Then
-        Call ESP.calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow)
-    Else
-        Call ESP.calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow)
-    End If
     
-    ESP_dp_atm = Array(Array(ESP.p_dis_atma - ESP.p_int_atma, ESP.t_dis_C - ESP.t_int_C, ESP.power_ESP_W, ESP.power_fluid_W, ESP.eff_ESP_d), _
-                       Array("dp_atm", "dt_C", "power_ESP_W", "power_fluid_W", "eff_d"))
-    ESP_dp_atm = array_join(ESP_dp_atm)
+        ' prepare solution function
+    Set coeffA(0) = ESP
+    coeffA(1) = p_int_atma
+    coeffA(2) = p_dis_atma
+    coeffA(3) = t_intake_C
+    coeffA(4) = t_dis_C
+    
+    Select Case calibr_type
+        Case 0
+            func = "calc_ESP_dp_error_calibr_head_atm"
+            cal_type_string = "calibr_head"
+            val_min = 0.5
+            val_max = 1.5
+        Case 1
+            func = "calc_ESP_dp_error_calibr_rate_atm"
+            cal_type_string = "calibr_rate"
+            val_min = 0.5
+            val_max = 1.5
+    End Select
+    
+    prm.y_tolerance = const_pressure_tolerance
+    
+    If solve_equation_bisection(func, val_min, val_max, coeffA, prm) Then
+    
+        out = Array(prm.x_solution, _
+                    cal_type_string, _
+                    prm.y_solution, _
+                    prm.iterations, _
+                    prm.msg)
+    Else
+        out = Array("no solution", _
+                    cal_type_string, _
+                    CStr(prm.y_solution), _
+                    CStr(prm.iterations), _
+                    prm.msg)
+    End If
+        
+    out_desc = Array("solution", _
+                     "cal_type", _
+                     "y_solution", _
+                     "iterations", _
+                     "description")
+    ESP_calibr_pump = array_join(Array(out, out_desc))
+    
     Exit Function
 er1:
-    ESP_dp_atm = "error"
-    addLogMsg "Error:ESP_dp_atm:" & Err.Description
-    
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' расчет подстроечных параметров системы УЭЦН
-Public Function ESP_calibr_calc( _
-                 ByVal qliq_sm3day As Double, _
-                 ByVal fw_perc As Double, _
-                 ByVal p_intake_atma As Double, _
-                 ByVal p_discharge_atma As Double, _
-        Optional ByVal str_PVT As String, _
-        Optional ByVal str_ESP As String)
-' qliq_sm3day       - дебит жидкости на поверхности
-' fw_perc           - обводненность
-' p_intake_atma     - давление на приеме
-' p_discharge_atma  - давление на выкиде насоса
-' str_PVT            - набор данных PVT
-' str_ESP            - набор данных ЭЦН
-' результат   - массив значений включающий
-'                   перепад давления
-'                   перепад температур
-'                   мощность потребляемая с вала, Вт
-'                   мощность гидравлическая по перекачке жидкости, Вт
-'                   КПД ЭЦН
-'                   список неполон
-'description_end
-    ESP_calibr_calc = "not implemented yet"
+    ESP_calibr_pump = "error"
+    addLogMsg "Error:ESP_calibr_pump:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет производительности системы УЭЦН
@@ -422,8 +483,9 @@ Public Function ESP_system_calc( _
                  ByVal p_calc_atma As Double, _
         Optional ByVal str_PVT As String, _
         Optional ByVal str_ESP As String, _
-        Optional ByVal calc_along_flow As Boolean = 1 _
-        )
+        Optional ByVal calc_along_flow As Boolean = 1, _
+        Optional ByVal out_curves_num_points As Integer = 20, _
+        Optional ByVal num_value As Integer = 0)
 ' qliq_sm3day       - дебит жидкости на поверхности
 ' fw_perc           - обводненность
 ' p_calc_atma        - давление для которого делается расчет
@@ -435,6 +497,9 @@ Public Function ESP_system_calc( _
 ' calc_along_flow    - режим расчета снизу вверх или сверху вниз
 '                 calc_along_flow = True => p_atma давление на приеме
 '                 calc_along_flow = False => p_atma давление на выкиде
+' out_curves_num_points - количество точек для вывода значений
+'                   по ступеня.
+' num_value       - значение которое будет выводиться первым
 ' результат   - массив значений включающий
 '                   перепад давления
 '                   перепад температур
@@ -444,7 +509,7 @@ Public Function ESP_system_calc( _
 '                   список неполон
 'description_end
 On Error GoTo er1:
-    Dim ESP As CESPpump
+   ' Dim ESP As CESPpump
     Dim ESPsys As New CESPsystemSimple
     Dim fluid As CPVT
     
@@ -455,39 +520,93 @@ On Error GoTo er1:
     Set ESPsys.ESP_pump.fluid = fluid
     fluid.qliq_sm3day = qliq_sm3day
     fluid.fw_perc = fw_perc
-    Call ESPsys.calc_ESPsys(p_calc_atma, calc_along_flow)
+    Call ESPsys.calc_ESPsys(p_calc_atma, calc_along_flow, saveCurve:=True)
     
-    ' на выходе будет много данных
-    ' надо подготовить их для удобного отображения
-    '
-    Dim ar_val(10) As Double
-    Dim ar_titles(10) As String
+    Dim arr
     Dim i As Integer
-    i = 0
-    ar_titles(i) = "dP_atm":  ar_val(i) = ESP.p_dis_atma - ESP.p_int_atma
-    i = i + 1
-    ar_titles(i) = "dT_C":  ar_val(i) = ESP.t_dis_C - ESP.t_int_C
-    i = i + 1
-    ar_titles(i) = "I, A":  ar_val(i) = ESPsys.I_A
-    i = i + 1
-    ar_titles(i) = "power kW":  ar_val(i) = ESPsys.power_CS_calc_W / 1000
-    i = i + 1
-    ar_titles(i) = "p_int_atma":  ar_val(i) = ESP.p_int_atma
-    i = i + 1
-    ar_titles(i) = "p_dis_atma":  ar_val(i) = ESP.p_dis_atma
-    i = i + 1
-    ar_titles(i) = "dP_atm":  ar_val(i) = ESPsys.I_A
-    i = i + 1
-    ar_titles(i) = "dP_atm":  ar_val(i) = ESPsys.I_A
-    i = i + 1
-    ar_titles(i) = "dP_atm":  ar_val(i) = ESPsys.I_A
-    i = i + 1
-    ar_titles(i) = "dP_atm":  ar_val(i) = ESPsys.I_A
-    i = i + 1
+    Dim nrows As Integer
     
-'    ESP_system_calc = Array(ESP.p_dis_atma - ESP.p_int_atma, ESP.t_dis_C - ESP.t_int_C)
-    ESP_system_calc = Array(ar_val, ar_titles)
-    ESP_system_calc = array_join(ESP_system_calc)
+    arr = ESPsys.ESP_pump.array_out(out_curves_num_points)
+    nrows = UBound(arr, 1)
+    
+    ReDim Preserve arr(nrows, 17)
+    i = 0
+    arr(0, 0) = ESPsys.p_dis_atma - ESPsys.p_int_atma
+    arr(1, 0) = "dP_atm"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.t_dis_C - ESPsys.t_int_C
+    arr(1, i) = "dT_C"
+    
+    i = i + 1
+    arr(0, i) = ESP.p_int_atma
+    arr(1, i) = "p_int_atma"
+    
+    i = i + 1
+    arr(0, i) = ESP.p_dis_atma
+    arr(1, i) = "p_dis_atma"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.ESP_pump.stage_num
+    arr(1, i) = "stage_num"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.freq_Hz
+    arr(1, i) = "Pow freq_Hz"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.ESP_pump.freq_Hz
+    arr(1, i) = "ESP freq_Hz"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.I_A
+    arr(1, i) = "I, A"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.load_fr
+    arr(1, i) = "load_fr"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.power_CS_calc_W
+    arr(1, i) = "power_CS_W"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.power_motor_W
+    arr(1, i) = "power_motor_W"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.power_shaft_W
+    arr(1, i) = "power_shaft_W"
+     
+    i = i + 1
+    arr(0, i) = ESPsys.ESP_pump.power_ESP_W
+    arr(1, i) = "power_ESP_W"
+        
+    i = i + 1
+    arr(0, i) = ESPsys.ESP_pump.power_fluid_W
+    arr(1, i) = "power_fluid_W"
+        
+    i = i + 1
+    arr(0, i) = ESPsys.U_trans_high_V
+    arr(1, i) = "U_trans_high_V"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.cable_dU_V
+    arr(1, i) = "cable_dU_V"
+         
+    i = i + 1
+    arr(0, i) = ESPsys.eff_d
+    arr(1, i) = "eff_d"
+    
+    i = i + 1
+    arr(0, i) = ESPsys.ESP_pump.eff_ESP_d
+    arr(1, i) = "eff_ESP_d"
+    
+    
+    arr(0, 0) = arr(0, num_value)
+    arr(1, 0) = arr(1, num_value)
+    
+    ESP_system_calc = arr
     Exit Function
 er1:
     ESP_system_calc = -1
@@ -992,4 +1111,33 @@ Public Function ESP_gasseparator_name( _
     ESP_gasseparator_name = GS.Separator_Name(gsep_type_TYPE)
     
 End Function
+Private Sub read_ESP_calibr(ByVal c_calibr, _
+                            ByRef c_calibr_head As Double, _
+                            ByRef c_calibr_rate As Double, _
+                            ByRef c_calibr_power As Double)
+    
+    
+    c_calibr_head = 1
+    c_calibr_rate = 1
+    c_calibr_power = 1
+    
+    
+    Dim clbr
+    
+    ' set calibration properties
+    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+    c_calibr_head = clbr(1)
+    If UBound(clbr) >= 2 Then
+        c_calibr_rate = clbr(2)
+    Else
+        c_calibr_rate = 1
+    End If
+    
+    If UBound(clbr) >= 3 Then
+        c_calibr_power = clbr(3)
+    Else
+        c_calibr_power = 1
+    End If
+    
+End Sub
 

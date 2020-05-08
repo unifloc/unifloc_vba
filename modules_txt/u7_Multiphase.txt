@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.23  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -895,7 +895,7 @@ End Sub
 '     function.
 '     (* indicates input variables)
 '     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Private Function itsafe(a#, b#, c#, d#, e#, g_#, i As Integer, X1#, X2#, xacc#) As Double
+Private Function itsafe(a#, b#, c#, d#, e#, g_#, i As Integer, x1#, x2#, xacc#) As Double
     '     ---------------------------------------------------------
     '     calculate values of the function and its derivative at x1
     '     and x2.
@@ -904,18 +904,18 @@ Private Function itsafe(a#, b#, c#, d#, e#, g_#, i As Integer, X1#, X2#, xacc#) 
     Dim dxold#, DX#
     Dim F#, j As Integer, temp As Double
     
-    Call func(a, b, c, d, e, g_, i, X1, fl, df)
-    Call func(a, b, c, d, e, g_, i, X2, fh, df)
+    Call func(a, b, c, d, e, g_, i, x1, fl, df)
+    Call func(a, b, c, d, e, g_, i, x2, fh, df)
     '     ---------------------------------------------------------
     '     interchange values of the function if it varies inversely
     '     with the variable.
     '     ---------------------------------------------------------
     If (fl < 0#) Then
-        xl = X1
-        xh = X2
+        xl = x1
+        xh = x2
     Else
-        xh = X1
-        xl = X2
+        xh = x1
+        xl = x2
         swap = fl
         fl = fh
         fh = swap
@@ -923,11 +923,11 @@ Private Function itsafe(a#, b#, c#, d#, e#, g_#, i As Integer, X1#, X2#, xacc#) 
     '     -------------------------------------------------
     '     take the average of x1 and x2 as the first guess.
     '     -------------------------------------------------
-    itsafe = 0.5 * (X1 + X2)
+    itsafe = 0.5 * (x1 + x2)
     '     ---------------------------------------------------
     '     define the difference in the two successive values.
     '     ---------------------------------------------------
-    dxold = Abs(X2 - X1)
+    dxold = Abs(x2 - x1)
     DX = dxold
     '     ----------------------------------------
     '     call func again to use the guessed value.
@@ -1375,6 +1375,7 @@ Dim l_2, l_3, AA As Double
 Dim f_n As Double ' normalized friction factor
 Dim F As Double ' friction factor
 Dim y, S As Double
+Dim fy As Double
 Const c_p = 0.000009871668   ' переводной коэффициент
 Ap_m2 = const_Pi * arr_d_m ^ 2 / 4
 If Ql_rc_m3day = 0 Then
@@ -1424,11 +1425,12 @@ Else
     'Calculate normalized friction factor
     f_n = unf_friction_factor(n_re, roughness_d)
     'calculate friction factor correction for multiphase flow
-    y = MaxReal(lambda_l / Hl_out_fr ^ 2, 0.001)
+    y = MaxReal(lambda_l / Hl_out_fr ^ 2, 0.000001)
+    fy = MaxReal(Log(y), 0.000001)
     If (y > 1 And y < 1.2) Then
       S = Log(2.2 * y - 1.2)
     Else
-      S = Log(y) / (-0.0523 + 3.182 * Log(y) - 0.8725 * (Log(y)) ^ 2 + 0.01853 * (Log(y)) ^ 4)
+      S = fy / (-0.0523 + 3.182 * fy - 0.8725 * fy ^ 2 + 0.01853 * fy ^ 4)
     End If
     'calculate friction factor
     F = f_n * Exp(S)
@@ -2708,7 +2710,7 @@ End Sub
 Function unf_friction_factor(ByVal n_re As Double, _
                              ByVal roughness_d As Double, _
                     Optional ByVal friction_corr_type As Integer = 3, _
-                    Optional n_re_boundary As Double = 2000)
+                    Optional ByVal smoth_transition As Boolean = False)
     'Calculates friction factor given pipe relative roughness and Reinolds number
     'Parameters
     'n_re - Reinolds number
@@ -2723,12 +2725,23 @@ Function unf_friction_factor(ByVal n_re As Double, _
     Dim ed As Double
     Dim Svar As Double
     Dim f_1 As Double
+    Dim Re_save As Double
+    Const lower_Re_lim = 2000#
+    Const upper_Re_lim = 4000#
     
     ed = roughness_d
     
     If n_re = 0 Then
         f_n = 0
-    ElseIf n_re > n_re_boundary Then 'turbulent flow
+    ElseIf n_re < lower_Re_lim Then 'laminar flow
+        f_n = 64 / n_re
+    Else 'turbulent flow
+        Re_save = -1
+        If smoth_transition And (n_re > lower_Re_lim And n_re < upper_Re_lim) Then
+        ' be ready to interpolate for smooth transition
+            Re_save = n_re
+            n_re = upper_Re_lim
+        End If
         Select Case friction_corr_type
             Case 0
                 'calculate friction factor for rough pipes according to Moody method - Payne et all modification for Beggs&Brill correlation
@@ -2778,10 +2791,22 @@ Function unf_friction_factor(ByVal n_re As Double, _
                     f_n = fr2 + (fr3 - fr2) * (n_re - 2000#) / 1000#
                 End If
                 f_n = 4 * f_n
-                
+            Case 5
+                ' from unified TUFFP model
+                ' Haaland equation   Haaland, SE (1983). "Simple and Explicit Formulas for the Friction Factor in Turbulent Flow". Journal of Fluids Engineering. 105 (1): 89–90. doi:10.1115/1.3240948
+                f_n = 4# / (3.6 * Log10(6.9 / n_re + (ed / 3.7) ^ 1.11)) ^ 2
         End Select
-    Else  'laminar flow
-        f_n = 64 / n_re
+        
+        Dim x1 As Double, x2 As Double, y1 As Double, y2 As Double
+        
+        If smoth_transition And Re_save > 0 Then
+          x1 = lower_Re_lim
+          y1 = 64# / lower_Re_lim
+          x2 = n_re
+          y2 = f_n
+          f_n = ((y2 - y1) * Re_save + (y1 * x2 - y2 * x1)) / (x2 - x1)
+        End If
+    
     End If
     
     unf_friction_factor = f_n
