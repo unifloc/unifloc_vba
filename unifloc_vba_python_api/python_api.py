@@ -391,7 +391,7 @@ class API():
         self.f_MF_calibr_choke = self.book.macro("MF_calibr_choke")
         return self.f_MF_calibr_choke(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day,calibr_type)
 
-    def MF_p_pipeline_atma(self, p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20):
+    def MF_p_pipeline_atma(self, p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций 
@@ -428,14 +428,16 @@ class API():
 
      out_curves - флаг вывод значений между концами трубы  1 основные, 2 все значения.  вывод может замедлять расчет (не сильно)    
 
-     out_curves_num_points - количество точек для вывода значений  между концами трубы.   
+     out_curves_num_points - количество точек для вывода значений  между концами трубы.    
+
+     num_value - значение которое будет выводиться первым   
 
         """
 
         self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
-        return self.f_MF_p_pipeline_atma(p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_method,c_calibr,roughness_m,out_curves,out_curves_num_points)
+        return self.f_MF_p_pipeline_atma(p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_method,c_calibr,roughness_m,out_curves,out_curves_num_points,num_value)
 
-    def MF_p_pipe_atma(self, p_calc_from_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20):
+    def MF_p_pipe_atma(self, p_calc_from_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубе  с использованием многофазных корреляций 
@@ -472,12 +474,14 @@ class API():
 
      out_curves - флаг вывод значений между концами трубы  0 минимум, 1 основные, 2 все значения.  вывод может замедлять расчет (не сильно)    
 
-     out_curves_num_points - количество точек для вывода значений  между концами трубы.   
+     out_curves_num_points - количество точек для вывода значений  между концами трубы.    
+
+     num_value - значение которое будет выводиться первым   
 
         """
 
         self.f_MF_p_pipe_atma = self.book.macro("MF_p_pipe_atma")
-        return self.f_MF_p_pipe_atma(p_calc_from_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,c_calibr,roughness_m,out_curves,out_curves_num_points)
+        return self.f_MF_p_pipe_atma(p_calc_from_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,c_calibr,roughness_m,out_curves,out_curves_num_points,num_value)
 
     def MF_p_choke_atma(self, qliq_sm3day,fw_perc,d_choke_mm,p_calc_from_atma=-1,calc_along_flow=True,d_pipe_mm=70,t_choke_C=20,c_calibr_fr=1,str_PVT=PVT_DEFAULT,q_gas_sm3day=0):
         """
@@ -1647,7 +1651,7 @@ class API():
         self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
         return self.f_IPR_pi_sm3dayatm(Qtest_sm3day,pwf_test_atma,pres_atma,fw_perc,pb_atma)
 
-    def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr=1):
         """
  ========== description ============== 
  номинальный напор ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1664,18 +1668,14 @@ class API():
 
      mu_cst - вязкость жидкости, сст;    
 
-     c_calibr_head - поправочный коэффициент (множитель) на напор насоса.    
-
-     c_calibr_rate - поправочный коэффициент (множитель) на подачу насоса.    
-
-     c_calibr_power - поправочный коэффициент (множитель) на мощность.   
+     c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)   
 
         """
 
         self.f_ESP_head_m = self.book.macro("ESP_head_m")
-        return self.f_ESP_head_m(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr_head,c_calibr_rate,c_calibr_power)
+        return self.f_ESP_head_m(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr)
 
-    def ESP_power_W(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_power_W(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr=1):
         """
  ========== description ============== 
  номинальная мощность потребляемая ЭЦН с вала (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1692,16 +1692,14 @@ class API():
 
      mu_cst - вязкость жидкости    
 
-     c_calibr_rate - поправочный коэффициент (множитель) на подачу насоса.    
-
-     c_calibr_power - поправочный коэффициент (множитель) на мощность.   
+     c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)   
 
         """
 
         self.f_ESP_power_W = self.book.macro("ESP_power_W")
-        return self.f_ESP_power_W(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr_rate,c_calibr_power)
+        return self.f_ESP_power_W(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr)
 
-    def ESP_eff_fr(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_eff_fr(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr=1):
         """
  ========== description ============== 
  номинальный КПД ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1718,16 +1716,12 @@ class API():
 
      mu_cst - вязкость жидкости    
 
-     c_calibr_head - поправочный коэффициент (множитель) на напор насоса.    
-
-     c_calibr_rate - поправочный коэффициент (множитель) на подачу насоса.    
-
-     c_calibr_power - поправочный коэффициент (множитель) на мощность.   
+     c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)   
 
         """
 
         self.f_ESP_eff_fr = self.book.macro("ESP_eff_fr")
-        return self.f_ESP_eff_fr(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr_head,c_calibr_rate,c_calibr_power)
+        return self.f_ESP_eff_fr(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr)
 
     def ESP_name(self, pump_id=674):
         """
@@ -1791,7 +1785,7 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q)
 
-    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях 
@@ -1818,23 +1812,25 @@ class API():
 
      определяется параметром calc_along_flow  num_stages - количество ступеней  freq_hz - частота вращения вала эцн, гц  pump_id - идентификатор насоса  str_pvt - набор данных pvt..см.мануал   
 
-     esp_gas_degradation_type - тип насоса по работе с газом:  0 нет коррекции;  1 стандартный эцн (предел 25%);  2 эцн с газостабилизирующим модулем (предел 50%);  3 эцн с осевым..см.мануал   
+     esp_gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым м..см.мануал   
 
-     c_calibr_head - коэффициент поправки на напор (множитель)    
+     c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
 
-     c_calibr_rate - коэффициент поправки на подачу (множитель)    
+     dnum_stages_integrate - шаг интегрирования эцн  если >1 будет быстрее но менее точно    
 
-     c_calibr_power - коэффициент поправки на мощность (множитель)   
+     out_curves_num_points - количество точек для вывода значений  по ступеням    
+
+     num_value - значение которое будет выводиться первым   
 
         """
 
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power)
+        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,out_curves_num_points,num_value)
 
-    def ESP_dp_atm(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1):
+    def ESP_calibr_pump(self, qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,calibr_type=0):
         """
  ========== description ============== 
- функция расчета перепада давления ЭЦН в рабочих условиях 
+ расчет подстроечных параметров системы УЭЦН 
         
  ==========  arguments  ============== 
 
@@ -1842,7 +1838,9 @@ class API():
 
      fw_perc - обводненность    
 
-     p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
+     p_int_atma - давление на приеме насоса    
+
+     p_dis_atma - давление на выкиде насоса    
 
      num_stages - количество ступеней    
 
@@ -1856,46 +1854,22 @@ class API():
 
      t_dis_c - температура на выкиде насоса.    
 
-     определяется параметром calc_along_flow  num_stages - количество ступеней  freq_hz - частота вращения вала эцн, гц  pump_id - идентификатор насоса  str_pvt - набор данных pvt..см.мануал   
+     если = 0 и calc_along_flow = 1 то рассчитывается  calc_along_flow - режим расчета снизу вверх или сверху вниз  calc_along_flow = true => p_atma давление на приеме  calc_along_..см.мануал   
 
-     esp_gas_degradation_type - тип насоса по работе с газом:  0 нет коррекции;  1 стандартный эцн (предел 25%);  2 эцн с газостабилизирующим модулем (предел 50%);  3 эцн с осевым..см.мануал   
+     esp_gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым м..см.мануал   
 
-     c_calibr_head - коэффициент поправки на напор (множитель)    
+     c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
 
-     c_calibr_rate - коэффициент поправки на подачу (множитель)    
+     dnum_stages_integrate - шаг интегрирования эцн  если >1 будет быстрее но менее точно    
 
-     c_calibr_power - коэффициент поправки на мощность (множитель)   
-
-        """
-
-        self.f_ESP_dp_atm = self.book.macro("ESP_dp_atm")
-        return self.f_ESP_dp_atm(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power)
-
-    def ESP_calibr_calc(self, qliq_sm3day,fw_perc,p_intake_atma,p_discharge_atma,str_PVT,str_ESP):
-        """
- ========== description ============== 
- расчет подстроечных параметров системы УЭЦН 
-        
- ==========  arguments  ============== 
-
-     qliq_sm3day - дебит жидкости на поверхности    
-
-     fw_perc - обводненность    
-
-     p_intake_atma - давление на приеме    
-
-     p_discharge_atma - давление на выкиде насоса    
-
-     str_pvt - набор данных pvt    
-
-     str_esp - набор данных эцн   
+     calibr_type - тип калибровки   
 
         """
 
-        self.f_ESP_calibr_calc = self.book.macro("ESP_calibr_calc")
-        return self.f_ESP_calibr_calc(qliq_sm3day,fw_perc,p_intake_atma,p_discharge_atma,str_PVT,str_ESP)
+        self.f_ESP_calibr_pump = self.book.macro("ESP_calibr_pump")
+        return self.f_ESP_calibr_pump(qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,calibr_type)
 
-    def ESP_system_calc(self, qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow=1):
+    def ESP_system_calc(self, qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
  расчет производительности системы УЭЦН  считает перепад давления, электрические параметры и деградацию КПД 
@@ -1912,12 +1886,16 @@ class API():
 
      str_esp - набор данных эцн    
 
-     определяется параметром calc_along_flow  str_pvt - набор данных pvt  str_esp - набор данных эцн  calc_along_flow - режим расчета снизу вверх или сверху вниз  calc_along_flow ..см.мануал  
+     определяется параметром calc_along_flow  str_pvt - набор данных pvt  str_esp - набор данных эцн  calc_along_flow - режим расчета снизу вверх или сверху вниз  calc_along_flow ..см.мануал   
+
+     out_curves_num_points - количество точек для вывода значений  по ступеня.    
+
+     num_value - значение которое будет выводиться первым   
 
         """
 
         self.f_ESP_system_calc = self.book.macro("ESP_system_calc")
-        return self.f_ESP_system_calc(qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow)
+        return self.f_ESP_system_calc(qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow,out_curves_num_points,num_value)
 
     def motor_M_slip_Nm(self, S,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
         """
@@ -2547,7 +2525,7 @@ class API():
         self.f_PVT_decode_string = self.book.macro("PVT_decode_string")
         return self.f_PVT_decode_string(str_PVT,getStr)
 
-    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ksep_manual_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_degradation_type=0,c_calibr_head=1,c_calibr_rate=1,c_calibr_power=1,PKV_work_min=-1,PKV_stop_min=-1):
+    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ksep_manual_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_correct=0,c_calibr=1,PKV_work_min=-1,PKV_stop_min=-1,dnum_stages_integrate=1):
         """
  ========== description ============== 
  функция кодирования параметров работы УЭЦН в строку,  которую можно потом использовать для задания ЭЦН в прикладных функциях 
@@ -2578,22 +2556,20 @@ class API():
 
      esp_h_mes_m - длина кабельной линии    
 
-     esp_gas_degradation_type - тип насоса по работе с газом  esp_gas_degradation_type = 0 нет коррекции  esp_gas_degradation_type = 1 стандартный эцн (предел 25%)  esp_gas_degrada..см.мануал   
+     esp_gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым м..см.мануал   
 
-     c_calibr_head - коэффициент поправки на напор (множитель)    
-
-     c_calibr_rate - коэффициент поправки на подачу (множитель)    
-
-     c_calibr_power - коэффициент поправки на мощность (множитель)    
+     c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
 
      pkv_work_min - время работы скважины для режима пкв в минутах    
 
-     pkv_stop_min - время ожидания запуска скважины для пкв , мин  пкв - периодическое кратковременное включение  если не заданы, то скважина в пдф  пдф - постоянно действующий фон..см.мануал  
+     pkv_stop_min - время ожидания запуска скважины для пкв , мин  пкв - периодическое кратковременное включение  если не заданы, то скважина в пдф  пдф - постоянно действующий фон..см.мануал   
+
+     dnum_stages_integrate - шаг интегрирования для расчета   
 
         """
 
         self.f_ESP_encode_string = self.book.macro("ESP_encode_string")
-        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ksep_manual_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_degradation_type,c_calibr_head,c_calibr_rate,c_calibr_power,PKV_work_min,PKV_stop_min)
+        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ksep_manual_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_correct,c_calibr,PKV_work_min,PKV_stop_min,dnum_stages_integrate)
 
     def ESP_decode_string(self, str_ESP,getStr=False):
         """
@@ -2900,7 +2876,7 @@ class API():
 
      fa - табличные значения интерполируемой функции,  двумерная таблица или массив    
 
-     xyia - таблица значений для которой надо найти результат  два столбца значений (x,y) или массив с двумя колонками  если не заданы возвращаются кубические коэффициента для каждо..см.мануал   
+     xyia - таблица значений для которой надо найти результат  два столбца значений (x,y) или массив с двумя колонками  если не заданы возвращаются кубические коэффициента  для каж..см.мануал   
 
      out - для интерполяции кубическими сплайнами  out = 0 возвращаются только значения  out = 1 возвращаются значения и производные    
 
@@ -2949,7 +2925,7 @@ class API():
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
 
-    def crv_fit_spline_1D(self, xa,YA,m,XIA,WA,XCA,YCA,DCA,hermite=False):
+    def crv_fit_spline_1D(self, xa,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
         """
  ========== description ============== 
 Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений. 
@@ -2962,22 +2938,22 @@ class API():
 
      должно быть четное для hermite = true    
 
-     xia - таблица выходных значений  столбц значений (x) или массив. значения в возрастающем порядке  если не заданы возвращаются кубические коэффициента для каждого сегмента    
+     xia - таблица выходных значений  столбц значений (x) или массив в возрастающем порядке  если не заданы возвращаются кубические коэффициента для сегментов    
 
      wa - веса исходных данных    
 
      xca - х значения матрицы ограничений (столбец или массив)    
 
-     yca - величина ограничения для заданного значения (столбец или массив)    
+     yca - величина ограничения для заданного значения  (столбец или массив)    
 
-     dca - тип ограничения. 0 - значение, 1 - наклон. (столбец или массив).  если хоть одно из ограничений не задано - они не учитываются    
+     dca - тип ограничения. 0 - значение, 1 - наклон.  (столбец или массив).  если хоть одно из ограничений не задано - они не учитываются    
 
-     должно быть четное для hermite = true  xia - таблица выходных значений  столбц значений (x) или массив. значения в возрастающем порядке  если не заданы возвращаются кубические..см.мануал  
+     должно быть четное для hermite = true  xia - таблица выходных значений  столбц значений (x) или массив в возрастающем порядке  если не заданы возвращаются кубические коэффицие..см.мануал  
 
         """
 
         self.f_crv_fit_spline_1D = self.book.macro("crv_fit_spline_1D")
-        return self.f_crv_fit_spline_1D(xa,YA,m,XIA,WA,XCA,YCA,DCA,hermite)
+        return self.f_crv_fit_spline_1D(xa,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
 
     def crv_fit_linear(self, YA,xa,out,weight,constraints):
         """
@@ -2988,11 +2964,11 @@ class API():
 
      ya - y вектор исходных данных [0..n-1] (столбец или массив)    
 
-     xa - x матрица исходных данных [0..n-1, 0..d-1] (таблица или массив)    
+     xa - x матрица исходных данных [0..n-1, 0..d-1]  (таблица или массив)    
 
-     out - тип вывода, out=0 (по умолчанию) коэффициенты аппроксимации [0..d-1],  out=1 код ошибки подбора аппроксимации  out=2 отчет по подбору аппроксимации, avgerror, avgrelerror..см.мануал   
+     out - тип вывода,  out=0 (по умолчанию) коэффициенты аппроксимации [0..d-1],  out=1 код ошибки подбора аппроксимации  out=2 отчет по подбору аппроксимации,  avgerror, avgrele..см.мануал   
 
-     weight - вектор весов [0..n-1] для каждого параметра исходных данных    
+     weight - вектор весов [0..n-1] для каждого параметра    
 
      constraints - матрица ограничений с [0..k-1, 0..d] такая что  c[i,0]*m[0] + ... + c[i,d-1]*c[d-1] = cmatrix[i,d]   
 
@@ -3001,7 +2977,7 @@ class API():
         self.f_crv_fit_linear = self.book.macro("crv_fit_linear")
         return self.f_crv_fit_linear(YA,xa,out,weight,raints)
 
-    def crv_fit_poly(self, YA,xa,m,out,XIA,weight,constraints):
+    def crv_fit_poly(self, YA,xa,M,out,XIA,weight,constraints):
         """
  ========== description ============== 
 Аппроксимация данных полиномом функцией. Решается задача min|XM-Y| ищется вектор M 
@@ -3014,23 +2990,23 @@ class API():
 
      m - степень полинома для аппроксимации    
 
-     out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации, avgerror, avgrelerror, maxerror, rmserr..см.мануал   
+     out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxerror, rmse..см.мануал   
 
-     out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации, avgerror, avgrelerror, maxerror, rmserr..см.мануал   
+     out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxerror, rmse..см.мануал   
 
-     weight - вектор весов [0..n-1] для каждого параметра исходных данных    
+     weight - вектор весов [0..n-1] для каждого параметра    
 
-     constraints - матрица ограничений с[0..k-1,0..2]. с[i,0] - значение x где задано ограничение  с[i,1] - велична ограничения, с[i,2] - тип ограничения (0 -значение,1 -производная)..см.мануал  
+     constraints - матрица ограничений с[0..k-1,0..2].  с[i,0] - значение x где задано ограничение  с[i,1] - велична ограничения,  с[i,2] - тип ограничения (0 -значение,1 -производ..см.мануал  
 
         """
 
         self.f_crv_fit_poly = self.book.macro("crv_fit_poly")
-        return self.f_crv_fit_poly(YA,xa,m,out,XIA,weight,raints)
+        return self.f_crv_fit_poly(YA,xa,M,out,XIA,weight,raints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """
  ========== description ============== 
- интерполяция функции заданной параметрически (параметр номер значения) 
+ интерполяция функции заданной параметрически  параметр номер значения 
         
  ==========  arguments  ============== 
 
