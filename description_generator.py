@@ -241,11 +241,11 @@ class VBA_Func_Header:
         list of pattern, that will be deleted in sting
         """
         not_nedeed_in_api = [self.func_name, "ByVal",  "Optional", "Double", "Integer", "Boolean", "Long" , "Variant",
-                                "String", "Public", " As ", "Function", " _ ", " ",  "\n", "\' ", "(_"]
+                                "String", "Public", " As ", "Function", " _ ", " ",  "\n", "\' ", "(_", 'TEMP_CALC_METHOD']
 
         not_nedeed_in_string = [self.func_name, "ByVal","-1", "const", "Optional", "Double", "Integer", "Boolean", "Long" , "Variant",
                                 "String", "Public", " As ", "Function", " _ ", " ", "=",  "\n", "\' ", "(_",
-                                "PVT_DEFAULT", "H_CORRELATION", "TEMP_CALC_METHOD"]
+                                "PVT_DEFAULT", "H_CORRELATION", "TEMP_CALC_METHOD", 'TEMP_CALC_METHOD']
         last_step = 0
         while string_contain_end_of_parametrs == False:
             math_object = re.search(r'\)', result_lines[string_number])
