@@ -22,6 +22,7 @@ Public c_calibr_power As Double        ' деградация по мощности (она же по КПД с
 ' набор параметром для задания поведения в зоне турбинного вращения (когда дебит больше максимального)
 Public turb_head_factor As Double
 Public turb_rate_factor As Double
+Public dnum_stages_integrate As Integer
 Public freq_Hz As Double               ' частота вращения вала насоса (используется для расчета)
 Public curves As New CCurves           ' все кривые планируется прятать тут
 ' параметры конструкции ЭЦН
@@ -39,13 +40,13 @@ Private head_real_m_ As Double
 Private db_ As ESP_PARAMS            ' набор параметров насоса из базы данных
 Private gas_frac_intake_ As Double
 Private gas_corr_ As Double
-Private gas_degr_type_ As Integer       ' тип для коррекции по газу
-                                        ' ESP_gas_degradation_type       - тип насоса по работе с газом
-                                        '      ESP_gas_degradation_type = 0 нет коррекции
-                                        '      ESP_gas_degradation_type = 1 стандартный ЭЦН (предел 25%)
-                                        '      ESP_gas_degradation_type = 2 ЭЦН с газостабилизирующим модулем (предел 50%)
-                                        '      ESP_gas_degradation_type = 3 ЭЦН с осевым модулем (предел 75%)
-                                        '      ESP_gas_degradation_type = 4 ЭЦН с модифицированным ступенями (предел 40%)
+Public gas_correct As Double       ' тип для коррекции по газу
+                                        ' ESP_gas_correct       - тип насоса по работе с газом
+                                        '      ESP_gas_correct = 0 нет коррекции
+                                        '      ESP_gas_correct = 1 стандартный ЭЦН (предел 25%)
+                                        '      ESP_gas_correct = 2 ЭЦН с газостабилизирующим модулем (предел 50%)
+                                        '      ESP_gas_correct = 3 ЭЦН с осевым модулем (предел 75%)
+                                        '      ESP_gas_correct = 4 ЭЦН с модифицированным ступенями (предел 40%)
 Private correct_visc_ As Boolean
 Private corr_visc_h_ As Double          ' поправочный коэффициент для напорной характеристики на вязкость для текущего дебита и текущего расчета
 Private corr_visc_q_ As Double          ' поправочный коэффициент для дебита
@@ -136,14 +137,15 @@ Public Property Get rate_nom_sm3day(Optional ByVal mu_cSt As Double = -1) As Dou
     End If
    rate_nom_sm3day = db_.rate_nom_sm3day * freq_Hz / db_.freq_Hz * corr_visc_q_
 End Property
-Public Property Get gas_degr_type() As Integer
-   gas_degr_type = gas_degr_type_
-End Property
-Public Property Let gas_degr_type(val As Integer)
-   If val >= 0 And val < 5 + 5 Then
-       gas_degr_type_ = val
-   End If
-End Property
+'Public Property Get gas_degr() As Double
+'   gas_degr = gas_degr_
+'End Property
+'
+'Public Property Let gas_degr(val As Double)
+'   If val >= 0 Then
+'       gas_degr_ = val
+'   End If
+'End Property
 Private Function calc_ESP_head_nominal_m(ByVal q_m3day As Double, Optional ByVal stage_num As Integer = 1) As Double
 ' функция для расчета номинального напора насоса
     Dim b As Double                  ' отношение частот
@@ -301,10 +303,11 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
     Dim dNst As Integer  ' шаг ускорения при интегрировании большими шагами
     Dim Nst As Integer   ' шаг на текущей итерации
     Dim n As Integer     ' текущий номер ступени
+    Dim nn As Integer    ' номер ступени от приема для записи в архив
     Dim dPav As Double   ' поправки на давление и температуру при интегрировании
     Dim dTav As Double
    
-    dNst = 1 ' для начала пытаемся интегрировать такими шагами
+    dNst = dnum_stages_integrate ' для начала пытаемся интегрировать такими шагами
              ' если тут поставить 10 будет быстрее считать за счет снижение числа шагов
              ' при этом может копиться ошибка, особенно если мало ступеней
     'dNst = 10 ' может быть надо будет когда то сделать глобальную настройку по скорости точности
@@ -312,7 +315,9 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
     dTav = 0
     gas_corr_ = 1
 On Error GoTo err1:
-    calc_from_dis_ = calc_from_dis
+    calc_from_dis_ = calc_from_dis  ' save state to object
+    
+    ' rearrange variables to calc direction
     If calc_from_dis Then
         If t_dis_C < 0 Then t_dis_C = t_intake_C
         Tst_C = t_dis_C
@@ -324,28 +329,21 @@ On Error GoTo err1:
         sign_int = 1
     End If
     
+    ' init auxiliary variables
+    Call corrections_clear
     Pst_atma = p_atma
     dTpumpSum_C = 0
     head_real_m_ = 0
     t_int_C_ = t_intake_C
     t_dis_C_ = t_dis_C
-    
-    Call corrections_clear
-    
-    With fluid
-        PowfluidWt = 0: PowfluidTot_Wt = 0
-        PowESP_Wt = 0: PowESPTot_Wt = 0
-        dTpumpSum_C = 0
-        p_curve_.AddPoint HmesStage_m(0), Pst_atma    ' запишем в выходной массив первые точки
-        t_curve_.AddPoint HmesStage_m(0), Tst_C
-        n = 0
-        i = 0
-        
-        Call .calc_PVT(Pst_atma, Tst_C)    ' calc first time to save point
-        gas_frac_intake_ = .gas_fraction_d
-        gas_corr_ = GasCorrection_d(gas_frac_intake_, gas_degr_type_)
-        
-        If saveCurve Then
+    PowfluidWt = 0
+    PowfluidTot_Wt = 0
+    PowESP_Wt = 0
+    PowESPTot_Wt = 0
+    dTpumpSum_C = 0
+    n = 0
+    i = 0
+    If saveCurve Then
             curves.Item("gas_fractionInPump").ClearPoints
             curves.Item("PressureInPump").ClearPoints
             curves.Item("TempInPump").ClearPoints
@@ -363,6 +361,21 @@ On Error GoTo err1:
                    
             p_curve_.ClearPoints
             t_curve_.ClearPoints
+    End If
+    
+    ' init gas correction coefficient
+    ' if calc from intake - it will be reinitialased later
+    ' if calc from discharge - it can be set manually here
+    gas_corr_ = GasCorrection_d(0, gas_correct)
+    
+    With fluid
+        ' if  calc from intake - then save intake condition to 0 stage
+        ' and calc intake gas fraction  and gas correction coefficient
+        If Not calc_from_dis And saveCurve Then
+            ' calc PVT for intake conditions
+            Call .calc_PVT(Pst_atma, Tst_C)    ' calc properties for inteke conditions
+            gas_frac_intake_ = .gas_fraction_d
+            gas_corr_ = GasCorrection_d(gas_frac_intake_, gas_correct) ' reinit gas correction
             
             curves.Item("gas_fractionInPump").AddPoint n, .f_g
             curves.Item("PressureInPump").AddPoint n, Pst_atma
@@ -382,9 +395,8 @@ On Error GoTo err1:
             p_curve_.AddPoint HmesStage_m(CDbl(n)), Pst_atma
             t_curve_.AddPoint HmesStage_m(CDbl(n)), Tst_C
         End If
-        
-       
-       
+              
+        ' ====================== start main loop ================================================
         Do While n < stage_num '+ 1
             If calc_from_dis Then
                 If stage_num - n - dNst > 0 Then  ' смотрим какой будет величина следующего шага
@@ -402,15 +414,15 @@ On Error GoTo err1:
             
             Call .calc_PVT(Pst_atma + dPav, Tst_C + dTav)  ' делаем поправку на давление и температуру
             
-            If i > 0 And gas_degr_type_ > 4 Then
-                gas_corr_ = GasCorrection_d(.gas_fraction_d, gas_degr_type_ - 5)
+            ' re init gas correction for each stage mode if applicable
+            If gas_correct > 99 Then
+                gas_corr_ = GasCorrection_d(.gas_fraction_d, gas_correct - 100)
             End If
             q_mix_ = .q_mix_rc_m3day
             q_mix__degr = q_mix_ * c_calibr_rate
             head_mix = get_ESP_head_m(q_mix__degr, Nst, .mu_mix_cSt) * c_calibr_head * gas_corr_
             head_real_m_ = head_real_m_ + head_mix
-            ' тут когда то надо сделать коррекцию характеристики на плотность
-            dPStage = .rho_mix_rc_kgm3 * head_mix * const_g * const_convert_Pa_atma
+            dPStage = .rho_mix_rc_kgm3 * head_mix * const_g * const_convert_Pa_atma ' тут когда то надо сделать коррекцию характеристики на плотность
             Pst_atma = Pst_atma + sign_int * dPStage
             dPav = dPStage / 2 * sign_int
             If dPStage > 0 Then
@@ -423,18 +435,21 @@ On Error GoTo err1:
                 ' оценим КПД ступени в данных условиях
                 If (PowESPTot_Wt > 0) Then
                     EffESP_d = PowfluidTot_Wt / PowESPTot_Wt
-                Else: EffESP_d = 0
+                Else
+                    EffESP_d = 0
                 End If
                 
                 If (PowESP_Wt > 0) Then
                     EffStage = PowfluidWt / PowESP_Wt
-                Else: EffStage = 0
+                Else
+                    EffStage = 0
                 End If
                 
                 If t_dis_C <= 0 And (Not calc_from_dis) Then ' оценка температуры по ступеням
                     If EffStage > 0 Then
                         dTpump_C = const_g * head_mix / .cmix_JkgC * (1 - EffStage) / EffStage
-                    Else: dTpump_C = 0
+                    Else
+                        dTpump_C = 0
                     End If
                 Else
                     dTpump_C = (t_dis_C - t_intake_C) / stage_num * Nst
@@ -460,27 +475,57 @@ On Error GoTo err1:
             n = n + Nst
             
             If saveCurve Then
-                curves.Item("gas_fractionInPump").AddPoint n, .f_g
-                curves.Item("PressureInPump").AddPoint n, Pst_atma
-                curves.Item("TempInPump").AddPoint n, Tst_C
-                curves.Item("PowerfluidInPump").AddPoint n, PowfluidTot_Wt
-                curves.Item("PowerESPInPump").AddPoint n, PowESPTot_Wt
-                curves.Item("EffESPInPump").AddPoint n, EffESP_d
-                curves.Item("q_mix_InPump").AddPoint n, q_mix_
+                If calc_from_dis Then
+                    nn = stage_num - n + 1
+                Else
+                    nn = n
+                End If
+                curves.Item("gas_fractionInPump").AddPoint nn, .f_g
+                curves.Item("PressureInPump").AddPoint nn, Pst_atma
+                curves.Item("TempInPump").AddPoint nn, Tst_C
+                curves.Item("PowerfluidInPump").AddPoint nn, PowfluidTot_Wt
+                curves.Item("PowerESPInPump").AddPoint nn, PowESPTot_Wt
+                curves.Item("EffESPInPump").AddPoint nn, EffESP_d
+                curves.Item("q_mix_InPump").AddPoint nn, q_mix_
                 
                 
-                curves.Item("mu_stage_cP").AddPoint n, .mu_mix_cP
-                curves.Item("corr_visc_h_").AddPoint n, corr_visc_h_
-                curves.Item("corr_visc_q_").AddPoint n, corr_visc_q_
-                curves.Item("corr_visc_pow_").AddPoint n, corr_visc_pow_
-                curves.Item("corr_visc_eff_").AddPoint n, corr_visc_eff_
-                curves.Item("gas_corr_").AddPoint n, gas_corr_
+                curves.Item("mu_stage_cP").AddPoint nn, .mu_mix_cP
+                curves.Item("corr_visc_h_").AddPoint nn, corr_visc_h_
+                curves.Item("corr_visc_q_").AddPoint nn, corr_visc_q_
+                curves.Item("corr_visc_pow_").AddPoint nn, corr_visc_pow_
+                curves.Item("corr_visc_eff_").AddPoint nn, corr_visc_eff_
+                curves.Item("gas_corr_").AddPoint nn, gas_corr_
                     
-                p_curve_.AddPoint HmesStage_m(CDbl(n)), Pst_atma
-                t_curve_.AddPoint HmesStage_m(CDbl(n)), Tst_C
+                p_curve_.AddPoint HmesStage_m(CDbl(nn)), Pst_atma
+                t_curve_.AddPoint HmesStage_m(CDbl(nn)), Tst_C
             End If
             i = i + 1
         Loop
+        ' ====================== end main loop ================================================
+        If calc_from_dis Then
+                nn = 0
+                curves.Item("gas_fractionInPump").AddPoint nn, .f_g
+                curves.Item("PressureInPump").AddPoint nn, Pst_atma
+                curves.Item("TempInPump").AddPoint nn, Tst_C
+                curves.Item("PowerfluidInPump").AddPoint nn, PowfluidTot_Wt
+                curves.Item("PowerESPInPump").AddPoint nn, PowESPTot_Wt
+                curves.Item("EffESPInPump").AddPoint nn, EffESP_d
+                curves.Item("q_mix_InPump").AddPoint nn, q_mix_
+                
+                
+                curves.Item("mu_stage_cP").AddPoint nn, .mu_mix_cP
+                curves.Item("corr_visc_h_").AddPoint nn, corr_visc_h_
+                curves.Item("corr_visc_q_").AddPoint nn, corr_visc_q_
+                curves.Item("corr_visc_pow_").AddPoint nn, corr_visc_pow_
+                curves.Item("corr_visc_eff_").AddPoint nn, corr_visc_eff_
+                curves.Item("gas_corr_").AddPoint nn, gas_corr_
+                    
+                p_curve_.AddPoint HmesStage_m(CDbl(nn)), Pst_atma
+                t_curve_.AddPoint HmesStage_m(CDbl(nn)), Tst_C
+        
+        End If
+        
+        
         If dTpumpSum_C > 298 Then
                 addLogMsg "Перегрев около УЭЦН, расчетная температура =" & Format(Tst_C, "##0") & _
                               " рост температуры на ступени =" & Format(dTpump_C, "##0") & _
@@ -519,9 +564,9 @@ Public Function get_num_stages(q_mix_rc_m3day As Double, head_m As Double) As In
 End Function
 Public Sub calc_ESP(p_atma As Double, t_intake_C As Double, Optional t_dis_C As Double = 0, _
                         Optional calc_from_intake As Boolean = True, _
-                        Optional savaCurve As Boolean = False)
+                        Optional saveCurve As Boolean = False)
 ' метод расчета работы насоса
-    Call ESP_dPIntegration(p_atma, t_intake_C, t_dis_C, Not calc_from_intake, savaCurve)
+    Call ESP_dPIntegration(p_atma, t_intake_C, t_dis_C, Not calc_from_intake, saveCurve)
 End Sub
 Private Sub Class_Initialize()
     Set fluid = New CPVT
@@ -547,9 +592,10 @@ Private Sub Class_Initialize()
     
     Call corrections_clear
     
-    gas_degr_type_ = 0
+    gas_correct = 1
     turb_head_factor = 1 ' 2 ' 0.5
     turb_rate_factor = 1 ' 1.1 '0.9
+    dnum_stages_integrate = 1
 End Sub
 ' метод для построения кривых характеристик УЭЦН
 Public Sub build_curves(Optional ByVal qliq As Double = -1)
@@ -623,6 +669,7 @@ Public Function Copy(pump As CESPpump) As Boolean
        angle_deg = .angle_deg
        turb_head_factor = .turb_head_factor
        turb_rate_factor = .turb_rate_factor
+       dnum_stages_integrate = .dnum_stages_integrate
        
     End With
      
@@ -747,24 +794,38 @@ Public Property Get m_Nm() As Double
     m_Nm = power_ESP_Wt_ / w_radsec
 End Property
 ' функция расчета деградации из за газа
-Private Function GasCorrection_d(GasFracIn As Double, Optional ESPtype As Integer = 0) As Double
+Private Function GasCorrection_d(GasFracIn As Double, Optional ByVal gas_degr_value As Double = 0) As Double
+' переделываем логику расчета поправки на газ для ЭЦН
+' чтобы можноб было задать руками и выбрать модель тоже
+' gas_degr_value  - тип насоса по работе с газом:
+'           0-2 значение применяется напрямую;
+'           10 стандартный ЭЦН (предел 25%);
+'           20 ЭЦН с газостабилизирующим модулем (предел 50%);
+'           30 ЭЦН с осевым модулем (предел 75%);
+'           40 ЭЦН с модифицированным ступенями (предел 40%).
+'           110+, тогда модель n-100 применяется ко всем ступеням отдельно
+'           Предел по доле газа на входе в насос после сепарации
+'           на основе статьи SPE 117414 (с корректировкой)
+'           поправка дополнительная к деградации (суммируется).
 Dim b As Double
     b = 0
     If GasFracIn > 0 And GasFracIn < 1 Then
         b = GasFracIn
     End If
-    If ESPtype = 0 Then GasCorrection_d = 1
-    If ESPtype = 1 Then
+    If gas_degr_value >= 0 And gas_degr_value <= 2 Then
+        GasCorrection_d = gas_degr_value
+    ElseIf gas_degr_value > 9.99 And gas_degr_value < 10.01 Then
+    
         GasCorrection_d = -9 * b ^ 2 + 0.6 * b + 1    ' SPE 117414
-    End If
-    If ESPtype = 2 Then
+    
+    ElseIf gas_degr_value > 19.99 And gas_degr_value < 20.01 Then
         GasCorrection_d = -2 * b ^ 2 + 0.05 * b + 1    ' SPE 117414  corrected rnt
-    End If
-    If ESPtype = 3 Then
+    ElseIf gas_degr_value > 29.99 And gas_degr_value < 30.01 Then
         GasCorrection_d = -1.4 * b ^ 2 + 0.15 * b + 1    ' SPE 117414
-    End If
-    If ESPtype = 4 Then
+    ElseIf gas_degr_value > 39.99 And gas_degr_value < 40.01 Then
         GasCorrection_d = -4 * b ^ 2 + 0.2 * b + 1    ' SPE 117414   corrected rnt
+    Else
+        GasCorrection_d = 1
     End If
     If GasCorrection_d < 0 Then GasCorrection_d = 0
 End Function
@@ -773,7 +834,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
 ' num_points - количество точек в выходных массивах для вывода
 '
     Dim arr()
-    Dim m As Integer
+    Dim M As Integer
    ' Dim FlowParams_out As PIPE_FLOW_PARAMS
     Dim offset As Integer
     Dim i As Integer
@@ -788,8 +849,8 @@ On Error Resume Next
     Set crv_P = curves.Item("PressureInPump").ClonePointsToNum(num_points)
     Set crv_T = curves.Item("TempInPump").ClonePointsToNum(num_points)
     
-    m = crv_P.num_points
-    ReDim arr(m + offset + 4, 15)
+    M = crv_P.num_points
+    ReDim arr(M + offset + 4, 15)
     
     ' в первом ряду параметров выведем результаты расчета
     ' которые могут пригодится в явном виде при массовых расчетах
@@ -837,7 +898,7 @@ On Error Resume Next
     
     Dim j As Integer
     
-    For i = 0 To m
+    For i = 0 To M
       
         j = 0
         hh = crv_P.pointX(i)   ' fractional stage number :)
@@ -966,69 +1027,69 @@ On Error Resume Next
 '        curves.Item("gas_corr_").ClearPoints
     
         ' во втором ряде параметров справочные параметры
-    arr(m + offset + 2, 0) = calc_from_dis_
-    arr(m + offset + 2, 1) = db_.name
-    arr(m + offset + 2, 2) = stage_num
-    arr(m + offset + 2, 3) = freq_Hz
-    arr(m + offset + 2, 4) = w_obmin
-    arr(m + offset + 2, 5) = rate_nom_sm3day
-    arr(m + offset + 2, 6) = rate_max_sm3day(-1)
-    arr(m + offset + 2, 7) = c_calibr_head
-    arr(m + offset + 2, 8) = c_calibr_rate
-    arr(m + offset + 2, 9) = c_calibr_power
-    arr(m + offset + 2, 10) = gas_degr_type
-    arr(m + offset + 2, 11) = turb_head_factor
-    arr(m + offset + 2, 12) = turb_rate_factor
+    arr(M + offset + 2, 0) = calc_from_dis_
+    arr(M + offset + 2, 1) = db_.name
+    arr(M + offset + 2, 2) = stage_num
+    arr(M + offset + 2, 3) = freq_Hz
+    arr(M + offset + 2, 4) = w_obmin
+    arr(M + offset + 2, 5) = rate_nom_sm3day
+    arr(M + offset + 2, 6) = rate_max_sm3day(-1)
+    arr(M + offset + 2, 7) = c_calibr_head
+    arr(M + offset + 2, 8) = c_calibr_rate
+    arr(M + offset + 2, 9) = c_calibr_power
+    arr(M + offset + 2, 10) = gas_correct
+    arr(M + offset + 2, 11) = turb_head_factor
+    arr(M + offset + 2, 12) = turb_rate_factor
     
-    arr(m + offset + 1, 0) = "calc_from_dis"
-    arr(m + offset + 1, 1) = "name"
-    arr(m + offset + 1, 2) = "stage_num"
-    arr(m + offset + 1, 3) = "freq_Hz"
-    arr(m + offset + 1, 4) = "w_obmin"
-    arr(m + offset + 1, 5) = "rate_nom_sm3day"
-    arr(m + offset + 1, 6) = "rate_max_sm3day"
-    arr(m + offset + 1, 7) = "c_calibr_head"
-    arr(m + offset + 1, 8) = "c_calibr_rate"
-    arr(m + offset + 1, 9) = "c_calibr_power"
-    arr(m + offset + 1, 10) = "gas_degr_type"
-    arr(m + offset + 1, 11) = "turb_head_factor"
-    arr(m + offset + 1, 12) = "turb_rate_factor"
-    arr(m + offset + 1, 13) = ""
-    arr(m + offset + 1, 14) = ""
-    arr(m + offset + 1, 15) = ""
-    arr(m + offset + 4, 0) = db_.ID
-    arr(m + offset + 4, 1) = db_.source
-    arr(m + offset + 4, 2) = db_.manufacturer
-    arr(m + offset + 4, 3) = db_.name
-    arr(m + offset + 4, 4) = db_.freq_Hz
-    arr(m + offset + 4, 5) = db_.nom_slip_fr
-    arr(m + offset + 4, 6) = db_.rate_nom_sm3day
-    arr(m + offset + 4, 7) = db_.rate_opt_min_sm3day
-    arr(m + offset + 4, 8) = db_.rate_opt_max_sm3day
-    arr(m + offset + 4, 9) = db_.stage_height_m
-    arr(m + offset + 4, 10) = db_.stages_max
-    arr(m + offset + 4, 11) = db_.d_od_m
-    arr(m + offset + 4, 12) = db_.d_cas_min_m
-    arr(m + offset + 4, 13) = db_.d_shaft_m
-    arr(m + offset + 4, 14) = db_.shaft_power_limit_W
-    arr(m + offset + 4, 15) = db_.housing_pressure_limit_atma
+    arr(M + offset + 1, 0) = "calc_from_dis"
+    arr(M + offset + 1, 1) = "name"
+    arr(M + offset + 1, 2) = "stage_num"
+    arr(M + offset + 1, 3) = "freq_Hz"
+    arr(M + offset + 1, 4) = "w_obmin"
+    arr(M + offset + 1, 5) = "rate_nom_sm3day"
+    arr(M + offset + 1, 6) = "rate_max_sm3day"
+    arr(M + offset + 1, 7) = "c_calibr_head"
+    arr(M + offset + 1, 8) = "c_calibr_rate"
+    arr(M + offset + 1, 9) = "c_calibr_power"
+    arr(M + offset + 1, 10) = "gas_degr"
+    arr(M + offset + 1, 11) = "turb_head_factor"
+    arr(M + offset + 1, 12) = "turb_rate_factor"
+    arr(M + offset + 1, 13) = ""
+    arr(M + offset + 1, 14) = ""
+    arr(M + offset + 1, 15) = ""
+    arr(M + offset + 4, 0) = db_.ID
+    arr(M + offset + 4, 1) = db_.source
+    arr(M + offset + 4, 2) = db_.manufacturer
+    arr(M + offset + 4, 3) = db_.name
+    arr(M + offset + 4, 4) = db_.freq_Hz
+    arr(M + offset + 4, 5) = db_.nom_slip_rpm
+    arr(M + offset + 4, 6) = db_.rate_nom_sm3day
+    arr(M + offset + 4, 7) = db_.rate_opt_min_sm3day
+    arr(M + offset + 4, 8) = db_.rate_opt_max_sm3day
+    arr(M + offset + 4, 9) = db_.stage_height_m
+    arr(M + offset + 4, 10) = db_.stages_max
+    arr(M + offset + 4, 11) = db_.d_od_m
+    arr(M + offset + 4, 12) = db_.d_cas_min_m
+    arr(M + offset + 4, 13) = db_.d_shaft_m
+    arr(M + offset + 4, 14) = db_.shaft_power_limit_W
+    arr(M + offset + 4, 15) = db_.housing_pressure_limit_atma
     
-    arr(m + offset + 3, 0) = "ID"
-    arr(m + offset + 3, 1) = "source"
-    arr(m + offset + 3, 2) = "manufacturer"
-    arr(m + offset + 3, 3) = "name"
-    arr(m + offset + 3, 4) = "freq_Hz"
-    arr(m + offset + 3, 5) = "nom_slip_fr"
-    arr(m + offset + 3, 6) = "rate_nom_sm3day"
-    arr(m + offset + 3, 7) = "rate_opt_min_sm3day"
-    arr(m + offset + 3, 8) = "rate_opt_max_sm3day"
-    arr(m + offset + 3, 9) = "stage_height_m"
-    arr(m + offset + 3, 10) = "stages_max"
-    arr(m + offset + 3, 11) = "d_od_m"
-    arr(m + offset + 3, 12) = "d_cas_min_m"
-    arr(m + offset + 3, 13) = "d_shaft_m"
-    arr(m + offset + 3, 14) = "shaft_power_limit_W"
-    arr(m + offset + 3, 15) = "housing_pressure_limit_atma"
+    arr(M + offset + 3, 0) = "ID"
+    arr(M + offset + 3, 1) = "source"
+    arr(M + offset + 3, 2) = "manufacturer"
+    arr(M + offset + 3, 3) = "name"
+    arr(M + offset + 3, 4) = "freq_Hz"
+    arr(M + offset + 3, 5) = "nom_slip_rpm"
+    arr(M + offset + 3, 6) = "rate_nom_sm3day"
+    arr(M + offset + 3, 7) = "rate_opt_min_sm3day"
+    arr(M + offset + 3, 8) = "rate_opt_max_sm3day"
+    arr(M + offset + 3, 9) = "stage_height_m"
+    arr(M + offset + 3, 10) = "stages_max"
+    arr(M + offset + 3, 11) = "d_od_m"
+    arr(M + offset + 3, 12) = "d_cas_min_m"
+    arr(M + offset + 3, 13) = "d_shaft_m"
+    arr(M + offset + 3, 14) = "shaft_power_limit_W"
+    arr(M + offset + 3, 15) = "housing_pressure_limit_atma"
     
     
     array_out = arr

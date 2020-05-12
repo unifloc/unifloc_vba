@@ -104,7 +104,7 @@ Public Function PVT_decode_string( _
 '                и выдаст строку (можно использовать из рабочей книги)
 ' результат - объект CPVT
 'description_end
-    Dim a
+    Dim A
     Dim i As Integer
     Dim b
     Dim p_atma As Double
@@ -131,12 +131,12 @@ Public Function PVT_decode_string( _
 On Error GoTo er1:
     ' пытаемс€ разбить строку разделител€ми
     If str_PVT = "" Then str_PVT = PVT_DEFAULT
-    a = Split(str_PVT, ";")
+    A = Split(str_PVT, ";")
     ' перебираем и сохран€ем все параметры
-    For i = LBound(a) To UBound(a)
+    For i = LBound(A) To UBound(A)
         ' только дл€ непустых разбиений
-        If a(i) <> "" Then
-           b = Split(a(i), ":")
+        If A(i) <> "" Then
+           b = Split(A(i), ":")
            'только там где есть значение
            If UBound(b) = 1 Then
                dict.Item(b(0)) = b(1)
@@ -221,11 +221,11 @@ Public Function ESP_encode_string( _
             Optional ByVal ESP_energy_fact_Whday As Double = 0, _
             Optional ByVal ESP_cable_type As Double = 0, _
             Optional ByVal ESP_h_mes_m As Double = 0, _
-            Optional ByVal ESP_gas_degradation_type As Integer = 0, _
+            Optional ByVal ESP_gas_correct As Double = 0, _
             Optional ByVal c_calibr = 1, _
             Optional ByVal PKV_work_min = -1, _
-            Optional ByVal PKV_stop_min = -1 _
-                    )
+            Optional ByVal PKV_stop_min = -1, _
+            Optional ByVal dnum_stages_integrate = 1)
 ' esp_ID         - идентификатор насоса
 ' HeadNom_m      - номинальный напор системы ”Ё÷Ќ
 '                - соответствует напора в записи Ё÷Ќ 50-2000
@@ -242,7 +242,7 @@ Public Function ESP_encode_string( _
 '                         cable_name =  ѕпјпЅѕ-120 3x16
 '                         cable_Tmax_C = 120
 ' ESP_h_mes_m    - длина кабельной линии
-' ESP_gas_degradation_type - тип насоса по работе с газом
+' ESP_gas_correct - тип насоса по работе с газом
 '                0 - нет коррекции,
 '                1 - стандартный Ё÷Ќ (предел 25%),
 '                2 - Ё÷Ќ с газостабилизирующим модулем (предел 50%),
@@ -258,6 +258,7 @@ Public Function ESP_encode_string( _
 '                     ѕ ¬ - периодическое кратковременное включение
 '                     если не заданы, то скважина в ѕƒ‘
 '                     ѕƒ‘ - посто€нно действующий фонд
+' dnum_stages_integrate - шаг интегрировани€ дл€ расчета
 ' результат         - строка с параметрами ”Ё÷Ќ
 'description_end
     Dim str As String
@@ -287,7 +288,7 @@ Public Function ESP_encode_string( _
     str = str & "ESP_energy_fact_Whday:" & Format(ESP_energy_fact_Whday, frmt) & ";"
     str = str & "ESP_cable_type:" & Format(ESP_cable_type, frmt_int) & ";"
     str = str & "ESP_h_mes_m:" & Format(ESP_h_mes_m, frmt) & ";"
-    str = str & "ESP_gas_degradation_type:" & Format(ESP_gas_degradation_type, frmt_int) & ";"
+    str = str & "ESP_gas_correct:" & Format(ESP_gas_correct, frmt) & ";"
     
         Dim clbr
     
@@ -311,6 +312,7 @@ Public Function ESP_encode_string( _
     str = str & "c_calibr_power:" & Format(c_calibr_power, frmt) & ";"
     str = str & "PKV_work_min:" & Format(PKV_work_min, frmt) & ";"
     str = str & "PKV_stop_min:" & Format(PKV_stop_min, frmt) & ";"
+    str = str & "d_st_int:" & Format(dnum_stages_integrate, frmt_int) & ";"
     ESP_encode_string = str
     
 End Function
@@ -325,7 +327,7 @@ Public Function ESP_decode_string(ByVal str_ESP As String, _
 '                       и выдаст строку (можно использовать из листа)
 ' результат - объект CESPsystemSimple
 'description_end
-    Dim a
+    Dim A
    ' Dim s As String
     Dim i As Integer
     Dim b
@@ -346,25 +348,27 @@ Public Function ESP_decode_string(ByVal str_ESP As String, _
     Dim ESP_energy_fact_Whday As Double
     Dim ESP_cable_type As Double
     Dim ESP_h_mes_m As Double
-    Dim ESP_gas_degradation_type As Integer
+    Dim ESP_gas_correct As Double
     Dim c_calibr_head As Double
     Dim c_calibr_rate As Double
     Dim c_calibr_power As Double
     
     Dim PKV_work_min As Double
     Dim PKV_stop_min As Double
+    
+    Dim dnum_stages_integrate As Integer
     Dim Key As String
     
     
 ' при разбиении строки на части ошибки недопустимы
 On Error GoTo er1:
     ' пытаемс€ разбить строку разделител€ми
-    a = Split(str_ESP, ";")
+    A = Split(str_ESP, ";")
     ' перебираем и сохран€ем все параметры
-    For i = LBound(a) To UBound(a)
+    For i = LBound(A) To UBound(A)
         ' только дл€ непустых разбиений
-        If a(i) <> "" Then
-           b = Split(a(i), ":")
+        If A(i) <> "" Then
+           b = Split(A(i), ":")
            'только там где есть значение
            If UBound(b) = 1 Then
                dict.Item(b(0)) = b(1)
@@ -388,21 +392,22 @@ On Error GoTo er2:
     Key = "ESP_energy_fact_Whday": ESP_energy_fact_Whday = Cdbl_(dict.Item(Key))
     Key = "ESP_cable_type": ESP_cable_type = Cdbl_(dict.Item(Key))
     Key = "ESP_h_mes_m": ESP_h_mes_m = Cdbl_(dict.Item(Key))
-    Key = "ESP_gas_degradation_type": ESP_gas_degradation_type = Cdbl_(dict.Item(Key))
+    Key = "ESP_gas_correct": ESP_gas_correct = Cdbl_(dict.Item(Key))
     Key = "c_calibr_head": c_calibr_head = Cdbl_(dict.Item(Key))
     Key = "c_calibr_rate": c_calibr_rate = Cdbl_(dict.Item(Key))
     Key = "c_calibr_power": c_calibr_power = Cdbl_(dict.Item(Key))
     Key = "PKV_work_min": PKV_work_min = Cdbl_(dict.Item(Key))
     Key = "PKV_stop_min": PKV_stop_min = Cdbl_(dict.Item(Key))
+    Key = "d_st_int": dnum_stages_integrate = CInt(dict.Item(Key))
 ' при создании объекта все должно пройти идеально
 ' переключаем режим реакции на ошибку
 On Error GoTo er1:
     If getStr Then
          ESP_decode_string = ESP_encode_string(esp_ID, HeadNom_m, ESPfreq_Hz, _
                                                ESP_U_V, MotorPowerNom_kW, t_int_C, t_dis_C, _
-                                               KsepGS_fr, ESP_energy_fact_Whday, ESP_cable_type, _
-                                               ESP_h_mes_m, ESP_gas_degradation_type, Array(c_calibr_head, c_calibr_rate, c_calibr_power), _
-                                               PKV_work_min, PKV_stop_min)
+                                               KsepGS_fr, ksep_manual_fr, ESP_energy_fact_Whday, ESP_cable_type, _
+                                               ESP_h_mes_m, ESP_gas_correct, Array(c_calibr_head, c_calibr_rate, c_calibr_power), _
+                                               PKV_work_min, PKV_stop_min, dnum_stages_integrate)
     Else
         If esp_ID > 0 Then
             If checkID_ESP(esp_ID) Then
@@ -424,7 +429,8 @@ On Error GoTo er1:
                 ESPsys.ESP_pump.c_calibr_head = c_calibr_head
                 ESPsys.ESP_pump.c_calibr_rate = c_calibr_rate
                 ESPsys.ESP_pump.c_calibr_power = c_calibr_power
-                ESPsys.ESP_pump.gas_degr_type = ESP_gas_degradation_type
+                ESPsys.ESP_pump.gas_correct = ESP_gas_correct
+                ESPsys.ESP_pump.dnum_stages_integrate = dnum_stages_integrate
                 Call ESPsys.PKV_set(PKV_work_min, PKV_stop_min)
                 
             End If
@@ -457,7 +463,7 @@ Public Function GL_decode_string(well_GL_str As String, _
 ' результат - объект CESPsystemSimple
 'description_end
     Dim S As String
-    Dim a, b
+    Dim A, b
     Dim i As Long
     Dim GLV As Integer
     Dim dict As New Dictionary
@@ -465,12 +471,12 @@ Public Function GL_decode_string(well_GL_str As String, _
 ' при разбиении строки на части ошибки недопустимы
 On Error GoTo er1:
     ' пытаемс€ разбить строку разделител€ми
-    a = Split(well_GL_str, ";")
+    A = Split(well_GL_str, ";")
     ' перебираем и сохран€ем все параметры
-    For i = LBound(a) To UBound(a)
+    For i = LBound(A) To UBound(A)
         ' только дл€ непустых разбиений
-        If a(i) <> "" Then
-           b = Split(a(i), ":")
+        If A(i) <> "" Then
+           b = Split(A(i), ":")
            'только там где есть значение
            If UBound(b) = 1 Then
                dict.Item(b(0)) = b(1)

@@ -1785,7 +1785,7 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q)
 
-    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr=1,out_curves_num_points=20,num_value=0):
+    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях 
@@ -1812,9 +1812,11 @@ class API():
 
      определяется параметром calc_along_flow  num_stages - количество ступеней  freq_hz - частота вращения вала эцн, гц  pump_id - идентификатор насоса  str_pvt - набор данных pvt..см.мануал   
 
-     esp_gas_degradation_type - тип насоса по работе с газом:  0 нет коррекции;  1 стандартный эцн (предел 25%);  2 эцн с газостабилизирующим модулем (предел 50%);  3 эцн с осевым..см.мануал   
+     esp_gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым м..см.мануал   
 
      c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
+
+     dnum_stages_integrate - шаг интегрирования эцн  если >1 будет быстрее но менее точно    
 
      out_curves_num_points - количество точек для вывода значений  по ступеня.    
 
@@ -1823,9 +1825,9 @@ class API():
         """
 
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr,out_curves_num_points,num_value)
+        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,out_curves_num_points,num_value)
 
-    def ESP_calibr_pump(self, qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_degradation_type=0,c_calibr=1,calibr_type=0):
+    def ESP_calibr_pump(self, qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,calibr_type=0):
         """
  ========== description ============== 
  расчет подстроечных параметров системы УЭЦН 
@@ -1854,16 +1856,18 @@ class API():
 
      если = 0 и calc_along_flow = 1 то рассчитывается  calc_along_flow - режим расчета снизу вверх или сверху вниз  calc_along_flow = true => p_atma давление на приеме  calc_along_..см.мануал   
 
-     esp_gas_degradation_type - тип насоса по работе с газом:  0 нет коррекции;  1 стандартный эцн (предел 25%);  2 эцн с газостабилизирующим модулем (предел 50%);  3 эцн с осевым..см.мануал   
+     esp_gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым м..см.мануал   
 
      c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
+
+     dnum_stages_integrate - шаг интегрирования эцн  если >1 будет быстрее но менее точно    
 
      calibr_type - тип калибровки   
 
         """
 
         self.f_ESP_calibr_pump = self.book.macro("ESP_calibr_pump")
-        return self.f_ESP_calibr_pump(qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_degradation_type,c_calibr,calibr_type)
+        return self.f_ESP_calibr_pump(qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,calibr_type)
 
     def ESP_system_calc(self, qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow=1,out_curves_num_points=20,num_value=0):
         """
@@ -2521,7 +2525,7 @@ class API():
         self.f_PVT_decode_string = self.book.macro("PVT_decode_string")
         return self.f_PVT_decode_string(str_PVT,getStr)
 
-    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ksep_manual_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_degradation_type=0,c_calibr=1,PKV_work_min=-1,PKV_stop_min=-1):
+    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ksep_manual_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_correct=0,c_calibr=1,PKV_work_min=-1,PKV_stop_min=-1,dnum_stages_integrate=1):
         """
  ========== description ============== 
  функция кодирования параметров работы УЭЦН в строку,  которую можно потом использовать для задания ЭЦН в прикладных функциях 
@@ -2552,18 +2556,20 @@ class API():
 
      esp_h_mes_m - длина кабельной линии    
 
-     esp_gas_degradation_type - тип насоса по работе с газом  0 - нет коррекции,  1 - стандартный эцн (предел 25%),  2 - эцн с газостабилизирующим модулем (предел 50%),  3 - эцн с..см.мануал   
+     esp_gas_correct - тип насоса по работе с газом  0 - нет коррекции,  1 - стандартный эцн (предел 25%),  2 - эцн с газостабилизирующим модулем (предел 50%),  3 - эцн с осевым м..см.мануал   
 
      c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
 
      pkv_work_min - время работы скважины для режима пкв в минутах    
 
-     pkv_stop_min - время ожидания запуска скважины для пкв , мин  пкв - периодическое кратковременное включение  если не заданы, то скважина в пдф  пдф - постоянно действующий фон..см.мануал  
+     pkv_stop_min - время ожидания запуска скважины для пкв , мин  пкв - периодическое кратковременное включение  если не заданы, то скважина в пдф  пдф - постоянно действующий фон..см.мануал   
+
+     dnum_stages_integrate - шаг интегрирования для расчета   
 
         """
 
         self.f_ESP_encode_string = self.book.macro("ESP_encode_string")
-        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ksep_manual_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_degradation_type,c_calibr,PKV_work_min,PKV_stop_min)
+        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ksep_manual_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_correct,c_calibr,PKV_work_min,PKV_stop_min,dnum_stages_integrate)
 
     def ESP_decode_string(self, str_ESP,getStr=False):
         """
@@ -2919,7 +2925,7 @@ class API():
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
 
-    def crv_fit_spline_1D(self, xa,YA,m,XIA,WA,XCA,YCA,DCA,hermite=False):
+    def crv_fit_spline_1D(self, xa,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
         """
  ========== description ============== 
 Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений. 
@@ -2947,7 +2953,7 @@ class API():
         """
 
         self.f_crv_fit_spline_1D = self.book.macro("crv_fit_spline_1D")
-        return self.f_crv_fit_spline_1D(xa,YA,m,XIA,WA,XCA,YCA,DCA,hermite)
+        return self.f_crv_fit_spline_1D(xa,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
 
     def crv_fit_linear(self, YA,xa,out,weight,constraints):
         """
@@ -2971,7 +2977,7 @@ class API():
         self.f_crv_fit_linear = self.book.macro("crv_fit_linear")
         return self.f_crv_fit_linear(YA,xa,out,weight,raints)
 
-    def crv_fit_poly(self, YA,xa,m,out,XIA,weight,constraints):
+    def crv_fit_poly(self, YA,xa,M,out,XIA,weight,constraints):
         """
  ========== description ============== 
 Аппроксимация данных полиномом функцией. Решается задача min|XM-Y| ищется вектор M 
@@ -2995,7 +3001,7 @@ class API():
         """
 
         self.f_crv_fit_poly = self.book.macro("crv_fit_poly")
-        return self.f_crv_fit_poly(YA,xa,m,out,XIA,weight,raints)
+        return self.f_crv_fit_poly(YA,xa,M,out,XIA,weight,raints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """
