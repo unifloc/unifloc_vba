@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2020
 '
@@ -24,6 +24,11 @@
 'description_end_rus
 Option Explicit
  Public gas_only As Boolean
+ Public ksep_fr As Double
+ Public p_ksep_atma As Double
+ Public t_ksep_C As Double
+ 
+ 
  Public zCorr As Z_CORRELATION
  Public PVT_correlation As PVT_correlation       ' PVT correlation
  Public gamma_o As Double                        ' плотность нефти удельная
@@ -40,7 +45,7 @@ Option Explicit
  Public pb_atma As Double                        ' давление насыщения  (калибровочное значение)
  Public muob_cP As Double                        ' вязкость нефти при давлении насыщения (калибровочное значение)
  Public bob_m3m3 As Double                       ' объемный коэффициент при давлении насыщения
- Public tres_C As Double                         ' пластовая температура при которой заданые значения давления насыщения и объемного коэффициента
+ Public t_res_C As Double                         ' пластовая температура при которой заданые значения давления насыщения и объемного коэффициента
  Private class_name_ As String                     ' имя класса для унифицированной генерации сообщений об ошибках
  Private PT_calc_ As PTtype                        ' термобарические условия при которых был проведен расчет
  ' базовые параметры флюида
@@ -95,13 +100,10 @@ Option Explicit
  Public Property Let fw_fr(val As Double)
     If val >= 0 And val <= 1 Then
         fw_fr_ = val
+    ElseIf val < 0 Then
+        fw_fr_ = 0
     Else
-        ' унифицированная реакция на ошибочный ввод ключевых параметров класса
-        Dim msg As String, fname As String
-        fname = "fw_fr"
-        msg = class_name_ & "." & fname & ": input - wrong " & fname & " = " & S(val)
-        addLogMsg msg
-        Err.Raise kErrPVTinput, class_name_ & "." & fname, msg
+        fw_fr_ = 1
     End If
  End Property
  Public Property Get fw_perc() As Double
@@ -116,16 +118,16 @@ Option Explicit
     fm_gas_fr = mg_kgsec / (mg_kgsec + mo_kgsec + mw_kgsec)
  End Property
  
- Public Property Get fm_oil_fr() As Double
+ Public Function fm_oil_fr() As Double
     fm_oil_fr = mo_kgsec / (mg_kgsec + mo_kgsec + mw_kgsec)
- End Property
- Public Property Get fm_wat_fr() As Double
+ End Function
+ Public Function fm_wat_fr() As Double
     fm_wat_fr = mw_kgsec / (mg_kgsec + mo_kgsec + mw_kgsec)
- End Property
- Public Property Get polytropic_exponent() As Double
+ End Function
+ Public Function polytropic_exponent() As Double
     polytropic_exponent = (fm_gas_fr * heat_capacity_ratio_gas_ * cv_gas_JkgC_ + fm_oil_fr * cv_oil_JkgC + fm_wat_fr * cv_wat_JkgC) / _
                           (fm_gas_fr * cv_gas_JkgC + fm_oil_fr * cv_oil_JkgC + fm_wat_fr * cv_wat_JkgC)
- End Property
+ End Function
   
  Private Sub calc_wc()
     If qliq_sm3day > 0 Then
@@ -135,58 +137,56 @@ Option Explicit
     End If
  End Sub
  
- Public Property Get q_wat_sm3day() As Double
+ Public Function q_wat_sm3day() As Double
    q_wat_sm3day = qliq_sm3day * fw_fr_
- End Property
+ End Function
   
- Public Property Get q_gas_sm3day() As Double
+ Public Function q_gas_sm3day() As Double
    q_gas_sm3day = q_oil_sm3day * rp_m3m3 + q_gas_free_sm3day    ' учитываем наличие свободного газа в потоке
-   ' при барботаже будет все корректно
- End Property
- Public Property Get q_gas_insitu_sm3day() As Double
+ End Function
+ Public Function q_gas_insitu_sm3day() As Double
  ' расход газа в заданных термобарических условиях приведенный к стандартным условиям
    q_gas_insitu_sm3day = (q_gas_sm3day - rs_m3m3 * q_oil_sm3day)
    If q_gas_insitu_sm3day < 0 Then
-        
-       If q_gas_insitu_sm3day < -1 Then
-           ' сообщение генерируем только если большая разница
-            addLogMsg "CPVT.q_gas_insitu_sm3day: warning: q_gas_insitu_sm3day  = " & S(q_gas_insitu_sm3day) & " < 0,  q_gas_sm3day = " & S(q_gas_sm3day) & _
-                  ", rs_m3m3 = " & S(rs_m3m3) & _
-                  ", rp_m3m3 = " & S(rp_m3m3) & _
-                  ", q_oil_sm3day = " & S(q_oil_sm3day) & _
-                  "  q_gas_insitu_sm3day set to 0"
-        End If
+'
+'       If q_gas_insitu_sm3day < -1 Then
+'           ' сообщение генерируем только если большая разница
+'            addLogMsg "CPVT.q_gas_insitu_sm3day: warning: q_gas_insitu_sm3day  = " & S(q_gas_insitu_sm3day) & " < 0,  q_gas_sm3day = " & S(q_gas_sm3day) & _
+'                  ", rs_m3m3 = " & S(rs_m3m3) & _
+'                  ", rp_m3m3 = " & S(rp_m3m3) & _
+'                  ", q_oil_sm3day = " & S(q_oil_sm3day) & _
+'                  "  q_gas_insitu_sm3day set to 0"
+'        End If
         q_gas_insitu_sm3day = 0
    End If
-   ' при барботаже будет все как надо - свободный газ уже учтен в дебите газа в стандартных условиях
- End Property
- Public Property Get q_gas_rc_m3day() As Double
+ End Function
+ Public Function q_gas_rc_m3day() As Double
    q_gas_rc_m3day = q_gas_insitu_sm3day * bg_m3m3_
    If q_gas_rc_m3day < 0 Then q_gas_rc_m3day = 0
- End Property
- Public Property Get q_oil_sm3day() As Double
+ End Function
+ Public Function q_oil_sm3day() As Double
    q_oil_sm3day = qliq_sm3day * (1 - fw_fr_)
- End Property
- Public Property Get q_oil_rc_m3day() As Double
+ End Function
+ Public Function q_oil_rc_m3day() As Double
    q_oil_rc_m3day = q_oil_sm3day * bo_m3m3_
- End Property
- Public Property Get q_wat_rc_m3day() As Double
+ End Function
+ Public Function q_wat_rc_m3day() As Double
    q_wat_rc_m3day = q_wat_sm3day * bw_m3m3_
- End Property
+ End Function
  
- Public Property Get qliq_rc_m3day() As Double
+ Public Function qliq_rc_m3day() As Double
    qliq_rc_m3day = q_wat_rc_m3day + q_oil_rc_m3day
- End Property
+ End Function
    
- Public Property Get q_mix_rc_m3day() As Double
+ Public Function q_mix_rc_m3day() As Double
    q_mix_rc_m3day = q_wat_rc_m3day_ + q_oil_rc_m3day_ + q_gas_rc_m3day_
- End Property
+ End Function
   
- Public Property Get wm_kgsec() As Double
+ Public Function wm_kgsec() As Double
    wm_kgsec = mg_kgsec + mo_kgsec + mw_kgsec
- End Property
+ End Function
   
- Public Property Get compressibility_oil_1atm() As Double
+ Public Function compressibility_oil_1atm() As Double
     Dim t_K As Double
     Dim p_MPa As Double
            
@@ -194,9 +194,9 @@ Option Explicit
     p_MPa = PT_calc_.p_atma * const_convert_atma_MPa
     compressibility_oil_1atm = unf_pvt_compressibility_oil_VB_1atm(rs_m3m3_, gamma_g, t_K, gamma_o, p_MPa)
     
- End Property
+ End Function
  
- Public Property Get compressibility_wat_1atm() As Double
+ Public Function compressibility_wat_1atm() As Double
     Dim t_K As Double
     Dim p_MPa As Double
            
@@ -206,8 +206,8 @@ Option Explicit
     ' need to check - water compressibility strongly correlate with Bw - water formation volume factor
     ' but here two different correlations are used
     ' in hope that for water everything should be ok
- End Property
- Public Property Get compressibility_gas_1atm() As Double
+ End Function
+ Public Function compressibility_gas_1atm() As Double
     Dim t_K As Double
     Dim p_MPa As Double
            
@@ -215,65 +215,63 @@ Option Explicit
     p_MPa = PT_calc_.p_atma * const_convert_atma_MPa
     compressibility_gas_1atm = 1 / p_MPa - 1 / z_ * unf_pvt_dZdp(t_K, p_MPa, gamma_g, z_Kareem)
     compressibility_gas_1atm = compressibility_gas_1atm * const_convert_atma_MPa
- End Property
+ End Function
   
- Public Property Get co_JkgC() As Double  ' oil heat capacity   теплоемкость нефти  Дж/кг/С
+ Public Function co_JkgC() As Double  ' oil heat capacity   теплоемкость нефти  Дж/кг/С
     co_JkgC = cp_oil_JkgC_
- End Property
- Public Property Get cw_JkgC() As Double   ' water heat capacity  теплоемкость воды
+ End Function
+ Public Function cw_JkgC() As Double   ' water heat capacity  теплоемкость воды
     cw_JkgC = cw_JkgC_
- End Property
- Public Property Get cg_JkgC() As Double  ' теплоемкость газа gas heat capacity
+ End Function
+ Public Function cg_JkgC() As Double  ' теплоемкость газа gas heat capacity
     cg_JkgC = cp_gas_JkgC
- End Property
+ End Function
  
- Public Property Get cp_gas_JkgC() As Double
+ Public Function cp_gas_JkgC() As Double
         cp_gas_JkgC = cv_gas_JkgC_ * heat_capacity_ratio_gas_
- End Property
+ End Function
  
- Public Property Get cv_gas_JkgC() As Double
+ Public Function cv_gas_JkgC() As Double
         cv_gas_JkgC = cv_gas_JkgC_
- End Property
+ End Function
  
- Public Property Get cv_oil_JkgC()
+ Public Function cv_oil_JkgC() As Double
     cv_oil_JkgC = cp_oil_JkgC_ / heat_capacity_ratio_oil_
- End Property
+ End Function
  
- Public Property Get cp_oil_JkgC()
+ Public Function cp_oil_JkgC() As Double
     cp_oil_JkgC = cp_oil_JkgC_
- End Property
- Public Property Get cv_wat_JkgC()
+ End Function
+ Public Function cv_wat_JkgC() As Double
     cv_wat_JkgC = cw_JkgC_ / heat_capacity_ratio_water_
- End Property
- Public Property Get cp_wat_JkgC()
+ End Function
+ Public Function cp_wat_JkgC() As Double
     cp_wat_JkgC = cw_JkgC_
- End Property
+ End Function
  
- Public Property Get cliq_JkgC() As Double  ' mixture heat capacity   теплоемкость жидкости  Дж/кг/С
+ Public Function cliq_JkgC() As Double  ' mixture heat capacity   теплоемкость жидкости  Дж/кг/С
     If q_mix_rc_m3day > 0 Then
          cliq_JkgC = (co_JkgC * mo_kgsec + cw_JkgC * mw_kgsec) / (mw_kgsec + mo_kgsec)
     Else
         cliq_JkgC = co_JkgC
     End If
- End Property
- Public Property Get cmix_JkgC() As Double  ' mixture heat capacity   теплоемкость жидкости  Дж/кг/С
+ End Function
+ Public Function cmix_JkgC() As Double  ' mixture heat capacity   теплоемкость жидкости  Дж/кг/С
     If q_mix_rc_m3day > 0 Then
          cmix_JkgC = (cliq_JkgC * (mw_kgsec + mo_kgsec) + cg_JkgC * mg_kgsec) / (mo_kgsec + mw_kgsec + mg_kgsec)
     Else
         cmix_JkgC = co_JkgC
     End If
- End Property
+ End Function
  
- Public Property Get cJT_Katm() As Double
+ Public Function cJT_Katm() As Double
  ' коэффциент Джоуля Томсона для многофазной смеси
     Dim x As Double
     Dim wm As Double
-    Dim z1 As Double, z2 As Double
-    Dim dtz As Double
     Dim dZdT As Double
     Dim TZdZdT As Double
     wm = (mo_kgsec + mw_kgsec + mg_kgsec)
-    dZdT = unf_pvt_dZdt(t_calc_K, pcalc_MPaa, gamma_g, z_Kareem, z_)
+    dZdT = unf_pvt_dZdt(t_calc_K, p_calc_MPaa, gamma_g, z_Kareem, z_)
     TZdZdT = t_calc_K / z_ * dZdT
     If wm > 0 Then
         x = mg_kgsec / (mo_kgsec + mw_kgsec + mg_kgsec)    ' массовая доля газа в потоке
@@ -281,13 +279,13 @@ Option Explicit
         x = 0
     End If
     cJT_Katm = 1 / cmix_JkgC * (x / rho_gas_rc_kgm3 * (-TZdZdT) + (1 - x) / rho_liq_rc_kgm3) * const_convert_atma_Pa
- End Property
+ End Function
  
- Public Property Get oil_API() As Double
+ Public Function oil_API() As Double
     oil_API = 141.5 / gamma_o - 131.5
- End Property
+ End Function
  
- Public Property Get rho_oil_rc_kgm3() As Double
+ Public Function rho_oil_rc_kgm3() As Double
     Dim msg As String
     If bo_m3m3_ > 0 Then
         rho_oil_rc_kgm3 = 1000 * (gamma_o + rs_m3m3_ * gamma_g * const_rho_air / 1000) / bo_m3m3_
@@ -297,9 +295,9 @@ Option Explicit
         addLogMsg msg
         rho_oil_rc_kgm3 = 1000 * (gamma_o + rs_m3m3_ * gamma_g * const_rho_air / 1000)
     End If
- End Property
+ End Function
  
- Public Property Get rho_wat_rc_kgm3() As Double
+ Public Function rho_wat_rc_kgm3() As Double
     Dim msg As String
     If bw_m3m3_ > 0 Then
         rho_wat_rc_kgm3 = 1000 * (gamma_w) / bw_m3m3_
@@ -309,12 +307,22 @@ Option Explicit
         addLogMsg msg
         rho_wat_rc_kgm3 = 1000 * (gamma_w)
     End If
- End Property
- Public Property Get rho_liq_rc_kgm3() As Double
+ End Function
+ Public Function rho_liq_rc_kgm3() As Double
     rho_liq_rc_kgm3 = rho_liq_rc_kgm3_ '(1 - fw_fr) * rho_oil_rc_kgm3 + fw_fr * rho_wat_rc_kgm3
- End Property
+ End Function
  
- Public Property Get rho_gas_rc_kgm3() As Double
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ Public Function rho_gas_rc_kgm3() As Double
     Dim msg As String
     If bg_m3m3_ > 0 Then
         rho_gas_rc_kgm3 = gamma_g * const_rho_air / bg_m3m3_
@@ -324,60 +332,60 @@ Option Explicit
         addLogMsg msg
         rho_gas_rc_kgm3 = gamma_g * const_rho_air
     End If
- End Property
- Public Property Get f_g() As Double
+ End Function
+ Public Function f_g() As Double
     If q_mix_rc_m3day > 0 Then
        f_g = q_gas_rc_m3day / q_mix_rc_m3day
     Else
        f_g = 0
     End If
- End Property
- Public Property Get rho_mix_rc_kgm3() As Double
+ End Function
+ Public Function rho_mix_rc_kgm3() As Double
     rho_mix_rc_kgm3 = rho_mix_rc_kgm3_  ' rho_liq_rc_kgm3 * (1 - f_g) + rho_gas_rc_kgm3 * f_g
- End Property
+ End Function
  
- Public Property Get sigma_liq_Nm() As Double
+ Public Function sigma_liq_Nm() As Double
     sigma_liq_Nm = ST_liqgas_dyncm_ * 0.001
- End Property
- Public Property Get sigma_oil_gas_Nm() As Double
+ End Function
+ Public Function sigma_oil_gas_Nm() As Double
     sigma_oil_gas_Nm = ST_oilgas_dyncm_ * 0.001
- End Property
+ End Function
   
- Public Property Get sigma_wat_gas_Nm() As Double
+ Public Function sigma_wat_gas_Nm() As Double
     'sigma_wat_gas_Nm = p_sigma_wat_gas_Nm
     sigma_wat_gas_Nm = ST_watgas_dyncm_ * 0.001
- End Property
+ End Function
   
- Public Property Get t_res_K() As Double
-    t_res_K = tres_C + const_t_K_min
- End Property
+ Public Function t_res_K() As Double
+    t_res_K = t_res_C + const_t_K_min
+ End Function
    
  ' молярная масса газа   (используется например в штуцере)
- Public Property Get m_g_kgmol() As Double
-    m_g_kgmol = const_m_a_kgmol * gamma_g
- End Property
- Public Property Get sal_ppm() As Double
+ Public Function mg_kgmol() As Double
+    mg_kgmol = const_m_a_kgmol * gamma_g
+ End Function
+ Public Function sal_ppm() As Double
     sal_ppm = salinity_ppm_
- End Property
+ End Function
   
- Public Property Get rho_oil_sckgm3() As Double
+ Public Function rho_oil_sckgm3() As Double
     rho_oil_sckgm3 = gamma_o * const_rho_ref
- End Property
+ End Function
  
- Public Property Get rho_gas_sckgm3() As Double
+ Public Function rho_gas_sckgm3() As Double
     rho_gas_sckgm3 = gamma_g * const_rho_air
- End Property
- Public Property Get rho_wat_sckgm3() As Double
+ End Function
+ Public Function rho_wat_sckgm3() As Double
     rho_wat_sckgm3 = gamma_w * const_rho_ref
- End Property
+ End Function
   
- Public Property Get rp_full_m3m3() As Double
+ Public Function rp_full_m3m3() As Double
     If q_oil_sm3day > 0 Then
         rp_full_m3m3 = rp_m3m3_ + q_gas_free_sm3day / q_oil_sm3day
     Else
         rp_full_m3m3 = rp_m3m3_
     End If
- End Property
+ End Function
  
 ' ----- Rp - GOR  ----------------------------------------------------------------------------------------
 Public Property Get rp_m3m3() As Double
@@ -404,9 +412,6 @@ End Property
 Public Property Get rsb_m3m3() As Double
     rsb_m3m3 = rsb_m3m3_
 End Property
-Public Property Get rsb_calc_m3m3() As Double
-    rsb_calc_m3m3 = rsb_calc_m3m3_
-End Property
 Property Let rsb_m3m3(val As Double)
     If (val >= 0) Then
         rsb_m3m3_ = val
@@ -424,6 +429,9 @@ Property Let rsb_m3m3(val As Double)
         Err.Raise kErrPVTinput, class_name_ & "." & fname, msg
     End If
 End Property
+Public Function rsb_calc_m3m3() As Double
+    rsb_calc_m3m3 = rsb_calc_m3m3_
+End Function
  
 Public Function set_rp_rsb(ByVal Rpval_m3m3 As Double, ByVal Rsbval_m3m3 As Double) As Boolean
 ' безопасный с точки зрения начисления штрафов способ установки произвольных значений газового фактора в системе
@@ -459,7 +467,7 @@ Public Function set_rp_rsb(ByVal Rpval_m3m3 As Double, ByVal Rsbval_m3m3 As Doub
     rsb_m3m3 = rsb_m3m3
 End Function
 '----- Pb -----------------------------------------------------------------------------------------
-Public Property Get pb_calc_atma() As Double
+Public Function pb_calc_atma() As Double
 ' функция выдает давление насыщения, которое было получено в ходе расчетов
 ' может отличатся от того, что было задано при инициализации, если оно было не допустимо
 ' если не было задано - то оно рассчитывается и выдается расчитанное
@@ -468,31 +476,31 @@ Public Property Get pb_calc_atma() As Double
         pb_calc_atma = pb_calc_atma_
     Else
     ' иначе считаем что получится из расчета по корреляции по газосодержанию
-        pb_calc_atma = calc_pb_atma(rsb_m3m3, tres_C)
+        pb_calc_atma = calc_pb_atma(rsb_m3m3, t_res_C)
     End If
-End Property
-Public Property Get rs_m3m3() As Double
+End Function
+Public Function rs_m3m3() As Double
     rs_m3m3 = rs_m3m3_
-End Property
-Public Property Get bo_m3m3() As Double
+End Function
+Public Function bo_m3m3() As Double
     bo_m3m3 = bo_m3m3_
-End Property
-Public Property Get bg_m3m3() As Double
+End Function
+Public Function bg_m3m3() As Double
     bg_m3m3 = bg_m3m3_
-End Property
-Public Property Get bw_m3m3() As Double
+End Function
+Public Function bw_m3m3() As Double
     bw_m3m3 = bw_m3m3_
-End Property
-Public Property Get mu_oil_cP() As Double
+End Function
+Public Function mu_oil_cP() As Double
  mu_oil_cP = mu_oil_cP_
-End Property
-Public Property Get mu_wat_cP() As Double
+End Function
+Public Function mu_wat_cP() As Double
  mu_wat_cP = mu_wat_cP_
-End Property
-Public Property Get mu_gas_cP() As Double
+End Function
+Public Function mu_gas_cP() As Double
  mu_gas_cP = mu_gas_cP_
-End Property
-Public Property Get mu_liq_cP() As Double
+End Function
+Public Function mu_liq_cP() As Double
 '
 ' todo надо уточнить как считать вязкость для смеси - быть может надо холдап использовать
 '
@@ -505,47 +513,47 @@ Public Property Get mu_liq_cP() As Double
     
     mu_liq_cP = (mu_oil_cP * (1 - fw_rc_fr) + _
                 mu_wat_cP * fw_rc_fr)
-End Property
-Public Property Get mu_mix_cP() As Double
+End Function
+Public Function mu_mix_cP() As Double
     mu_mix_cP = mu_mix_cP_
-End Property
+End Function
 ' кинематическая вязкость смеси в сантистоксах
-Public Property Get mu_mix_cSt() As Double
+Public Function mu_mix_cSt() As Double
     mu_mix_cSt = mu_mix_cP_ / (rho_mix_rc_kgm3_ / 1000)
-End Property
+End Function
 ' массовый расход нефти
-Public Property Get mo_kgsec() As Double
+Public Function mo_kgsec() As Double
     mo_kgsec = q_oil_rc_m3day * rho_oil_rc_kgm3 / const_conver_day_sec
-End Property
+End Function
 ' массовый расход воды
-Public Property Get mw_kgsec() As Double
+Public Function mw_kgsec() As Double
     mw_kgsec = q_wat_rc_m3day * rho_wat_rc_kgm3 / const_conver_day_sec
-End Property
+End Function
 ' массовый расход газа
-Public Property Get mg_kgsec() As Double
+Public Function mg_kgsec() As Double
     mg_kgsec = q_gas_rc_m3day * rho_gas_rc_kgm3 / const_conver_day_sec
-End Property
-Public Property Get z() As Double
+End Function
+Public Function z() As Double
     z = z_
-End Property
-Public Property Get p_calc_atma() As Double
+End Function
+Public Function p_calc_atma() As Double
     p_calc_atma = PT_calc_.p_atma
-End Property
-Public Property Get pcalc_MPaa() As Double
-    pcalc_MPaa = p_calc_atma * const_convert_atma_MPa
-End Property
-Public Property Get t_calc_C() As Double
+End Function
+Public Function p_calc_MPaa() As Double
+    p_calc_MPaa = p_calc_atma * const_convert_atma_MPa
+End Function
+Public Function t_calc_C() As Double
     t_calc_C = PT_calc_.t_C
-End Property
-Public Property Get t_calc_K() As Double
+End Function
+Public Function t_calc_K() As Double
     t_calc_K = t_calc_C + const_t_K_min
-End Property
-Public Property Get t_calc_F() As Double
+End Function
+Public Function t_calc_F() As Double
     t_calc_F = t_calc_C * 1.8 + 32
-End Property
-Public Property Get mu_deadoil_cP() As Double
+End Function
+Public Function mu_deadoil_cP() As Double
     mu_deadoil_cP = mu_deadoil_cP_
-End Property
+End Function
 '===================================================================================
 ' функции и процедуры
 '===================================================================================
@@ -560,13 +568,17 @@ End Property
         rsb_m3m3 = 100
         pb_atma = -1  ' по умолчанию нет калибровок, только корреляция
         bob_m3m3 = -1  ' по умолчанию нет калибровок, только корреляция
-        tres_C = 90
+        muob_cP = -1
+        
+        t_res_C = 90
+        
         fw_perc = 0
         qliq_sm3day = 100
         q_gas_free_sm3day = 0
         ' для начала для простоты инициализируем теплоемкость флюидов как константы
         ' потом можно будет добавить расчет в зависимости от условий
         cw_JkgC_ = 4176
+        
         zCorr = z_Kareem
         gas_only = False
         pb_calc_atma_ = 0
@@ -575,38 +587,127 @@ End Property
         heat_capacity_ratio_gas_ = 1.3
         heat_capacity_ratio_oil_ = 1.05
         heat_capacity_ratio_water_ = 1
+        
+        ksep_fr = 0
+        p_ksep_atma = 0
+        t_ksep_C = 0
     
  End Sub
  
+ Public Sub init_json(json As String)
+    Dim d As Dictionary
+    Set d = ParseJson(json)
+    Call init_dictionary(d)
+ End Sub
  
- Public Sub init(Optional ByVal gamma_gas = 0.6, _
-                 Optional ByVal gamma_oil = 0.86, _
-                 Optional ByVal gamma_wat = 1, _
-                 Optional ByVal rsb_m3m3 = 100, _
-                 Optional ByVal pb_atma = -1, _
-                 Optional ByVal bob_m3m3 = -1, _
-                 Optional ByVal PVTcorr = 0, _
-                 Optional ByVal tres_C = 90, _
-                 Optional ByVal rp_m3m3 = -1, _
-                 Optional ByVal muob_cP = -1)
+ Public Sub init_dictionary(dict As Dictionary)
+ ' expect that dictionary has all main properties with proper names
+    Dim gamma_gas As Double
+    Dim gamma_oil As Double
+    Dim gamma_wat As Double
+    Dim rsb_m3m3 As Double
+    Dim rp_m3m3 As Double
+    Dim pb_atma As Double
+    Dim t_res_C As Double
+    Dim bob_m3m3 As Double
+    Dim muob_cP As Double
+    Dim PVTcorr As Integer
+    Dim ksep_fr As Double
+    Dim p_ksep_atma As Double
+    Dim t_ksep_C As Double
+    Dim gas_only As Boolean
+    Dim errmsg As String
+    Dim key As String
+On Error Resume Next:
+    ' при чтении параметров используем промежуточную переменную key
+    ' чтобы иметь возможность более информативно отреагировать на ошибку
+    With dict
+        key = "gamma_oil"
+        If .Exists(key) Then
+            gamma_oil = .Item(key)
+        Else
+            errmsg = "CPVT.init_dictionary. error: " & key & " must be given"
+            GoTo er2:
+        End If
+        
+        key = "gamma_gas"
+        If .Exists(key) Then
+            gamma_gas = .Item(key)
+        Else
+            errmsg = "CPVT.init_dictionary. error: " & key & " must be given"
+            GoTo er2:
+        End If
+        
+        key = "rsb_m3m3"
+        If .Exists(key) Then
+            rsb_m3m3 = .Item(key)
+        Else
+            errmsg = "CPVT.init_dictionary. error: " & key & " must be given"
+            GoTo er2:
+        End If
+        
+        If .Exists("gamma_wat") Then gamma_wat = .Item("gamma_wat")
+        If .Exists("rp_m3m3") Then rp_m3m3 = .Item("rp_m3m3")
+        If .Exists("pb_atma") Then pb_atma = .Item("pb_atma")
+        If .Exists("t_res_C") Then t_res_C = .Item("t_res_C")
+        If .Exists("bob_m3m3") Then bob_m3m3 = .Item("bob_m3m3")
+        If .Exists("muob_cP") Then muob_cP = .Item("muob_cP")
+        If .Exists("PVTcorr") Then PVTcorr = .Item("PVTcorr")
+        If .Exists("ksep_fr") Then ksep_fr = .Item("ksep_fr")
+        If .Exists("p_ksep_atma") Then p_ksep_atma = .Item("p_ksep_atma")
+        If .Exists("t_ksep_C") Then t_ksep_C = .Item("t_ksep_C")
+        If .Exists("gas_only") Then gas_only = .Item("gas_only")
+        
+    End With
+' ловим все ошибки, все должно пройти идеально при дешифровке
+On Error GoTo er1:
+    ' калибровочный параметр проверяем специально и не даем сохраниться значению по умолчанию
+    ' если он неправильно указан (дублируется инициализацией в конструкторе, но все же)
+    Call init(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, t_res_C, rp_m3m3, muob_cP)
+    Me.gas_only = gas_only
+    Me.ksep_fr = ksep_fr
+    Me.p_ksep_atma = p_ksep_atma
+    Me.t_ksep_C = t_ksep_C
+    If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
+        Call mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, True)
+    End If
+    Exit Sub
+er1:
+    errmsg = "CPVT.init_dictionary. error:" & Err.Description
+er2:
+    addLogMsg errmsg
+    Err.Raise kErrPVTinput, Err.source, errmsg
+ 
+ End Sub
+ 
+ Public Sub init(Optional ByVal gamma_gas As Double = 0.6, _
+                 Optional ByVal gamma_oil As Double = 0.86, _
+                 Optional ByVal gamma_wat As Double = 1, _
+                 Optional ByVal rsb_m3m3 As Double = 100, _
+                 Optional ByVal pb_atma As Double = -1, _
+                 Optional ByVal bob_m3m3 As Double = -1, _
+                 Optional ByVal PVTcorr As PVT_correlation = 0, _
+                 Optional ByVal t_res_C As Double = 90, _
+                 Optional ByVal rp_m3m3 As Double = -1, _
+                 Optional ByVal muob_cP As Double = -1)
         gamma_g = gamma_gas
         gamma_o = gamma_oil
         gamma_w = gamma_wat
         Me.set_rp_rsb rp_m3m3, rsb_m3m3
         Me.pb_atma = pb_atma
-        If tres_C > 0 Then Me.tres_C = tres_C
+        If t_res_C > 0 Then Me.t_res_C = t_res_C
         Me.bob_m3m3 = bob_m3m3
         Me.muob_cP = muob_cP
         PVT_correlation = PVTcorr
  End Sub
  
- Public Function clone()
+ Public Function clone() As CPVT
         Dim fl As New CPVT
         Call fl.Copy(Me)
         Set clone = fl
  End Function
  
- Public Function Copy(fl As CPVT)
+ Public Sub Copy(fl As CPVT)
  ' all params that define fluid must be copied here
         PVT_correlation = fl.PVT_correlation
         gamma_o = fl.gamma_o
@@ -616,13 +717,13 @@ End Property
         pb_atma = fl.pb_atma
         bob_m3m3 = fl.bob_m3m3
         muob_cP = fl.muob_cP
-        tres_C = fl.tres_C
+        t_res_C = fl.t_res_C
         fw_fr = fl.fw_fr
         qliq_sm3day = fl.qliq_sm3day
         q_gas_free_sm3day = fl.q_gas_free_sm3day
         gas_only = fl.gas_only
         
- End Function
+ End Sub
 Public Sub calc_PVT_PT(pt As PTtype)
         Call calc_PVT(pt.p_atma, pt.t_C)
 End Sub
@@ -829,7 +930,7 @@ On Error GoTo err1:
     rho_mix_rc_kgm3_ = rho_liq_rc_kgm3 * (1 - f_g) + rho_gas_rc_kgm3 * f_g
     Call calc_ST(p_atma, t_C)
     
-    cv_gas_JkgC_ = z_ * const_r / (m_g_kgmol * (heat_capacity_ratio_gas_ - 1))
+    cv_gas_JkgC_ = z_ * const_r / (mg_kgmol * (heat_capacity_ratio_gas_ - 1))
     cp_oil_JkgC_ = ((0.002 * t_C - 1.429) * gamma_o + 0.00267 * t_C + 3.49) * 1000   ' http://www.jmcampbell.com/tip-of-the-month/2014/04/simple-equations-to-approximate-changes-to-the-properties-of-crude-oil-with-changing-temperature/
     
     Exit Sub
@@ -926,13 +1027,13 @@ err1:
     addLogMsg errmsg
     gas_fraction_d = 0
 End Function
-Public Function p_gas_fraction_atma(FreeGas, t_C As Double, Optional Es As Double = 0, Optional P_init_atma = 300) As Double
+Public Function p_gas_fraction_atma(FreeGas As Double, t_C As Double, Optional Es As Double = 0, Optional P_init_atma As Double = 300) As Double
     'P_init     - давление инициализации, атм
     'FreeGas    - доля газ на приеме целевая
     'Es         - коэффициент сепарации насоса
     Dim p1 As Double
     Dim p2 As Double
-    Dim max_iter As Integer, i As Integer
+    Dim max_iter As Integer, I As Integer
     Dim e As Double
     Dim p_gas As Double, p As Double
     max_iter = 100
@@ -940,7 +1041,7 @@ Public Function p_gas_fraction_atma(FreeGas, t_C As Double, Optional Es As Doubl
     p1 = P_init_atma
     p2 = 0
 On Error GoTo err1:
-    For i = 1 To max_iter
+    For I = 1 To max_iter
         p = (p1 + p2) / 2
         Call calc_PVT(p, t_C)
         p_gas = gas_fraction_d(Es)
@@ -956,15 +1057,15 @@ On Error GoTo err1:
 err1:
     p_gas_fraction_atma = 0
 End Function
-Public Function rp_gas_fraction_m3m3(FreeGas, p_atma As Double, t_C As Double, Optional Es As Double = 0, Optional Rp_init_m3m3 = 500) As Double
+Public Function rp_gas_fraction_m3m3(FreeGas As Double, p_atma As Double, t_C As Double, Optional Es As Double = 0, Optional Rp_init_m3m3 As Double = 500) As Double
     'P_init     - давление инициализации, атм
     'FreeGas    - доля газ на приеме целевая
     'Es         - коэффициент сепарации насоса
     Dim G1 As Double
     Dim g2 As Double
-    Dim max_iter As Integer, i As Integer
+    Dim max_iter As Integer, I As Integer
     Dim e As Double
-    Dim p_gas As Double, g As Double
+    Dim p_gas As Double, G As Double
     Dim rsb_back As Double
     max_iter = 100
     e = 0.0001
@@ -972,34 +1073,37 @@ Public Function rp_gas_fraction_m3m3(FreeGas, p_atma As Double, t_C As Double, O
     g2 = 0
     rsb_back = rsb_m3m3_
 On Error GoTo err1:
-    For i = 1 To max_iter
-        g = (G1 + g2) / 2
-        Call set_rp_rsb(g, rsb_back)
+    For I = 1 To max_iter
+        G = (G1 + g2) / 2
+        Call set_rp_rsb(G, rsb_back)
 '        rsb_m3m3 = rsb_back
 '        rp_m3m3 = g
         Call calc_PVT(p_atma, t_C)
         p_gas = gas_fraction_d(Es)
         If Abs(p_gas - FreeGas) <= e Then Exit For
         If p_gas > FreeGas Then
-           G1 = g
+           G1 = G
         Else
-           g2 = g
+           g2 = G
         End If
     Next
-    rp_gas_fraction_m3m3 = g
+    rp_gas_fraction_m3m3 = G
     Exit Function
 err1:
     rp_gas_fraction_m3m3 = 0
 End Function
-Public Function get_clone_mod_after_separation(p_atma As Double, t_C As Double, Ksep As Double, _
-                                         Optional ByVal GasSol As GAS_INTO_SOLUTION = GasnotGoesIntoSolution) As CPVT
+Public Function get_clone_mod_after_separation(p_atma As Double, _
+                                               t_C As Double, Ksep As Double, _
+                                Optional ByVal GasGoesIntoSolution As Boolean = False) As CPVT
     Dim newfluid As CPVT
     Set newfluid = Me.clone
-    Call newfluid.mod_after_separation(p_atma, t_C, Ksep, GasSol)
+    Call newfluid.mod_after_separation(p_atma, t_C, Ksep, GasGoesIntoSolution)
     Set get_clone_mod_after_separation = newfluid
 End Function
-Public Sub mod_after_separation(ByVal p_atma As Double, ByVal t_C As Double, ByVal Ksep As Double, _
-                                         Optional ByVal GasSol As GAS_INTO_SOLUTION = GasnotGoesIntoSolution) 'As CPVT
+Public Sub mod_after_separation(ByVal p_atma As Double, _
+                                ByVal t_C As Double, _
+                                ByVal Ksep As Double, _
+                       Optional ByVal GasGoesIntoSolution As Boolean = False)
 ' функция модификации свойств нефти после сепарации
 ' удаление части газа меняет свойства нефти - причем добавление газа свойства не трогает
 ' на входе условия при которых проходила сепарация
@@ -1009,7 +1113,7 @@ Public Sub mod_after_separation(ByVal p_atma As Double, ByVal t_C As Double, ByV
     Dim Bo_Rs_curve As New CInterpolation
     Dim pb_atma_tab As Double, rsb_m3m3_tab As Double, Bo_m3m3_tab As Double
     Dim Delta As Double
-    Dim i As Integer
+    Dim I As Integer
     Const n = 10
     Dim Rpnew_with_Ksep As Double   ' новый ГФ с учетом сепарации газа
     Dim Rpnew_Ksep_1 As Double      ' новый ГФ без учета сепарации
@@ -1028,20 +1132,21 @@ On Error GoTo err1:
         
         Rpnew_with_Ksep = .rp_m3m3 - (.rp_m3m3 - Rs) * Ksep
         Rpnew_Ksep_1 = .rp_m3m3 - (.rp_m3m3 - Rs)
+        q_gas_free_sm3day = q_gas_free_sm3day * (1 - Ksep)
         
         
         Delta = (.pb_calc_atma - 1) / n    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
         ' запишем зависимость газосодержания от давления насыщения на память
-        For i = 0 To n
-            pb_atma_tab = 1 + Delta * i
-            rsb_m3m3_tab = .calc_rs_m3m3(pb_atma_tab, .tres_C)
+        For I = 0 To n
+            pb_atma_tab = 1 + Delta * I
+            rsb_m3m3_tab = .calc_rs_m3m3(pb_atma_tab, .t_res_C)
             Pb_Rs_curve.AddPoint rsb_m3m3_tab, pb_atma_tab
-            Bo_m3m3_tab = .calc_bo_m3m3(pb_atma_tab, .tres_C)
+            Bo_m3m3_tab = .calc_bo_m3m3(pb_atma_tab, .t_res_C)
             Bo_Rs_curve.AddPoint rsb_m3m3_tab, Bo_m3m3_tab
-        Next i
+        Next I
         ' найдем сколько всего газа осталось в потоке
         
-        If GasSol = GasGoesIntoSolution Then   ' тогда газ успеет растворится
+        If GasGoesIntoSolution Then   ' тогда газ успеет растворится
             Rpnew = Rpnew_with_Ksep
         Else                                   ' газ не растворяется, то же самое, что Ксеп = 1
             Rpnew = Rpnew_Ksep_1

@@ -1,95 +1,109 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
 '=======================================================================================
 ' Pump and submersible equipment base operation
-'
 Option Explicit
-' set of global objects created in memory when working with the pump base
-' global variables allow you to load a database once and work with it
-' without having to constantly reboot it from the Excel sheet.
-Public ESPbase As CESPBase
-Public ESP As CESPpump
-Public ESPsys As New CESPsystemSimple
-Public motor As New CESPMotor
-Const esp_db_name = "ESP.db"
-Public Function loadESPbase() As Boolean
-' loading all db content to internal variables
-    Dim numESP As Integer
-    Dim esp_db_full_name As String
+Const esp_db_name = "\ESP_json.db"
+' only database as global variable here
+' in order to reduce db file read
+Public ESP_base_dictionary As Dictionary
+Private Sub read_json_to_dict()
+    ' read ESP database in json format
+    ' ESP database in json format can be prepared with ESP_db.xlsm file
+    
+    Dim ss As String
     Dim line_from_file As String
     Dim lines_all As String
-    Dim ar_lines() As String
+    Dim fname As String
+    
+    fname = ThisWorkbook.Path & esp_db_name
+    
 On Error GoTo err1:
-    lines_all = ""
-    esp_db_full_name = ThisWorkbook.Path & "\" & esp_db_name ' file db name
     
-    addLogMsg "loadESPbase. ESP db from file " & esp_db_full_name & " to be loaded."
-    
-    'read file once here
-    Open esp_db_full_name For Input As #1
+    Open fname For Input As #1
     Do While Not EOF(1)
         Line Input #1, line_from_file
         lines_all = lines_all & line_from_file & vbCrLf
     Loop
     Close #1
-    ' store all data in array of strings
-    lines_all = Replace(lines_all, vbLf, vbCrLf)
-    ar_lines = Split(lines_all, vbCrLf)
-    addLogMsg "loadESPbase. ESP db file " & esp_db_full_name & " load done." & CStr(UBound(ar_lines) + 1) & " lines"
-On Error GoTo err2:
-    Set ESPbase = New CESPBase
-    ESPbase.load_db_file_ESP ar_lines
-    numESP = ESPbase.num_pumps
+    Set ESP_base_dictionary = ParseJson(lines_all)
     
-    addLogMsg "loadESPbase. ESP db created with " & numESP & " pump records"
-    loadESPbase = True
-    Exit Function
+    Exit Sub
 err1:
-    addLogMsg "loadESPbase. error loading file. " & esp_db_full_name & ":" & Err.Description
-    loadESPbase = False
-    Exit Function
-err2:
-    addLogMsg "loadESPbase. error db creation. " & esp_db_full_name & ":" & Err.Description
-    loadESPbase = False
-    Exit Function
-End Function
-Public Function checkID_ESP(ID) As Boolean
-' check if the passed ID matches the one loaded in the temporary variable
-On Error GoTo err1:
-    If ESP Is Nothing Then
-        If Not loadESPbase Then checkID_ESP = False
-        Set ESP = ESPbase.get_pump(ID)
-        checkID_ESP = True
-    End If
-    If ESP.db.ID = ID Then
-        checkID_ESP = True
-    Else
-        Set ESP = ESPbase.get_pump(ID)
-        checkID_ESP = True
-    End If
-Exit Function
-err1:
-    addLogMsg "ќшибка при проверке насоса ID " & ID & " ."
-    checkID_ESP = False
-End Function
-Public Function getESP(ID) As CESPpump
+    Dim msg As String
+    msg = "read_json_to_dict:" & fname & "read error"
+    Err.Raise kErrESPbase, , msg & Err.Description
+End Sub
+Public Function getESP(ByVal ID As String) As CESPpump
 ' returns an ESP with a specified number from the base
-   Dim newESP As New CESPpump
-    If checkID_ESP(ID) Then
-        Call newESP.Copy(ESP)
-        Set getESP = newESP
+    Dim newESP As New CESPpump
+    
+    If ESP_base_dictionary Is Nothing Then
+        Call read_json_to_dict
     End If
+    Set getESP = get_ESP_dict(ESP_base_dictionary(CStr(ID)))
 End Function
-Public Function checkID_Motor(ID) As Boolean
-    checkID_Motor = True
-End Function
-Public Function checkID_Cable(ID) As Boolean
-    checkID_Cable = True
-End Function
-Public Function checkID_GasSep(ID) As Boolean
-    checkID_GasSep = True
+Private Function get_ESP_dict(dict As Dictionary) As CESPpump
+' load all pumps from db array here
+    Dim esp_db As ESP_PARAMS
+    Dim j As Integer, num As Integer
+    Dim zero_found As Boolean
+    Dim esp As New CESPpump
+    
+On Error GoTo err_load_pump:
+    num = dict("rate_points").Count
+    With esp_db
+        
+        ReDim .head_points(1 To num)
+        ReDim .rate_points(1 To num)
+        ReDim .power_points(1 To num)
+        ReDim .eff_points(1 To num)
+              
+        For j = 1 To num
+               .head_points(j) = dict("head_points")(j)
+               .rate_points(j) = dict("rate_points")(j)
+               .power_points(j) = dict("power_points")(j)
+               .eff_points(j) = dict("eff_points")(j)
+        Next j
+        
+            ' read all data from first line in DB table
+        .ID = dict("ID")
+        .manufacturer = dict("manufacturer")
+        .name = dict("name")
+        .stages_max = dict("stages_max")
+        .rate_nom_sm3day = dict("rate_nom_sm3day")
+        .rate_opt_min_sm3day = dict("rate_opt_min_sm3day")
+        .rate_opt_max_sm3day = dict("rate_opt_max_sm3day")
+        .rate_max_sm3day = dict("rate_max_sm3day")
+        .slip_nom_rpm = dict("slip_nom_rpm")
+        .freq_Hz = dict("freq_Hz")
+        .eff_max = dict("eff_max")
+        .d_od_m = dict("d_od_mm") / 1000 ' читаем габарит насоса
+        .d_motor_od_m = dict("d_motor_od_mm") / 1000  ' читаем габарит насоса
+        .d_cas_min_m = dict("d_cas_min_mm") / 1000
+        .d_shaft_m = dict("d_shaft_mm") / 1000
+        .power_limit_shaft_kW = dict("power_limit_shaft_kW")
+        .power_limit_shaft_max_kW = dict("power_limit_shaft_max_kW")
+        .pressure_limit_housing_atma = dict("pressure_limit_housing_atma")
+        
+        If dict("height_stage_m") <> "" Then
+            .height_stage_m = dict("height_stage_m")
+        Else
+            .height_stage_m = 0.05   ' по умолчанию 5 см высота. ћожно сделать зависимость от дебита
+        End If
+    End With
+    
+        esp.db = esp_db
+    Set get_ESP_dict = esp
+    
+    Exit Function
+    
+err_load_pump:
+    On Error GoTo 0
+    addLogMsg "Problem while loading pump . " & CStr(esp_db.ID) & Err.Description
+    Set get_ESP_dict = Nothing
 End Function
 

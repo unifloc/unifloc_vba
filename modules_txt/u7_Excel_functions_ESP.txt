@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -15,7 +15,7 @@ Public Function ESP_head_m( _
         ByVal qliq_m3day As Double, _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
-        Optional ByVal pump_id = 674, _
+        Optional ByVal pump_id As String, _
         Optional ByVal mu_cSt As Double = -1, _
         Optional ByVal c_calibr = 1) As Double
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
@@ -28,7 +28,9 @@ Public Function ESP_head_m( _
 '               третье на мощность (множитель)
 'description_end
 On Error GoTo err1:
-    If Not checkID_ESP(pump_id) Then
+    Dim esp As CESPpump
+    Set esp = getESP(pump_id)
+    If esp Is Nothing Then
         ESP_head_m = 0
         Exit Function
     End If
@@ -38,10 +40,10 @@ On Error GoTo err1:
     Dim c_calibr_power As Double
     Call read_ESP_calibr(c_calibr, c_calibr_head, c_calibr_rate, c_calibr_power)
     
-    ESP.freq_Hz = freq_Hz
-    ESP.stage_num = num_stages
+    esp.freq_Hz = freq_Hz
+    esp.stage_num = num_stages
     qliq_m3day = qliq_m3day / c_calibr_rate
-    ESP_head_m = ESP.get_ESP_head_m(qliq_m3day, num_stages, mu_cSt)
+    ESP_head_m = esp.get_ESP_head_m(qliq_m3day, num_stages, mu_cSt)
     ESP_head_m = ESP_head_m * c_calibr_head
     Exit Function
 err1:
@@ -55,7 +57,7 @@ Public Function ESP_power_W( _
         ByVal qliq_m3day As Double, _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
-        Optional ByVal pump_id = 674, _
+        Optional ByVal pump_id As String = "737", _
         Optional ByVal mu_cSt As Double = -1, _
         Optional ByVal c_calibr = 1) As Double
 ' мощность УЭЦН номинальная потребляемая
@@ -70,7 +72,9 @@ Public Function ESP_power_W( _
 'description_end
     
 On Error GoTo err1:
-    If Not checkID_ESP(pump_id) Then
+    Dim esp As CESPpump
+    Set esp = getESP(pump_id)
+    If esp Is Nothing Then
         ESP_power_W = 0
         Exit Function
     End If
@@ -80,10 +84,10 @@ On Error GoTo err1:
     Dim c_calibr_power As Double
     Call read_ESP_calibr(c_calibr, c_calibr_head, c_calibr_rate, c_calibr_power)
     
-    ESP.freq_Hz = freq_Hz
-    ESP.stage_num = num_stages
+    esp.freq_Hz = freq_Hz
+    esp.stage_num = num_stages
     qliq_m3day = qliq_m3day / c_calibr_rate
-    ESP_power_W = ESP.get_ESP_power_W(qliq_m3day, num_stages, mu_cSt)
+    ESP_power_W = esp.get_ESP_power_W(qliq_m3day, num_stages, mu_cSt)
     ESP_power_W = ESP_power_W * c_calibr_power
     Exit Function
 err1:
@@ -97,7 +101,7 @@ Public Function ESP_eff_fr( _
         ByVal qliq_m3day As Double, _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
-        Optional ByVal pump_id = 674, _
+        Optional ByVal pump_id As String = "737", _
         Optional ByVal mu_cSt As Double = -1, _
         Optional ByVal c_calibr = 1) As Double
 ' qliq_m3day - дебит жидкости в условиях насоса (стенд)
@@ -112,7 +116,9 @@ Public Function ESP_eff_fr( _
     
 On Error GoTo err1:
     
-    If Not checkID_ESP(pump_id) Then
+    Dim esp As CESPpump
+    Set esp = getESP(pump_id)
+    If esp Is Nothing Then
         ESP_eff_fr = 0
         Exit Function
     End If
@@ -122,11 +128,11 @@ On Error GoTo err1:
     Dim c_calibr_power As Double
     Call read_ESP_calibr(c_calibr, c_calibr_head, c_calibr_rate, c_calibr_power)
     
-    ESP.freq_Hz = freq_Hz
-    ESP.stage_num = num_stages
+    esp.freq_Hz = freq_Hz
+    esp.stage_num = num_stages
     qliq_m3day = qliq_m3day / c_calibr_rate
-    ESP.correct_visc = True
-    ESP_eff_fr = ESP.get_ESP_effeciency_fr(qliq_m3day, mu_cSt)
+    esp.correct_visc = True
+    ESP_eff_fr = esp.get_ESP_effeciency_fr(qliq_m3day, mu_cSt)
     ESP_eff_fr = ESP_eff_fr * c_calibr_head * c_calibr_rate / c_calibr_power
     Exit Function
 err1:
@@ -135,17 +141,20 @@ err1:
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' название ЭЦН по номеру
-Public Function ESP_name(Optional ByVal pump_id = 674) As String
+Public Function ESP_name(Optional ByVal pump_id As String) As String
 ' pump_id    - идентификатор насоса в базе данных
 ' результат - название насоса
 'description_end
     
 On Error GoTo err1:
-    If Not checkID_ESP(pump_id) Then
-        ESP_name = ""
+    Dim esp As CESPpump
+    Set esp = getESP(pump_id)
+    If esp Is Nothing Then
+        ESP_name = "no name"
         Exit Function
     End If
-    ESP_name = ESP.db.name
+    
+    ESP_name = esp.db.name
     
     Exit Function
 err1:
@@ -157,18 +166,20 @@ End Function
 ' по номинальной кривой РНХ
 Public Function ESP_rate_max_sm3day( _
     Optional ByVal freq_Hz As Double = 50, _
-    Optional ByVal pump_id = 674, _
+    Optional ByVal pump_id As String, _
     Optional ByVal mu_cSt As Double = -1) As Double
 ' freq_Hz   - частота вращения ЭЦН
 ' pump_id    - идентификатор насоса в базе данных
 'description_end
 On Error GoTo err1:
-    If Not checkID_ESP(pump_id) Then
+    Dim esp As CESPpump
+    Set esp = getESP(pump_id)
+    If esp Is Nothing Then
         ESP_rate_max_sm3day = 0
         Exit Function
     End If
-    ESP.freq_Hz = freq_Hz
-    ESP_rate_max_sm3day = ESP.rate_max_sm3day(mu_cSt)
+    esp.freq_Hz = freq_Hz
+    ESP_rate_max_sm3day = esp.rate_max_sm3day(mu_cSt)
     Exit Function
 err1:
     ESP_rate_max_sm3day = -1
@@ -179,17 +190,19 @@ End Function
 ' по номинальной кривой РНХ
 Public Function ESP_optRate_m3day( _
     Optional ByVal freq_Hz As Double = 50, _
-    Optional ByVal pump_id = 674) As Double
+    Optional ByVal pump_id As String) As Double
 ' freq_Hz   - частота вращения ЭЦН
 ' pump_id    - идентификатор насоса в базе данных
 'description_end
 On Error GoTo err1:
-    If Not checkID_ESP(pump_id) Then
+    Dim esp As CESPpump
+    Set esp = getESP(pump_id)
+    If esp Is Nothing Then
         ESP_optRate_m3day = 0
         Exit Function
     End If
-    ESP.freq_Hz = freq_Hz
-    ESP_optRate_m3day = ESP.rate_nom_sm3day
+    esp.freq_Hz = freq_Hz
+    ESP_optRate_m3day = esp.rate_nom_sm3day
     Exit Function
 err1:
     ESP_optRate_m3day = -1
@@ -224,7 +237,7 @@ Public Function ESP_p_atma( _
                  ByVal p_calc_atma As Double, _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
-        Optional ByVal pump_id = 674, _
+        Optional ByVal pump_id As String, _
         Optional ByVal str_PVT As String = PVT_DEFAULT, _
         Optional ByVal t_intake_C As Double = 50, _
         Optional ByVal t_dis_C As Double = 50, _
@@ -272,15 +285,21 @@ Public Function ESP_p_atma( _
 'description_end
     Dim arr
     Dim clbr
-    Dim ESP As CESPpump
+    Dim esp As CESPpump
     Dim c_calibr_head As Double
     Dim c_calibr_rate As Double
     Dim c_calibr_power As Double
     
 On Error GoTo er1:
     ' get ESP from database
-    Set ESP = getESP(pump_id)
-    With ESP
+    Set esp = getESP(pump_id)
+    
+    If esp Is Nothing Then
+        ESP_p_atma = "no ESP"
+        Exit Function
+    End If
+    
+    With esp
         If str_PVT <> "" Then
              Set .fluid = PVT_decode_string(str_PVT)
         End If
@@ -373,7 +392,7 @@ Public Function ESP_calibr_pump( _
 'description_end
    
     
-    Dim ESP As CESPpump
+    Dim esp As CESPpump
     Dim c_calibr_head As Double
     Dim c_calibr_rate As Double
     Dim c_calibr_power As Double
@@ -388,8 +407,14 @@ Public Function ESP_calibr_pump( _
     
 On Error GoTo er1:
     ' get ESP from database
-    Set ESP = getESP(pump_id)
-    With ESP
+    Set esp = getESP(pump_id)
+    
+    If esp Is Nothing Then
+        ESP_calibr_pump = "no ESP"
+        Exit Function
+    End If
+    
+    With esp
         If str_PVT <> "" Then
              Set .fluid = PVT_decode_string(str_PVT)
         End If
@@ -410,7 +435,7 @@ On Error GoTo er1:
         .dnum_stages_integrate = dnum_stages_integrate
     End With
         ' prepare solution function
-    Set coeffA(0) = ESP
+    Set coeffA(0) = esp
     coeffA(1) = p_int_atma
     coeffA(2) = p_dis_atma
     coeffA(3) = t_intake_C
@@ -493,10 +518,9 @@ Public Function ESP_system_calc( _
 '            список неполон
 'description_end
     Dim arr
-    Dim i As Integer
+    Dim I As Integer
     Dim nrows As Integer
 On Error GoTo er1:
-   ' Dim ESP As CESPpump
     Dim ESPsys As New CESPsystemSimple
     Dim fluid As CPVT
     
@@ -510,82 +534,7 @@ On Error GoTo er1:
     Call ESPsys.calc_ESPsys(p_calc_atma, calc_along_flow, saveCurve:=True)
     
     
-    arr = ESPsys.ESP_pump.array_out(out_curves_num_points)
-    nrows = UBound(arr, 1)
-    
-    ReDim Preserve arr(nrows, 17)
-    i = 0
-    arr(0, 0) = ESPsys.p_dis_atma - ESPsys.p_int_atma
-    arr(1, 0) = "dP_atm"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.t_dis_C - ESPsys.t_int_C
-    arr(1, i) = "dT_C"
-    
-    i = i + 1
-    arr(0, i) = ESP.p_int_atma
-    arr(1, i) = "p_int_atma"
-    
-    i = i + 1
-    arr(0, i) = ESP.p_dis_atma
-    arr(1, i) = "p_dis_atma"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.ESP_pump.stage_num
-    arr(1, i) = "stage_num"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.freq_Hz
-    arr(1, i) = "Pow freq_Hz"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.ESP_pump.freq_Hz
-    arr(1, i) = "ESP freq_Hz"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.I_A
-    arr(1, i) = "I, A"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.load_fr
-    arr(1, i) = "load_fr"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.power_CS_calc_W
-    arr(1, i) = "power_CS_W"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.power_motor_W
-    arr(1, i) = "power_motor_W"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.power_shaft_W
-    arr(1, i) = "power_shaft_W"
-     
-    i = i + 1
-    arr(0, i) = ESPsys.ESP_pump.power_ESP_W
-    arr(1, i) = "power_ESP_W"
-        
-    i = i + 1
-    arr(0, i) = ESPsys.ESP_pump.power_fluid_W
-    arr(1, i) = "power_fluid_W"
-        
-    i = i + 1
-    arr(0, i) = ESPsys.U_trans_high_V
-    arr(1, i) = "U_trans_high_V"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.cable_dU_V
-    arr(1, i) = "cable_dU_V"
-         
-    i = i + 1
-    arr(0, i) = ESPsys.eff_d
-    arr(1, i) = "eff_d"
-    
-    i = i + 1
-    arr(0, i) = ESPsys.ESP_pump.eff_ESP_d
-    arr(1, i) = "eff_ESP_d"
-    
+    arr = ESPsys.array_out(out_curves_num_points)
     
     arr(0, 0) = arr(0, num_value)
     arr(1, 0) = arr(1, num_value)
@@ -653,328 +602,111 @@ End Function
 ''    motorload_d = motor.load_d
 '
 'End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета двигателя
+Public Function ESP_motor_calc_mom(ByVal mom_Nm As Double, _
+                  Optional ByVal freq_Hz As Double = 50, _
+                  Optional ByVal U_V As Double = -1, _
+                  Optional ByVal Unom_V As Double = 500, _
+                  Optional ByVal Pnom_kW As Double = 10, _
+                  Optional ByVal Fnom_Hz As Double = 50, _
+                  Optional ByVal motorID As Integer = 0, _
+                  Optional ByVal eff_fr As Double = 0.85, _
+                  Optional ByVal cosphi_fr As Double = 0.8, _
+                  Optional ByVal slip_fr As Double = 0.05, _
+                     Optional ByVal diam_mm As Double = 117, _
+                     Optional ByVal lambda As Double = 2, _
+                     Optional ByVal alpha0 As Double = 0.4, _
+                     Optional ByVal xi0 As Double = 1.05) _
+                  As Variant
+' Pshaft_kW     - мощность развиваемая двигателем на валу
+' опциональные параметры
+' freq_Hz     - частота вращения внешнего поля
+' U_V         - напряжение рабочее, линейное, В
+' Unom_V      - номинальное напряжение питания двигателя, линейное, В
+' Pnom_kW      - номинальная мощность двигателя кВт
+' fnom_Hz     - номинальная частота вращения поля, Гц
+' motorID     - тип 0 - постоянные значения,
+'                   1 - задается по каталожным кривым, ассинхронный
+'                   2 - задается по схеме замещения, ассинхронный
+' eff_fr      - КПД для типа 0
+' cosphi_fr   - коэффициент мощности для типа 0
+' slip_fr     - проскальзывание для типа 0
+' результат   - момент на валу двигателя
+'description_end
+On Error GoTo er1:
+    Dim motor As New CESPMotor
+     
+    Call motor.InitMotor(motorID, Unom_V, Pnom_kW, Fnom_Hz, eff_fr, cosphi_fr, slip_fr, diam_mm, lambda, alpha0, xi0)
+    motor.calc_motor_mom_Nm mom_Nm, freq_Hz, U_V
+    With motor
+        ESP_motor_calc_mom = Array(.I_lin_A, .CosPhi_d, .eff_d, .s_d, .M_Nm, .Pshaft_kW)
+    End With
+    Exit Function
+er1:
+    ESP_motor_calc_mom = -1
+    addLogMsg "Error:ESP_motor_calc_mom:" & Err.Description
+End Function
 ' rnt 03/2016
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета момента двигателя от проскальзования
-Public Function motor_M_slip_Nm(ByVal S As Double, _
-                      Optional ByVal freq_Hz As Double = 50, _
-                      Optional ByVal U_V As Double = -1, _
-                      Optional ByVal Unom_V As Double = 500, _
-                      Optional ByVal Inom_A As Double = 10, _
-                      Optional ByVal Fnom_Hz As Double = 50, _
-                      Optional ByVal motorID As Integer = 0) As Double
+Public Function ESP_motor_calc_slip(ByVal S As Double, _
+                            Optional ByVal freq_Hz As Double = 50, _
+                            Optional ByVal U_V As Double = -1, _
+                            Optional ByVal Unom_V As Double = 500, _
+                            Optional ByVal Pnom_kW As Double = 10, _
+                            Optional ByVal Fnom_Hz As Double = 50)
 '   s           - скольжение двигателя
 ' опциональные параметры
 '   freq_Hz     - частота вращения внешнего поля
 '   U_V         - напряжение рабочее, линейное, В
 '   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
+'   Pnom_kW      - номинальная мощность двигателя кВт
 '   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-'                 корректно работает, толко для motorID = 0
-' выход
 '   результат   - значение момента двигателя при заданных частоте и напряжении
 'description_end
 On Error GoTo er1:
     
     Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
+    motor.InitMotor 2, Unom_V, Pnom_kW, Fnom_Hz
     motor.calc_motor_slip S, freq_Hz, U_V
-    motor_M_slip_Nm = motor.m_Nm
+    
+    
+    With motor
+        ESP_motor_calc_slip = Array(.I_lin_A, .CosPhi_d, .eff_d, .s_d, .M_Nm, .Pshaft_kW)
+    End With
+    
     
     Exit Function
 er1:
-    motor_M_slip_Nm = -1
+    ESP_motor_calc_slip = -1
     addLogMsg "Error:motor_M_slip_Nm:" & Err.Description
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' Расчет потребляемого тока
-' погружного ассинхронного двигателя от проскальзывания
-Public Function motor_I_slip_A(ByVal S As Double, _
-                     Optional ByVal freq_Hz As Double = 50, _
-                     Optional ByVal U_V As Double = -1, _
-                     Optional ByVal Unom_V As Double = 500, _
-                     Optional ByVal Inom_A As Double = 10, _
-                     Optional ByVal Fnom_Hz As Double = 50, _
-                     Optional ByVal motorID As Integer = 0) As Double
-'   s           - скольжение двигателя
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-'                 корректно работает, толко для motorID = 0
-' выход
-'   результат   - ток
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor_slip S, freq_Hz, U_V
-    motor_I_slip_A = motor.I_lin_A
-    
-    Exit Function
-er1:
-    motor_I_slip_A = -1
-    addLogMsg "Error:motor_I_slip_A:" & Err.Description
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' Расчет коэффициента мощности
-' погружного ассинхронного двигателя от проскальзывания
-Public Function motor_CosPhi_slip(ByVal S As Double, _
-                        Optional ByVal freq_Hz As Double = 50, _
-                        Optional ByVal U_V As Double = -1, _
-                        Optional ByVal Unom_V As Double = 500, _
-                        Optional ByVal Inom_A As Double = 10, _
-                        Optional ByVal Fnom_Hz As Double = 50, _
-                        Optional ByVal motorID As Integer = 0) As Double
-'   s           - скольжение двигателя
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-'                 корректно работает, толко для motorID = 0
-' выход
-'   результат   - коэффициент мощности cos phi
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor_slip S, freq_Hz, U_V
-    motor_CosPhi_slip = motor.CosPhi_d
-    
-    Exit Function
-er1:
-    motor_CosPhi_slip = -1
-    addLogMsg "Error:motor_CosPhi_slip:" & Err.Description
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' Расчет КПД погружного ассинхронного двигателя от проскальзывания
-Public Function motor_Eff_slip(ByVal S As Double, _
-                     Optional ByVal freq_Hz As Double = 50, _
-                     Optional ByVal U_V As Double = -1, _
-                     Optional ByVal Unom_V As Double = 500, _
-                     Optional ByVal Inom_A As Double = 10, _
-                     Optional ByVal Fnom_Hz As Double = 50, _
-                     Optional ByVal motorID As Integer = 0) As Double
-'   s           - скольжение двигателя
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-'                 корректно работает, толко для motorID = 0
-' выход
-'   результат   -  КПД преобразования электрической мощности
-'                 в механическую
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor_slip S, freq_Hz, U_V
-    motor_Eff_slip = motor.eff_d
-    Exit Function
-er1:
-    motor_Eff_slip = -1
-    addLogMsg "Error:motor_Eff_slip:" & Err.Description
-    
-End Function
-' rnt 03/2016
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расчета момента двигателя от мощности на валу
-Public Function motor_M_Nm(ByVal Pshaft_kW As Double, _
-                Optional ByVal freq_Hz As Double = 50, _
-                Optional ByVal U_V As Double = -1, _
-                Optional ByVal Unom_V As Double = 500, _
-                Optional ByVal Inom_A As Double = 10, _
-                Optional ByVal Fnom_Hz As Double = 50, _
-                Optional ByVal motorID As Integer = 0) As Double
-' Pshaft_kW     - мощность развиваемая двигателем на валу
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-' выход
-'   результат   - момент на валу двигателя
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor Pshaft_kW, freq_Hz, U_V
-    motor_M_Nm = motor.m_Nm
-    
-    Exit Function
-er1:
-    motor_M_Nm = -1
-    addLogMsg "Error:motor_M_Nm:" & Err.Description
-End Function
-' rnt 03/2016
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расчета рабочего тока двигателя
-Public Function motor_I_A(ByVal Pshaft_kW As Double, _
-                Optional ByVal freq_Hz As Double = 50, _
-                Optional ByVal U_V As Double = -1, _
-                Optional ByVal Unom_V As Double = 500, _
-                Optional ByVal Inom_A As Double = 10, _
-                Optional ByVal Fnom_Hz As Double = 50, _
-                Optional ByVal motorID As Integer = 0) As Double
-'  Pshaft_kW     - мощность развиваемая двигателем на валу
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-' выход
-'   число       - значение тока при данном режиме работы
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor Pshaft_kW, freq_Hz, U_V
-    motor_I_A = motor.I_lin_A
-    
-    Exit Function
-er1:
-    motor_I_A = -1
-    addLogMsg "Error:motor_I_A:" & Err.Description
-End Function
-' rnt 03/2016
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расчета коэффициента мощности двигателя
-Public Function motor_CosPhi_d(ByVal Pshaft_kW As Double, _
-                Optional ByVal freq_Hz As Double = 50, _
-                Optional ByVal U_V As Double = -1, _
-                Optional ByVal Unom_V As Double = 500, _
-                Optional ByVal Inom_A As Double = 10, _
-                Optional ByVal Fnom_Hz As Double = 50, _
-                Optional ByVal motorID As Integer = 0) As Double
-'   Pshaft_kW     - мощность развиваемая двигателем на валу
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-' выход
-'   результат   - коэффициент мощности двигателя
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor Pshaft_kW, freq_Hz, U_V
-    motor_CosPhi_d = motor.CosPhi_d
-    
-    Exit Function
-er1:
-    motor_CosPhi_d = -1
-    addLogMsg "Error:motor_CosPhi_d:" & Err.Description
-End Function
-' rnt 03/2016
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расчета КПД двигателя
-Public Function motor_Eff_d(ByVal Pshaft_kW As Double, _
-                Optional ByVal freq_Hz As Double = 50, _
-                Optional ByVal U_V As Double = -1, _
-                Optional ByVal Unom_V As Double = 500, _
-                Optional ByVal Inom_A As Double = 10, _
-                Optional ByVal Fnom_Hz As Double = 50, _
-                Optional ByVal motorID As Integer = 0) As Double
-' Pshaft_kW     - мощность развиваемая двигателем на валу
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-' выход
-'   результат   - КПД преобразования электрической мощности
-'                 в механическую
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor Pshaft_kW, freq_Hz, U_V
-    motor_Eff_d = motor.eff_d
-    
-    Exit Function
-er1:
-    motor_Eff_d = -1
-    addLogMsg "Error:motor_Eff_d:" & Err.Description
-End Function
-' rnt 07/2018
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-'функция расчета скольжения от мощности на валу
-Public Function motor_S_d(ByVal Pshaft_kW As Double, _
-                Optional ByVal freq_Hz As Double = 50, _
-                Optional ByVal U_V As Double = -1, _
-                Optional ByVal Unom_V As Double = 500, _
-                Optional ByVal Inom_A As Double = 10, _
-                Optional ByVal Fnom_Hz As Double = 50, _
-                Optional ByVal motorID As Integer = 0) As Double
-'   Pshaft_kW     - мощность развиваемая двигателем на валу
-' опциональные параметры
-'   freq_Hz     - частота вращения внешнего поля
-'   U_V         - напряжение рабочее, линейное, В
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым
-' выход
-'   результат   - скольжения от мощности на валу
-'description_end
-On Error GoTo er1:
-    Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor.calc_motor Pshaft_kW, freq_Hz, U_V
-    motor_S_d = motor.s_d
-    
-    Exit Function
-er1:
-    motor_S_d = -1
-    addLogMsg "Error:motor_S_d:" & Err.Description
 End Function
 ' rnt 07/2018
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция выдает название двигателя по его характеристикам
 Public Function motor_Name(Optional ByVal Unom_V As Double = 500, _
-                          Optional ByVal Inom_A As Double = 10, _
-                          Optional ByVal Fnom_Hz As Double = 50, _
-                          Optional ByVal motorID As Integer = 0)
-'
+                           Optional ByVal Pnom_kW As Double = 10, _
+                           Optional ByVal Fnom_Hz As Double = 50, _
+                           Optional ByVal motorID As Integer = 0, _
+                           Optional ByVal eff_fr As Double = 0.85, _
+                           Optional ByVal cosphi_fr As Double = 0.8, _
+                           Optional ByVal slip_fr As Double = 0.05)
 ' опциональные параметры
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым' выход
+' Unom_V      - номинальное напряжение питания двигателя, линейное, В
+' Pnom_kW     - номинальная мощность двигателя кВт
+' fnom_Hz     - номинальная частота вращения поля, Гц
+' motorID     - тип 0 - постоянные значения,
+'                   1 - задается по каталожным кривым, ассинхронный
+'                   2 - задается по схеме замещения, ассинхронный
+' eff_fr      - КПД для типа 0
+' cosphi_fr   - коэффициент мощности для типа 0
+' slip_fr     - проскальзывание для типа 0
 '   результат   - формальное название ПЭД
 'description_end
 On Error GoTo er1:
     Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
+    motor.InitMotor motorID, Unom_V, Pnom_kW, Fnom_Hz
     motor_Name = motor.motorName
     
     Exit Function
@@ -985,27 +717,34 @@ End Function
 ' rnt 07/2018
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция выдает номинальную мощность ПЭД по его характеристикам
-Public Function motor_Pnom_kW(Optional ByVal Unom_V As Double = 500, _
-                             Optional ByVal Inom_A As Double = 10, _
+Public Function motor_Inom_A(Optional ByVal Unom_V As Double = 500, _
+                             Optional ByVal Pnom_kW As Double = 10, _
                              Optional ByVal Fnom_Hz As Double = 50, _
-                             Optional ByVal motorID As Integer = 0)
+                             Optional ByVal motorID As Integer = 0, _
+                             Optional ByVal eff_fr As Double = 0.85, _
+                             Optional ByVal cosphi_fr As Double = 0.8, _
+                             Optional ByVal slip_fr As Double = 0.05)
 ' опциональные параметры
-'   Unom_V      - номинальное напряжение питания двигателя, линейное, В
-'   Inom_A      - номинальный ток двигателя, линейный, А
-'   fnom_Hz     - номинальная частота вращения поля, Гц
-'   motorID     - тип двигателя 0 - задается по схеме замещения,
-'                               1 - задается по каталожным кривым' выход
-'   результат   - номинальная мощность ПЭД
+' Unom_V      - номинальное напряжение питания двигателя, линейное, В
+' Pnom_kW     - номинальная мощность двигателя кВт
+' fnom_Hz     - номинальная частота вращения поля, Гц
+' motorID     - тип 0 - постоянные значения,
+'                   1 - задается по каталожным кривым, ассинхронный
+'                   2 - задается по схеме замещения, ассинхронный
+' eff_fr      - КПД для типа 0
+' cosphi_fr   - коэффициент мощности для типа 0
+' slip_fr     - проскальзывание для типа 0
+' результат   - номинальная мощность ПЭД
 'description_end
 On Error GoTo er1:
     Dim motor As New CESPMotor
-    motor.InitMotor motorID, Unom_V, Inom_A, Fnom_Hz
-    motor_Pnom_kW = motor.Pnom_kW
+    Call motor.InitMotor(motorID, Unom_V, Pnom_kW, Fnom_Hz, eff_fr, cosphi_fr, slip_fr)
+    motor_Inom_A = motor.Inom_lin_A
     
     Exit Function
 er1:
-    motor_Pnom_kW = -1
-    addLogMsg "Error:motor_Pnom_kW:" & Err.Description
+    motor_Inom_A = -1
+    addLogMsg "Error:motor_Inom_A:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет коэффициента сепарации газосепаратора
@@ -1124,4 +863,24 @@ Private Sub read_ESP_calibr(ByVal c_calibr, _
     End If
     
 End Sub
+Public Function motor_eff_u_corr(Uf)
+    
+    Uf = Uf - 2.5
+    motor_eff_u_corr = -0.00010442 * (Uf) ^ 2 + 0.020574732 * (Uf) - 0.013469505
+End Function
+Public Function motor_I_u_corr(Uf)
+    Uf = Uf + 2
+    motor_I_u_corr = (0.0000333333 * (Uf) ^ 4 - 0.013577778 * (Uf) ^ 3 + 2.093833333 * (Uf) ^ 2 - 144.8529365 * (Uf) + 3891.666667) / 100 - 0.001661
+End Function
+Public Function motor_cosphi_u_corr(Uf)
+    Uf = Uf + 0
+    motor_cosphi_u_corr = (0.0000000731957 * (Uf) ^ 4 - 0.0000262041 * (Uf) ^ 3 + 0.00332089 * (Uf) ^ 2 - 0.179141048 * (Uf) + 4.589348453)
+    motor_cosphi_u_corr = motor_cosphi_u_corr * (1 - (1 - Uf / 100) * 0.08)
+End Function
+Public Function motor_slip_u_corr(Uf)
+    Uf = Uf + 0
+    motor_slip_u_corr = (0.00000204082 * (Uf) ^ 3 - 0.0007138 * (Uf) ^ 2 + 0.084499514 * (Uf) - 2.353571429)
+    motor_slip_u_corr = motor_slip_u_corr * (1 + (1 - Uf / 100) * 0.05)
+    
+End Function
 

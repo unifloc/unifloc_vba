@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -37,9 +37,9 @@ Private w_rpm_ As Double                   ' скорость вращения вала
 Private f_nom_Hz_ As Double                 ' номинальная скорость вращения газосепаратора
  
 ' свойство для выдачи момента
-Public Property Get m_Nm() As Double
-   m_Nm = m_Nm_
-   m_Nm = p_shaft_w_ / w_radsec
+Public Property Get M_Nm() As Double
+   M_Nm = m_Nm_
+   M_Nm = p_shaft_w_ / w_radsec
 End Property
 Public Property Get w_radsec() As Double
    w_radsec = w_rpm_ / 60 * 2 * const_Pi
@@ -182,7 +182,7 @@ Public Sub calc_gassep(pt As PTtype, Optional f_Hz As Double = 50)
     If ksep_total_d_ > 0 Then
         ' разделяем и модифицируем свойства флюидов после сепарации
         Call Separatefluids
-        Call fluid_tub_.mod_after_separation(pt.p_atma, pt.t_C, ksep_total_d_, GasGoesIntoSolution)
+        Call fluid_tub_.mod_after_separation(pt.p_atma, pt.t_C, ksep_total_d_, True)
         fluid_cas_.qliq_sm3day = 0
     End If
     ' поскольку основная мощность потребляемая газосепаратором тратится шнеком на повышение давления
@@ -353,7 +353,7 @@ End Function
 '    "F"  - проверка по ЧАСТОТЕ
 '
 '**************************************************************************************************************************
-Public Function my_sepfactor(SEP_TYPE As Integer, g As Double, q As Double, F As Double) As Double
+Public Function my_sepfactor(SEP_TYPE As Integer, G As Double, q As Double, f As Double) As Double
 '
 ' MY_SEPFACTOR - Вычисление коэффициента сепрации в точке
 '
@@ -409,17 +409,17 @@ mult = 1.3
 '        Проверки области по ЧАСТОТЕ вообще нет
 '
 ' Если точка лежит в замеренной области, используем аппроксимацию
-If (my_inarea(SEP_TYPE, g, q, F, "GQ")) Then
-    my_sepfactor = my_sepfactor_approx(SEP_TYPE, g, q, F)
+If (my_inarea(SEP_TYPE, G, q, f, "GQ")) Then
+    my_sepfactor = my_sepfactor_approx(SEP_TYPE, G, q, f)
     
 End If
 ' Если точка лежит вне замеренной области, используем сшивки
 ' (1) Сшивка с параболическим цилиндром только по дебиту в области нуля
-If (q < my_qmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "G")) Then
+If (q < my_qmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "G")) Then
     MX = my_qmin(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, g, MX, F)
-    dfunc = my_sepfactor_approx(SEP_TYPE, g, MX, F, "dQ")
+    func = my_sepfactor_approx(SEP_TYPE, G, MX, f)
+    dfunc = my_sepfactor_approx(SEP_TYPE, G, MX, f, "dQ")
             
     kA = dfunc / MX
     kB = -dfunc
@@ -428,7 +428,7 @@ If (q < my_qmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "G")) Then
     my_sepfactor = kA * q ^ 2 + kB * q + kC
 End If
 ' (2) Сшивка с параболическим цилиндром только по дебиту в области максимума
-If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "G")) Then
+If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "G")) Then
     MX = my_qmax(SEP_TYPE)
             
     ' mQ2
@@ -438,8 +438,8 @@ If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "G")) Then
         my_sepfactor = 0
             
     Else
-        func = my_sepfactor_approx(SEP_TYPE, g, MX, F)
-        dfunc = my_sepfactor_approx(SEP_TYPE, g, MX, F, "dQ")
+        func = my_sepfactor_approx(SEP_TYPE, G, MX, f)
+        dfunc = my_sepfactor_approx(SEP_TYPE, G, MX, f, "dQ")
                 
         r = MX - mX2
         kA = (dfunc * r - func) / r / r
@@ -451,49 +451,49 @@ If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "G")) Then
     End If
 End If
 ' (3) Сшивка с параболическим цилиндром только по газу в области нуля
-If (g < my_gmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "Q")) Then
+If (G < my_gmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "Q")) Then
     MX = my_gmin(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, MX, q, F)
-    dfunc = my_sepfactor_approx(SEP_TYPE, MX, q, F, "dG")
+    func = my_sepfactor_approx(SEP_TYPE, MX, q, f)
+    dfunc = my_sepfactor_approx(SEP_TYPE, MX, q, f, "dG")
             
     kA = (MX * dfunc - func) / MX / MX
     kB = dfunc - 2 * MX * kA
             
-    my_sepfactor = kA * g ^ 2 + kB * g
+    my_sepfactor = kA * G ^ 2 + kB * G
     
 End If
    
 ' (4) Сшивка с параболическим цилиндром только по газу в области максимума
-If (g > my_gmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, F, "Q")) Then
+If (G > my_gmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "Q")) Then
     MX = my_gmax(SEP_TYPE)
             
     ' mG2
     mX2 = 100
             
-    If (g > mX2) Then
+    If (G > mX2) Then
         my_sepfactor = 0
             
     Else
-        func = my_sepfactor_approx(SEP_TYPE, MX, q, F)
-        dfunc = my_sepfactor_approx(SEP_TYPE, MX, q, F, "dG")
+        func = my_sepfactor_approx(SEP_TYPE, MX, q, f)
+        dfunc = my_sepfactor_approx(SEP_TYPE, MX, q, f, "dG")
                 
         r = MX - mX2
         kA = (dfunc * r - func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
-        my_sepfactor = kA * g ^ 2 + kB * g + kC
+        my_sepfactor = kA * G ^ 2 + kB * G + kC
     
     End If
 End If
 ' (5) Сшивка с параболоидом вращения по газу в области нуля и по дебиту в области нуля
-If (g < my_gmin(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
+If (G < my_gmin(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     MX = my_qmin(SEP_TYPE)
     mD = my_gmin(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, mD, MX, F)
-    dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, F, "dQ")
+    func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+    dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
             
     kA = dfunc / MX
     kB = -dfunc
@@ -503,16 +503,16 @@ If (g < my_gmin(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     MX = my_gmin(SEP_TYPE)
     mD = my_qmin(SEP_TYPE)
     
-    dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, F, "dG")
+    dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
             
     kA = (MX * dfunc - func) / MX / MX
     kB = dfunc - 2 * MX * kA
             
-    my_sepfactor = kA * g ^ 2 + kB * g
+    my_sepfactor = kA * G ^ 2 + kB * G
     
 End If
 ' (6) Сшивка с параболоидом вращения по газу в области нуля и по дебиту в области максимума
-If (g < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
+If (G < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     MX = my_qmax(SEP_TYPE)
             
     ' mQ2
@@ -524,8 +524,8 @@ If (g < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     Else
         mD = my_gmin(SEP_TYPE)
         
-        func = my_sepfactor_approx(SEP_TYPE, mD, MX, F)
-        dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, F, "dQ")
+        func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+        dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
                 
         r = MX - mX2
         kA = (dfunc * r - func) / r / r
@@ -537,22 +537,22 @@ If (g < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
         MX = my_gmin(SEP_TYPE)
         mD = my_qmax(SEP_TYPE)
     
-        dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, F, "dG")
+        dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
             
         kA = (MX * dfunc - func) / MX / MX
         kB = dfunc - 2 * MX * kA
             
-        my_sepfactor = kA * g ^ 2 + kB * g
+        my_sepfactor = kA * G ^ 2 + kB * G
     
     End If
 End If
 ' (7) Сшивка с параболоидом вращения по газу в области максимума и по дебиту в области нуля
-If (g > my_gmax(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
+If (G > my_gmax(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     MX = my_qmin(SEP_TYPE)
     mD = my_gmax(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, mD, MX, F)
-    dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, F, "dQ")
+    func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+    dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
             
     kA = dfunc / MX
     kB = -dfunc
@@ -566,23 +566,23 @@ If (g > my_gmax(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     ' mG2
     mX2 = 100
             
-    If (g > mX2) Then
+    If (G > mX2) Then
         my_sepfactor = 0
             
     Else
-        dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, F, "dG")
+        dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
                 
         r = MX - mX2
         kA = (dfunc * r - func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
-        my_sepfactor = kA * g ^ 2 + kB * g + kC
+        my_sepfactor = kA * G ^ 2 + kB * G + kC
     
     End If
 End If
 ' (8) Сшивка с параболоидом вращения по газу в области максимума и по дебиту в области максимума
-If (g > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
+If (G > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     MX = my_qmax(SEP_TYPE)
             
     ' mQ2
@@ -594,8 +594,8 @@ If (g > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     Else
         mD = my_gmax(SEP_TYPE)
         
-        func = my_sepfactor_approx(SEP_TYPE, mD, MX, F)
-        dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, F, "dQ")
+        func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+        dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
                 
         r = MX - mX2
         kA = (dfunc * r - func) / r / r
@@ -610,18 +610,18 @@ If (g > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
         ' mG2
         mX2 = 100
             
-        If (g > mX2) Then
+        If (G > mX2) Then
             my_sepfactor = 0
             
         Else
-            dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, F, "dG")
+            dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
                 
             r = MX - mX2
             kA = (dfunc * r - func) / r / r
             kB = dfunc - 2 * kA * MX
             kC = -kA * mX2 ^ 2 - kB * mX2
                    
-            my_sepfactor = kA * g ^ 2 + kB * g + kC
+            my_sepfactor = kA * G ^ 2 + kB * G + kC
     
         End If
     
@@ -638,7 +638,7 @@ If (my_sepfactor > 100) Then
 End If
 End Function
 '**************************************************************************************************************************
-Public Function my_inarea(SEP_TYPE As Integer, g As Double, q As Double, F As Double, Optional param = "GQF") As Boolean
+Public Function my_inarea(SEP_TYPE As Integer, G As Double, q As Double, f As Double, Optional param = "GQF") As Boolean
 '
 ' MY_INAREA - Определяет принадлежность точки к измеренной области
 '
@@ -691,7 +691,7 @@ Public Function my_inarea(SEP_TYPE As Integer, g As Double, q As Double, F As Do
 '
 my_inarea = True
 If (param = "GQF") Or (param = "G") Or (param = "GQ") Or (param = "GF") Then
-    If (g < my_gmin(SEP_TYPE)) Or (g > my_gmax(SEP_TYPE)) Then
+    If (G < my_gmin(SEP_TYPE)) Or (G > my_gmax(SEP_TYPE)) Then
         my_inarea = False
     End If
 End If
@@ -701,7 +701,7 @@ If (param = "GQF") Or (param = "Q") Or (param = "GQ") Or (param = "QF") Then
     End If
 End If
 If (param = "GQF") Or (param = "F") Or (param = "GF") Or (param = "QF") Then
-    If (F < my_fmin(SEP_TYPE)) Or (F > my_fmax(SEP_TYPE)) Then
+    If (f < my_fmin(SEP_TYPE)) Or (f > my_fmax(SEP_TYPE)) Then
         my_inarea = False
     End If
 End If
@@ -1115,7 +1115,7 @@ fmax(29) = 4074
 my_fmax = fmax(SEP_TYPE)
 End Function
 '**************************************************************************************************************************
-Private Function my_sepfactor_approx(SEP_TYPE As Integer, g As Double, q As Double, F As Double, Optional Diff = "0") As Double
+Private Function my_sepfactor_approx(SEP_TYPE As Integer, G As Double, q As Double, f As Double, Optional Diff = "0") As Double
 '
 ' MY_SEPFACTOR_APPROX - Вычисление коэффициента сепарации по аппроксимированной зависимости
 '
@@ -1546,22 +1546,22 @@ THETA(29, 11) = 0.0000000365
 THETA(29, 12) = 58.3191138042
 ' Вычисление функции по аппроксимации
 If (Diff = "0") Then
-    my_sepfactor_approx = THETA(SEP_TYPE, 1) * g ^ 4 + THETA(SEP_TYPE, 2) * g ^ 3 + THETA(SEP_TYPE, 3) * g ^ 2 * q + THETA(SEP_TYPE, 4) * g ^ 2 + THETA(SEP_TYPE, 5) * g * q + THETA(SEP_TYPE, 6) * g * F + THETA(SEP_TYPE, 7) * q ^ 2 + THETA(SEP_TYPE, 8) * q * F + THETA(SEP_TYPE, 9) * g + THETA(SEP_TYPE, 10) * q + THETA(SEP_TYPE, 11) * F + THETA(SEP_TYPE, 12)
+    my_sepfactor_approx = THETA(SEP_TYPE, 1) * G ^ 4 + THETA(SEP_TYPE, 2) * G ^ 3 + THETA(SEP_TYPE, 3) * G ^ 2 * q + THETA(SEP_TYPE, 4) * G ^ 2 + THETA(SEP_TYPE, 5) * G * q + THETA(SEP_TYPE, 6) * G * f + THETA(SEP_TYPE, 7) * q ^ 2 + THETA(SEP_TYPE, 8) * q * f + THETA(SEP_TYPE, 9) * G + THETA(SEP_TYPE, 10) * q + THETA(SEP_TYPE, 11) * f + THETA(SEP_TYPE, 12)
     
 End If
 ' Вычисление производной функции по ГАЗОСОДЕРЖАНИЮ
 If (Diff = "dG") Then
-    my_sepfactor_approx = 4 * THETA(SEP_TYPE, 1) * g ^ 3 + 3 * THETA(SEP_TYPE, 2) * g ^ 2 + 2 * THETA(SEP_TYPE, 3) * g * q + 2 * THETA(SEP_TYPE, 4) * g + THETA(SEP_TYPE, 5) * q + THETA(SEP_TYPE, 6) * F + THETA(SEP_TYPE, 9)
+    my_sepfactor_approx = 4 * THETA(SEP_TYPE, 1) * G ^ 3 + 3 * THETA(SEP_TYPE, 2) * G ^ 2 + 2 * THETA(SEP_TYPE, 3) * G * q + 2 * THETA(SEP_TYPE, 4) * G + THETA(SEP_TYPE, 5) * q + THETA(SEP_TYPE, 6) * f + THETA(SEP_TYPE, 9)
     
 End If
 ' Вычисление производной функции по дебитУ
 If (Diff = "dQ") Then
-    my_sepfactor_approx = THETA(SEP_TYPE, 3) * g ^ 2 + THETA(SEP_TYPE, 5) * g + 2 * THETA(SEP_TYPE, 7) * q + THETA(SEP_TYPE, 8) * F + THETA(SEP_TYPE, 10)
+    my_sepfactor_approx = THETA(SEP_TYPE, 3) * G ^ 2 + THETA(SEP_TYPE, 5) * G + 2 * THETA(SEP_TYPE, 7) * q + THETA(SEP_TYPE, 8) * f + THETA(SEP_TYPE, 10)
     
 End If
 ' Вычисление производной функции по ЧАСТОТЕ
 If (Diff = "dF") Then
-    my_sepfactor_approx = THETA(SEP_TYPE, 6) * g + THETA(SEP_TYPE, 8) * q + THETA(SEP_TYPE, 11)
+    my_sepfactor_approx = THETA(SEP_TYPE, 6) * G + THETA(SEP_TYPE, 8) * q + THETA(SEP_TYPE, 11)
     
 End If
 End Function

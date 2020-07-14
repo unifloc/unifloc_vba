@@ -267,7 +267,7 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,c_calibr_grav,c_calibr_fric)
 
-    def MF_calibr_pipeline(self, p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,calibr_type=0):
+    def MF_calibr_pipeline(self, p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,calibr_type=0):
         """
  ========== description ============== 
  подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций 
@@ -391,7 +391,7 @@ class API():
         self.f_MF_calibr_choke = self.book.macro("MF_calibr_choke")
         return self.f_MF_calibr_choke(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day,calibr_type)
 
-    def MF_p_pipeline_atma(self, p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0):
+    def MF_p_pipeline_atma(self, p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций 
@@ -2627,7 +2627,7 @@ class API():
         self.f_GL_encode_string = self.book.macro("GL_encode_string")
         return self.f_GL_encode_string(q_gas_inj_sm3day,p_gas_inj_atma,d_gas_inj_mm,HmesGLV_m,dGLV_mm,PsurfGLV_atma)
 
-    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
         """
  ========== description ============== 
  Расчет устьевого давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций. 
@@ -2681,7 +2681,7 @@ class API():
         self.f_well_plin_pwf_atma = self.book.macro("well_plin_pwf_atma")
         return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
-    def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
+    def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
         """
  ========== description ============== 
  Расчет забойного давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций 
@@ -2735,7 +2735,7 @@ class API():
         self.f_well_pwf_plin_atma = self.book.macro("well_pwf_plin_atma")
         return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
-    def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
         """
  ========== description ============== 
  Расчет устьевого давления скважины по давлению на приеме.  Расчет распределения давления и температуры в скважине  с использованием многофазных корреляций. 
@@ -2789,7 +2789,7 @@ class API():
         self.f_wellESP_plin_pintake_atma = self.book.macro("wellESP_plin_pintake_atma")
         return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
 
-    def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_methodTEMP_CALC_METHOD=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,num_pt_crv=21):
+    def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,num_pt_crv=21):
         """
  ========== description ============== 
  Расчет забойного давления по узловому анализу,  скважины и пласта. 

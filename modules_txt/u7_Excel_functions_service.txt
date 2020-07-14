@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -21,16 +21,16 @@ Public Function PVT_encode_string( _
                     Optional ByVal gamma_oil As Double = const_go_, _
                     Optional ByVal gamma_wat As Double = const_gw_, _
                     Optional ByVal rsb_m3m3 = const_rsb_default, _
-                    Optional ByVal rp_m3m3 = -1, _
-                    Optional ByVal pb_atma = -1, _
-                    Optional ByVal tres_C = const_tres_default, _
-                    Optional ByVal bob_m3m3 = -1, _
-                    Optional ByVal muob_cP = -1, _
-                    Optional ByVal PVTcorr = Standing_based, _
-                    Optional ByVal ksep_fr = 0, _
-                    Optional ByVal p_ksep_atma = -1, _
-                    Optional ByVal t_ksep_C = -1, _
-                    Optional ByVal gas_only As Boolean = False _
+                    Optional ByVal rp_m3m3, _
+                    Optional ByVal pb_atma, _
+                    Optional ByVal t_res_C, _
+                    Optional ByVal bob_m3m3, _
+                    Optional ByVal muob_cP, _
+                    Optional ByVal PVTcorr, _
+                    Optional ByVal ksep_fr, _
+                    Optional ByVal p_ksep_atma, _
+                    Optional ByVal t_ksep_C, _
+                    Optional ByVal gas_only As Boolean _
                     )
 ' gamma_gas - удельная плотность газа, по воздуху.
 '             По умолчанию const_gg_ = 0.6
@@ -42,10 +42,10 @@ Public Function PVT_encode_string( _
 '             По умолчанию const_rsb_default = 100
 ' rp_m3m3 - замерной газовый фактор, м3/м3.
 '           Имеет приоритет перед rsb если rp < rsb
-' pb_atma - давление насыщения при  температуре tres_C, атма.
+' pb_atma - давление насыщения при  температуре t_res_C, атма.
 '           Опциональный калибровочный параметр,
 '           если не задан или = 0, то рассчитается по корреляции.
-' tres_C  - пластовая температура, С.
+' t_res_C  - пластовая температура, С.
 '           Учитывается при расчете давления насыщения.
 '           По умолчанию  const_tres_default = 90
 ' bob_m3m3 - объемный коэффициент нефти при давлении насыщения
@@ -72,25 +72,27 @@ Public Function PVT_encode_string( _
     Dim str As String
     Dim frmt As String
     Dim frmt_int As String
-    frmt = "#0.##0"
-    frmt_int = "0"
-    str = ""
-    ' безхитростно кодируем все параметры один за другим
-    str = str & "gamma_gas:" & Format(gamma_gas, frmt) & ";"
-    str = str & "gamma_oil:" & Format(gamma_oil, frmt) & ";"
-    str = str & "gamma_wat:" & Format(gamma_wat, frmt) & ";"
-    str = str & "rsb_m3m3:" & Format(rsb_m3m3, frmt) & ";"
-    str = str & "rp_m3m3:" & Format(rp_m3m3, frmt) & ";"
-    str = str & "pb_atma:" & Format(pb_atma, frmt) & ";"
-    str = str & "tres_C:" & Format(tres_C, frmt) & ";"
-    str = str & "bob_m3m3:" & Format(bob_m3m3, frmt) & ";"
-    str = str & "muob_cP:" & Format(muob_cP, frmt) & ";"
-    str = str & "PVTcorr:" & Format(PVTcorr, frmt_int) & ";"
-    str = str & "ksep_fr:" & Format(ksep_fr, frmt) & ";"
-    str = str & "p_ksep_atma:" & Format(p_ksep_atma, frmt) & ";"
-    str = str & "t_ksep_C:" & Format(t_ksep_C, frmt) & ";"
-    str = str & "gas_only:" & Format(gas_only) & ";"
-    PVT_encode_string = str
+    
+    Dim pvt_dict As New Dictionary
+    
+    pvt_dict.Add "gamma_gas", gamma_gas
+    pvt_dict.Add "gamma_oil", gamma_oil
+    pvt_dict.Add "gamma_wat", gamma_wat
+    pvt_dict.Add "rsb_m3m3", rsb_m3m3
+    
+    If Not IsMissing(rp_m3m3) Then pvt_dict.Add "rp_m3m3", rp_m3m3
+    If Not IsMissing(pb_atma) Then pvt_dict.Add "pb_atma", pb_atma
+    If Not IsMissing(t_res_C) Then pvt_dict.Add "t_res_C", t_res_C
+    If Not IsMissing(bob_m3m3) Then pvt_dict.Add "bob_m3m3", bob_m3m3
+    If Not IsMissing(muob_cP) Then pvt_dict.Add "muob_cP", muob_cP
+    If Not IsMissing(PVTcorr) Then pvt_dict.Add "PVTcorr", PVTcorr
+    If Not IsMissing(ksep_fr) Then pvt_dict.Add "ksep_fr", ksep_fr
+    If Not IsMissing(p_ksep_atma) Then pvt_dict.Add "p_ksep_atma", p_ksep_atma
+    If Not IsMissing(t_ksep_C) Then pvt_dict.Add "t_ksep_C", t_ksep_C
+    If gas_only Then pvt_dict.Add "gas_only", gas_only
+    
+    
+    PVT_encode_string = ConvertToJson(pvt_dict)
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расшифровки параметров PVT закодированных в строке
@@ -104,91 +106,22 @@ Public Function PVT_decode_string( _
 '                и выдаст строку (можно использовать из рабочей книги)
 ' результат - объект CPVT
 'description_end
-    Dim A
-    Dim i As Integer
-    Dim b
-    Dim p_atma As Double
-    Dim t_C
-    Dim gamma_gas As Double
-    Dim gamma_oil As Double
-    Dim gamma_wat As Double
-    Dim rsb_m3m3 As Double
-    Dim rp_m3m3 As Double
-    Dim pb_atma As Double
-    Dim tres_C As Double
-    Dim bob_m3m3 As Double
-    Dim muob_cP As Double
-    Dim PVTcorr As Integer
-    Dim ksep_fr As Double
-    Dim p_ksep_atma As Double
-    Dim t_ksep_C As Double
-    Dim gas_only As Boolean
-    Dim Key As String
-    Dim Item As String
-    Dim PVT As New CPVT
-    Dim dict As New Dictionary
 ' при разбиении строки на части ошибки недопустимы
+    Dim PVT As New CPVT
 On Error GoTo er1:
-    ' пытаемся разбить строку разделителями
-    If str_PVT = "" Then str_PVT = PVT_DEFAULT
-    A = Split(str_PVT, ";")
-    ' перебираем и сохраняем все параметры
-    For i = LBound(A) To UBound(A)
-        ' только для непустых разбиений
-        If A(i) <> "" Then
-           b = Split(A(i), ":")
-           'только там где есть значение
-           If UBound(b) = 1 Then
-               dict.Item(b(0)) = b(1)
-           End If
-        End If
-    Next i
-' при считывании параметров со строки пытаемся выполнить чтение всех параметров
-' с использование словаря - включаем режим после ошибки двигаться далее
-On Error GoTo er2:
-    ' при чтении параметров используем промежуточную переменную key
-    ' чтобы иметь возможность более информативно отреагировать на ошибку
-    Key = "gamma_oil": gamma_oil = Cdbl_(dict.Item(Key))
-    Key = "gamma_wat": gamma_wat = Cdbl_(dict.Item(Key))
-    Key = "gamma_gas": gamma_gas = Cdbl_(dict.Item(Key))
-    Key = "rsb_m3m3": rsb_m3m3 = Cdbl_(dict.Item(Key))
-    Key = "rp_m3m3": Item = dict.Item(Key): If Item = "" Then Item = "0":
-    rp_m3m3 = Cdbl_(Item)
-    ' для опциональных параметров делаем доп проверку
-    Key = "pb_atma": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    pb_atma = Cdbl_(Item)
-    Key = "bob_m3m3": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    bob_m3m3 = Cdbl_(Item)
-    Key = "muob_cP": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    muob_cP = Cdbl_(Item)
-    
-    Key = "tres_C": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    tres_C = Cdbl_(Item)
-    
-    Key = "PVTcorr": Item = dict.Item(Key): If Item = "" Then Item = "0":
-    PVTcorr = Cdbl_(Item)
-    Key = "ksep_fr": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    ksep_fr = Cdbl_(Item)
-    Key = "p_ksep_atma": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    p_ksep_atma = Cdbl_(Item)
-    Key = "t_ksep_C": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    t_ksep_C = Cdbl_(Item)
-    Key = "gas_only": Item = dict.Item(Key): If Item = "" Then Item = "-1":
-    gas_only = CBool(Item)
-' ловим все ошибки, все должно пройти идеально при дешифровке
-On Error GoTo er1:
-    ' калибровочный параметр проверяем специально и не даем сохраниться значению по умолчанию
-    ' если он неправильно указан (дублируется инициализацией в конструкторе, но все же)
-    PVT.init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, tres_C, rp_m3m3, muob_cP
-    PVT.gas_only = gas_only
-    If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
-        Call PVT.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, GasGoesIntoSolution)
+    If Len(str_PVT) < 3 Then
+        Set PVT_decode_string = Nothing
+        Exit Function
     End If
+    Call PVT.init_json(str_PVT)
+    
     If getStr Then
-        PVT_decode_string = PVT_encode_string(gamma_gas, gamma_oil, _
-              gamma_wat, rsb_m3m3, rp_m3m3, _
-              pb_atma, tres_C, bob_m3m3, muob_cP, PVTcorr, ksep_fr, p_ksep_atma, _
-              t_ksep_C)
+        With PVT
+            PVT_decode_string = PVT_encode_string(.gamma_g, .gamma_o, _
+              .gamma_w, .rsb_m3m3, .rsb_m3m3, _
+              .pb_atma, .t_res_C, .bob_m3m3, .muob_cP, .PVT_correlation, .ksep_fr, .p_ksep_atma, _
+              .t_ksep_C, PVT.gas_only)
+        End With
     Else
         Set PVT_decode_string = PVT
     End If
@@ -198,44 +131,40 @@ er1:
     errmsg = "PVT_decode_string. error:" & Err.Description & " :" & str_PVT
     addLogMsg errmsg
     Err.Raise kErrPVTinput, Err.source, errmsg
-    Exit Function
-er2:
- '   On Error Resume Next
-    addLogMsg "PVT_decode_string: error reading PVT key: " & Key & " item: " & Item & ":" & Err.Description & " :" & str_PVT
-    Resume Next
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы УЭЦН в строку,
 ' которую можно потом использовать для задания ЭЦН в прикладных функциях
 Public Function ESP_encode_string( _
-            Optional ByVal esp_ID As Double = 1005, _
+            Optional ByVal ESP_ID As Double = 1005, _
             Optional ByVal HeadNom_m As Double = 2000, _
-            Optional ByVal ESPfreq_Hz As Double = 50, _
-            Optional ByVal ESP_U_V As Double = 1000, _
-            Optional ByVal MotorPowerNom_kW As Double = 30, _
-            Optional ByVal t_intake_C As Double = 85, _
-            Optional ByVal t_dis_C As Double = 85, _
-            Optional ByVal KsepGS_fr As Double = 0, _
-            Optional ByVal ksep_manual_fr As Double = 0, _
-            Optional ByVal ESP_energy_fact_Whday As Double = 0, _
-            Optional ByVal ESP_cable_type As Double = 0, _
-            Optional ByVal ESP_h_mes_m As Double = 0, _
-            Optional ByVal ESP_gas_correct As Double = 0, _
-            Optional ByVal c_calibr = 1, _
-            Optional ByVal PKV_work_min = -1, _
-            Optional ByVal PKV_stop_min = -1, _
+            Optional ByVal ESP_freq_Hz As Double = 50, _
+            Optional ByVal ESP_U_V, _
+            Optional ByVal ESP_cos_phi, _
+            Optional ByVal MotorPowerNom_kW, _
+            Optional ByVal t_intake_C, _
+            Optional ByVal t_dis_C, _
+            Optional ByVal Ksep_GS_fr, _
+            Optional ByVal ksep_manual_fr, _
+            Optional ByVal ESP_energy_fact_kWhday, _
+            Optional ByVal ESP_cable_type, _
+            Optional ByVal ESP_h_mes_m, _
+            Optional ByVal ESP_gas_correct, _
+            Optional ByVal c_calibr, _
+            Optional ByVal PKV_work_min, _
+            Optional ByVal PKV_stop_min, _
             Optional ByVal dnum_stages_integrate = 1)
 ' esp_ID         - идентификатор насоса
 ' HeadNom_m      - номинальный напор системы УЭЦН
 '                - соответствует напора в записи ЭЦН 50-2000
-' ESPfreq_Hz     - частота, Гц
+' ESP_freq_Hz     - частота, Гц
 ' ESP_U_V        - напряжение на ПЭД
 ' MotorPowerNom_kW  - номинальная мощность двигателя
 ' t_intake_C     - температура на приеме насоа
 ' t_dis_C        - температура на выкиде насоса.
 '                  если = 0 и calc_along_flow = 1 то рассчитывается
-' KsepGS_fr      - коэффициент сепарации газосепаратора УЭЦН
+' Ksep_GS_fr      - коэффициент сепарации газосепаратора УЭЦН
 ' ESP_energy_fact_Whday  - фактическое потребление мощности ЭЦН
 ' ESP_cable_type - тип кабельной линии
 '                  тип 1: cable_R_Omkm = 1.18
@@ -271,51 +200,56 @@ Public Function ESP_encode_string( _
     Dim c_calibr_power As Double
     
     
+    Dim dict As New Dictionary
+        
     c_calibr_head = 1
     c_calibr_rate = 1
     c_calibr_power = 1
     
-    frmt = "#0.####0"
-    frmt_int = "0"
-    str = ""
-    str = str & "ESP_ID:" & Format(esp_ID, frmt) & ";"
-    str = str & "HeadNom_m:" & Format(HeadNom_m, frmt) & ";"
-    str = str & "ESPfreq_Hz:" & Format(ESPfreq_Hz, frmt) & ";"
-    str = str & "ESP_U_V:" & Format(ESP_U_V, frmt) & ";"
-    str = str & "MotorPowerNom_kW:" & Format(MotorPowerNom_kW, frmt) & ";"
-    str = str & "t_intake_C:" & Format(t_intake_C, frmt) & ";"
-    str = str & "t_dis_C:" & Format(t_dis_C, frmt) & ";"
-    str = str & "KsepGS_fr:" & Format(KsepGS_fr, frmt) & ";"
-    str = str & "Ksep_manual_fr:" & Format(ksep_manual_fr, frmt) & ";"
-    str = str & "ESP_energy_fact_Whday:" & Format(ESP_energy_fact_Whday, frmt) & ";"
-    str = str & "ESP_cable_type:" & Format(ESP_cable_type, frmt_int) & ";"
-    str = str & "ESP_h_mes_m:" & Format(ESP_h_mes_m, frmt) & ";"
-    str = str & "ESP_gas_correct:" & Format(ESP_gas_correct, frmt) & ";"
     
-        Dim clbr
+    dict.Add "ESP_ID", ESP_ID
+    dict.Add "HeadNom_m", HeadNom_m
+    dict.Add "ESP_freq_Hz", ESP_freq_Hz
+    If Not IsMissing(ESP_U_V) Then dict.Add "ESP_U_V", ESP_U_V
+    If Not IsMissing(ESP_cos_phi) Then dict.Add "ESP_cos_phi", ESP_cos_phi
+    If Not IsMissing(MotorPowerNom_kW) Then dict.Add "MotorPowerNom_kW", MotorPowerNom_kW
+    If Not IsMissing(t_intake_C) Then dict.Add "t_intake_C", t_intake_C
+    If Not IsMissing(t_dis_C) Then dict.Add "t_dis_C", t_dis_C
+    If Not IsMissing(Ksep_GS_fr) Then dict.Add "Ksep_GS_fr", Ksep_GS_fr
     
-    ' set calibration properties
-    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
-    c_calibr_head = clbr(1)
-    If UBound(clbr) >= 2 Then
-        c_calibr_rate = clbr(2)
-    Else
-        c_calibr_rate = 1
+    If Not IsMissing(ksep_manual_fr) Then dict.Add "Ksep_manual_fr", ksep_manual_fr
+    If Not IsMissing(ESP_energy_fact_kWhday) Then dict.Add "ESP_energy_fact_kWhday", ESP_energy_fact_kWhday
+    If Not IsMissing(ESP_cable_type) Then dict.Add "ESP_cable_type", ESP_cable_type
+    If Not IsMissing(ESP_h_mes_m) Then dict.Add "ESP_h_mes_m", ESP_h_mes_m
+    If Not IsMissing(ESP_gas_correct) Then dict.Add "ESP_gas_correct", ESP_gas_correct
+    
+    
+    Dim clbr
+    
+    If Not IsMissing(c_calibr) Then
+        ' set calibration properties
+        clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+        c_calibr_head = clbr(1)
+        dict.Add "c_calibr_head", c_calibr_head
+        If UBound(clbr) >= 2 Then
+            c_calibr_rate = clbr(2)
+            dict.Add "c_calibr_rate", c_calibr_rate
+        Else
+            c_calibr_rate = 1
+        End If
+        
+        If UBound(clbr) >= 3 Then
+            c_calibr_power = clbr(3)
+            dict.Add "c_calibr_power", c_calibr_power
+        Else
+            c_calibr_power = 1
+        End If
     End If
     
-    If UBound(clbr) >= 3 Then
-        c_calibr_power = clbr(3)
-    Else
-        c_calibr_power = 1
-    End If
-    
-    str = str & "c_calibr_head:" & Format(c_calibr_head, frmt) & ";"
-    str = str & "c_calibr_rate:" & Format(c_calibr_rate, frmt) & ";"
-    str = str & "c_calibr_power:" & Format(c_calibr_power, frmt) & ";"
-    str = str & "PKV_work_min:" & Format(PKV_work_min, frmt) & ";"
-    str = str & "PKV_stop_min:" & Format(PKV_stop_min, frmt) & ";"
-    str = str & "d_st_int:" & Format(dnum_stages_integrate, frmt_int) & ";"
-    ESP_encode_string = str
+    If Not IsMissing(PKV_work_min) Then dict.Add "PKV_work_min", PKV_work_min
+    If Not IsMissing(PKV_stop_min) Then dict.Add "PKV_stop_min", PKV_stop_min
+    If Not IsMissing(dnum_stages_integrate) Then dict.Add "dnum_stages_integrate", dnum_stages_integrate
+    ESP_encode_string = ConvertToJson(dict)
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
@@ -329,114 +263,36 @@ Public Function ESP_decode_string(ByVal str_ESP As String, _
 '                       и выдаст строку (можно использовать из листа)
 ' результат - объект CESPsystemSimple
 'description_end
-    Dim A
-   ' Dim s As String
-    Dim i As Integer
-    Dim b
-    Dim p_atma As Double
-    Dim esp_ID As Double
-    Dim HeadNom_m As Double
-    Dim ESPfreq_Hz As Double
-    Dim ESP_U_V As Double
-    Dim MotorPowerNom_kW As Double
-    Dim t_int_C As Double
-    Dim t_dis_C As Double
-    Dim KsepGS_fr As Double
-    Dim ksep_manual_fr As Double
-    Dim ESPsys As CESPsystemSimple
-    Dim pmp As CESPpump
-    Dim dict As New Dictionary
+    Dim ESPsys As New CESPsystemSimple
+    Dim dict As Dictionary
     
-    Dim ESP_energy_fact_Whday As Double
-    Dim ESP_cable_type As Double
-    Dim ESP_h_mes_m As Double
-    Dim ESP_gas_correct As Double
-    Dim c_calibr_head As Double
-    Dim c_calibr_rate As Double
-    Dim c_calibr_power As Double
-    
-    Dim PKV_work_min As Double
-    Dim PKV_stop_min As Double
-    
-    Dim dnum_stages_integrate As Integer
-    Dim Key As String
-    
-    
-' при разбиении строки на части ошибки недопустимы
 On Error GoTo er1:
     ' пытаемся разбить строку разделителями
-    A = Split(str_ESP, ";")
-    ' перебираем и сохраняем все параметры
-    For i = LBound(A) To UBound(A)
-        ' только для непустых разбиений
-        If A(i) <> "" Then
-           b = Split(A(i), ":")
-           'только там где есть значение
-           If UBound(b) = 1 Then
-               dict.Item(b(0)) = b(1)
-           End If
-        End If
-    Next i
-' при считывании параметров со строки пытаемся выполнить чтение всех параметров
-' с использование словаря - включаем режим после ошибки двигаться далее
-On Error GoTo er2:
-    ' при чтении параметров используем промежуточную переменную key
-    ' чтобы иметь возможность более информативно отреагировать на ошибку
-    Key = "ESP_ID": esp_ID = Cdbl_(dict.Item(Key))
-    Key = "HeadNom_m": HeadNom_m = Cdbl_(dict.Item(Key))
-    Key = "ESPfreq_Hz": ESPfreq_Hz = Cdbl_(dict.Item(Key))
-    Key = "ESP_U_V": ESP_U_V = Cdbl_(dict.Item(Key))
-    Key = "MotorPowerNom_kW": MotorPowerNom_kW = Cdbl_(dict.Item(Key))
-    Key = "t_intake_C": t_int_C = Cdbl_(dict.Item(Key))
-    Key = "t_dis_C": t_dis_C = Cdbl_(dict.Item(Key))
-    Key = "KsepGS_fr": KsepGS_fr = Cdbl_(dict.Item(Key))
-    Key = "Ksep_manual_fr": ksep_manual_fr = Cdbl_(dict.Item(Key))
-    Key = "ESP_energy_fact_Whday": ESP_energy_fact_Whday = Cdbl_(dict.Item(Key))
-    Key = "ESP_cable_type": ESP_cable_type = Cdbl_(dict.Item(Key))
-    Key = "ESP_h_mes_m": ESP_h_mes_m = Cdbl_(dict.Item(Key))
-    Key = "ESP_gas_correct": ESP_gas_correct = Cdbl_(dict.Item(Key))
-    Key = "c_calibr_head": c_calibr_head = Cdbl_(dict.Item(Key))
-    Key = "c_calibr_rate": c_calibr_rate = Cdbl_(dict.Item(Key))
-    Key = "c_calibr_power": c_calibr_power = Cdbl_(dict.Item(Key))
-    Key = "PKV_work_min": PKV_work_min = Cdbl_(dict.Item(Key))
-    Key = "PKV_stop_min": PKV_stop_min = Cdbl_(dict.Item(Key))
-    Key = "d_st_int": dnum_stages_integrate = CInt(dict.Item(Key))
-' при создании объекта все должно пройти идеально
-' переключаем режим реакции на ошибку
-On Error GoTo er1:
+    
+    
+    If Len(str_ESP) < 3 Then
+        Set ESP_decode_string = Nothing
+        Exit Function
+    End If
+    
+    Set dict = ParseJson(str_ESP)
+    
+    Call ESPsys.init_dictionary(dict)
+    
     If getStr Then
-         ESP_decode_string = ESP_encode_string(esp_ID, HeadNom_m, ESPfreq_Hz, _
-                                               ESP_U_V, MotorPowerNom_kW, t_int_C, t_dis_C, _
-                                               KsepGS_fr, ksep_manual_fr, ESP_energy_fact_Whday, ESP_cable_type, _
-                                               ESP_h_mes_m, ESP_gas_correct, Array(c_calibr_head, c_calibr_rate, c_calibr_power), _
-                                               PKV_work_min, PKV_stop_min, dnum_stages_integrate)
+        With ESPsys
+            ESP_decode_string = ESP_encode_string(.ESP_pump.db.ID, _
+                                                  .head_nom_m, _
+                                                  .freq_Hz, _
+                                               .U_V, .power_motor_nom_W, .t_int_C, .t_dis_C, _
+                                               .ksep_gassep_fr, .ksep_manual_fr, .energy_fact_Whday, _
+                                               .cable_type_num, _
+                                               .h_mes_top_m, .ESP_pump.gas_correct, _
+                                               Array(.ESP_pump.c_calibr_head, .ESP_pump.c_calibr_rate, .ESP_pump.c_calibr_power), _
+                                               .PKV_work_min, .PKV_stop_min, .ESP_pump.dnum_stages_integrate)
+        End With
     Else
-        If esp_ID > 0 Then
-            If checkID_ESP(esp_ID) Then
-                Set pmp = getESP(esp_ID)
-                pmp.stage_num = pmp.get_num_stages(pmp.rate_nom_sm3day, HeadNom_m)  ' ESP_numStages
-                pmp.freq_Hz = ESPfreq_Hz
-                Set ESPsys = New CESPsystemSimple
-                Set ESPsys.ESP_pump = pmp
-                ESPsys.U_V = ESP_U_V
-                ESPsys.power_motor_nom_W = MotorPowerNom_kW * 1000
-                ESPsys.ksep_gassep_fr = KsepGS_fr
-                ESPsys.ksep_manual_fr = ksep_manual_fr
-                ESPsys.t_int_C = t_int_C
-                ESPsys.t_dis_C = t_dis_C
-                
-                ESPsys.energy_fact_Whday = ESP_energy_fact_Whday
-                ESPsys.setCable ESP_cable_type
-                ESPsys.h_mes_top_m = ESP_h_mes_m
-                ESPsys.ESP_pump.c_calibr_head = c_calibr_head
-                ESPsys.ESP_pump.c_calibr_rate = c_calibr_rate
-                ESPsys.ESP_pump.c_calibr_power = c_calibr_power
-                ESPsys.ESP_pump.gas_correct = ESP_gas_correct
-                ESPsys.ESP_pump.dnum_stages_integrate = dnum_stages_integrate
-                Call ESPsys.PKV_set(PKV_work_min, PKV_stop_min)
-                
-            End If
-        End If
+        
         Set ESP_decode_string = ESPsys
     End If
     Exit Function
@@ -446,10 +302,6 @@ er1:
     addLogMsg errmsg
     Err.Raise kErrPVTinput, Err.source, errmsg
     Exit Function
-er2:
- '   On Error Resume Next
-    addLogMsg "ESP_decode_string: error reading PVT key: " & Key & ":" & Err.Description
-    Resume Next
     
 End Function
 '=============================
@@ -466,31 +318,31 @@ Public Function GL_decode_string(well_GL_str As String, _
 'description_end
     Dim S As String
     Dim A, b
-    Dim i As Long
+    Dim I As Long
     Dim GLV As Integer
     Dim dict As New Dictionary
-    Dim Key As String
+    Dim key As String
 ' при разбиении строки на части ошибки недопустимы
 On Error GoTo er1:
     ' пытаемся разбить строку разделителями
     A = Split(well_GL_str, ";")
     ' перебираем и сохраняем все параметры
-    For i = LBound(A) To UBound(A)
+    For I = LBound(A) To UBound(A)
         ' только для непустых разбиений
-        If A(i) <> "" Then
-           b = Split(A(i), ":")
+        If A(I) <> "" Then
+           b = Split(A(I), ":")
            'только там где есть значение
            If UBound(b) = 1 Then
                dict.Item(b(0)) = b(1)
            End If
         End If
-    Next i
+    Next I
 ' при считывании параметров со строки пытаемся выполнить чтение всех параметров
 ' с использование словаря - включаем режим после ошибки двигаться далее
 On Error GoTo er2:
     ' при чтении параметров используем промежуточную переменную key
     ' чтобы иметь возможность более информативно отреагировать на ошибку
-    Key = "GLV": GLV = Cdbl_(dict.Item(Key)) ' количество клапанов
+    key = "GLV": GLV = Cdbl_(dict.Item(key)) ' количество клапанов
     
     Dim q_gas_inj_sm3day As Double
     Dim p_gas_inj_atma As Double
@@ -502,15 +354,15 @@ On Error GoTo er2:
     ReDim d_glv_mm(1 To GLV)
     ReDim p_glv_atma(1 To GLV)
     
-    Key = "q_gas_inj_sm3day": q_gas_inj_sm3day = Cdbl_(dict.Item(Key))
-    Key = "p_gas_inj_atma": p_gas_inj_atma = Cdbl_(dict.Item(Key))
-    Key = "d_gas_inj_mm": d_gas_inj_mm = Cdbl_(dict.Item(Key))
+    key = "q_gas_inj_sm3day": q_gas_inj_sm3day = Cdbl_(dict.Item(key))
+    key = "p_gas_inj_atma": p_gas_inj_atma = Cdbl_(dict.Item(key))
+    key = "d_gas_inj_mm": d_gas_inj_mm = Cdbl_(dict.Item(key))
     
-    For i = 1 To GLV
-            Key = "H_glv_m" & FormatInteger(i, 0): h_glv_m(i) = Cdbl_(dict.Item(Key))
-            Key = "d_glv_mm" & FormatInteger(i, 0): d_glv_mm(i) = Cdbl_(dict.Item(Key))
-            Key = "p_glv_atma" & FormatInteger(i, 0): p_glv_atma(i) = Cdbl_(dict.Item(Key))
-    Next i
+    For I = 1 To GLV
+            key = "H_glv_m" & FormatInteger(I, 0): h_glv_m(I) = Cdbl_(dict.Item(key))
+            key = "d_glv_mm" & FormatInteger(I, 0): d_glv_mm(I) = Cdbl_(dict.Item(key))
+            key = "p_glv_atma" & FormatInteger(I, 0): p_glv_atma(I) = Cdbl_(dict.Item(key))
+    Next I
 On Error GoTo er1:
 ' ловим все ошибки, все должно пройти идеально при дешифровке
     If getStr Then
@@ -533,7 +385,7 @@ er1:
     Exit Function
 er2:
  '   On Error Resume Next
-    addLogMsg "GL_decode_string: error reading PVT key: " & Key & ":" & Err.Description
+    addLogMsg "GL_decode_string: error reading PVT key: " & key & ":" & Err.Description
     Resume Next
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
@@ -561,7 +413,7 @@ Public Function GL_encode_string( _
     Dim d_glv_mm() As Variant
     Dim p_glv_atma() As Variant
     
-    Dim i As Long
+    Dim I As Long
     
     frmt = "#0.####0"
     frmt_int = "0"
@@ -575,11 +427,11 @@ Public Function GL_encode_string( _
     
     If (UBound(h_glv_m) = UBound(d_glv_mm)) And (UBound(h_glv_m) = UBound(p_glv_atma)) Then
         str = str & "GLV:" & FormatInteger(UBound(h_glv_m), 0) & ";"
-        For i = LBound(h_glv_m) To UBound(h_glv_m)
-            str = str & "H_glv_m" & FormatInteger(i, 0) & ":" & FormatFReal(Cdbl_(h_glv_m(i)), 0, 3) & ";"
-            str = str & "d_glv_mm" & FormatInteger(i, 0) & ":" & FormatFReal(Cdbl_(d_glv_mm(i)), 0, 3) & ";"
-            str = str & "p_glv_atma" & FormatInteger(i, 0) & ":" & FormatFReal(Cdbl_(p_glv_atma(i)), 0, 3) & ";"
-        Next i
+        For I = LBound(h_glv_m) To UBound(h_glv_m)
+            str = str & "H_glv_m" & FormatInteger(I, 0) & ":" & FormatFReal(Cdbl_(h_glv_m(I)), 0, 3) & ";"
+            str = str & "d_glv_mm" & FormatInteger(I, 0) & ":" & FormatFReal(Cdbl_(d_glv_mm(I)), 0, 3) & ";"
+            str = str & "p_glv_atma" & FormatInteger(I, 0) & ":" & FormatFReal(Cdbl_(p_glv_atma(I)), 0, 3) & ";"
+        Next I
     Else
         str = str & "GVL:0;error" & ";"
     End If

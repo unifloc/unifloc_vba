@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -45,7 +45,7 @@ Private Sub Class_Initialize()
 End Sub
 Public Sub init_from_curves(ByVal habs_curve_m As CInterpolation, _
                             ByVal diam_curve_mm As CInterpolation)
-    Dim i As Integer
+    Dim I As Integer
     Dim ang
     Dim sina As Double, cosa As Double
     
@@ -56,21 +56,21 @@ Public Sub init_from_curves(ByVal habs_curve_m As CInterpolation, _
     Set diam_init_m_ = diam_curve_mm.transform(multY:=const_convert_mm_m)
     diam_init_m_.isStepFunction = True   ' диаметры - ступенчатая функция
         
-    For i = 2 To habs_curve_m.num_points
-       sina = (habs_curve_m.PointY(i) - habs_curve_m.PointY(i - 1)) / (habs_curve_m.pointX(i) - habs_curve_m.pointX(i - 1))
+    For I = 2 To habs_curve_m.num_points
+       sina = (habs_curve_m.PointY(I) - habs_curve_m.PointY(I - 1)) / (habs_curve_m.pointX(I) - habs_curve_m.pointX(I - 1))
        cosa = Sqr(MaxReal(1 - sina ^ 2, 0))
        If cosa = 0 Then
            ang = 90 * sina
        Else
            ang = Atn(sina / cosa) * 180 / const_Pi
        End If
-       angle_init_deg_.AddPoint habs_curve_m.pointX(i - 1), ang
-    Next i
+       angle_init_deg_.AddPoint habs_curve_m.pointX(I - 1), ang
+    Next I
     calc_trajectory
 End Sub
 Private Function calc_trajectory() As Boolean
     ' функция расчета траектории скважины - из исходных данных считает нормализованные выходные данные и готовит данные для скважины
-    Dim i As Integer
+    Dim I As Integer
     Dim h As Double
     Dim allDone As Boolean
     Dim i_constrPoint As Integer
@@ -78,14 +78,15 @@ Private Function calc_trajectory() As Boolean
     
     construction_points_curve_.ClearPoints
     construction_points_curve_.AddPoint h_abs_init_m_.minx, h_abs_init_m_.getPoint(h_abs_init_m_.minx)   ' на всякий случай добавим в конструкцию нулевую точку из которой стартуем
-    For i = 1 To diam_init_m_.num_points
-        h = diam_init_m_.pointX(i)
+    
+    For I = 1 To diam_init_m_.num_points
+        h = diam_init_m_.pointX(I)
         If h < h_abs_init_m_.minx Then h = h_abs_init_m_.minx
         construction_points_curve_.AddPoint h, h_abs_init_m_.getPoint(h)
-    Next i
+    Next I
      
     Hmes = h_abs_init_m_.minx
-    i = 0
+    I = 0
     i_constrPoint = 1
     allDone = False
     
@@ -111,17 +112,17 @@ Private Function calc_trajectory() As Boolean
     ' дальше надо по данному набору заполнить все элементы массива конструкции
     
     ReDim pipe_trajectory_(h_points_curve_.num_points - 1)
-    For i = 0 To h_points_curve_.num_points - 1
-       Hmes = h_points_curve_.pointX(i + 1)
-       With pipe_trajectory_(i)
+    For I = 0 To h_points_curve_.num_points - 1
+       Hmes = h_points_curve_.pointX(I + 1)
+       With pipe_trajectory_(I)
            .h_mes_m = Hmes
-           .h_abs_m = h_points_curve_.PointY(i + 1)
+           .h_abs_m = h_points_curve_.PointY(I + 1)
            .ang_deg = angle_init_deg_.getPoint(Hmes)
            .diam_in_m = diam_init_m_.getPoint(Hmes)
            .diam_out_m = diam_init_m_.getPoint(Hmes) + wall_thickness_mm_ * const_convert_mm_m
            .roughness_m = wall_roughness_m_
        End With
-    Next i
+    Next I
     
     ' траекторию сформировали
     ' надо теперь подготовить массивы для класса скважина
@@ -131,7 +132,9 @@ End Function
 ' ожидаем, что на входе либо range - тогда их конвертируем в массивы
 ' либо массивы, либо числа - тогда генерируем простые массивы
 Public Sub init_from_vert_range(ByRef h_data_m As Variant, _
-                       Optional ByRef diam_data_mm As Variant)
+                       Optional ByRef diam_data_mm As Variant, _
+                       Optional ByVal h_limit_top_m As Double = 1E+20, _
+                       Optional ByVal h_limit_bottom_m As Double = -1E+20)
 ' h_data_m - инклинометрия - range или двухмерный массив или число
 '            зависимость значений вертикальной глубины от измеренной,
 '            первый столбец - измеренная глубина, м
@@ -141,7 +144,7 @@ Public Sub init_from_vert_range(ByRef h_data_m As Variant, _
 '            первый столбец - измеренная глубина, м
 '            второй столбец - диаметр трубы, мм - применяется от текущего значения глубины и до следующего
 '            если передано одно число - то будет задан постоянный диаметр
-    Dim i As Integer
+    Dim I As Integer
     Dim habs_curve_m As New CInterpolation
     Dim diam_curve_mm As New CInterpolation
     Dim diam_val_mm As Double, h_val As Double
@@ -157,12 +160,11 @@ Public Sub init_from_vert_range(ByRef h_data_m As Variant, _
     ' проверим
     
     hdata = array_num_from_range(h_data_m, True)
-    'habs_curve_m.AddPoint 0, 0
-    For i = LBound(hdata, 1) To UBound(hdata, 1)
+    For I = LBound(hdata, 1) To UBound(hdata, 1)
         If UBound(hdata, 2) = 1 Then
-            habs_curve_m.AddPoint hdata(i, 1), hdata(i, 1)
+            habs_curve_m.AddPoint hdata(I, 1), hdata(I, 1)
         Else
-            habs_curve_m.AddPoint hdata(i, 1), hdata(i, 2)
+            habs_curve_m.AddPoint hdata(I, 1), hdata(I, 2)
         End If
     Next
     If habs_curve_m.num_points = 1 Then
@@ -174,104 +176,63 @@ Public Sub init_from_vert_range(ByRef h_data_m As Variant, _
         diam_curve_mm.AddPoint 0, ddata(1, 1)
         diam_curve_mm.AddPoint hdata(UBound(hdata, 1), 1), ddata(1, 1)
     ElseIf UBound(ddata, 2) > 1 Then
-        For i = LBound(ddata, 1) To UBound(ddata, 1)
-            If ddata(i, 1) < hdata(UBound(hdata, 1), 1) Then
-                diam_curve_mm.AddPoint ddata(i, 1), ddata(i, 2)
+        For I = LBound(ddata, 1) To UBound(ddata, 1)
+            If ddata(I, 1) < hdata(UBound(hdata, 1), 1) Then
+                diam_curve_mm.AddPoint ddata(I, 1), ddata(I, 2)
             End If
         Next
-        diam_curve_mm.AddPoint hdata(UBound(hdata, 1), 1), ddata(i - 1, 2)
+        diam_curve_mm.AddPoint hdata(UBound(hdata, 1), 1), ddata(I - 1, 2)
     End If
     
-    
-    
-    
-'    If TypeName(h_data_m) = "Range" Then h_data_m = h_data_m.Value
-'
-'    If IsNumeric(h_data_m) Then
-'        If h_data_m > 0 Then h_val = h_data_m
-'        h_number = True
-'    End If
-'
-'    If h_val > 0 Then
-'        ReDim h_data_m(1 To 2, 1 To 2)
-'        h_data_m(1, 1) = 0
-'        h_data_m(2, 1) = h_val
-'        h_data_m(1, 2) = 0
-'        h_data_m(2, 2) = h_val
-'    End If
-'
-'    For i = LBound(h_data_m) To UBound(h_data_m)
-'        If LBound(h_data_m) = 0 Then
-'            fix_index = -1
-'        Else
-'            fix_index = 0
-'        End If
-'        If Not (IsEmpty(h_data_m(i, 1 + fix_index)) Or IsEmpty(h_data_m(i, 2 + fix_index))) Then
-'            habs_curve_m.AddPoint h_data_m(i, 1 + fix_index), h_data_m(i, 2 + fix_index)
-'        Else
-'            h_data_m(i, 1) = h_data_m(i - 1, 1)
-'            h_data_m(i, 2) = h_data_m(i - 1, 2)
-'        End If
-'    Next i
-'
-'
-'    If TypeName(diam_data_mm) = "Range" Then diam_data_mm = diam_data_mm.Value
-'
-'    If IsNumeric(diam_data_mm) Then
-'        If diam_data_mm > 0 Then diam_val_mm = diam_data_mm
-'        diam_number = True
-'    End If
-'
-'
-'    If IsMissing(diam_data_mm) Then diam_val_mm = const_pipe_diam_default_mm
-'    If IsMissing(diam_data_mm) Or diam_val_mm > 0 Then
-'        ReDim diam_data_mm(1 To 2, 1 To 2)
-'        diam_data_mm(1, 1) = 0
-'        If h_number Then
-'           diam_data_mm(2, 1) = h_data_m
-'        Else
-'           diam_data_mm(2, 1) = h_data_m(UBound(h_data_m), 1)
-'        End If
-'        diam_data_mm(1, 2) = diam_val_mm
-'        diam_data_mm(2, 2) = diam_val_mm
-'    End If
-'
-'
-'    For i = LBound(diam_data_mm) To UBound(diam_data_mm)
-'        If LBound(diam_data_mm) = 0 Then
-'            fix_index = -1
-'        Else
-'            fix_index = 0
-'        End If
-'        If Not (IsEmpty(diam_data_mm(i, 1 + fix_index)) Or IsEmpty(diam_data_mm(i, 2 + fix_index))) Then
-'            diam_curve_mm.AddPoint diam_data_mm(i, 1 + fix_index), diam_data_mm(i, 2 + fix_index)
-'        End If
-'    Next i
+    Call habs_curve_m.CutByValue(h_limit_top_m, h_limit_bottom_m)
+    Call diam_curve_mm.CutByValue(h_limit_top_m, h_limit_bottom_m)
+   
     Call init_from_curves(habs_curve_m, diam_curve_mm)
 End Sub
+' функции для обеспечения клонирования траекторий
+Public Function get_habs_curve_m() As CInterpolation
+    Dim I As Integer
+    Dim crv As New CInterpolation
+    For I = LBound(pipe_trajectory_) To UBound(pipe_trajectory_)
+        With pipe_trajectory_(I)
+            Call crv.AddPoint(.h_mes_m, .h_abs_m)
+        End With
+    Next I
+    Set get_habs_curve_m = crv
+End Function
+Public Function get_diam_curve_mm() As CInterpolation
+    Dim I As Integer
+    Dim crv As New CInterpolation
+    For I = LBound(pipe_trajectory_) To UBound(pipe_trajectory_)
+        With pipe_trajectory_(I)
+            Call crv.AddPoint(.h_mes_m, .diam_in_m * 1000)
+        End With
+    Next I
+    Set get_diam_curve_mm = crv
+End Function
 ' ========================================================================
 ' свойства и методы задания параметров
 ' ========================================================================
 Public Property Get num_points() As Integer
     num_points = h_points_curve_.num_points
 End Property
-Public Property Get ang_deg(i As Integer) As Double
-    ang_deg = pipe_trajectory_(i).ang_deg
+Public Property Get ang_deg(I As Integer) As Double
+    ang_deg = pipe_trajectory_(I).ang_deg
 End Property
 Public Property Get ang_hmes_deg(h_mes_m As Double) As Double
     ang_hmes_deg = angle_init_deg_.getPoint(h_mes_m)
 End Property
-Public Property Get h_mes_m(i As Integer) As Double
-    h_mes_m = pipe_trajectory_(i).h_mes_m
+Public Property Get h_mes_m(I As Integer) As Double
+    h_mes_m = pipe_trajectory_(I).h_mes_m
 End Property
-Public Property Get h_abs_m(i As Integer) As Double
-    h_abs_m = pipe_trajectory_(i).h_abs_m
+Public Property Get h_abs_m(I As Integer) As Double
+    h_abs_m = pipe_trajectory_(I).h_abs_m
 End Property
 Public Property Get h_abs_hmes_m(ByVal h_mes_m As Double) As Double
     h_abs_hmes_m = h_points_curve_.getPoint(h_mes_m)
 End Property
-Public Property Get diam_in_m(i As Integer) As Double
-    diam_in_m = pipe_trajectory_(i).diam_in_m
+Public Property Get diam_in_m(I As Integer) As Double
+    diam_in_m = pipe_trajectory_(I).diam_in_m
 End Property
 Public Property Get diam_hmes_m(h_mes_m As Double) As Double
     diam_hmes_m = diam_init_m_.getPoint(h_mes_m)
@@ -280,30 +241,31 @@ Public Property Get roughness_m() As Double
     roughness_m = wall_roughness_m_
 End Property
 Public Property Let roughness_m(val As Double)
-    Dim i As Integer
+    Dim I As Integer
     If val > 0 Then wall_roughness_m_ = val
-    For i = 0 To h_points_curve_.num_points - 1
-        pipe_trajectory_(i).roughness_m = wall_roughness_m_
-    Next i
+    For I = 0 To h_points_curve_.num_points - 1
+        pipe_trajectory_(I).roughness_m = wall_roughness_m_
+    Next I
 End Property
 Public Property Get wall_thickness_m() As Double
     wall_thickness_m = wall_roughness_m_
 End Property
 Public Property Let wall_thickness_mm(val As Double)
-    Dim i As Integer
+    Dim I As Integer
     Dim Hmes As Double
     If val > 0 Then wall_thickness_mm_ = val
-    For i = 0 To h_points_curve_.num_points - 1
-       Hmes = h_points_curve_.pointX(i + 1)
-       With pipe_trajectory_(i)
+    For I = 0 To h_points_curve_.num_points - 1
+       Hmes = h_points_curve_.pointX(I + 1)
+       With pipe_trajectory_(I)
            .diam_out_m = diam_init_m_.getPoint(Hmes) + wall_thickness_mm_ * const_convert_mm_m
        End With
-    Next i
+    Next I
 End Property
 Public Property Get top_m() As Double
     top_m = h_points_curve_.pointX(1)
 End Property
 Public Property Get bottom_m() As Double
     bottom_m = h_points_curve_.pointX(num_points)
+    
 End Property
 

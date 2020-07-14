@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -94,32 +94,33 @@ Public Property Get c_calibr_fric() As Double
    c_calibr_fric = c_calibr_fric_
 End Property
  
-Public Property Get h_mes_save_m(ByVal i As Integer) As Double
-  h_mes_save_m = h_mes_insert_m_.pointX(i)
+Public Property Get h_mes_save_m(ByVal I As Integer) As Double
+  h_mes_save_m = h_mes_insert_m_.pointX(I)
 End Property
 Public Function add_h_mes_save_m(ByVal val As Double) As Boolean
     If val > ZeroCoordMes_m And val < (ZeroCoordMes_m + length_mes_m) Then
         Call h_mes_insert_m_.AddPoint(val, 0)   ' Запишем точку, которую надо сохранить
     End If
+    StepHmCurve = StepHmCurve
 End Function
 Public Property Get StepHmCurve() As Double
    StepHmCurve = step_hm_curve_
 End Property
 Public Property Let StepHmCurve(val As Double)
-   Dim i As Integer
+   Dim I As Integer
    Dim Hm As Double
    Dim Hm_max As Double
    
    step_hm_curve_ = val
    ' установили шаг - сразу подготовим массив точек по давлению для которых должен быть проведен расчет
    hm_curve_.ClearPoints    ' очистили точки по давлению
-   For i = 1 To h_mes_insert_m_.num_points    ' пустили цикл по количеству точек, которые должны быть обязательно
-       Hm = h_mes_insert_m_.pointX(i)
+   For I = 1 To h_mes_insert_m_.num_points    ' пустили цикл по количеству точек, которые должны быть обязательно
+       Hm = h_mes_insert_m_.pointX(I)
        hm_curve_.AddPoint Hm, 0               ' добвляем точку в выходной массив. Важен только x, поэтому y задаем произвольно
                                               ' здесь же должны задаться первая и последняя точки
-   Next i
+   Next I
    ' далее добавим все промежуточные точки с заданым шагом
-   i = 0
+   I = 0
    Hm = hm_curve_.pointX(1)   ' начинаем с первой точки
    Hm_max = hm_curve_.pointX(hm_curve_.num_points)
    Do
@@ -158,6 +159,36 @@ Public Sub InitTlinear(ByVal T_start_coord_C As Double, ByVal T_end_coord_C As D
        curve("c_Tinit").ClearPoints
        curve("c_Tinit").AddPoint ZeroCoordMes_m, T_start_coord_C
        curve("c_Tinit").AddPoint ZeroCoordMes_m + length_mes_m, T_end_coord_C
+       curve("c_Tinit").special = True
+End Sub
+' general temperature initialisation fuction for UDF
+Public Sub InitT(t_calc_from_C As Double, _
+                t_val As Variant, _
+                calc_flow_direction As Integer, _
+                Optional temp_method As TEMP_CALC_METHOD = StartEndTemp)
+    Dim tarr
+    Dim t_calc_to_C As Double
+    Dim temp_crv As New CInterpolation
+    Dim amb As New CAmbientFormation
+    Dim prm As PARAMCALC
+    
+    InitTlinear t_calc_from_C, t_calc_from_C
+    t_calc_C = t_calc_from_C
+    
+    tarr = array_num_from_range(t_val, True)
+    If UBound(tarr, 2) = 1 Then
+        t_calc_to_C = tarr(1, 1)
+        
+        InitTlinearSmart t_calc_from_C, t_calc_to_C, calc_flow_direction
+    Else
+        Call temp_crv.load_from_range(t_val)
+        Set amb.amb_temp_curve = temp_crv
+        Set ambient_formation = amb
+        prm = param
+        prm.temp_method = temp_method
+        param = prm
+        
+    End If
 End Sub
 Private Function dTdL_linear_Cm(lmes_m As Double) As Double
     ' возвращает градиент температуры исходя из линейного приближения
@@ -225,7 +256,7 @@ Public Sub init_pipe_constr_by_trajectory( _
                    Optional tr_cas As CPipeTrajectory, _
                    Optional ByVal srv_points_step As Integer = 100)
                    
-    Dim i As Integer
+    Dim I As Integer
     Dim h As Double
     Dim p_pipe_segments_num As Integer
     
@@ -237,13 +268,13 @@ Public Sub init_pipe_constr_by_trajectory( _
     ZeroCoordVert_m = tr.h_abs_hmes_m(HmesStart_m)
     p_pipe_segments_num = tr.num_points - 1
     ' по умолчанию используем все сегменты которые были заданы в траектории
-    For i = 0 To p_pipe_segments_num + 2
-         If i = 0 Then
+    For I = 0 To p_pipe_segments_num + 2
+         If I = 0 Then
             h = HmesStart_m
-         ElseIf i = 1 Then
+         ElseIf I = 1 Then
             h = HmesEnd_m
          Else
-             h = tr.h_mes_m(i - 2)
+             h = tr.h_mes_m(I - 2)
          End If
          If h >= HmesStart_m And h <= HmesEnd_m Then
             ' теперь  заполним кривые соответствующие траектории скважины  - в первый раз пишем нулевую точку
@@ -256,11 +287,11 @@ Public Sub init_pipe_constr_by_trajectory( _
             curve("c_Theta").AddPoint h, tr.ang_hmes_deg(h)
             curve("c_Hvert").AddPoint h, tr.h_abs_hmes_m(h)
          End If
-    Next i
-    curve("c_Diam").protected = True
-    curve("c_Roughness").protected = True
-    curve("c_Theta").protected = True
-    curve("c_Hvert").protected = True
+    Next I
+    curve("c_Diam").special = True
+    curve("c_Roughness").special = True
+    curve("c_Theta").special = True
+    curve("c_Hvert").special = True
     
     legth_total_m_ = HmesEnd_m - HmesStart_m
     depth_vert_total_m_ = tr.h_abs_hmes_m(HmesEnd_m) - tr.h_abs_hmes_m(HmesStart_m)
@@ -306,7 +337,7 @@ Public Function calc_grad(l_m As Double, _
                          p_atma As Double, _
                          t_C As Double, _
                          Optional calc_dtdl As Boolean = True, _
-                         Optional pcas_atma As Double = 0.95) As PIPE_FLOW_PARAMS
+                         Optional p_cas_atma As Double = 0.95) As PIPE_FLOW_PARAMS
 ' функция расчета градиента давления и температуры в скважине при заданных параметрах
 ' возвращает все параметры потока в заданной точке трубы при заданых термобарических условиях.
 '
@@ -316,7 +347,7 @@ Public Function calc_grad(l_m As Double, _
 '  p_atma   - давление в заданной точке
 '  T_C      - температура в заданной точке
 '  calc_dtdl
-'  pcas_atma - затрубное давление для оптимизации расчета барботажа в затрубе
+'  p_cas_atma - затрубное давление для оптимизации расчета барботажа в затрубе
 'Allocate variables used to output auxilary values
 Dim dpdlg_out As Double
 Dim dpdlf_out As Double
@@ -379,12 +410,12 @@ With fluid
             dp_dl_arr = unf_BegsBrillGradient(d_m, theta_deg, rough_m, .qliq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
                                   .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, 0, 1, c_calibr_grav, c_calibr_fric)
         Case Ansari
-            If p_atma > pcas_atma Then
+            If p_atma > p_cas_atma Then
                 dp_dl_arr = unf_AnsariGradient(d_m, theta_deg, rough_m, .qliq_rc_m3day, .q_gas_rc_m3day, .mu_liq_cP, .mu_gas_cP, .sigma_liq_Nm, _
                                   .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, p_atma, c_calibr_grav, c_calibr_fric)
             End If
         Case gas
-            If p_atma > pcas_atma Then
+            If p_atma > p_cas_atma Then
                 dp_dl_arr = unf_GasGradient(d_m, theta_deg, rough_m, .q_gas_rc_m3day, .mu_gas_cP, _
                                            .rho_gas_rc_kgm3, p_atma)
                 ' gas gradient do not use calibration coeficients
@@ -405,6 +436,7 @@ With fluid
     End Select
     
     dp_dl = theta_sign * dp_dl_arr(0)
+    
     dpdlg_out = theta_sign * dp_dl_arr(1)
     dpdlf_out = theta_sign * dp_dl_arr(2)
     dpdla_out = theta_sign * dp_dl_arr(3)
@@ -479,8 +511,9 @@ Public Sub set_ZNLF()
     
         param_.correlation = Ansari
         If param_.temp_method = 2 Then param_.temp_method = 1
+        Set fluid = fluid.clone
         fluid.qliq_sm3day = const_ZNLF_rate
-        fluid.fw_fr = 0 ' только вода при барботаже
+        fluid.fw_fr = 0 ' только нефть при барботаже
 End Sub
 Public Function calc_dPipe(ByVal p_atma As Double, _
                   Optional ByVal t_C As Double, _
@@ -525,7 +558,7 @@ Dim eps As Double
 Dim Step As Double
 Dim State As ODESolverState
 Dim Rtn As Boolean
-Dim i As Integer
+Dim I As Integer
 Dim pfp As PIPE_FLOW_PARAMS
 Dim Rep As ODESolverReport
 Dim stPt As Boolean
@@ -542,13 +575,13 @@ On Error GoTo err1:
     ReDim x(M - 1)
     
     If param.CalcAlongCoord Then
-        For i = 0 To M - 1
-            x(i) = hm_curve_.pointX(i + 1)
-        Next i
+        For I = 0 To M - 1
+            x(I) = hm_curve_.pointX(I + 1)
+        Next I
     Else
-        For i = 0 To M - 1
-            x(i) = hm_curve_.pointX(M - i)
-        Next i
+        For I = 0 To M - 1
+            x(I) = hm_curve_.pointX(M - I)
+        Next I
     End If
       ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
       ' без такой проверки расчет градиента температуры сходит с ума
@@ -565,13 +598,13 @@ On Error GoTo err1:
     ' The VBA function named in "FuncName" is called using
     ' the Application.Run method.
     Rtn = True
-    i = 0
-    Do While Rtn = True And i < 10000
+    I = 0
+    Do While Rtn = True And I < 10000
         Rtn = ODESolverIteration(State)
         pfp = calc_grad(State.x, State.y(0), State.y(1))    ' Application.Run(FuncName, State.X, State.Y, CoeffA)
         State.DY(0) = pfp.dp_dl
         State.DY(1) = pfp.dt_dl
-        i = i + 1
+        I = I + 1
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
@@ -591,19 +624,19 @@ On Error GoTo err1:
         curve("c_P").ClearPoints
         curve("c_T").ClearPoints
         curve("c_Tamb").ClearPoints
-        For i = 0 To M - 1
-            stPt = i = 0 Or i = M - 1
-            curve("c_P").AddPoint x(i), y(i, 0), stPt
-            curve("c_T").AddPoint x(i), y(i, 1), stPt
+        For I = 0 To M - 1
+            stPt = I = 0 Or I = M - 1
+            curve("c_P").AddPoint x(I), y(I, 0), stPt
+            curve("c_T").AddPoint x(I), y(I, 1), stPt
             If param.temp_method = AmbientTemp Then
-                curve("c_Tamb").AddPoint x(i), ambient_formation.amb_temp_C(curve("c_Hvert").getPoint(x(i))), stPt
+                curve("c_Tamb").AddPoint x(I), ambient_formation.amb_temp_C(curve("c_Hvert").getPoint(x(I))), stPt
             Else
-                curve("c_Tamb").AddPoint x(i), y(i, 1), stPt
+                curve("c_Tamb").AddPoint x(I), y(I, 1), stPt
             End If
-        Next i
-        curve("c_P").protected = True
-        curve("c_T").protected = True
-        curve("c_Tamb").protected = True
+        Next I
+        curve("c_P").special = True
+        curve("c_T").special = True
+        curve("c_Tamb").special = True
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -624,7 +657,7 @@ Dim eps As Double
 Dim Step As Double
 Dim State As ODESolverState
 Dim Rtn As Boolean
-Dim i As Integer
+Dim I As Integer
 Dim pfp As PIPE_FLOW_PARAMS
 Dim Rep As ODESolverReport
 Dim stPt As Boolean
@@ -640,13 +673,13 @@ On Error GoTo err1:
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
     ReDim x(M - 1)
     If param.CalcAlongCoord Then
-        For i = 0 To M - 1
-            x(i) = hm_curve_.pointX(i + 1)
-        Next i
+        For I = 0 To M - 1
+            x(I) = hm_curve_.pointX(I + 1)
+        Next I
     Else
-        For i = 0 To M - 1
-            x(i) = hm_curve_.pointX(M - i)
-        Next i
+        For I = 0 To M - 1
+            x(I) = hm_curve_.pointX(M - I)
+        Next I
     End If
       ' проверка - если поток в скважине нулевой, тогда температура равна температуре окружающей среды
       ' без такой проверки расчет градиента температуры сходит с ума
@@ -660,19 +693,20 @@ On Error GoTo err1:
     ' The VBA function named in "FuncName" is called using
     ' the Application.Run method.
     Rtn = True
-    i = 0
-    Do While Rtn = True And i < 10000
+    I = 0
+    Do While Rtn = True And I < 10000
         Rtn = ODESolverIteration(State)
         If State.y(0) < const_minPpipe_atma Then
         ' при расчете давления получили отрицательные значения
         ' может происходить про расчете в затрубе
         ' тогда имитируем правильное завершение работы цикла
-            State.RepTerminationType = 2
-            Rtn = False
+            State.y(0) = 0
+            'State.RepTerminationType = 2
+            'Rtn = False
         End If
         pfp = calc_grad(State.x, State.y(0), t_init_C(State.x), calc_dtdl:=False)
         State.DY(0) = pfp.dp_dl
-        i = i + 1
+        I = I + 1
     Loop
      ' Extract the desired results from the State
      ' object using the appropriate AlgLib routine
@@ -692,40 +726,41 @@ On Error GoTo err1:
         curve("c_P").ClearPoints
         curve("c_T").ClearPoints
         curve("c_Tamb").ClearPoints
-        For i = 0 To M - 1
+        For I = 0 To M - 1
 '            stPt = h_mes_insert_m_.TestPoint(x(i)) >= 0
-            If h_mes_insert_m_.TestPoint(x(i)) >= 0 Then
+            If h_mes_insert_m_.TestPoint(x(I)) >= 0 Then
                 stPt = True
             Else
                 stPt = False
             End If
-            curve("c_P").AddPoint x(i), y(i, 0), stPt
-            curve("c_T").AddPoint x(i), t_init_C(x(i)), stPt
-            curve("c_Tamb").AddPoint x(i), t_init_C(x(i)), stPt
-        Next i
-        curve("c_P").protected = True
-        curve("c_T").protected = True
-        curve("c_Tamb").protected = True
+            curve("c_P").AddPoint x(I), y(I, 0), stPt
+            curve("c_T").AddPoint x(I), t_init_C(x(I)), stPt
+            curve("c_Tamb").AddPoint x(I), t_init_C(x(I)), stPt
+        Next I
+        curve("c_P").special = True
+        curve("c_T").special = True
+        curve("c_Tamb").special = True
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
     End If
     Exit Function
 err1:
-    addLogMsg ("CPipe.calc_dPipe_1d: ошибка какая то")
-    Err.Raise Err.Number, Err.source, Err.Description
+    Dim msg As String
+    msg = "CPipe.calc_dPipe_1d: error -> " + sDELIM + Err.Description
+    Err.Raise Err.Number, Err.source, msg
 End Function
 Private Sub FillDetailedCurve()
 ' функция расчета  детальных распределений параметров по длине трубы
-    Dim i As Integer
+    Dim I As Integer
     Dim M As Integer
     Dim FlowParams_out As PIPE_FLOW_PARAMS
     M = curve("c_P").num_points
     Call curve.ClearPoints_unprotected
-    For i = 1 To M
-        FlowParams_out = calc_grad(curve("c_P").pointX(i), _
-                                    curve("c_P").PointY(i), _
-                                    curve("c_T").PointY(i))
+    For I = 1 To M
+        FlowParams_out = calc_grad(curve("c_P").pointX(I), _
+                                    curve("c_P").PointY(I), _
+                                    curve("c_T").PointY(I))
         With FlowParams_out
             curve("c_udl_m").AddPoint .md_m, .md_m - .vd_m
             curve("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
@@ -735,8 +770,8 @@ Private Sub FillDetailedCurve()
             curve("c_vsg").AddPoint .md_m, .v_sg_msec
             curve("c_Hl").AddPoint .md_m, .h_l_d
             curve("c_fpat").AddPoint .md_m, .fpat
-            curve("c_Theta").AddPoint .md_m, .thete_deg
-            curve("c_Roughness").AddPoint .md_m, .roughness_m
+            'curve("c_Theta").AddPoint .md_m, .thete_deg
+            'curve("c_Roughness").AddPoint .md_m, .roughness_m
             curve("c_Rs").AddPoint .md_m, .rs_m3m3
             curve("c_gasfrac").AddPoint .md_m, .gasfrac
             curve("c_muo").AddPoint .md_m, .mu_oil_cP
@@ -757,7 +792,7 @@ Private Sub FillDetailedCurve()
             curve("c_vl").AddPoint .md_m, .vl_msec
             curve("c_vg").AddPoint .md_m, .vg_msec
         End With
-    Next i
+    Next I
 End Sub
 Public Property Get p_curve() As CInterpolation
     Set p_curve = curve("c_P")
@@ -771,7 +806,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20, _
     Dim M As Integer
   '  Dim FlowParams_out As PIPE_FLOW_PARAMS
     Dim offset As Integer
-    Dim i As Integer
+    Dim I As Integer
     Dim hh As Double
     
     offset = 2
@@ -925,53 +960,53 @@ On Error Resume Next
         arr(offset, 39) = "c_vg"
         arr(offset, 40) = "c_Rs"
     End If
-    For i = 1 To M
-        arr(offset + i, 0) = i
-        hh = crv_P.pointX(i)
-        arr(offset + i, 1) = hh
-        arr(offset + i, 2) = curve("c_Hvert").getPoint(hh)
-        arr(offset + i, 3) = crv_P.PointY(i)
-        arr(offset + i, 4) = curve("c_T").getPoint(hh)
-        arr(offset + i, 5) = curve("c_Hl").getPoint(hh)
-        arr(offset + i, 6) = curve("c_fpat").getPoint(hh)
-        arr(offset + i, 7) = curve("c_Tamb").getPoint(hh)
-        arr(offset + i, 8) = curve("c_Diam").getPoint(hh)
+    For I = 1 To M
+        arr(offset + I, 0) = I
+        hh = crv_P.pointX(I)
+        arr(offset + I, 1) = hh
+        arr(offset + I, 2) = curve("c_Hvert").getPoint(hh)
+        arr(offset + I, 3) = crv_P.PointY(I)
+        arr(offset + I, 4) = curve("c_T").getPoint(hh)
+        arr(offset + I, 5) = curve("c_Hl").getPoint(hh)
+        arr(offset + I, 6) = curve("c_fpat").getPoint(hh)
+        arr(offset + I, 7) = curve("c_Tamb").getPoint(hh)
+        arr(offset + I, 8) = curve("c_Diam").getPoint(hh)
         If all_curves_out Then
-            arr(offset + i, 9) = curve("c_Roughness").getPoint(hh)
-            arr(offset + i, 10) = curve("c_Theta").getPoint(hh)
-            arr(offset + i, 11) = curve("c_Tinit").getPoint(hh)
-            arr(offset + i, 12) = curve("c_P").getPoint(hh)
-            arr(offset + i, 13) = curve("c_T").getPoint(hh)
-            arr(offset + i, 14) = curve("c_Tamb").getPoint(hh)
-            arr(offset + i, 15) = curve("c_udl_m").getPoint(hh)
-            arr(offset + i, 16) = curve("c_dpdl_g").getPoint(hh)
-            arr(offset + i, 17) = curve("c_dpdl_f").getPoint(hh)
-            arr(offset + i, 18) = curve("c_dpdl_a").getPoint(hh)
-            arr(offset + i, 19) = curve("c_vsl").getPoint(hh)
-            arr(offset + i, 20) = curve("c_vsg").getPoint(hh)
-            arr(offset + i, 21) = curve("c_Hl").getPoint(hh)
-            arr(offset + i, 22) = curve("c_gasfrac").getPoint(hh)
-            arr(offset + i, 23) = curve("c_muo").getPoint(hh)
-            arr(offset + i, 24) = curve("c_muw").getPoint(hh)
-            arr(offset + i, 25) = curve("c_mug").getPoint(hh)
-            arr(offset + i, 26) = curve("c_mumix").getPoint(hh)
-            arr(offset + i, 27) = curve("c_rhoo").getPoint(hh)
-            arr(offset + i, 28) = curve("c_rhow").getPoint(hh)
-            arr(offset + i, 29) = curve("c_rhol").getPoint(hh)
-            arr(offset + i, 30) = curve("c_rhog").getPoint(hh)
-            arr(offset + i, 31) = curve("c_rhomix").getPoint(hh)
-            arr(offset + i, 32) = curve("c_qo").getPoint(hh)
-            arr(offset + i, 33) = curve("c_qw").getPoint(hh)
-            arr(offset + i, 34) = curve("c_qg").getPoint(hh)
-            arr(offset + i, 35) = curve("c_mo").getPoint(hh)
-            arr(offset + i, 36) = curve("c_mw").getPoint(hh)
-            arr(offset + i, 37) = curve("c_mg").getPoint(hh)
-            arr(offset + i, 38) = curve("c_vl").getPoint(hh)
-            arr(offset + i, 39) = curve("c_vg").getPoint(hh)
+            arr(offset + I, 9) = curve("c_Roughness").getPoint(hh)
+            arr(offset + I, 10) = curve("c_Theta").getPoint(hh)
+            arr(offset + I, 11) = curve("c_Tinit").getPoint(hh)
+            arr(offset + I, 12) = curve("c_P").getPoint(hh)
+            arr(offset + I, 13) = curve("c_T").getPoint(hh)
+            arr(offset + I, 14) = curve("c_Tamb").getPoint(hh)
+            arr(offset + I, 15) = curve("c_udl_m").getPoint(hh)
+            arr(offset + I, 16) = curve("c_dpdl_g").getPoint(hh)
+            arr(offset + I, 17) = curve("c_dpdl_f").getPoint(hh)
+            arr(offset + I, 18) = curve("c_dpdl_a").getPoint(hh)
+            arr(offset + I, 19) = curve("c_vsl").getPoint(hh)
+            arr(offset + I, 20) = curve("c_vsg").getPoint(hh)
+            arr(offset + I, 21) = curve("c_Hl").getPoint(hh)
+            arr(offset + I, 22) = curve("c_gasfrac").getPoint(hh)
+            arr(offset + I, 23) = curve("c_muo").getPoint(hh)
+            arr(offset + I, 24) = curve("c_muw").getPoint(hh)
+            arr(offset + I, 25) = curve("c_mug").getPoint(hh)
+            arr(offset + I, 26) = curve("c_mumix").getPoint(hh)
+            arr(offset + I, 27) = curve("c_rhoo").getPoint(hh)
+            arr(offset + I, 28) = curve("c_rhow").getPoint(hh)
+            arr(offset + I, 29) = curve("c_rhol").getPoint(hh)
+            arr(offset + I, 30) = curve("c_rhog").getPoint(hh)
+            arr(offset + I, 31) = curve("c_rhomix").getPoint(hh)
+            arr(offset + I, 32) = curve("c_qo").getPoint(hh)
+            arr(offset + I, 33) = curve("c_qw").getPoint(hh)
+            arr(offset + I, 34) = curve("c_qg").getPoint(hh)
+            arr(offset + I, 35) = curve("c_mo").getPoint(hh)
+            arr(offset + I, 36) = curve("c_mw").getPoint(hh)
+            arr(offset + I, 37) = curve("c_mg").getPoint(hh)
+            arr(offset + I, 38) = curve("c_vl").getPoint(hh)
+            arr(offset + I, 39) = curve("c_vg").getPoint(hh)
     
-            arr(offset + i, 40) = curve("c_Rs").getPoint(hh)
+            arr(offset + I, 40) = curve("c_Rs").getPoint(hh)
         End If
-    Next i
+    Next I
     array_out = arr
 End Function
 

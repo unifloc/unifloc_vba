@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -64,7 +64,7 @@ Public Property Let db(val As ESP_PARAMS)
 End Property
 ' =======================  геометрия
 Public Property Get length_m() As Double
-   length_m = db_.stage_height_m * stage_num
+   length_m = db_.height_stage_m * stage_num
 End Property
 ' глубина нижней точки установки
 Public Property Get h_mes_down_m() As Double
@@ -79,8 +79,8 @@ Private Function stages_heigth_m(ByVal num As Double) As Double
    End If
 End Function
 ' свойство для расчета измеренной глубины расположения i ступени
-Public Property Get HmesStage_m(i As Double) As Double
-   HmesStage_m = h_mes_down_m - stages_heigth_m(i) ' тут надо отнять длину ступеней выше контрольной
+Public Property Get HmesStage_m(I As Double) As Double
+   HmesStage_m = h_mes_down_m - stages_heigth_m(I) ' тут надо отнять длину ступеней выше контрольной
 End Property
 Public Property Get area_shaft_m2() As Double
    area_shaft_m2 = db_.d_shaft_m * db_.d_shaft_m / 4 * const_Pi
@@ -288,7 +288,7 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
     ' calc_from_dis  показывает будет ли предпринята попытка проинтегрировать сверху вниз насос
     ' p_int_estimation_atma приближения для давления на приеме, используется для расчета сверху вниз
     
-    Dim i As Integer
+    Dim I As Integer
     Dim head_mix As Double
     Dim dPStage As Double
     Dim PowfluidWt As Double, PowfluidTot_Wt As Double  ' полезная мощность передаваемая насосом жидкости
@@ -342,7 +342,7 @@ On Error GoTo err1:
     PowESPTot_Wt = 0
     dTpumpSum_C = 0
     n = 0
-    i = 0
+    I = 0
     If saveCurve Then
             curves.Item("gas_fractionInPump").ClearPoints
             curves.Item("PressureInPump").ClearPoints
@@ -524,7 +524,7 @@ On Error GoTo err1:
                 p_curve_.AddPoint HmesStage_m(CDbl(nn)), Pst_atma
                 t_curve_.AddPoint HmesStage_m(CDbl(nn)), Tst_C
             End If
-            i = i + 1
+            I = I + 1
         Loop
         ' ====================== end main loop ================================================
         If calc_from_dis Then
@@ -577,6 +577,14 @@ err1:
     addLogMsg errmsg
     Err.Raise kErrESPcalc, Err.source, errmsg
 End Sub
+Public Sub set_num_stages(head_m As Double)
+'  функция расчета необходимого числа ступеней для обеспечения заданного напора
+    Dim Head1st As Double
+    Head1st = get_ESP_head_m(rate_nom_sm3day, 1)
+    If Head1st > 0 Then
+        stage_num = CInt(head_m / Head1st)
+    End If
+End Sub
 Public Function get_num_stages(q_mix_rc_m3day As Double, head_m As Double) As Integer
 '  функция расчета необходимого числа ступеней для обеспечения заданного напора
     Dim Head1st As Double
@@ -596,17 +604,6 @@ End Sub
 Private Sub Class_Initialize()
     Set fluid = New CPVT
     correct_visc_ = True
- ' некоторых параметров может не быть в текущей версии базы, зададим их по умолчанию
-    db_.stage_height_m = 0.05   ' 50 mm в среднем закладывается на высоту одной ступени
-    db_.d_od_m = 0.092         ' 92 мм для 5 габарита внешний диаметр ЭЦН
-    db_.d_cas_min_m = 0.121     ' 121 мм, рекомендуемый для 5 габарита минимальный диаметр обсадной колонны, заданный производителем оборудования
-    db_.d_shaft_m = 0.017    ' 17 мм диаметр вала для насоса
-    db_.area_shaft_m2 = 0.0002269    ' площадь поперечного сечения вала   (дублирует диаметр, но задается производителем)
-    db_.shaft_power_limit_W = 60000   ' 60 кВт максимальная мощность передаваемая валом на номинальной частоте
-    db_.shaft_power_limit_max_W = 125000     ' 125 кВт максимальная мощность передаваемая валом на номинальной частоте для высокопрочного вала
-    db_.housing_pressure_limit_atma = 390  ' 390 атм максимальное давление на корпус
-    db_.freq_Hz = 50
-    db_.ID = 0
     
     c_calibr_head = 1 ' по умолчанию нет деградации
     c_calibr_rate = 1 ' по умолчанию нет деградации
@@ -621,10 +618,12 @@ Private Sub Class_Initialize()
     turb_head_factor = 1 ' 2 ' 0.5
     turb_rate_factor = 1 ' 1.1 '0.9
     dnum_stages_integrate = 1
+    
+    h_mes_top_m = 1000
 End Sub
 ' метод для построения кривых характеристик УЭЦН
 Public Sub build_curves(Optional ByVal qliq As Double = -1)
-    Dim i As Integer
+    Dim I As Integer
     Dim degr_temp As Double
     Dim qmin As Double, qmax As Double, qcalc As Double
     Dim qold As Double
@@ -644,8 +643,8 @@ Public Sub build_curves(Optional ByVal qliq As Double = -1)
     
     qmin = 0.1
     qmax = rate_max_sm3day(-1)
-    For i = 0 To num_points
-        qcalc = (qmax - qmin) / num_points * i + qmin
+    For I = 0 To num_points
+        qcalc = (qmax - qmin) / num_points * I + qmin
         
         Me.fluid.fw_perc = fluid.fw_perc
         Me.fluid.qliq_sm3day = qcalc
@@ -667,11 +666,11 @@ Public Sub build_curves(Optional ByVal qliq As Double = -1)
         curves.Item("RealHead").AddPoint qcalc, head_real_m_
         curves.Item("PumpTdis").AddPoint qcalc, t_dis_C_
         curves.Item("PumpTint").AddPoint qcalc, t_int_C_
-    Next i
+    Next I
     If qliq < 0 Then Me.fluid.qliq_sm3day = qold
     Call calc_ESP(p_int_atma_, t_int_C_)
 End Sub
-Public Function Copy(pump As CESPpump) As Boolean
+Public Sub Copy(pump As CESPpump)
   
     With pump
        stage_num = .stage_num
@@ -698,7 +697,7 @@ Public Function Copy(pump As CESPpump) As Boolean
        
     End With
      
-End Function
+End Sub
 Public Property Get correct_visc() As Boolean
     correct_visc = correct_visc_
 End Property
@@ -722,6 +721,7 @@ Private Sub calc_CorrVisc_PetrInst(ByVal q_mix_ As Double, ByVal nu_cSt As Doubl
     Dim corr_visc_q__                ' для дебита
     Dim corr_visc_pow__              ' для мощности
     Dim corr_visc_eff__              ' для КПД
+On Error GoTo err1:
     ' turn off object correction factors
     corr_visc_h_ = 1             ' поправочный коэффициень для напорной характеристики на вязкость для текущего дебита и текущего расчета
     corr_visc_q_ = 1               ' для дебита
@@ -791,6 +791,12 @@ Private Sub calc_CorrVisc_PetrInst(ByVal q_mix_ As Double, ByVal nu_cSt As Doubl
     corr_visc_q_ = corr_visc_q__               ' для дебита
     corr_visc_pow_ = corr_visc_pow__             ' для мощности
     corr_visc_eff_ = corr_visc_eff__             ' для КПД
+    
+    Exit Sub
+err1:
+    Dim msg As String
+    msg = "CESPpump.calc_CorrVisc_PetrInst error with params q_mix_ = " & CStr(q_mix_) & " nu_cSt = " & CStr(nu_cSt)
+    
 End Sub
 ' метод для доступа к кривой давления в насосе относительно измеренных глубин
 Public Property Get p_curve() As CInterpolation
@@ -799,13 +805,13 @@ End Property
 Public Property Get t_curve() As CInterpolation
     Set t_curve = t_curve_
 End Property
-Public Function CheckShaft(ByVal m_Nm As Double) As Boolean
+Public Function CheckShaft(ByVal M_Nm As Double) As Boolean
 ' проверка допустимой прочности вала
-    Dim Pow_nom_w As Double   ' мощность приведенная к номинальной
-    Pow_nom_w = m_Nm * w_radsec
-    If Pow_nom_w < db_.shaft_power_limit_W Then
+    Dim Pow_nom_kW As Double   ' мощность приведенная к номинальной
+    Pow_nom_kW = M_Nm * w_radsec / 1000
+    If Pow_nom_kW < db_.power_limit_shaft_kW Then
         CheckShaft = True
-    ElseIf Pow_nom_w < db_.shaft_power_limit_max_W Then
+    ElseIf Pow_nom_kW < db_.power_limit_shaft_max_kW Then
         CheckShaft = False
         addLogMsg "Превышена нагрузка на вал. Требуется использовать вал повышенной прочности"
         ' здесь надо предпринимать действия по прочности вала
@@ -815,8 +821,8 @@ Public Function CheckShaft(ByVal m_Nm As Double) As Boolean
     End If
 End Function
 ' свойство выдает момент на валу потребляемый насосом
-Public Property Get m_Nm() As Double
-    m_Nm = power_ESP_Wt_ / w_radsec
+Public Property Get M_Nm() As Double
+    M_Nm = power_ESP_Wt_ / w_radsec
 End Property
 ' функция расчета деградации из за газа
 Private Function GasCorrection_d(GasFracIn As Double, Optional ByVal gas_degr_value As Double = 0) As Double
@@ -862,7 +868,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     Dim M As Integer
    ' Dim FlowParams_out As PIPE_FLOW_PARAMS
     Dim offset As Integer
-    Dim i As Integer
+    Dim I As Integer
     Dim hh As Double
     
     offset = 2
@@ -875,7 +881,7 @@ On Error Resume Next
     Set crv_T = curves.Item("TempInPump").ClonePointsToNum(num_points)
     
     M = crv_P.num_points
-    ReDim arr(M + offset + 4, 15)
+    ReDim arr(M + offset + 4, 16)
     
     ' в первом ряду параметров выведем результаты расчета
     ' которые могут пригодится в явном виде при массовых расчетах
@@ -885,7 +891,7 @@ On Error Resume Next
     arr(0, 3) = p_dis_atma
     arr(0, 4) = t_dis_C
     arr(0, 5) = head_m
-    arr(0, 6) = m_Nm
+    arr(0, 6) = M_Nm
     arr(0, 7) = length_m
     arr(0, 8) = power_fluid_W
     arr(0, 9) = power_ESP_W
@@ -923,126 +929,126 @@ On Error Resume Next
     
     Dim j As Integer
     
-    For i = 0 To M
+    For I = 0 To M
       
         j = 0
-        hh = crv_P.pointX(i)   ' fractional stage number :)
-        If i = 0 Then
-            arr(offset + i, j) = "i"
+        hh = crv_P.pointX(I)   ' fractional stage number :)
+        If I = 0 Then
+            arr(offset + I, j) = "i"
         Else
-            arr(offset + i, 0) = i
+            arr(offset + I, 0) = I
         End If
         
         j = j + 1
-        If i = 0 Then
-            arr(offset + i, j) = "n_stage"
+        If I = 0 Then
+            arr(offset + I, j) = "n_stage"
         Else
-            arr(offset + i, j) = hh
+            arr(offset + I, j) = hh
         End If
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "length_m"
         Else
-            arr(offset + i, j) = HmesStage_m(hh)
+            arr(offset + I, j) = HmesStage_m(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
-            arr(offset + i, j) = "p_atma"
+        If I = 0 Then
+            arr(offset + I, j) = "p_atma"
         Else
-            arr(offset + i, j) = curves.Item("PressureInPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("PressureInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
-            arr(offset + i, j) = "t_C"
+        If I = 0 Then
+            arr(offset + I, j) = "t_C"
         Else
-            arr(offset + i, j) = curves.Item("TempInPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("TempInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
-            arr(offset + i, j) = "gas_fraction"
+        If I = 0 Then
+            arr(offset + I, j) = "gas_fraction"
         Else
-            arr(offset + i, j) = curves.Item("gas_fractionInPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("gas_fractionInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
-            arr(offset + i, j) = "qmix_rm3day"
+        If I = 0 Then
+            arr(offset + I, j) = "qmix_rm3day"
         Else
-            arr(offset + i, j) = curves.Item("q_mix_InPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("q_mix_InPump").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "Power_fluid_W"
         Else
-            arr(offset + i, j) = curves.Item("PowerfluidInPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("PowerfluidInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "Power_ESP_W"
         Else
-            arr(offset + i, j) = curves.Item("PowerESPInPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("PowerESPInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "eff fluid"
         Else
-            arr(offset + i, j) = curves.Item("EffESPInPump").getPoint(hh)
+            arr(offset + I, j) = curves.Item("EffESPInPump").getPoint(hh)
         End If
         
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "mu_stage_cP"
         Else
-            arr(offset + i, j) = curves.Item("mu_stage_cP").getPoint(hh)
+            arr(offset + I, j) = curves.Item("mu_stage_cP").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "corr_visc_h_"
         Else
-            arr(offset + i, j) = curves.Item("corr_visc_h_").getPoint(hh)
+            arr(offset + I, j) = curves.Item("corr_visc_h_").getPoint(hh)
         End If
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "corr_visc_q_"
         Else
-            arr(offset + i, j) = curves.Item("corr_visc_q_").getPoint(hh)
+            arr(offset + I, j) = curves.Item("corr_visc_q_").getPoint(hh)
         End If
         
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "corr_visc_pow_"
         Else
-            arr(offset + i, j) = curves.Item("corr_visc_pow_").getPoint(hh)
+            arr(offset + I, j) = curves.Item("corr_visc_pow_").getPoint(hh)
         End If
         
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "corr_visc_eff_"
         Else
-            arr(offset + i, j) = curves.Item("corr_visc_eff_").getPoint(hh)
+            arr(offset + I, j) = curves.Item("corr_visc_eff_").getPoint(hh)
         End If
         
         
         j = j + 1
-        If i = 0 Then
+        If I = 0 Then
             arr(offset, j) = "gas_corr_"
         Else
-            arr(offset + i, j) = curves.Item("gas_corr_").getPoint(hh)
+            arr(offset + I, j) = curves.Item("gas_corr_").getPoint(hh)
         End If
         
-    Next i
+    Next I
     
 '            curves.Item("mu_stage_cP").ClearPoints
 '        curves.Item("corr_visc_h_").ClearPoints
@@ -1087,34 +1093,36 @@ On Error Resume Next
     arr(M + offset + 4, 2) = db_.manufacturer
     arr(M + offset + 4, 3) = db_.name
     arr(M + offset + 4, 4) = db_.freq_Hz
-    arr(M + offset + 4, 5) = db_.nom_slip_rpm
+    arr(M + offset + 4, 5) = db_.slip_nom_rpm
     arr(M + offset + 4, 6) = db_.rate_nom_sm3day
     arr(M + offset + 4, 7) = db_.rate_opt_min_sm3day
     arr(M + offset + 4, 8) = db_.rate_opt_max_sm3day
-    arr(M + offset + 4, 9) = db_.stage_height_m
+    arr(M + offset + 4, 9) = db_.height_stage_m
     arr(M + offset + 4, 10) = db_.stages_max
     arr(M + offset + 4, 11) = db_.d_od_m
-    arr(M + offset + 4, 12) = db_.d_cas_min_m
-    arr(M + offset + 4, 13) = db_.d_shaft_m
-    arr(M + offset + 4, 14) = db_.shaft_power_limit_W
-    arr(M + offset + 4, 15) = db_.housing_pressure_limit_atma
+    arr(M + offset + 4, 12) = db_.d_motor_od_m
+    arr(M + offset + 4, 13) = db_.d_cas_min_m
+    arr(M + offset + 4, 14) = db_.d_shaft_m
+    arr(M + offset + 4, 15) = db_.power_limit_shaft_kW
+    arr(M + offset + 4, 16) = db_.pressure_limit_housing_atma
     
     arr(M + offset + 3, 0) = "ID"
     arr(M + offset + 3, 1) = "source"
     arr(M + offset + 3, 2) = "manufacturer"
     arr(M + offset + 3, 3) = "name"
     arr(M + offset + 3, 4) = "freq_Hz"
-    arr(M + offset + 3, 5) = "nom_slip_rpm"
+    arr(M + offset + 3, 5) = "slip_nom_rpm"
     arr(M + offset + 3, 6) = "rate_nom_sm3day"
     arr(M + offset + 3, 7) = "rate_opt_min_sm3day"
     arr(M + offset + 3, 8) = "rate_opt_max_sm3day"
-    arr(M + offset + 3, 9) = "stage_height_m"
+    arr(M + offset + 3, 9) = "height_stage_m"
     arr(M + offset + 3, 10) = "stages_max"
     arr(M + offset + 3, 11) = "d_od_m"
-    arr(M + offset + 3, 12) = "d_cas_min_m"
-    arr(M + offset + 3, 13) = "d_shaft_m"
-    arr(M + offset + 3, 14) = "shaft_power_limit_W"
-    arr(M + offset + 3, 15) = "housing_pressure_limit_atma"
+    arr(M + offset + 3, 12) = "d_motor_od_m"
+    arr(M + offset + 3, 13) = "d_cas_min_m"
+    arr(M + offset + 3, 14) = "d_shaft_m"
+    arr(M + offset + 3, 15) = "power_limit_shaft_kW"
+    arr(M + offset + 3, 16) = "pressure_limit_housing_atma"
     
     
     array_out = arr

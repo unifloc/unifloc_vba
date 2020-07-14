@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.24  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
 '
@@ -184,23 +184,43 @@ Public Property Get Uto_tub_gascas_Jm2secC() As Double
                                 1 / rti_m / heat_transfer_fluid_convection_Wm2C _
                             )
 End Property
-Public Sub init_amb_temp(Optional ByVal h_perf_abs_m As Double = 3000, _
-                              Optional ByVal t_bh_C As Double = 100, _
-                              Optional ByVal t_wh_C As Double = 30, _
-                              Optional ByVal tamb_arr_hmes_m, _
-                              Optional ByVal tamb_arr_C)
+Public Sub init_amb_temp_points(ByVal h1 As Double, _
+                                ByVal t1 As Double, _
+                                ByVal h2 As Double, _
+                                ByVal t2 As Double)
+                                
+    Dim geo_grad_curve As New CInterpolation
+    geo_grad_curve.AddPoint h1, t1
+    geo_grad_curve.AddPoint h2, t2
+    Set Me.amb_temp_curve = geo_grad_curve
+End Sub
+Public Sub init_amb_temp_arr(ByVal tamb_arr_C, _
+                    Optional ByVal tamb_arr_hmes_m)
     
     Dim geo_grad_curve As New CInterpolation
+    Dim t As Double
+    Dim h As Double
    
-    If Not IsMissing(tamb_arr_C) And IsMissing(tamb_arr_hmes_m) Then
-        Call geo_grad_curve.loadFromVertRange(tamb_arr_C) ' читаем инклинометрию из одной таблицы
+    If IsMissing(tamb_arr_hmes_m) Then
+        tamb_arr_C = array_num_from_range(tamb_arr_C, True) ' 2d array generated here
+        If UBound(tamb_arr_C, 2) > 1 Then
+            Call geo_grad_curve.loadFromVertRange(tamb_arr_C) ' read deviation survey from one table
+        Else
+            t = tamb_arr_C(1, 1)
+            geo_grad_curve.AddPoint 0, t
+            geo_grad_curve.AddPoint 1000, t
+        End If
     ElseIf Not IsMissing(tamb_arr_C) And Not IsMissing(tamb_arr_hmes_m) Then
-        Call geo_grad_curve.loadFromVertRange(tamb_arr_hmes_m, tamb_arr_C) ' читаем инклинометрию из двух столбцов
-    ElseIf IsMissing(tamb_arr_C) And IsMissing(tamb_arr_hmes_m) Then
-        geo_grad_curve.AddPoint 0, t_wh_C
-        geo_grad_curve.AddPoint h_perf_abs_m, t_bh_C
+        Call geo_grad_curve.loadFromVertRange(tamb_arr_hmes_m, tamb_arr_C) ' read deviation survey from two collumns
     End If
-    Set Me.amb_temp_curve = geo_grad_curve
     
+    ' correction if only one number pre curve have been read
+    If geo_grad_curve.num_points = 1 Then
+        t = geo_grad_curve.PointY(1)
+        h = geo_grad_curve.pointX(1)
+        geo_grad_curve.AddPoint h + 1000, t
+    End If
+    
+    Set Me.amb_temp_curve = geo_grad_curve
 End Sub
 
