@@ -6,76 +6,213 @@
 '=======================================================================================
 '
 Option Explicit
-'  класс для описания характеристик роторного газосепаратора УЭЦН
-'  класс работает с расчетом сепарации вообще - при необходимости описывает входной модуль
+'  класс для описания параметров сепарации газа на приеме ЭЦН, включая сепарацию роторным газосепаратором
 '
+' описание газосепаратора
+Public isGasSep As Boolean   ' флаг того, что ГС работает
+'Public ksep_total_manual_fr As Double     '
+Public ksep_gassep_fr As Double           ' коэффициент сепарации газосепаратора, расчетный
+Public ksep_nat_fr As Double              ' коэффициент естественной сепарации, расчетный
+Public ksep_liquid_d As Double
+Public ksep_water_d As Double
+Public p_ksep_atma As Double              ' давление сепарации, расчетное
+Public t_ksep_C As Double                 ' температура сепарации расчетная
+Public separation_mode As String ' флаг для ручного задания параметров сепарации
+                                           ' 0 - нет - расчет автоматический
+                                           ' 1 - Ксеп ручной, давления автомат
+                                           ' 2 - Ксеп ручной, давления и температура ручные
+' выбор моделей расчета сепарации
+Public gassep_type As Long
+Public natsep_type As Long
+' вручную заданные параметры для соответствующего режима расчета
+'Public ksep_total_man_d As Double
+Public psep_man_atma As Double
+Public tsep_man_C As Double
+Public ksep_gassep_man_d As Double
+Public ksep_nat_man_d As Double
+Public ksep_liquid_man_d As Double
+Public ksep_water_man_d As Double
+Public manufacturer As String
+Public name As String
+Public length_m As Double
 ' геометрические параметры насоса
 Private length_m_ As Double                ' длина должна быть не нулевая, для того чтобы корректно строились графики по скважине
-Private h_mes_top_ As Double                 ' глубина установки газосепаратора по верхней части
-Private d_od_mm_ As Double                   ' внешний диаметр
-Private angle_deg_ As Double               ' угол установки УЭЦН (предполагается, что по глубине угол не меняется)
-Private d_cas_m_ As Double                  ' диаметр эксплуатационной колонны в месте установки сепаратора
-Private q_nom_m3day_                        ' номинальный дебит для газосепаратора
-Private p_curve_ As New CInterpolation      ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
-Private t_curve_ As New CInterpolation      ' кривая распределения температуры флюида вдоль насоса
+Private h_mes_top_ As Double               ' глубина установки газосепаратора по верхней части
+Private d_od_mm_ As Double                 ' внешний диаметр
+Public angle_deg As Double                 ' угол установки УЭЦН (предполагается, что по глубине угол не меняется)
+Public d_cas_m As Double                   ' диаметр эксплуатационной колонны в месте установки сепаратора
 ' общие параметры
 Private fluid_ As CPVT                     ' флюид исходный
-Private fluid_tub_ As CPVT                  ' флюид после сепарации
-Private fluid_cas_ As CPVT                  ' флюид после сепарации - то что идет в затруб
-Private is_ksep_manual_ As Boolean           ' флаг для ручного учета газосепаратора
- ' параметры сепарации, расчетные значения
-Private ksep_natural_d_ As Double
-Private ksep_gassep_d_ As Double
-Private ksep_total_d_  As Double
- 
+Private fluid_gs_ As CPVT                     ' флюид исходный
+Private fluid_tub_ As CPVT                 ' флюид после сепарации
+Private fluid_cas_ As CPVT                 ' флюид после сепарации - то что идет в затруб
+'Private is_ksep_manual_ As Boolean         ' флаг для ручного учета газосепаратора
+'  параметры для задания упрощенной модели сепаратора
 Private ksep_gassep_max_d_  As Double
-Private q_mix_gassep_rc_m3day_ As Double
+Private ksep_q_max_m3day_    As Double                    ' максимальный дебит для газосепаратора для упрощенной характеристики
+'Private q_mix_gassep_rc_m3day_ As Double
 Private m_Nm_ As Double                    ' момент потребляемый
-Private p_shaft_w_ As Double                ' мощность потребляемая
-Private p_shaft_nom_w_ As Double             ' номинальная мощность потребляемая газосепаратором
-Private w_rpm_ As Double                   ' скорость вращения вала
-Private f_nom_Hz_ As Double                 ' номинальная скорость вращения газосепаратора
+Public freq_Hz As Double
+ 
+ 
+Public Property Get ksep_total_fr() As Double
+' общая сепарация УЭЦН параметр только для чтения
+' для задания вручную надо задать естественную сепарацию и сепарацию газосепаратора
+    ksep_total_fr = ksep_nat_fr + (1 - ksep_nat_fr) * ksep_gassep_fr
+End Property
  
 ' свойство для выдачи момента
 Public Property Get M_Nm() As Double
-   M_Nm = m_Nm_
-   M_Nm = p_shaft_w_ / w_radsec
+    If isGasSep Then
+        M_Nm = m_Nm_
+    Else
+        M_Nm = 0
+    End If
 End Property
-Public Property Get w_radsec() As Double
-   w_radsec = w_rpm_ / 60 * 2 * const_Pi
-End Property
-Public Property Get w_rpm() As Double
-   w_rpm = w_rpm_
-End Property
-' свойство выдает сумарную кривую по давлениям
-Public Property Get p_curve() As CInterpolation
-   Set p_curve = p_curve_
-End Property
-Public Property Get t_curve() As CInterpolation
-    Set t_curve = t_curve_
-End Property
-Public Property Get d_cas_m() As Double
-    d_cas_m = d_cas_m_
-End Property
-'Public Property get Dintake_m() As Double
-'    Dintake_m = p_Dintake_m
-'End Property
 Private Sub Class_Initialize()
-    Call init_gassep(OD_mm:=125, _
-                Qnom_m3day:=250, _
-                h_mes_top_m:=0, _
-                d_cas_mm:=0, _
-                length_m:=3, _
-                angle_deg:=90)
-    is_ksep_manual_ = False
+    Call set_gassep_param(OD_mm:=125, _
+                          Qnom_m3day:=250, _
+                          h_mes_top_m:=0, _
+                          d_cas_mm:=0, _
+                          length_m:=3, _
+                          angle_deg:=90)
+'    is_ksep_manual_ = False
     
+    
+    'dPower_GasSep_W = 500
+    isGasSep = True
+    separation_mode = byCorrealation
+    ksep_nat_fr = 0.5
+    ksep_gassep_fr = 0.5
+    
+    'ksep_total_manual_fr = -1
+    m_Nm_ = 1
+    ksep_gassep_max_d_ = 0.9
+    ksep_q_max_m3day_ = 500
 End Sub
-Public Sub init_gassep(Optional OD_mm As Double = 125, _
-                  Optional Qnom_m3day As Double = 250, _
-                  Optional h_mes_top_m As Double = 0, _
-                  Optional angle_deg As Double = 90, _
-                  Optional d_cas_mm As Double = 0, _
-                  Optional length_m As Double = 1)
+ Public Sub set_ksep_total(calc_method As SEPAR_CALC_METHOD, _
+                                  ksep_nat_fr As Double, _
+                         Optional ksep_GS_fr As Double = 0, _
+                         Optional p_ksep_atma As Double = -1, _
+                         Optional t_ksep_C As Double = -1)
+ ' устанавливает значение сепарации для уэцн вручную
+ ' сначала установим значение газосепаратора - оно всегда одинаково для всех вариантов
+    
+    If ksep_GS_fr > 0 And ksep_GS_fr <= 1 Then
+        isGasSep = True
+    Else
+       isGasSep = False
+    End If
+    
+    ksep_gassep_man_d = ksep_GS_fr
+    psep_man_atma = p_ksep_atma
+    tsep_man_C = t_ksep_C
+    ksep_nat_man_d = ksep_nat_fr
+    
+    ' установим метод расчета
+    ' но так чтобы он не противоречил введенным данным
+     If ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
+        ' если ввели хорошие параметры то можно применить любой метод расчета
+         separation_mode = calc_method
+     ElseIf ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma <= 0 Then
+        ' плохое значение давления не позволяет полностью ручной метод
+        If calc_method <> fullyManual Then
+            separation_mode = calc_method
+        Else
+            separation_mode = valueManual
+        End If
+     ElseIf (ksep_nat_fr < 0 Or ksep_nat_fr > 1) And (p_ksep_atma > 0 And t_ksep_C > 0) Then
+        ' плохая сепарация, но хорошие давления
+         If calc_method = byCorrealation Or calc_method = pressureManual Then
+            separation_mode = calc_method
+         Else
+            separation_mode = pressureManual
+        End If
+     Else
+         ' плохая сепарация не позволяет ручной расчет
+         separation_mode = byCorrealation
+     End If
+     
+ End Sub
+Public Function calc_separation(p_atma As Double, t_C As Double, f_Hz As Double)
+' расчет сепарации и соответствующих параметров флюидов
+' должен вызываться незавимо от расчета УЭЦН, так как при расчете сверху вниз
+'   необходимо заранее рассчитать параметры флюида выше насоса, чтобы правильно посчитать НКТ
+' p_atma  - давление при которой идет сепарация
+' T_C - температура при которой идет сепарация
+    freq_Hz = f_Hz
+    Select Case separation_mode
+        Case "byCorrealation"
+            ' все по сепарации по корреляциям
+            p_ksep_atma = p_atma
+            t_ksep_C = t_C
+            Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
+            With fluid_
+                ' оценим естественную сепарацию
+                ksep_nat_fr = estimate_nat_separation_d(p_ksep_atma, t_ksep_C)
+                ' сгенерируем флюид для затруба
+                Set fluid_gs_ = fluid_.clone()
+                Call fluid_gs_.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_total_fr, True)
+                ' оценим коэффициент сепарации газосепаратора
+                ksep_gassep_fr = estimate_GS_separation_d(p_ksep_atma, t_ksep_C, f_Hz)
+                
+            End With
+        Case "pressureManual"
+            ' берем значение ручное, давления как есть
+            p_ksep_atma = psep_man_atma
+            t_ksep_C = tsep_man_C
+             Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
+            With fluid_
+                ' оценим естественную сепарацию
+                ksep_nat_fr = estimate_nat_separation_d(p_ksep_atma, t_ksep_C)
+                ' сгенерируем флюид для затруба
+                Set fluid_gs_ = fluid_.clone()
+                Call fluid_gs_.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_total_fr, True)
+                ' оценим коэффициент сепарации газосепаратора
+                ksep_gassep_fr = estimate_GS_separation_d(p_ksep_atma, t_ksep_C, f_Hz)
+                
+            End With
+        Case "valueManual"
+            ' берем и коэффициенты и давления как было задано при установке значений
+            p_ksep_atma = p_atma
+            t_ksep_C = t_C
+            ksep_nat_fr = ksep_nat_man_d
+            ksep_gassep_fr = ksep_gassep_man_d
+            Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
+        Case "fullyManual"
+            ' берем и коэффициенты и давления как было задано при установке значений
+            p_ksep_atma = psep_man_atma
+            t_ksep_C = tsep_man_C
+            ksep_nat_fr = ksep_nat_man_d
+            ksep_gassep_fr = ksep_gassep_man_d
+            ksep_liquid_d = ksep_liquid_man_d
+            ksep_water_d = ksep_water_man_d
+            Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
+        
+    End Select
+    
+    ' потом, когда будет расчет газосепаратора - то надо будет разделить алгоритмы
+    ' ручного задания и задания с использованием газосепаратора
+    If isGasSep Then
+        ksep_gassep_fr = ksep_gassep_fr
+    Else
+        ksep_gassep_fr = 0
+    End If
+    
+    Set fluid_tub_ = fluid_.clone()
+    Call fluid_tub_.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_total_fr, True)
+    Set fluid_cas_ = fluid_.clone() ' тут надо будет доделать чтобы считать затруб с газом
+    fluid_cas_.q_gas_free_sm3day = fluid.q_gas_insitu_sm3day * ksep_total_fr
+    
+    calc_separation = ksep_total_fr
+    
+End Function
+Public Sub set_gassep_param(Optional OD_mm As Double = 125, _
+                       Optional Qnom_m3day As Double = 250, _
+                       Optional h_mes_top_m As Double = 0, _
+                       Optional angle_deg As Double = 90, _
+                       Optional d_cas_mm As Double = 0, _
+                       Optional length_m As Double = 1)
 ' метод инициализации параметров газосепаратора
 ' в зависимости от габарита
 ' OD_mm     - определяет габарит
@@ -83,27 +220,58 @@ Public Sub init_gassep(Optional OD_mm As Double = 125, _
 ' Angle_deg - угол установки к горизонтали 90 - вертикально
 ' d_cas_mm   - диаметр эксплуатационной колоны в месте установки
     d_od_mm_ = OD_mm
-    angle_deg_ = angle_deg
+    Me.angle_deg = angle_deg
     If d_cas_mm = 0 Then
-        d_cas_m_ = OD_mm + 10
+        Me.d_cas_m = (OD_mm + 10) / 1000
     Else
-        d_cas_m_ = d_cas_mm
+        Me.d_cas_m = d_cas_mm / 1000
     End If
     h_mes_top_ = h_mes_top_m
     length_m_ = length_m
-    q_nom_m3day_ = Qnom_m3day
-    
-    ' пока задаем тут - надо будет в зависимости от модели изменить потом
-    p_shaft_nom_w_ = 1000            ' по умолчанию считаем что 1 квт уходит на сепарацию при номинальной частоте
-    w_rpm_ = 3000                  ' по умолчанию 3000 оборотов в секунду
-    f_nom_Hz_ = 50
-    ksep_gassep_max_d_ = 0.9
+    ksep_q_max_m3day_ = Qnom_m3day * 2
     
 End Sub
+Public Sub init_json(json As String)
+    Dim d As Dictionary
+    
+    Set d = ParseJson(json)
+    
+    Call init_dictionary(d)
+ End Sub
+ 
+ Private Sub init_dictionary(dict As Dictionary)
+ 
+ Dim ESP_ID As Long
+ Dim head_nom_m As Double
+ Dim msg As String
+On Error GoTo err1:
+    With dict
+        If .Exists("separation_mode") Then separation_mode = .Item("separation_mode")
+        If .Exists("gassep_type") Then gassep_type = .Item("gassep_type")
+        If .Exists("natsep_type") Then natsep_type = .Item("natsep_type")
+        If .Exists("psep_man_atma") Then psep_man_atma = .Item("psep_man_atma")
+        If .Exists("tsep_man_C") Then tsep_man_C = .Item("tsep_man_C")
+        If .Exists("ksep_gassep_man_d") Then ksep_gassep_man_d = .Item("ksep_gassep_man_d")
+        If .Exists("ksep_nat_man_d") Then ksep_nat_man_d = .Item("ksep_nat_man_d")
+        If .Exists("ksep_liquid_man_d") Then ksep_liquid_man_d = .Item("ksep_liquid_man_d")
+        If .Exists("M_Nm") Then m_Nm_ = .Item("M_Nm")
+        
+        If .Exists("manufacturer") Then manufacturer = .Item("manufacturer")
+        If .Exists("name") Then name = .Item("name")
+        If .Exists("length_m") Then length_m = .Item("length_m")
+    End With
+    
+    Exit Sub
+err1:
+    Dim errmsg As String
+    errmsg = "Error:CESPGasSep.init_dictionary: init error " & sDELIM & Err.Description
+    addLogMsg errmsg
+    Err.Raise kErrESPcalc, Err.source, errmsg
+ End Sub
 ' =======================  геометрия
-Public Property Get length_m() As Double
-    length_m = length_m_
-End Property
+'Public Property Get length_m() As Double
+'    length_m = length_m_
+'End Property
 ' глубина установки  (верхняя точка)
 Public Property Get h_mes_top_m() As Double
    h_mes_top_m = h_mes_top_
@@ -120,9 +288,6 @@ Public Property Get d_od_m() As Double
 End Property
 ' угол к горизонтали под которым установлена установка
 ' угол задается извне системой скважиной при установке системы в скважину
-Public Property Get angle_deg() As Double
-   angle_deg = angle_deg_
-End Property
 Public Property Get angle_vert_deg() As Double
    angle_vert_deg = angle_vert_deg - 90
 End Property
@@ -140,18 +305,13 @@ Public Property Set fluid(val As CPVT)
   Set fluid_tub_ = val
   Set fluid_cas_ = val
 End Property
-Public Property Get is_ksep_manual() As Boolean
-   is_ksep_manual = is_ksep_manual_
-End Property
-Public Property Let is_ksep_manual(val As Boolean)
-   is_ksep_manual_ = val
-End Property
-Public Property Get ksep_fr() As Double
-   ksep_fr = ksep_total_d_
-End Property
-Public Property Let ksep_fr(val As Double)
-   ksep_total_d_ = val
-End Property
+'Public Property Get is_ksep_manual() As Boolean
+'   is_ksep_manual = is_ksep_manual_
+'End Property
+'
+'Public Property Let is_ksep_manual(val As Boolean)
+'   is_ksep_manual_ = val
+'End Property
 Private Sub Separatefluids()
 ' метод для принудительного разделения свойст флюида
    ' создаем новые экзампляры
@@ -161,44 +321,7 @@ Private Sub Separatefluids()
    fluid_tub_.Copy fluid_
    fluid_cas_.Copy fluid_
 End Sub
-Public Sub calc_gassep(pt As PTtype, Optional f_Hz As Double = 50)
-' метод расчета параметров газосепаратора при заданных термобарических условиях
-' считает, сепарацию, потребляемую мощность, при необходимости другие параметры
-' расчитывается естественная и искуственная сепарация, модифицируются флюиды после сепарации
-' возвращается значение коэффициента сепарации общего
-'
-    
-    p_curve_.ClearPoints
-    t_curve_.ClearPoints
-    With fluid
-        .calc_PVT_PT pt
-        If Not is_ksep_manual Then
-            ksep_natural_d_ = calc_NatSeparation_d()
-            q_mix_gassep_rc_m3day_ = .qliq_rc_m3day + .q_gas_rc_m3day * (1 - ksep_natural_d_)
-            ksep_gassep_d_ = calc_GSsep_d(q_mix_gassep_rc_m3day_)
-            ksep_total_d_ = ksep_natural_d_ + (1 - ksep_natural_d_) * ksep_gassep_d_
-        End If
-    End With
-    If ksep_total_d_ > 0 Then
-        ' разделяем и модифицируем свойства флюидов после сепарации
-        Call Separatefluids
-        Call fluid_tub_.mod_after_separation(pt.p_atma, pt.t_C, ksep_total_d_, True)
-        fluid_cas_.qliq_sm3day = 0
-    End If
-    ' поскольку основная мощность потребляемая газосепаратором тратится шнеком на повышение давления
-    ' то можно предположить, что потери мощность с ростом частоты будут расти в кубе
-    ' при этом зависимости от дебита выраженной нет, поскольку будет меняться КПД
-    ' это предположение требует уточнения (11.07.2018 rnt)
-    p_shaft_w_ = p_shaft_nom_w_ * (f_Hz / f_nom_Hz_) ^ 3
-    
-    ' добавим точки для газосепаратора
-    p_curve_.AddPoint h_mes_top_m, pt.p_atma
-    p_curve_.AddPoint h_mes_down_m, pt.p_atma
-    t_curve_.AddPoint h_mes_top_m, pt.t_C
-    t_curve_.AddPoint h_mes_down_m, pt.t_C
-    
-End Sub
-Private Function calc_GSsep_d(q_mix_rc_m3day As Double)
+Private Function estimate_GS_separation_d(p_atma As Double, t_C As Double, f_Hz As Double)
 ' расчет коэффициента сепарации газосепаратора
 ' предполагается линейная зависимость от дебита
 ' q_mix_rc_m3day - расход ГЖС поступающей на вход с учетом естественной сепарации с рабочих условиях
@@ -206,21 +329,42 @@ Private Function calc_GSsep_d(q_mix_rc_m3day As Double)
     Dim KS As Double
     Dim q_mix_ As Double
     Dim qmax As Double
-    q_mix_ = q_mix_rc_m3day
-    qmax = q_nom_m3day_
-    If q_mix_ < qmax Then
-        KS = (q_mix_ / qmax) * ksep_gassep_max_d_
-    Else
-        KS = 0
-    End If
-    calc_GSsep_d = KS
+    
+    Call fluid_gs_.calc_PVT(p_atma, t_C)
+    Select Case gassep_type
+        Case -1
+            
+            estimate_GS_separation_d = ksep_gassep_man_d
+            
+        Case 0
+            q_mix_ = fluid_gs_.q_mix_rc_m3day
+            qmax = ksep_q_max_m3day_
+            
+            If q_mix_ < qmax Then
+                KS = (1 - q_mix_ / qmax) * ksep_gassep_max_d_
+            Else
+                KS = 0
+            End If
+            estimate_GS_separation_d = KS
+        Case Else
+            estimate_GS_separation_d = my_sepfactor(gassep_type, fluid_gs_.gas_fraction_d * 100, fluid_gs_.qliq_sm3day, f_Hz * 60) / 100
+   End Select
+    
 End Function
-Private Function calc_NatSeparation_d() As Double
+Private Function estimate_nat_separation_d(p_atma As Double, t_C As Double) As Double
+    Call fluid.calc_PVT(p_atma, t_C)
     With fluid
-        calc_NatSeparation_d = unf_natural_separation(d_od_mm_ / 1000, d_cas_m_, _
+        Select Case natsep_type
+            Case 0
+                estimate_nat_separation_d = unf_natural_separation(d_od_m, d_cas_m, _
                                                         .qliq_sm3day, .q_gas_insitu_sm3day, .bo_m3m3, .bg_m3m3, .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
+            Case Else
+                 estimate_nat_separation_d = unf_natural_separation(d_od_m, d_cas_m, _
+                                                        .qliq_sm3day, .q_gas_insitu_sm3day, .bo_m3m3, .bg_m3m3, .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
+         End Select
     End With
 End Function
+'
 '' метод построения кривой зависимости коэффициента сепарации от дебита
 'Public Function Build_SeparCurve()
 '
@@ -353,7 +497,7 @@ End Function
 '    "F"  - проверка по ЧАСТОТЕ
 '
 '**************************************************************************************************************************
-Public Function my_sepfactor(SEP_TYPE As Integer, G As Double, q As Double, f As Double) As Double
+Public Function my_sepfactor(ByVal SEP_TYPE As Integer, g As Double, q As Double, f As Double) As Double
 '
 ' MY_SEPFACTOR - Вычисление коэффициента сепрации в точке
 '
@@ -396,7 +540,7 @@ Public Function my_sepfactor(SEP_TYPE As Integer, G As Double, q As Double, f As
 '
 ' Переменные для сшивок
 Dim MX  As Double
-Dim func, dfunc As Double
+Dim Func, dfunc As Double
 Dim kA, kB, kC As Double
 Dim mX2, r As Double
 Dim mD As Double
@@ -409,26 +553,26 @@ mult = 1.3
 '        Проверки области по ЧАСТОТЕ вообще нет
 '
 ' Если точка лежит в замеренной области, используем аппроксимацию
-If (my_inarea(SEP_TYPE, G, q, f, "GQ")) Then
-    my_sepfactor = my_sepfactor_approx(SEP_TYPE, G, q, f)
+If (my_inarea(SEP_TYPE, g, q, f, "GQ")) Then
+    my_sepfactor = my_sepfactor_approx(SEP_TYPE, g, q, f)
     
 End If
 ' Если точка лежит вне замеренной области, используем сшивки
 ' (1) Сшивка с параболическим цилиндром только по дебиту в области нуля
-If (q < my_qmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "G")) Then
+If (q < my_qmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, f, "G")) Then
     MX = my_qmin(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, G, MX, f)
-    dfunc = my_sepfactor_approx(SEP_TYPE, G, MX, f, "dQ")
+    Func = my_sepfactor_approx(SEP_TYPE, g, MX, f)
+    dfunc = my_sepfactor_approx(SEP_TYPE, g, MX, f, "dQ")
             
     kA = dfunc / MX
     kB = -dfunc
-    kC = func
+    kC = Func
             
     my_sepfactor = kA * q ^ 2 + kB * q + kC
 End If
 ' (2) Сшивка с параболическим цилиндром только по дебиту в области максимума
-If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "G")) Then
+If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, f, "G")) Then
     MX = my_qmax(SEP_TYPE)
             
     ' mQ2
@@ -438,11 +582,11 @@ If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "G")) Then
         my_sepfactor = 0
             
     Else
-        func = my_sepfactor_approx(SEP_TYPE, G, MX, f)
-        dfunc = my_sepfactor_approx(SEP_TYPE, G, MX, f, "dQ")
+        Func = my_sepfactor_approx(SEP_TYPE, g, MX, f)
+        dfunc = my_sepfactor_approx(SEP_TYPE, g, MX, f, "dQ")
                 
         r = MX - mX2
-        kA = (dfunc * r - func) / r / r
+        kA = (dfunc * r - Func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
@@ -451,68 +595,68 @@ If (q > my_qmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "G")) Then
     End If
 End If
 ' (3) Сшивка с параболическим цилиндром только по газу в области нуля
-If (G < my_gmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "Q")) Then
+If (g < my_gmin(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, f, "Q")) Then
     MX = my_gmin(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, MX, q, f)
+    Func = my_sepfactor_approx(SEP_TYPE, MX, q, f)
     dfunc = my_sepfactor_approx(SEP_TYPE, MX, q, f, "dG")
             
-    kA = (MX * dfunc - func) / MX / MX
+    kA = (MX * dfunc - Func) / MX / MX
     kB = dfunc - 2 * MX * kA
             
-    my_sepfactor = kA * G ^ 2 + kB * G
+    my_sepfactor = kA * g ^ 2 + kB * g
     
 End If
    
 ' (4) Сшивка с параболическим цилиндром только по газу в области максимума
-If (G > my_gmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, G, q, f, "Q")) Then
+If (g > my_gmax(SEP_TYPE)) And (my_inarea(SEP_TYPE, g, q, f, "Q")) Then
     MX = my_gmax(SEP_TYPE)
             
     ' mG2
     mX2 = 100
             
-    If (G > mX2) Then
+    If (g > mX2) Then
         my_sepfactor = 0
             
     Else
-        func = my_sepfactor_approx(SEP_TYPE, MX, q, f)
+        Func = my_sepfactor_approx(SEP_TYPE, MX, q, f)
         dfunc = my_sepfactor_approx(SEP_TYPE, MX, q, f, "dG")
                 
         r = MX - mX2
-        kA = (dfunc * r - func) / r / r
+        kA = (dfunc * r - Func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
-        my_sepfactor = kA * G ^ 2 + kB * G + kC
+        my_sepfactor = kA * g ^ 2 + kB * g + kC
     
     End If
 End If
 ' (5) Сшивка с параболоидом вращения по газу в области нуля и по дебиту в области нуля
-If (G < my_gmin(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
+If (g < my_gmin(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     MX = my_qmin(SEP_TYPE)
     mD = my_gmin(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+    Func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
     dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
             
     kA = dfunc / MX
     kB = -dfunc
-    kC = func
+    kC = Func
             
-    func = kA * q ^ 2 + kB * q + kC
+    Func = kA * q ^ 2 + kB * q + kC
     MX = my_gmin(SEP_TYPE)
     mD = my_qmin(SEP_TYPE)
     
     dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
             
-    kA = (MX * dfunc - func) / MX / MX
+    kA = (MX * dfunc - Func) / MX / MX
     kB = dfunc - 2 * MX * kA
             
-    my_sepfactor = kA * G ^ 2 + kB * G
+    my_sepfactor = kA * g ^ 2 + kB * g
     
 End If
 ' (6) Сшивка с параболоидом вращения по газу в области нуля и по дебиту в области максимума
-If (G < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
+If (g < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     MX = my_qmax(SEP_TYPE)
             
     ' mQ2
@@ -524,41 +668,41 @@ If (G < my_gmin(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     Else
         mD = my_gmin(SEP_TYPE)
         
-        func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+        Func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
         dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
                 
         r = MX - mX2
-        kA = (dfunc * r - func) / r / r
+        kA = (dfunc * r - Func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
-        func = kA * q ^ 2 + kB * q + kC
+        Func = kA * q ^ 2 + kB * q + kC
     
         MX = my_gmin(SEP_TYPE)
         mD = my_qmax(SEP_TYPE)
     
         dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
             
-        kA = (MX * dfunc - func) / MX / MX
+        kA = (MX * dfunc - Func) / MX / MX
         kB = dfunc - 2 * MX * kA
             
-        my_sepfactor = kA * G ^ 2 + kB * G
+        my_sepfactor = kA * g ^ 2 + kB * g
     
     End If
 End If
 ' (7) Сшивка с параболоидом вращения по газу в области максимума и по дебиту в области нуля
-If (G > my_gmax(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
+If (g > my_gmax(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     MX = my_qmin(SEP_TYPE)
     mD = my_gmax(SEP_TYPE)
             
-    func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+    Func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
     dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
             
     kA = dfunc / MX
     kB = -dfunc
-    kC = func
+    kC = Func
             
-    func = kA * q ^ 2 + kB * q + kC
+    Func = kA * q ^ 2 + kB * q + kC
     
     MX = my_gmax(SEP_TYPE)
     mD = my_qmin(SEP_TYPE)
@@ -566,23 +710,23 @@ If (G > my_gmax(SEP_TYPE)) And (q < my_qmin(SEP_TYPE)) Then
     ' mG2
     mX2 = 100
             
-    If (G > mX2) Then
+    If (g > mX2) Then
         my_sepfactor = 0
             
     Else
         dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
                 
         r = MX - mX2
-        kA = (dfunc * r - func) / r / r
+        kA = (dfunc * r - Func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
-        my_sepfactor = kA * G ^ 2 + kB * G + kC
+        my_sepfactor = kA * g ^ 2 + kB * g + kC
     
     End If
 End If
 ' (8) Сшивка с параболоидом вращения по газу в области максимума и по дебиту в области максимума
-If (G > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
+If (g > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     MX = my_qmax(SEP_TYPE)
             
     ' mQ2
@@ -594,15 +738,15 @@ If (G > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
     Else
         mD = my_gmax(SEP_TYPE)
         
-        func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
+        Func = my_sepfactor_approx(SEP_TYPE, mD, MX, f)
         dfunc = my_sepfactor_approx(SEP_TYPE, mD, MX, f, "dQ")
                 
         r = MX - mX2
-        kA = (dfunc * r - func) / r / r
+        kA = (dfunc * r - Func) / r / r
         kB = dfunc - 2 * kA * MX
         kC = -kA * mX2 ^ 2 - kB * mX2
                    
-        func = kA * q ^ 2 + kB * q + kC
+        Func = kA * q ^ 2 + kB * q + kC
     
         MX = my_gmax(SEP_TYPE)
         mD = my_qmax(SEP_TYPE)
@@ -610,18 +754,18 @@ If (G > my_gmax(SEP_TYPE)) And (q > my_qmax(SEP_TYPE)) Then
         ' mG2
         mX2 = 100
             
-        If (G > mX2) Then
+        If (g > mX2) Then
             my_sepfactor = 0
             
         Else
             dfunc = my_sepfactor_approx(SEP_TYPE, MX, mD, f, "dG")
                 
             r = MX - mX2
-            kA = (dfunc * r - func) / r / r
+            kA = (dfunc * r - Func) / r / r
             kB = dfunc - 2 * kA * MX
             kC = -kA * mX2 ^ 2 - kB * mX2
                    
-            my_sepfactor = kA * G ^ 2 + kB * G + kC
+            my_sepfactor = kA * g ^ 2 + kB * g + kC
     
         End If
     
@@ -638,7 +782,7 @@ If (my_sepfactor > 100) Then
 End If
 End Function
 '**************************************************************************************************************************
-Public Function my_inarea(SEP_TYPE As Integer, G As Double, q As Double, f As Double, Optional param = "GQF") As Boolean
+Public Function my_inarea(SEP_TYPE As Integer, g As Double, q As Double, f As Double, Optional param = "GQF") As Boolean
 '
 ' MY_INAREA - Определяет принадлежность точки к измеренной области
 '
@@ -691,7 +835,7 @@ Public Function my_inarea(SEP_TYPE As Integer, G As Double, q As Double, f As Do
 '
 my_inarea = True
 If (param = "GQF") Or (param = "G") Or (param = "GQ") Or (param = "GF") Then
-    If (G < my_gmin(SEP_TYPE)) Or (G > my_gmax(SEP_TYPE)) Then
+    If (g < my_gmin(SEP_TYPE)) Or (g > my_gmax(SEP_TYPE)) Then
         my_inarea = False
     End If
 End If
@@ -1115,7 +1259,7 @@ fmax(29) = 4074
 my_fmax = fmax(SEP_TYPE)
 End Function
 '**************************************************************************************************************************
-Private Function my_sepfactor_approx(SEP_TYPE As Integer, G As Double, q As Double, f As Double, Optional Diff = "0") As Double
+Private Function my_sepfactor_approx(SEP_TYPE As Integer, g As Double, q As Double, f As Double, Optional Diff = "0") As Double
 '
 ' MY_SEPFACTOR_APPROX - Вычисление коэффициента сепарации по аппроксимированной зависимости
 '
@@ -1546,22 +1690,22 @@ THETA(29, 11) = 0.0000000365
 THETA(29, 12) = 58.3191138042
 ' Вычисление функции по аппроксимации
 If (Diff = "0") Then
-    my_sepfactor_approx = THETA(SEP_TYPE, 1) * G ^ 4 + THETA(SEP_TYPE, 2) * G ^ 3 + THETA(SEP_TYPE, 3) * G ^ 2 * q + THETA(SEP_TYPE, 4) * G ^ 2 + THETA(SEP_TYPE, 5) * G * q + THETA(SEP_TYPE, 6) * G * f + THETA(SEP_TYPE, 7) * q ^ 2 + THETA(SEP_TYPE, 8) * q * f + THETA(SEP_TYPE, 9) * G + THETA(SEP_TYPE, 10) * q + THETA(SEP_TYPE, 11) * f + THETA(SEP_TYPE, 12)
+    my_sepfactor_approx = THETA(SEP_TYPE, 1) * g ^ 4 + THETA(SEP_TYPE, 2) * g ^ 3 + THETA(SEP_TYPE, 3) * g ^ 2 * q + THETA(SEP_TYPE, 4) * g ^ 2 + THETA(SEP_TYPE, 5) * g * q + THETA(SEP_TYPE, 6) * g * f + THETA(SEP_TYPE, 7) * q ^ 2 + THETA(SEP_TYPE, 8) * q * f + THETA(SEP_TYPE, 9) * g + THETA(SEP_TYPE, 10) * q + THETA(SEP_TYPE, 11) * f + THETA(SEP_TYPE, 12)
     
 End If
 ' Вычисление производной функции по ГАЗОСОДЕРЖАНИЮ
 If (Diff = "dG") Then
-    my_sepfactor_approx = 4 * THETA(SEP_TYPE, 1) * G ^ 3 + 3 * THETA(SEP_TYPE, 2) * G ^ 2 + 2 * THETA(SEP_TYPE, 3) * G * q + 2 * THETA(SEP_TYPE, 4) * G + THETA(SEP_TYPE, 5) * q + THETA(SEP_TYPE, 6) * f + THETA(SEP_TYPE, 9)
+    my_sepfactor_approx = 4 * THETA(SEP_TYPE, 1) * g ^ 3 + 3 * THETA(SEP_TYPE, 2) * g ^ 2 + 2 * THETA(SEP_TYPE, 3) * g * q + 2 * THETA(SEP_TYPE, 4) * g + THETA(SEP_TYPE, 5) * q + THETA(SEP_TYPE, 6) * f + THETA(SEP_TYPE, 9)
     
 End If
 ' Вычисление производной функции по дебитУ
 If (Diff = "dQ") Then
-    my_sepfactor_approx = THETA(SEP_TYPE, 3) * G ^ 2 + THETA(SEP_TYPE, 5) * G + 2 * THETA(SEP_TYPE, 7) * q + THETA(SEP_TYPE, 8) * f + THETA(SEP_TYPE, 10)
+    my_sepfactor_approx = THETA(SEP_TYPE, 3) * g ^ 2 + THETA(SEP_TYPE, 5) * g + 2 * THETA(SEP_TYPE, 7) * q + THETA(SEP_TYPE, 8) * f + THETA(SEP_TYPE, 10)
     
 End If
 ' Вычисление производной функции по ЧАСТОТЕ
 If (Diff = "dF") Then
-    my_sepfactor_approx = THETA(SEP_TYPE, 6) * G + THETA(SEP_TYPE, 8) * q + THETA(SEP_TYPE, 11)
+    my_sepfactor_approx = THETA(SEP_TYPE, 6) * g + THETA(SEP_TYPE, 8) * q + THETA(SEP_TYPE, 11)
     
 End If
 End Function
@@ -1631,4 +1775,9 @@ Case Else
 Separator_Name = "Н/Д"
 End Select
 End Function
+Public Property Get dPower_GasSep_W() As Variant
+    dPower_GasSep_W = M_Nm * freq_Hz * 2 * const_Pi
+End Property
+Public Property Let dPower_GasSep_W(ByVal vNewValue As Variant)
+End Property
 

@@ -1,0 +1,474 @@
+'=======================================================================================
+'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2019
+'
+'=======================================================================================
+'
+'
+' класс описывает систему ЭЦН в простом варианте - один ЭЦН+ПЭД+кабель
+' класс отвечатает и за расчет сепарации и свойств флюидов
+Option Explicit
+Private pump_ As CESPpump  ' сам насос
+Public separ As CESPGasSep
+Public motor As CESPMotor
+' для расчета сепарации надо либо задать, либо спасти значения при которых проводился расчет сепарации
+Public p_ksep_atma As Double
+Public t_ksep_C As Double
+Public p_int_atma As Double
+Public t_int_C As Double
+Public p_dis_atma As Double
+Public t_dis_C As Double
+Public power_shaft_W As Double      ' мощность механическая на валу
+                                    ' оценивается в ходе расчета при связке ЭЦН и ПЭД
+Public eff_d As Double              ' КПД системы в целом
+Public eff_fact_d As Double
+Public dp_unknown_kW As Double
+Public power_CS_fact_W As Double
+' параметры установки УЭЦН в скважине
+'Public h_mes_top_m As Double
+'Private head_nom_m_ As Double
+Private d_cas_mm_ As Double
+Private angle_deg_ As Double
+'Private PKV_work_min_ As Double     ' время работы в ПКВ режиме
+'Private PKV_stop_min_ As Double     ' время ожидания в ПКВ режиме
+' флюиды которые работают в системе УЭЦН
+Private fluid_ As CPVT    ' флюид перед входом в насос
+Public fluid_tub As CPVT    ' флюид в НКТ выше насоса
+Public fluid_cas As CPVT    ' флюид в затрубном пространстве
+Public fluidGasSep As CPVT ' флюид в газосепараторе
+' вспомогательные переменные для расчета
+' могут быть определены в двигателе, но надо уметь считать и без двигателя
+'Private slip_fr_ As Double
+'Private f_shaft_Hz_ As Double
+'Public U_surf_V_ As Double
+' параметры определяющие режим периодической кратковременной работы скважины
+' ПКВ режим влияет на расчет показателей УЭЦН
+'   - учитывается, что в период работы дебит равен мгновенному
+'   - в период остановки дебита в системе нет
+'
+' класс ESPSystemSimple работает по следующей схеме
+'   -  задает ЭЦН
+'   -  задает флюид который притекает в зону приема УЭЦН
+'   -  определяет сепарацию и распределяет флюиды по элементам системы
+'         - что в насос
+'         - что в НКТ (может отличаться от насоса для ПКВ режима)
+'         - что в затруб
+'   - задает электрические показатели системы УЭЦН и проводит расчет системы
+'   - тепературный режим регулируется параметрами класса
+'           t_int_C - температура на приеме насоса
+'           t_dis_C - температура на выкиде насоса. если =-1 то рассчитывается при calc_along_flow = True
+Public Property Get f_shaft_Hz() As Double
+        If motor Is Nothing Then
+            f_shaft_Hz = pump_.freq_Hz
+        Else
+            f_shaft_Hz = motor.f_Hz * (1 - motor.s_d)
+        End If
+    
+End Property
+Public Property Get slip_fr() As Double
+    If motor Is Nothing Then
+        slip_fr = 0
+    Else
+        slip_fr = motor.s_d    ' если задан двигатель, то берем проскальзывание из его характеристик
+    End If
+End Property
+Public Property Get U_surf_V() As Double
+    If motor Is Nothing Then
+        U_surf_V = 0
+    Else
+        U_surf_V = motor.U_trans_high_V     ' если задан двигатель, то берем проскальзывание из его характеристик
+    End If
+End Property
+Public Property Get energy_fact_Whday() As Double
+    If Not motor Is Nothing Then
+       energy_fact_Whday = motor.power_fact_kW
+    Else
+       energy_fact_Whday = 0
+    End If
+End Property
+'Public Property Let energy_fact_Whday(val As Double)
+'   energy_fact_Whday_ = val
+'   power_CS_fact_W = val / 24 '/ PKV_frac
+'End Property
+Public Property Get h_mes_top_m() As Double
+    h_mes_top_m = pump_.h_mes_top_m
+End Property
+Public Property Let h_mes_top_m(val As Double)
+    pump_.h_mes_top_m = val
+End Property
+Public Property Get h_mes_bottom_m() As Double
+    Dim ml As Double
+    If Not motor Is Nothing Then
+        ml = motor.length_m
+    Else
+        ml = 5
+    End If
+    h_mes_bottom_m = h_mes_top_m + pump_.length_m + ml
+End Property
+Public Property Get h_mes_intake_m() As Double
+    h_mes_intake_m = h_mes_top_m + pump_.length_m
+End Property
+'Public Property Get head_nom_m() As Double
+'    head_nom_m = head_nom_m_
+'End Property
+'Public Property Get freq_Hz() As Double
+'   freq_Hz = freq_Hz_
+'End Property
+'
+'Public Property Let freq_Hz(val As Double)
+'   freq_Hz_ = val
+'   pump_.freq_Hz = val * (1 - slip_fr_)
+'End Property
+Public Property Get ESP_pump() As CESPpump
+   Set ESP_pump = pump_
+End Property
+Public Property Set ESP_pump(pmp As CESPpump)
+   Set pump_ = pmp
+'   freq_nom_Hz = pmp.db.freq_Hz
+'   slip_fr_ = 1 - pmp.db.slip_nom_rpm / (pmp.db.freq_Hz * 60)
+End Property
+Public Property Get name() As String
+    name = pump_.db.name + " " + pump_.db.manufacturer
+End Property
+' свойства для управления флюидом
+Public Property Get fluid() As CPVT
+    Set fluid = fluid_
+End Property
+Public Property Set fluid(val As CPVT)
+    Set fluid_ = val
+    ' сбросим также все другие флюиды
+    Set fluid_tub = val
+    Set fluid_cas = val
+    Set fluidGasSep = val
+    ' в насосе всегда свой флюид
+    Set pump_.fluid = val.clone()
+    Set separ.fluid = pump_.fluid
+    
+'''    Call PKV_update
+End Property
+Public Property Get d_intake_mm() As Double
+    d_intake_mm = ESP_pump.db.d_od_m
+End Property
+  
+Private Sub Class_Initialize()
+'    saparation object always on
+'    Set separ = New CESPGasSep
+    ' парметры установки по умолчанию
+    d_cas_mm = 150
+    angle_deg = 90
+    
+    p_ksep_atma = 100
+    t_ksep_C = 60
+    
+    
+'    PKV_work_min_ = 0
+'    PKV_stop_min_ = 0
+    
+End Sub
+' only way to init ESPsys
+Public Sub init_json(pump_json As String, _
+            Optional motor_json As String, _
+            Optional cable_json As String, _
+            Optional gassep_json As String, _
+            Optional fluid As CPVT)
+    Dim edb As ESP_PARAMS
+    
+            
+    Set pump_ = New CESPpump
+    Call pump_.init_json(pump_json)
+    
+    Set separ = New CESPGasSep
+    If Len(gassep_json) > 3 Then
+        Call separ.init_json(gassep_json)
+    End If
+    
+    If Not IsMissing(motor_json) Then
+        If Len(motor_json) > 3 Then
+            Set motor = New CESPMotor
+            Call motor.init_json(motor_json, cable_json)
+            edb = pump_.db
+            edb.d_motor_od_m = motor.d_od_mm / 1000
+            pump_.db = edb
+        Else
+            Set motor = Nothing
+        End If
+    End If
+    
+    If fluid Is Nothing Then
+        Set fluid = PVT_decode_string(PVT_DEFAULT)
+    End If
+    Set Me.fluid = fluid
+    
+End Sub
+Public Function calc_ESPsys(ByVal p_atma As Double, _
+                            ByVal t_int_C As Double, _
+                            ByVal t_dis_C As Double, _
+                            Optional ByVal calc_along_flow As Boolean = True, _
+                            Optional ByVal calc_temperature = False, _
+                            Optional saveCurve As Boolean = False) As PTtype
+' функция расчета параметров работы УЭЦН
+'
+' p_atma - давление начала расчета (давление на приеме если calc_along_flow = True)
+' calc_along_flow - флаг показывает ведется ли расчет от давления на приеме или от выкида
+'                  при расчете сверху вниз температура должна быть задана с двух сторон
+'                  и сепарация будет учитываться в соответствии с параметрами заданными вручную
+' calc_cfPower - флаг режима расчета корректировочного фактора для потребления энергии
+' calc_temperature - флаг режима расчета перепада температуры в ЭЦН
+    
+    ' подготовим режима расчета температуры для ЭЦН
+    If calc_temperature Then
+        t_dis_C = -1
+    ElseIf t_dis_C < 0 Then
+        t_dis_C = t_int_C
+    End If
+    
+    Dim sl1 As Double
+    Dim i As Integer
+    
+    i = 0
+    ' 1. если есть мотор - зададим для него номинальные параметры работы
+    If Not motor Is Nothing Then
+        Call motor.calc_motor_mom_from_surf(motor.Mnom_Nm)
+        sl1 = motor.s_d
+    End If
+    
+    ' 2. найдем параметры работы насоса и двигателя согласованные по скольжению
+    Do
+        i = i + 1
+        sl1 = slip_fr
+        '2.0 оценим параметры сепарации флюида перед расчетом
+        
+        Call separ.calc_separation(p_atma, t_int_C, f_shaft_Hz)
+        Set pump_.fluid = separ.fluid_tub
+        
+        '2.1. расчет распределения давления в ЭЦН при работе УЭЦН
+        '     результатом будет момент на валу насоса
+        Call pump_.calc_ESP(p_atma, t_int_C, t_dis_C, calc_along_flow, saveCurve, f_shaft_Hz)
+        '2.2  если есть мотор, найдем скольжение и другие параметры
+        If Not motor Is Nothing Then
+            Call motor.calc_motor_mom_from_surf(pump_.M_Nm + separ.M_Nm)
+        End If
+    Loop Until (Abs(slip_fr - sl1) < 0.001) Or (i >= 10)
+    
+    p_dis_atma = pump_.p_dis_atma
+    p_int_atma = pump_.p_int_atma
+    'power_shaft_W =
+    If Not motor Is Nothing Then
+        power_shaft_W = motor.Pshaft_kW * 1000
+        If motor.power_CS_teor_calc_W > 0 And power_CS_fact_W > 0 Then
+            pump_.c_calibr_power = power_CS_fact_W / motor.power_CS_teor_calc_W
+        End If
+        
+        If motor.power_CS_teor_calc_W > 0 Then
+            eff_d = pump_.power_fluid_W / motor.power_CS_teor_calc_W
+            If motor.power_fact_kW > 0 Then
+                eff_fact_d = pump_.power_fluid_W / 1000 / motor.power_fact_kW
+                dp_unknown_kW = motor.power_fact_kW - motor.power_CS_teor_calc_W / 1000
+            End If
+            
+        Else
+            eff_d = 0
+        End If
+        
+    End If
+    
+    calc_ESPsys = set_PT(pump_.p_dis_atma, pump_.t_dis_C)
+End Function
+ ' дебит газожидкостной смеси перед насосом в рабочих условиях
+ Public Property Get q_mix_BeforePump_m3day() As Double
+    With pump_
+        fluid.calc_PVT .p_int_atma, .t_int_C
+        q_mix_BeforePump_m3day = fluid.q_mix_rc_m3day
+    End With
+ End Property
+ 
+ ' дебит газожидкостной смеси внути газосепаратора (после естественной сепарации)
+ Public Property Get q_mix_InGasSep_m3day() As Double
+    With pump_
+        ' надо рассчитать свойства флюида после частичной сепарации
+        fluidGasSep.calc_PVT .p_int_atma, .t_int_C
+        q_mix_InGasSep_m3day = fluidGasSep.q_mix_rc_m3day
+    End With
+ End Property
+ ' дебит газожидкостной смеси в насосе на первых ступенях (после естественной сепарации и газосепаратора)
+ Public Property Get q_mix_PumpIntake_m3day() As Double
+    With pump_
+        fluid_tub.calc_PVT .p_int_atma, .t_int_C
+        q_mix_PumpIntake_m3day = fluid_tub.q_mix_rc_m3day
+    End With
+ End Property
+ 
+ ' дебит газожидкостной смеси на выкиде насоса (на последних ступенях)
+ Public Property Get q_mix_PumpOutlet_m3day() As Double
+    With pump_
+        fluid_tub.calc_PVT .p_dis_atma, .t_dis_C
+        q_mix_PumpOutlet_m3day = fluid_tub.q_mix_rc_m3day
+    End With
+ End Property
+ 
+ Public Property Get gas_fraction_BeforePump_d() As Double
+    With pump_
+        fluid.calc_PVT .p_int_atma, .t_int_C
+        gas_fraction_BeforePump_d = fluid.gas_fraction_d(0)
+    End With
+ End Property
+ 
+ Public Property Get gas_fraction_InGasSep_d() As Double
+    With pump_
+        fluidGasSep.calc_PVT .p_int_atma, .t_int_C
+        gas_fraction_InGasSep_d = fluidGasSep.gas_fraction_d(0)
+    End With
+ End Property
+ Public Property Get gas_fraction_PumpIntake_d() As Double
+    With pump_
+        fluid_tub.calc_PVT .p_int_atma, .t_int_C
+        gas_fraction_PumpIntake_d = fluid_tub.gas_fraction_d(0)
+    End With
+ End Property
+ 
+ Public Property Get gas_fraction_PumpOutlet_d() As Double
+    With pump_
+        fluid_tub.calc_PVT .p_dis_atma, .t_dis_C
+        gas_fraction_PumpOutlet_d = fluid_tub.gas_fraction_d(0)
+    End With
+ End Property
+ 
+ Public Property Get c_calibr_head() As Double
+    c_calibr_head = pump_.c_calibr_head
+ End Property
+ 
+ Public Property Let c_calibr_head(val As Double)
+    pump_.c_calibr_head = val
+ End Property
+ 
+ Public Property Get c_calibr_power() As Double
+    c_calibr_power = pump_.c_calibr_power
+ End Property
+  
+ Public Property Get c_calibr_rate() As Double
+    c_calibr_rate = pump_.c_calibr_rate
+ End Property
+ 
+Public Function array_out(Optional ByVal num_points As Integer = 20)
+' подготовка массива для вывода в Excel
+' num_points - количество точек в выходных массивах для вывода
+'
+    Dim arr()
+    Dim M As Integer
+   ' Dim FlowParams_out As PIPE_FLOW_PARAMS
+    Dim offset As Integer
+    Dim i As Integer
+    Dim hh As Double
+    Dim nrows As Integer
+    Dim dict_electric_params As New Dictionary
+    Dim dict_geometry As New Dictionary
+    Dim dict_separ As New Dictionary
+    
+    offset = 2
+On Error Resume Next
+    arr = pump_.array_out(num_points)
+    nrows = UBound(arr, 1)
+    
+    offset = nrows - 3
+    
+    ReDim Preserve arr(nrows, 12)
+    arr(0, 0) = p_dis_atma - p_int_atma
+    arr(1, 0) = "dP_atm"
+    
+    
+    arr(0, 2) = motor.M_Nm
+    arr(1, 2) = "M_Nm"
+    
+    With dict_geometry
+        .Add "length_motor_m", motor.length_m
+        .Add "length_pump_m", pump_.length_m
+        .Add "angle", angle_deg_
+        .Add "d_od_m", d_intake_mm
+        .Add "d_cas_mm", d_cas_mm
+        .Add "d_cas_min_m", pump_.db.d_cas_min_m
+        .Add "d_motor_cas_min_mm", motor.d_cas_min_mm
+        .Add "d_motor_od_m", motor.d_od_mm
+    End With
+    
+    arr(0, 3) = ConvertToJson(dict_geometry)
+    arr(1, 3) = "geometry"
+    
+    i = 9
+    With dict_electric_params
+        Call .Add("Pow_freq_Hz", motor.f_Hz)
+        Call .Add("ESP_freq_Hz", ESP_pump.freq_Hz)
+        Call .Add("I_A", motor.I_lin_A)
+        Call .Add("load_%", motor.load_d)
+        Call .Add("power_CS_kW", motor.power_CS_calc_W / 1000)
+        Call .Add("power_motor_kW", motor.power_motor_W / 1000)
+        Call .Add("power_shaft_kW", power_shaft_W / 1000)
+        Call .Add("power_ESP_kW", ESP_pump.power_ESP_W / 1000)
+        Call .Add("power_fluid_kW", ESP_pump.power_fluid_W / 1000)
+        Call .Add("U_trans_high_V", motor.U_trans_high_V)
+        Call .Add("U_motor_V", motor.U_lin_V)
+        Call .Add("eff_total_d", eff_d)
+        Call .Add("eff_ESP_d", ESP_pump.eff_ESP_d)
+        Call .Add("eff_fact_d", eff_fact_d)
+        Call .Add("dp_unknown_kW", dp_unknown_kW)
+        Call .Add("Pmotor_nom_kW", motor.Pnom_kW)
+        Call .Add("power_CS_fact_kW", power_CS_fact_W / 1000)
+        Call .Add("motor_eff_fr", motor.eff_d)
+        Call .Add("cable_R_Omkm", motor.cable_R_Omkm)
+        Call .Add("dPower_protector_kW", motor.dPower_protector_W / 1000)
+        Call .Add("dPower_GasSep_kW", separ.dPower_GasSep_W / 1000)
+        Call .Add("dPower_CS_kW", motor.dPower_CS_W / 1000)
+        Call .Add("dPower_transform_kW", motor.dPower_transform_W / 1000)
+        Call .Add("cos_phi", motor.CosPhi_d)
+    End With
+    i = i + 1
+    arr(0, 7) = ConvertToJson(dict_electric_params)
+    arr(1, 7) = "dict_power"
+    
+    With dict_separ
+        .Add "ksep_nat_fr", separ.ksep_nat_fr
+        .Add "ksep_gassep_fr", separ.ksep_gassep_fr
+        .Add "ksep_total_fr", separ.ksep_total_fr
+        .Add "p_ksep_atma", separ.p_ksep_atma
+        .Add "t_ksep_C", separ.t_ksep_C
+        .Add "isGasSep", separ.isGasSep
+        .Add "ksep_liquid_man_d", separ.ksep_liquid_man_d
+        .Add "d_od_m", separ.d_od_m
+        .Add "d_cas_m", separ.d_cas_m
+        .Add "angle_deg", separ.angle_deg
+        .Add "gassep_type", separ.gassep_type
+        .Add "natsep_type", separ.natsep_type
+        .Add "M_Nm", separ.M_Nm
+        .Add "freq_Hz", separ.freq_Hz
+    End With
+     
+    
+    arr(0, 10) = ConvertToJson(dict_separ)
+    arr(1, 10) = "dict_separ"
+    
+    array_out = arr
+End Function
+Public Property Get angle_deg() As Variant
+    angle_deg = angle_deg_
+End Property
+Public Property Let angle_deg(ByVal vNewValue As Variant)
+    angle_deg_ = vNewValue
+    
+    If Not separ Is Nothing Then
+        separ.angle_deg = angle_deg_
+    End If
+    
+    If Not pump_ Is Nothing Then
+        pump_.angle_deg = angle_deg_
+    End If
+End Property
+Public Property Get d_cas_mm() As Variant
+    d_cas_mm = d_cas_mm_
+End Property
+Public Property Let d_cas_mm(ByVal vNewValue As Variant)
+    d_cas_mm_ = vNewValue
+    If Not separ Is Nothing Then
+        separ.d_cas_m = d_cas_mm_
+    End If
+End Property
+

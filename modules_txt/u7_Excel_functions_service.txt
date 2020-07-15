@@ -14,6 +14,140 @@ Public Function unf_version() As String
     unf_version = const_unifloc_version
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Функция декодирования json строки,
+' позволяет вывести содержимое json строки в таблицу
+Public Function decode_json_string(json, _
+                          Optional transpose As Boolean = False, _
+                          Optional keys_filter, _
+                          Optional only_values As Boolean = False)
+' json   - строка содержащая результаты расчета
+' transpose - выбор вывода в строки или в столбцы
+' keys_filter - строка с ключами, которые надо вывести
+' only_values - если = 1 подписи выводиться не будут
+' результат - закодированная строка
+'description_end
+    Dim d As Dictionary
+    Dim c As Collection
+    Dim p
+    Dim i As Integer
+    Dim outarr
+    Dim v
+    Dim K
+    
+    Dim keylist As Dictionary
+    Dim arrkeys As Variant
+    
+    On Error GoTo err1:
+    
+    
+    JsonConverter.JsonOptions.UseDoubleForLargeNumbers = True
+    
+    Set p = ParseJson(json)
+    If TypeName(p) = "Dictionary" Then
+    
+        Set d = p
+        
+        If Not IsMissing(keys_filter) Then
+            arrkeys = Split(keys_filter, ",")
+            Set keylist = New Dictionary
+            For i = LBound(arrkeys) To UBound(arrkeys)
+                If d.Exists(arrkeys(i)) Then
+                    keylist.Add arrkeys(i), d.Item(arrkeys(i))
+                End If
+            Next i
+            If keylist.Count > 0 Then
+                Set d = keylist
+            End If
+        End If
+    
+        If transpose Then
+            If only_values Then
+                ReDim outarr(1 To 1, 1 To d.Count)
+            Else
+                ReDim outarr(1 To 2, 1 To d.Count)
+            End If
+            For i = 1 To d.Count
+                K = d.keys(i - 1)
+                outarr(1, i) = K
+                If IsObject(d.Items(i - 1)) Then
+                    Set v = d.Items(i - 1)
+                Else
+                    v = d.Items(i - 1)
+                End If
+                If TypeName(v) = "Collection" Then
+                    If only_values Then
+                        outarr(1, i) = ConvertToJson(v)
+                    Else
+                        outarr(2, i) = ConvertToJson(v)
+                    End If
+                Else
+                    
+                    If only_values Then
+                        outarr(1, i) = v
+                    Else
+                        outarr(2, i) = v
+                    End If
+                End If
+            Next
+        Else
+            If only_values Then
+                ReDim outarr(1 To d.Count, 1 To 1)
+            Else
+                ReDim outarr(1 To d.Count, 1 To 2)
+            End If
+            For i = 1 To d.Count
+                K = d.keys(i - 1)
+                outarr(i, 1) = d.keys(i - 1)
+                If IsObject(d.Items(i - 1)) Then
+                    Set v = d.Items(i - 1)
+                Else
+                    v = d.Items(i - 1)
+                End If
+                If TypeName(v) = "Collection" Then
+                    If only_values Then
+                        outarr(i, 1) = ConvertToJson(v)
+                    Else
+                        outarr(i, 2) = ConvertToJson(v)
+                    End If
+                Else
+                    If only_values Then
+                        outarr(i, 1) = v
+                    Else
+                        outarr(i, 2) = v
+                    End If
+                End If
+            Next i
+        End If
+    Else  ' expect collection here
+        
+        Set c = p
+        If c.Count = 1 Then
+            If TypeName(c.Item(1)) = "Collection" Then
+                outarr = CollectionToArray2D(c.Item(1))
+            End If
+        Else
+            i = 1
+            If transpose Then
+                ReDim outarr(1 To 1, 1 To c.Count)
+                For Each v In c
+                    outarr(1, i) = v
+                    i = i + 1
+                Next
+            Else
+                ReDim outarr(1 To c.Count, 1 To 1)
+                For Each v In c
+                    outarr(i, 1) = v
+                    i = i + 1
+                Next
+            End If
+        End If
+    End If
+    decode_json_string = outarr
+    Exit Function
+err1:
+    decode_json_string = "error"
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция кодирования параметров PVT в строку,
 ' для передачи PVT свойств в прикладные функции Унифлок.
 Public Function PVT_encode_string( _
@@ -93,6 +227,7 @@ Public Function PVT_encode_string( _
     
     
     PVT_encode_string = ConvertToJson(pvt_dict)
+ '   Debug.Print PVT_encode_string
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расшифровки параметров PVT закодированных в строке
@@ -134,44 +269,25 @@ er1:
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция кодирования параметров работы УЭЦН в строку,
-' которую можно потом использовать для задания ЭЦН в прикладных функциях
-Public Function ESP_encode_string( _
-            Optional ByVal ESP_ID As Double = 1005, _
-            Optional ByVal HeadNom_m As Double = 2000, _
-            Optional ByVal ESP_freq_Hz As Double = 50, _
-            Optional ByVal ESP_U_V, _
-            Optional ByVal ESP_cos_phi, _
-            Optional ByVal MotorPowerNom_kW, _
-            Optional ByVal t_intake_C, _
-            Optional ByVal t_dis_C, _
-            Optional ByVal Ksep_GS_fr, _
-            Optional ByVal ksep_manual_fr, _
-            Optional ByVal ESP_energy_fact_kWhday, _
-            Optional ByVal ESP_cable_type, _
-            Optional ByVal ESP_h_mes_m, _
-            Optional ByVal ESP_gas_correct, _
+' функция кодирования параметров работы УЭЦН в строку
+Public Function ESP_pump_encode_string( _
+            Optional ByVal ESP_ID As Long = "1005", _
+            Optional ByVal head_nom_m As Double = 2000, _
+            Optional ByVal num_stages As Integer = 0, _
+            Optional ByVal freq_Hz As Double = 50, _
+            Optional ByVal gas_correct, _
             Optional ByVal c_calibr, _
-            Optional ByVal PKV_work_min, _
-            Optional ByVal PKV_stop_min, _
             Optional ByVal dnum_stages_integrate = 1)
 ' esp_ID         - идентификатор насоса
-' HeadNom_m      - номинальный напор системы УЭЦН
+' head_nom_m     - номинальный напор системы УЭЦН
 '                - соответствует напора в записи ЭЦН 50-2000
-' ESP_freq_Hz     - частота, Гц
-' ESP_U_V        - напряжение на ПЭД
-' MotorPowerNom_kW  - номинальная мощность двигателя
+' num_stages     - количество ступеней, если задано
+'                  перекрывает значение напора
+' freq_Hz        - частота, Гц
 ' t_intake_C     - температура на приеме насоа
 ' t_dis_C        - температура на выкиде насоса.
 '                  если = 0 и calc_along_flow = 1 то рассчитывается
-' Ksep_GS_fr      - коэффициент сепарации газосепаратора УЭЦН
-' ESP_energy_fact_Whday  - фактическое потребление мощности ЭЦН
-' ESP_cable_type - тип кабельной линии
-'                  тип 1: cable_R_Omkm = 1.18
-'                         cable_name = КПпАпБП-120 3x16
-'                         cable_Tmax_C = 120
-' ESP_h_mes_m    - длина кабельной линии
-' ESP_gas_correct  - деградация по газу:
+' gas_correct    - деградация по газу:
 '      0 - 2 задает значение вручную;
 '      10 стандартный ЭЦН (предел 25%);
 '      20 ЭЦН с газостабилизирующим модулем (предел 50%);
@@ -184,22 +300,12 @@ Public Function ESP_encode_string( _
 ' c_calibr    - коэффициент поправки на напор.
 '     если массив то второе значение - поправыка на подачу (множитель)
 '     третье на мощность (множитель)
-' PKV_work_min      - время работы скважины для режима ПКВ в минутах
-' PKV_stop_min      - время ожидания запуска скважины для ПКВ , мин
-'                     ПКВ - периодическое кратковременное включение
-'                     если не заданы, то скважина в ПДФ
-'                     ПДФ - постоянно действующий фонд
 ' dnum_stages_integrate - шаг интегрирования для расчета
 ' результат         - строка с параметрами УЭЦН
 'description_end
-    Dim str As String
-    Dim frmt As String
-    Dim frmt_int As String
     Dim c_calibr_head As Double
     Dim c_calibr_rate As Double
     Dim c_calibr_power As Double
-    
-    
     Dim dict As New Dictionary
         
     c_calibr_head = 1
@@ -208,24 +314,15 @@ Public Function ESP_encode_string( _
     
     
     dict.Add "ESP_ID", ESP_ID
-    dict.Add "HeadNom_m", HeadNom_m
-    dict.Add "ESP_freq_Hz", ESP_freq_Hz
-    If Not IsMissing(ESP_U_V) Then dict.Add "ESP_U_V", ESP_U_V
-    If Not IsMissing(ESP_cos_phi) Then dict.Add "ESP_cos_phi", ESP_cos_phi
-    If Not IsMissing(MotorPowerNom_kW) Then dict.Add "MotorPowerNom_kW", MotorPowerNom_kW
-    If Not IsMissing(t_intake_C) Then dict.Add "t_intake_C", t_intake_C
-    If Not IsMissing(t_dis_C) Then dict.Add "t_dis_C", t_dis_C
-    If Not IsMissing(Ksep_GS_fr) Then dict.Add "Ksep_GS_fr", Ksep_GS_fr
-    
-    If Not IsMissing(ksep_manual_fr) Then dict.Add "Ksep_manual_fr", ksep_manual_fr
-    If Not IsMissing(ESP_energy_fact_kWhday) Then dict.Add "ESP_energy_fact_kWhday", ESP_energy_fact_kWhday
-    If Not IsMissing(ESP_cable_type) Then dict.Add "ESP_cable_type", ESP_cable_type
-    If Not IsMissing(ESP_h_mes_m) Then dict.Add "ESP_h_mes_m", ESP_h_mes_m
-    If Not IsMissing(ESP_gas_correct) Then dict.Add "ESP_gas_correct", ESP_gas_correct
-    
-    
+    dict.Add "head_nom_m", head_nom_m
+    If num_stages > 0 Then dict.Add "num_stages", num_stages
+    dict.Add "freq_Hz", freq_Hz
+'    If Not IsMissing(t_intake_C) Then dict.Add "t_intake_C", t_intake_C
+'    If Not IsMissing(t_dis_C) Then dict.Add "t_dis_C", t_dis_C
+    If Not IsMissing(gas_correct) Then dict.Add "gas_correct", gas_correct
+  '  If Not IsMissing(ksep_total) Then dict.Add "ksep_total", ksep_total
+        
     Dim clbr
-    
     If Not IsMissing(c_calibr) Then
         ' set calibration properties
         clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
@@ -246,198 +343,404 @@ Public Function ESP_encode_string( _
         End If
     End If
     
-    If Not IsMissing(PKV_work_min) Then dict.Add "PKV_work_min", PKV_work_min
-    If Not IsMissing(PKV_stop_min) Then dict.Add "PKV_stop_min", PKV_stop_min
     If Not IsMissing(dnum_stages_integrate) Then dict.Add "dnum_stages_integrate", dnum_stages_integrate
-    ESP_encode_string = ConvertToJson(dict)
+    ESP_pump_encode_string = ConvertToJson(dict)
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расшифровки параметров работы ЭЦН закодированных в строке
-Public Function ESP_decode_string(ByVal str_ESP As String, _
-                         Optional ByVal getStr As Boolean = False)
-' str_ESP  - строка с параметрами ЭЦН
-' getStr  - флаг проверки работы функции
-'    по умолчанию False (0) - функция выдает объект CESPsystemSimple
-'    если задать True - функция раскодирует строку и снова закодирует
-'                       и выдаст строку (можно использовать из листа)
-' результат - объект CESPsystemSimple
+' функция кодирования параметров ПЭД в строку
+Public Function ESP_motor_encode_string( _
+            Optional ByVal motor_ID As Long = 0, _
+            Optional ByVal U_surf_high_lin_V As Double, _
+            Optional ByVal f_surf_Hz As Double, _
+            Optional ByVal power_fact_kW As Double, _
+            Optional ByVal U_nom_lin_V As Double, _
+            Optional ByVal P_nom_kW As Double, _
+            Optional ByVal f_nom_Hz As Double, _
+            Optional ByVal eff_nom_fr As Double, _
+            Optional ByVal cosphi_nom_fr As Double, _
+            Optional ByVal slip_nom_fr As Double, _
+            Optional ByVal d_od_mm As Double, _
+            Optional ByVal lambda As Double, _
+            Optional ByVal alpha0 As Double, _
+            Optional ByVal xi0 As Double, _
+            Optional ByVal Ixcf As Double)
+'motor_ID - тип 0 - постоянные значения,
+'               1 - задается по каталожным кривым, ассинхронный
+'               2 - задается по схеме замещения, ассинхронный
+'U_surf_high_lin_V - напряжение на поверхности
+'                    на высокой стороне трансформатора
+'f_surf_Hz  - частота питающего напряжения
+'U_nom_lin_V - номинальное напряжение двигателя, линейное, В
+'P_nom_kW - номинальная мощность двигателя кВт
+'f_nom_Hz - номинальная частота тока, Гц
+'eff_nom_fr - КПД при номинальном режиме работы
+'cosphi_nom_fr - коэффициент мощности при номинальном режиме работы
+'slip_nom_fr - скольжение при номинальном режиме работы
+'d_od_mm - внешний диаметр - габарит ПЭД
+'lambda - для motorID = 2 перегрузочный коэффициент
+'         отношение макс момента к номинальному
+'alpha0 - параметр. влияет на положение макс КПД.для motorID = 2
+'xi0 - параметр. определяет потери момента при холостом ходе.
+'      для motorID = 2
+'Ixcf - поправка на поправку тока холостого хода
+'       при изменении напряжения и частоты от минимальной.
 'description_end
-    Dim ESPsys As New CESPsystemSimple
-    Dim dict As Dictionary
     
-On Error GoTo er1:
-    ' пытаемся разбить строку разделителями
+    Dim dict As New Dictionary
     
+    dict.Add "motor_ID", motor_ID
+   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
+   If f_surf_Hz > 0 Then dict.Add "f_surf_Hz", f_surf_Hz
+   If power_fact_kW > 0 Then dict.Add "power_fact_kW", power_fact_kW
+   If U_nom_lin_V > 0 Then dict.Add "U_nom_lin_V", U_nom_lin_V
+   If P_nom_kW > 0 Then dict.Add "P_nom_kW", P_nom_kW
+   If f_nom_Hz > 0 Then dict.Add "F_nom_Hz", f_nom_Hz
+   If eff_nom_fr > 0 Then dict.Add "eff_nom_fr", eff_nom_fr
+   If cosphi_nom_fr > 0 Then dict.Add "cosphi_nom_fr", cosphi_nom_fr
+   If slip_nom_fr > 0 Then dict.Add "slip_nom_fr", slip_nom_fr
+   If d_od_mm > 0 Then dict.Add "d_od_mm", d_od_mm
     
-    If Len(str_ESP) < 3 Then
-        Set ESP_decode_string = Nothing
-        Exit Function
-    End If
-    
-    Set dict = ParseJson(str_ESP)
-    
-    Call ESPsys.init_dictionary(dict)
-    
-    If getStr Then
-        With ESPsys
-            ESP_decode_string = ESP_encode_string(.ESP_pump.db.ID, _
-                                                  .head_nom_m, _
-                                                  .freq_Hz, _
-                                               .U_V, .power_motor_nom_W, .t_int_C, .t_dis_C, _
-                                               .ksep_gassep_fr, .ksep_manual_fr, .energy_fact_Whday, _
-                                               .cable_type_num, _
-                                               .h_mes_top_m, .ESP_pump.gas_correct, _
-                                               Array(.ESP_pump.c_calibr_head, .ESP_pump.c_calibr_rate, .ESP_pump.c_calibr_power), _
-                                               .PKV_work_min, .PKV_stop_min, .ESP_pump.dnum_stages_integrate)
-        End With
-    Else
-        
-        Set ESP_decode_string = ESPsys
-    End If
-    Exit Function
-er1:
-    Dim errmsg As String
-    errmsg = "ESP_decode_string. error:" & Err.Description
-    addLogMsg errmsg
-    Err.Raise kErrPVTinput, Err.source, errmsg
-    Exit Function
+   If lambda > 0 Then dict.Add "lambda", lambda
+   If alpha0 > 0 Then dict.Add "alpha0", alpha0
+   If xi0 > 0 Then dict.Add "xi0", xi0
+   If Ixcf > 0 Then dict.Add "Ixcf", Ixcf
+    ESP_motor_encode_string = ConvertToJson(dict)
     
 End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция кодирования параметров
+' кабельной линии ПЭД в строку
+Public Function ESP_cable_encode_string( _
+            Optional ByVal cable_R_Omkm As Double, _
+            Optional ByVal cable_X_Omkm As Double, _
+            Optional ByVal cable_t_max_C As Double, _
+            Optional ByVal manufacturer As String = "no", _
+            Optional ByVal name As String = "no", _
+            Optional ByVal d_mm As Double, _
+            Optional ByVal length_m As Double)
+' cable_R_Omkm - удельное активное сопротивление
+' cable_X_Omkm - удельное реактивное сопротивление
+' cable_t_max_C - максимально допустимая температура
+' manufacturer - производитель, для справки
+' name  - название кабеля, для справки
+' d_mm - диаметр жилы
+' length_m - длина кабельной линии, м
+'description_end
+    Dim dict As New Dictionary
+    
+    If cable_R_Omkm > 0 Then dict.Add "cable_R_Omkm", cable_R_Omkm
+    If cable_X_Omkm > 0 Then dict.Add "cable_X_Omkm", cable_X_Omkm
+    If cable_t_max_C > 0 Then dict.Add "cable_t_max_C", cable_t_max_C
+    If manufacturer <> "no" Then dict.Add "manufacturer", manufacturer
+    If name <> "no" Then dict.Add "name", name
+    If d_mm > 0 Then dict.Add "d_mm", d_mm
+    If length_m > 0 Then dict.Add "length_m", length_m
+    
+    ESP_cable_encode_string = ConvertToJson(dict)
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция кодирования газосепаратора
+Public Function ESP_separation_encode_string( _
+            Optional ByVal separation_mode As String, _
+            Optional ByVal gassep_type As Long, _
+            Optional ByVal natsep_type As Long = 0, _
+            Optional ByVal psep_man_atma As Double, _
+            Optional ByVal tsep_man_C As Double, _
+            Optional ByVal ksep_gassep_man_d As Double, _
+            Optional ByVal ksep_nat_man_d As Double, _
+            Optional ByVal ksep_liquid_man_d As Double, _
+            Optional ByVal M_Nm As Double, _
+            Optional ByVal manufacturer As String = "no", _
+            Optional ByVal name As String = "no", _
+            Optional ByVal length_m As Double)
+' separation_mode - режим расчета сепарации
+' gassep_type - тип - номер из базы
+' natsep_type - модель расчета естественной сепарации
+' psep_man_atma  - давление для расчета
+'                     коэффициента сепарации заданного вручную
+' tsep_man_C  - температура для расчета
+'                     коэффициента сепарации заданного вручную
+' ksep_gassep_man_d  - коэффициент сепарации ГС заданный вручную
+' ksep_nat_man_d  - коэффициент сепарации натуральной
+'                   заданный вручную
+' ksep_liquid_man_d - коэффициент сепарации жидкости для режима
+'                     потока через затруб
+' M_Nm  - момент на валу
+' manufacturer - производитель, для справки
+' name  - название кабеля, для справки
+' length_m - длина кабельной линии, м
+'description_end
+    Dim dict As New Dictionary
+    
+    If separation_mode >= 0 Then
+        Select Case separation_mode
+            Case "0", "byCorrealation"
+                dict.Add "separation_mode", "byCorrealation"
+            Case "1", "pressureManual"
+                dict.Add "separation_mode", "pressureManual"
+            Case "2", "valueManual"
+                dict.Add "separation_mode", "valueManual"
+            Case "3", "fullyManual"
+                dict.Add "separation_mode", "fullyManual"
+        End Select
+    End If
+    If gassep_type >= 0 Then dict.Add "gassep_type", gassep_type
+    If natsep_type >= 0 Then dict.Add "natsep_type", natsep_type
+    If psep_man_atma >= 0 Then dict.Add "psep_man_atma", psep_man_atma
+    If tsep_man_C >= 0 Then dict.Add "tsep_man_C", tsep_man_C
+    If ksep_gassep_man_d > 0 Then dict.Add "ksep_gassep_man_d", ksep_gassep_man_d
+    If ksep_nat_man_d > 0 Then dict.Add "ksep_nat_man_d", ksep_nat_man_d
+    If ksep_liquid_man_d > 0 Then dict.Add "ksep_liquid_man_d", ksep_liquid_man_d
+    If M_Nm > 0 Then dict.Add "M_Nm", M_Nm
+    If manufacturer <> "no" Then dict.Add "manufacturer", manufacturer
+    If name <> "no" Then dict.Add "name", name
+    If length_m > 0 Then dict.Add "length_m", length_m
+    
+    ESP_separation_encode_string = ConvertToJson(dict)
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция кодирования температурных парамметров окружающей среды
+Public Function AmbientFormation_encode_string( _
+    Optional ByVal therm_cond_form_WmC As Double = 2.4252, _
+    Optional ByVal sp_heat_capacity_form_JkgC As Double = 200, _
+    Optional ByVal therm_cond_cement_WmC As Double = 6.965, _
+    Optional ByVal therm_cond_tubing_WmC As Double = 32, _
+    Optional ByVal therm_cond_casing_WmC As Double = 32, _
+    Optional ByVal heat_transfer_casing_liquid_Wm2C As Double = 200, _
+    Optional ByVal heat_transfer_casing_gas_Wm2C As Double = 10, _
+    Optional ByVal heat_transfer_fluid_convection_Wm2C As Double = 200, _
+    Optional ByVal t_calc_hr As Double = 240)
+' therm_cond_form_WmC - теплопроводность породы окружающей среды
+' sp_heat_capacity_form_JkgC - удельная теплоемкость породы окружающей среды
+' therm_cond_cement_WmC - теплопроводность цементного камня вокруг скважины
+' therm_cond_tubing_WmC - теплопроводность стенок НКТ
+' heat_transfer_casing_liquid_Wm2C - теплопередача через затруб с жидкостью
+' heat_transfer_casing_gas_Wm2C - теплопередача через затруб с газом
+' heat_transfer_fluid_convection_Wm2C - теплопередача в потоке
+'                               с жидкостью за счет конвекции
+' t_calc_hr - время на которое расчитывается распределение температуры
+'
+'description_end
+    Dim dict As New Dictionary
+    
+    dict.Add "therm_cond_form_WmC", therm_cond_form_WmC
+    dict.Add "sp_heat_capacity_form_JkgC", sp_heat_capacity_form_JkgC
+    dict.Add "therm_cond_cement_WmC", therm_cond_cement_WmC
+    dict.Add "therm_cond_tubing_WmC", therm_cond_tubing_WmC
+    dict.Add "therm_cond_casing_WmC", therm_cond_casing_WmC
+    dict.Add "heat_transfer_casing_liquid_Wm2C", heat_transfer_casing_liquid_Wm2C
+    dict.Add "heat_transfer_casing_gas_Wm2C", heat_transfer_casing_gas_Wm2C
+    dict.Add "heat_transfer_fluid_convection_Wm2C", heat_transfer_fluid_convection_Wm2C
+    dict.Add "t_calc_hr", t_calc_hr
+    AmbientFormation_encode_string = ConvertToJson(dict)
+End Function
+''=============================
+''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'' функция расшифровки параметров газлифтной компоновки скважины
+'Public Function GL_decode_string(well_GL_str As String, _
+'                  Optional ByVal getStr As Boolean = False)
+'' well_GL_str  - строка с параметрами газлифтной скважины
+'' getStr  - флаг проверки работы функции
+''    по умолчанию False (0) - функция выдает объект CESPsystem
+''    если задать True - функция раскодирует строку и снова закодирует
+''                       и выдаст строку (можно использовать из листа)
+'' результат - объект CESPsystem
+''description_end
+'
+'    Dim S As String
+'    Dim a, b
+'    Dim i As Long
+'    Dim GLV As Integer
+'    Dim dict As New Dictionary
+'    Dim key As String
+'' при разбиении строки на части ошибки недопустимы
+'On Error GoTo er1:
+'    ' пытаемся разбить строку разделителями
+'    a = Split(well_GL_str, ";")
+'    ' перебираем и сохраняем все параметры
+'    For i = LBound(a) To UBound(a)
+'        ' только для непустых разбиений
+'        If a(i) <> "" Then
+'           b = Split(a(i), ":")
+'           'только там где есть значение
+'           If UBound(b) = 1 Then
+'               dict.Item(b(0)) = b(1)
+'           End If
+'        End If
+'    Next i
+'' при считывании параметров со строки пытаемся выполнить чтение всех параметров
+'' с использование словаря - включаем режим после ошибки двигаться далее
+'On Error GoTo er2:
+'    ' при чтении параметров используем промежуточную переменную key
+'    ' чтобы иметь возможность более информативно отреагировать на ошибку
+'    key = "GLV": GLV = Cdbl_(dict.Item(key)) ' количество клапанов
+'
+'    Dim q_gas_inj_sm3day As Double
+'    Dim p_gas_inj_atma As Double
+'    Dim d_gas_inj_mm As Double
+'
+'    Dim h_glv_m() As Double
+'    Dim d_glv_mm() As Double
+'    Dim p_glv_atma() As Double
+'
+'    ReDim h_glv_m(1 To GLV)
+'    ReDim d_glv_mm(1 To GLV)
+'    ReDim p_glv_atma(1 To GLV)
+'
+'    key = "q_gas_inj_sm3day": q_gas_inj_sm3day = Cdbl_(dict.Item(key))
+'    key = "p_gas_inj_atma": p_gas_inj_atma = Cdbl_(dict.Item(key))
+'    key = "d_gas_inj_mm": d_gas_inj_mm = Cdbl_(dict.Item(key))
+'
+'
+'    For i = 1 To GLV
+'            key = "H_glv_m" & FormatInteger(i, 0): h_glv_m(i) = Cdbl_(dict.Item(key))
+'            key = "d_glv_mm" & FormatInteger(i, 0): d_glv_mm(i) = Cdbl_(dict.Item(key))
+'            key = "p_glv_atma" & FormatInteger(i, 0): p_glv_atma(i) = Cdbl_(dict.Item(key))
+'    Next i
+'On Error GoTo er1:
+'' ловим все ошибки, все должно пройти идеально при дешифровке
+'    If getStr Then
+'        GL_decode_string = GL_encode_string(q_gas_inj_sm3day, p_gas_inj_atma, d_gas_inj_mm, h_glv_m, d_glv_mm, p_glv_atma)
+'    Else
+'        Dim glv_set As New CGLValveSet
+'        Call glv_set.loadFromArray(h_glv_m, d_glv_mm, p_glv_atma)
+'        glv_set.q_gas_inj_sm3day = q_gas_inj_sm3day
+'        glv_set.p_gas_inj_atma = p_gas_inj_atma
+'        glv_set.d_gas_inj_mm = d_gas_inj_mm
+'
+'        Set GL_decode_string = glv_set
+'    End If
+'    Exit Function
+'er1:
+'    Dim errmsg As String
+'    errmsg = "GL_decode_string. error:" & Err.Description
+'    addLogMsg errmsg
+'    Err.Raise kErrPVTinput, Err.source, errmsg
+'    Exit Function
+'er2:
+' '   On Error Resume Next
+'    addLogMsg "GL_decode_string: error reading PVT key: " & key & ":" & Err.Description
+'    Resume Next
+'
+'End Function
+'
+''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'' функция кодирования параметров работы скважины с газлифтом
+'Public Function GL_encode_string( _
+'                    Optional q_gas_inj_sm3day As Double = 0, _
+'                    Optional p_gas_inj_atma As Double = 0, _
+'                    Optional d_gas_inj_mm As Double = 0, _
+'                    Optional HmesGLV_m = 0, _
+'                    Optional dGLV_mm = 0, _
+'                    Optional PsurfGLV_atma = 0)
+'' q_gas_inj_sm3day - расход газа закачки
+'' p_gas_inj_atma - давление газа закачки на поверхности
+'' d_gas_inj_mm - диаметр штуцера регулировки закачки газа на поверхности
+'' HmesGLV_m     - измеренные глубины установки газлифтных клапанов
+'' dGLV_mm       - диаметры порта установленных газлифтных клапанов
+'' PsurfGLV_atma - давления зарядки газлифтных клапанов
+'' результат     - строка с закодированными параметрами
+''description_end
+'
+'    Dim str As String
+'    Dim frmt As String
+'    Dim frmt_int As String
+'
+'    Dim h_glv_m() As Variant
+'    Dim d_glv_mm() As Variant
+'    Dim p_glv_atma() As Variant
+'
+'    Dim i As Long
+'
+'    frmt = "#0.####0"
+'    frmt_int = "0"
+'    str = "GLV:1;"
+'    str = str & "q_gas_inj_sm3day:" & Format(q_gas_inj_sm3day, frmt) & ";"
+'    str = str & "p_gas_inj_atma:" & Format(p_gas_inj_atma, frmt) & ";"
+'    str = str & "d_gas_inj_mm:" & Format(d_gas_inj_mm, frmt) & ";"
+'
+'    h_glv_m = readRange(HmesGLV_m)
+'    d_glv_mm = readRange(dGLV_mm)
+'    p_glv_atma = readRange(PsurfGLV_atma)
+'
+'    If (UBound(h_glv_m) = UBound(d_glv_mm)) And (UBound(h_glv_m) = UBound(p_glv_atma)) Then
+'        str = str & "GLV:" & FormatInteger(UBound(h_glv_m), 0) & ";"
+'        For i = LBound(h_glv_m) To UBound(h_glv_m)
+'            str = str & "H_glv_m" & FormatInteger(i, 0) & ":" & FormatFReal(Cdbl_(h_glv_m(i)), 0, 3) & ";"
+'            str = str & "d_glv_mm" & FormatInteger(i, 0) & ":" & FormatFReal(Cdbl_(d_glv_mm(i)), 0, 3) & ";"
+'            str = str & "p_glv_atma" & FormatInteger(i, 0) & ":" & FormatFReal(Cdbl_(p_glv_atma(i)), 0, 3) & ";"
+'        Next i
+'    Else
+'        str = str & "GVL:0;error" & ";"
+'    End If
+'
+'    GL_encode_string = str
+'
+'End Function
 '=============================
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расшифровки параметров газлифтной компоновки скважины
-Public Function GL_decode_string(well_GL_str As String, _
-                  Optional ByVal getStr As Boolean = False)
-' well_GL_str  - строка с параметрами газлифтной скважины
-' getStr  - флаг проверки работы функции
-'    по умолчанию False (0) - функция выдает объект CESPsystemSimple
-'    если задать True - функция раскодирует строку и снова закодирует
-'                       и выдаст строку (можно использовать из листа)
-' результат - объект CESPsystemSimple
+' функция кодирования параметров работы скважины с газлифтом
+Public Function well_construction_encode_string( _
+             ByVal h_perf_m As Double, _
+             ByVal h_tub_m As Double, _
+             ByVal h_list_m As Variant, _
+             ByVal d_tub_list_mm As Variant, _
+             ByVal d_cas_list_mm As Variant, _
+    Optional ByVal d_choke_mm As Double, _
+    Optional ByVal t_val_C As Variant, _
+    Optional ByVal rough_m As Double = 0.0001)
+'h_perf_m - глубина перфорации по длине скважины
+'           точка узлового анализа для забоя
+'h_tub_m - глубина спуска НКТ, или глубина
+'          спуска ЭЦН
+'h_list_m  - траектория скважины, если число то измеренная
+'           длина, range или таблица [0..N,0..1] то траектория
+'d_tub_list_mm - диаметр НКТ. range или таблица [0..N,0..1]
+'d_cas_list_mm - диаметр эксп колонны.
+'              range или таблица [0..N,0..1]
+'d_choke_mm - диаметр штуцера
+'t_val_C   - температура вдоль скважины
+'           если число то температура на устье скважины
+'           если range или таблица [0..N,0..1] то температура
+'           окружающей среды по вертикальной глубине, С
+'rough_m    - шероховатость трубы
+' результат     - строка с закодированными параметрами
 'description_end
-    Dim S As String
-    Dim A, b
-    Dim I As Long
-    Dim GLV As Integer
     Dim dict As New Dictionary
-    Dim key As String
-' при разбиении строки на части ошибки недопустимы
-On Error GoTo er1:
-    ' пытаемся разбить строку разделителями
-    A = Split(well_GL_str, ";")
-    ' перебираем и сохраняем все параметры
-    For I = LBound(A) To UBound(A)
-        ' только для непустых разбиений
-        If A(I) <> "" Then
-           b = Split(A(I), ":")
-           'только там где есть значение
-           If UBound(b) = 1 Then
-               dict.Item(b(0)) = b(1)
-           End If
-        End If
-    Next I
-' при считывании параметров со строки пытаемся выполнить чтение всех параметров
-' с использование словаря - включаем режим после ошибки двигаться далее
-On Error GoTo er2:
-    ' при чтении параметров используем промежуточную переменную key
-    ' чтобы иметь возможность более информативно отреагировать на ошибку
-    key = "GLV": GLV = Cdbl_(dict.Item(key)) ' количество клапанов
     
-    Dim q_gas_inj_sm3day As Double
-    Dim p_gas_inj_atma As Double
-    Dim d_gas_inj_mm As Double
-    Dim h_glv_m() As Double
-    Dim d_glv_mm() As Double
-    Dim p_glv_atma() As Double
-    ReDim h_glv_m(1 To GLV)
-    ReDim d_glv_mm(1 To GLV)
-    ReDim p_glv_atma(1 To GLV)
+    dict.Add "h_perf_m", h_perf_m
+    dict.Add "h_tub_m", h_tub_m
+    dict.Add "rough_m", rough_m
+    dict.Add "d_choke_mm", d_choke_mm
+    dict.Add "t_val_C", array_num_from_range(t_val_C, True)
+    dict.Add "h_list_m", array_num_from_range(h_list_m, True)
+    dict.Add "d_tub_list_mm", array_num_from_range(d_tub_list_mm, True)
+    dict.Add "d_cas_list_mm", array_num_from_range(d_cas_list_mm, True)
+    well_construction_encode_string = ConvertToJson(dict)
     
-    key = "q_gas_inj_sm3day": q_gas_inj_sm3day = Cdbl_(dict.Item(key))
-    key = "p_gas_inj_atma": p_gas_inj_atma = Cdbl_(dict.Item(key))
-    key = "d_gas_inj_mm": d_gas_inj_mm = Cdbl_(dict.Item(key))
-    
-    For I = 1 To GLV
-            key = "H_glv_m" & FormatInteger(I, 0): h_glv_m(I) = Cdbl_(dict.Item(key))
-            key = "d_glv_mm" & FormatInteger(I, 0): d_glv_mm(I) = Cdbl_(dict.Item(key))
-            key = "p_glv_atma" & FormatInteger(I, 0): p_glv_atma(I) = Cdbl_(dict.Item(key))
-    Next I
-On Error GoTo er1:
-' ловим все ошибки, все должно пройти идеально при дешифровке
-    If getStr Then
-        GL_decode_string = GL_encode_string(q_gas_inj_sm3day, p_gas_inj_atma, d_gas_inj_mm, h_glv_m, d_glv_mm, p_glv_atma)
-    Else
-        Dim glv_set As New CGLValveSet
-        Call glv_set.loadFromArray(h_glv_m, d_glv_mm, p_glv_atma)
-        glv_set.q_gas_inj_sm3day = q_gas_inj_sm3day
-        glv_set.p_gas_inj_atma = p_gas_inj_atma
-        glv_set.d_gas_inj_mm = d_gas_inj_mm
-        
-        Set GL_decode_string = glv_set
-    End If
-    Exit Function
-er1:
-    Dim errmsg As String
-    errmsg = "GL_decode_string. error:" & Err.Description
-    addLogMsg errmsg
-    Err.Raise kErrPVTinput, Err.source, errmsg
-    Exit Function
-er2:
- '   On Error Resume Next
-    addLogMsg "GL_decode_string: error reading PVT key: " & key & ":" & Err.Description
-    Resume Next
+'   ' cl = dict.Item("h_list_m")
+'    Set d2 = ParseJson(well_construction_encode)
+'    Set cl = d2.Item("h_list_m")
+'    a = CollectionToArray(cl)
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы скважины с газлифтом
-Public Function GL_encode_string( _
-                    Optional q_gas_inj_sm3day As Double = 0, _
-                    Optional p_gas_inj_atma As Double = 0, _
-                    Optional d_gas_inj_mm As Double = 0, _
-                    Optional HmesGLV_m = 0, _
-                    Optional dGLV_mm = 0, _
-                    Optional PsurfGLV_atma = 0)
-' q_gas_inj_sm3day - расход газа закачки
-' p_gas_inj_atma - давление газа закачки на поверхности
-' d_gas_inj_mm - диаметр штуцера регулировки закачки газа на поверхности
-' HmesGLV_m     - измеренные глубины установки газлифтных клапанов
-' dGLV_mm       - диаметры порта установленных газлифтных клапанов
-' PsurfGLV_atma - давления зарядки газлифтных клапанов
+Public Function crv_encode_string( _
+             ByVal list As Variant)
+'list    -  range или таблица [0..N,0..1] c табличной функцией
 ' результат     - строка с закодированными параметрами
 'description_end
-    Dim str As String
-    Dim frmt As String
-    Dim frmt_int As String
+    Dim c As New Collection
     
-    Dim h_glv_m() As Variant
-    Dim d_glv_mm() As Variant
-    Dim p_glv_atma() As Variant
+    c.Add array_num_from_range(list, True)
     
-    Dim I As Long
-    
-    frmt = "#0.####0"
-    frmt_int = "0"
-    str = "GLV:1;"
-    str = str & "q_gas_inj_sm3day:" & Format(q_gas_inj_sm3day, frmt) & ";"
-    str = str & "p_gas_inj_atma:" & Format(p_gas_inj_atma, frmt) & ";"
-    str = str & "d_gas_inj_mm:" & Format(d_gas_inj_mm, frmt) & ";"
-    h_glv_m = readRange(HmesGLV_m)
-    d_glv_mm = readRange(dGLV_mm)
-    p_glv_atma = readRange(PsurfGLV_atma)
-    
-    If (UBound(h_glv_m) = UBound(d_glv_mm)) And (UBound(h_glv_m) = UBound(p_glv_atma)) Then
-        str = str & "GLV:" & FormatInteger(UBound(h_glv_m), 0) & ";"
-        For I = LBound(h_glv_m) To UBound(h_glv_m)
-            str = str & "H_glv_m" & FormatInteger(I, 0) & ":" & FormatFReal(Cdbl_(h_glv_m(I)), 0, 3) & ";"
-            str = str & "d_glv_mm" & FormatInteger(I, 0) & ":" & FormatFReal(Cdbl_(d_glv_mm(I)), 0, 3) & ";"
-            str = str & "p_glv_atma" & FormatInteger(I, 0) & ":" & FormatFReal(Cdbl_(p_glv_atma(I)), 0, 3) & ";"
-        Next I
-    Else
-        str = str & "GVL:0;error" & ";"
-    End If
-    
-    GL_encode_string = str
-    
+    crv_encode_string = ConvertToJson(c)
 End Function
-'=============================
+Public Function crv_decode(rng)
+    Dim a
+    Set a = ParseJson(rng)
+End Function
 

@@ -266,7 +266,7 @@ Option Explicit
  
  Public Function cJT_Katm() As Double
  ' коэффциент Джоуля Томсона для многофазной смеси
-    Dim x As Double
+    Dim X As Double
     Dim wm As Double
     Dim dZdT As Double
     Dim TZdZdT As Double
@@ -274,11 +274,11 @@ Option Explicit
     dZdT = unf_pvt_dZdt(t_calc_K, p_calc_MPaa, gamma_g, z_Kareem, z_)
     TZdZdT = t_calc_K / z_ * dZdT
     If wm > 0 Then
-        x = mg_kgsec / (mo_kgsec + mw_kgsec + mg_kgsec)    ' массовая доля газа в потоке
+        X = mg_kgsec / (mo_kgsec + mw_kgsec + mg_kgsec)    ' массовая доля газа в потоке
     Else
-        x = 0
+        X = 0
     End If
-    cJT_Katm = 1 / cmix_JkgC * (x / rho_gas_rc_kgm3 * (-TZdZdT) + (1 - x) / rho_liq_rc_kgm3) * const_convert_atma_Pa
+    cJT_Katm = 1 / cmix_JkgC * (X / rho_gas_rc_kgm3 * (-TZdZdT) + (1 - X) / rho_liq_rc_kgm3) * const_convert_atma_Pa
  End Function
  
  Public Function oil_API() As Double
@@ -947,7 +947,7 @@ On Error GoTo err1:
     Dim ST68 As Double, ST100 As Double
     Dim STw74 As Double, STw280 As Double
     Dim Tst As Double, Tstw As Double
-    Dim STo As Double, STw As Double, ST As Double
+    Dim STo As Double, STw As Double, st As Double
     Dim t_F As Double
     Dim P_psia As Double, p_MPa As Double
         t_F = t_C * 1.8 + 32
@@ -977,10 +977,10 @@ On Error GoTo err1:
         ' далее второй способ
         STw = 10 ^ (-(1.19 + 0.01 * p_MPa)) * 1000
         ' Расчет коэффициента поверхностного натяжения газ-жидкость
-        ST = (STw * fw_fr_) + STo * (1 - fw_fr_)
+        st = (STw * fw_fr_) + STo * (1 - fw_fr_)
         ST_oilgas_dyncm_ = STo
         ST_watgas_dyncm_ = STw
-        ST_liqgas_dyncm_ = ST
+        ST_liqgas_dyncm_ = st
     Exit Sub
 err1:
     Dim errmsg As String
@@ -1033,7 +1033,7 @@ Public Function p_gas_fraction_atma(FreeGas As Double, t_C As Double, Optional E
     'Es         - коэффициент сепарации насоса
     Dim p1 As Double
     Dim p2 As Double
-    Dim max_iter As Integer, I As Integer
+    Dim max_iter As Integer, i As Integer
     Dim e As Double
     Dim p_gas As Double, p As Double
     max_iter = 100
@@ -1041,7 +1041,7 @@ Public Function p_gas_fraction_atma(FreeGas As Double, t_C As Double, Optional E
     p1 = P_init_atma
     p2 = 0
 On Error GoTo err1:
-    For I = 1 To max_iter
+    For i = 1 To max_iter
         p = (p1 + p2) / 2
         Call calc_PVT(p, t_C)
         p_gas = gas_fraction_d(Es)
@@ -1063,9 +1063,9 @@ Public Function rp_gas_fraction_m3m3(FreeGas As Double, p_atma As Double, t_C As
     'Es         - коэффициент сепарации насоса
     Dim G1 As Double
     Dim g2 As Double
-    Dim max_iter As Integer, I As Integer
+    Dim max_iter As Integer, i As Integer
     Dim e As Double
-    Dim p_gas As Double, G As Double
+    Dim p_gas As Double, g As Double
     Dim rsb_back As Double
     max_iter = 100
     e = 0.0001
@@ -1073,21 +1073,21 @@ Public Function rp_gas_fraction_m3m3(FreeGas As Double, p_atma As Double, t_C As
     g2 = 0
     rsb_back = rsb_m3m3_
 On Error GoTo err1:
-    For I = 1 To max_iter
-        G = (G1 + g2) / 2
-        Call set_rp_rsb(G, rsb_back)
+    For i = 1 To max_iter
+        g = (G1 + g2) / 2
+        Call set_rp_rsb(g, rsb_back)
 '        rsb_m3m3 = rsb_back
 '        rp_m3m3 = g
         Call calc_PVT(p_atma, t_C)
         p_gas = gas_fraction_d(Es)
         If Abs(p_gas - FreeGas) <= e Then Exit For
         If p_gas > FreeGas Then
-           G1 = G
+           G1 = g
         Else
-           g2 = G
+           g2 = g
         End If
     Next
-    rp_gas_fraction_m3m3 = G
+    rp_gas_fraction_m3m3 = g
     Exit Function
 err1:
     rp_gas_fraction_m3m3 = 0
@@ -1103,18 +1103,23 @@ End Function
 Public Sub mod_after_separation(ByVal p_atma As Double, _
                                 ByVal t_C As Double, _
                                 ByVal Ksep As Double, _
-                       Optional ByVal GasGoesIntoSolution As Boolean = False)
+                       Optional ByVal GasGoesIntoSolution As Boolean = False, _
+                       Optional ByVal ksep_liq As Double = 0, _
+                       Optional ByVal ksep_water As Double = 0)
+                       
 ' функция модификации свойств нефти после сепарации
 ' удаление части газа меняет свойства нефти - причем добавление газа свойства не трогает
 ' на входе условия при которых проходила сепарация
+' ksep_liq доля жидкости выкинутая из потока
+' ksep_water доля воды выкинутая из потока
     Dim Rs As Double
     Dim Bo As Double
     Dim Pb_Rs_curve As New CInterpolation ' хранилище кривой зависимости газосодержания от давления насыщения
     Dim Bo_Rs_curve As New CInterpolation
     Dim pb_atma_tab As Double, rsb_m3m3_tab As Double, Bo_m3m3_tab As Double
     Dim Delta As Double
-    Dim I As Integer
-    Const n = 10
+    Dim i As Integer
+    Const N = 10
     Dim Rpnew_with_Ksep As Double   ' новый ГФ с учетом сепарации газа
     Dim Rpnew_Ksep_1 As Double      ' новый ГФ без учета сепарации
     Dim Rpnew As Double
@@ -1135,15 +1140,15 @@ On Error GoTo err1:
         q_gas_free_sm3day = q_gas_free_sm3day * (1 - Ksep)
         
         
-        Delta = (.pb_calc_atma - 1) / n    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
+        Delta = (.pb_calc_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
         ' запишем зависимость газосодержания от давления насыщения на память
-        For I = 0 To n
-            pb_atma_tab = 1 + Delta * I
+        For i = 0 To N
+            pb_atma_tab = 1 + Delta * i
             rsb_m3m3_tab = .calc_rs_m3m3(pb_atma_tab, .t_res_C)
             Pb_Rs_curve.AddPoint rsb_m3m3_tab, pb_atma_tab
             Bo_m3m3_tab = .calc_bo_m3m3(pb_atma_tab, .t_res_C)
             Bo_Rs_curve.AddPoint rsb_m3m3_tab, Bo_m3m3_tab
-        Next I
+        Next i
         ' найдем сколько всего газа осталось в потоке
         
         If GasGoesIntoSolution Then   ' тогда газ успеет растворится
@@ -1163,11 +1168,54 @@ On Error GoTo err1:
         ' итоговый газовый фактор всегда с учетом сепараци
         .rp_m3m3 = Rpnew_with_Ksep
     End With
-     Exit Sub
+    
+    qliq_sm3day = qliq_sm3day * (1 - ksep_liq)
+    
+    Exit Sub
 err1:
     Dim errmsg As String
     errmsg = "Error:CPVT.mod_after_separation:" & Err.Description
     addLogMsg errmsg
     Err.Raise kErrPVTcalc, "CPVT.mod_after_separation", errmsg
 End Sub
+' деление потока на две части по заданным коэффициентам сепарации
+Public Function divide_flux(psep_atma As Double, _
+                            tsep_C As Double, _
+                            ksep_gas As Double, _
+                            ksep_oil As Double, _
+                            ksep_wat As Double, _
+                            Optional tubing As Boolean = True) As CPVT
+    Dim fl As CPVT
+    Dim Rs As Double
+    Dim Bo As Double
+    Dim pb As Double
+    Dim muo As Double
+    Dim qgf As Double
+     
+    Call calc_PVT(psep_atma, tsep_C)
+    Rs = rs_m3m3
+    Bo = bo_m3m3
+    muo = mu_oil_cP
+    qgf = q_gas_free_sm3day
+    pb = calc_pb_atma(Rs, tsep_C)
+    
+    Set fl = clone
+    fl.rsb_m3m3 = Rs
+    fl.bob_m3m3 = Bo
+    fl.pb_atma = pb
+    fl.muob_cP = muo
+    
+    If Not tubing Then
+        ksep_gas = 1 - ksep_gas
+        ksep_oil = 1 - ksep_oil
+        ksep_wat = 1 - ksep_wat
+    End If
+    
+    fl.qliq_sm3day = qliq_sm3day * fw_fr * ksep_wat + qliq_sm3day * (1 - fw_fr) * ksep_oil
+    fl.fw_fr = qliq_sm3day * fw_fr * ksep_oil / (qliq_sm3day * fw_fr * ksep_wat + qliq_sm3day * (1 - fw_fr) * ksep_oil)
+    fl.rp_m3m3 = fl.rsb_m3m3 + (qgf * ksep_gas) / fl.q_oil_sm3day
+    
+    Set divide_flux = fl
+    
+End Function
 

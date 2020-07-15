@@ -318,7 +318,7 @@ class API():
     def MF_calibr_pipe(self, p_calc_from_atma,p_calc_to_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,c_calibr=1,roughness_m=0.0001,calibr_type=0):
         """
  ========== description ============== 
- подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций 
+ подбор параметров потока через трубу при известном  перепаде давления с использованием многофазных корреляций  (лучше не использовать - используйте MF_calibr_pipeline) 
         
  ==========  arguments  ============== 
 
@@ -391,7 +391,7 @@ class API():
         self.f_MF_calibr_choke = self.book.macro("MF_calibr_choke")
         return self.f_MF_calibr_choke(qliq_sm3day,fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,str_PVT,q_gas_sm3day,calibr_type)
 
-    def MF_p_pipeline_atma(self, p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0):
+    def MF_p_pipeline_atma(self, p_calc_from_atma,t_calc_from_C,t_val_C,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0,znlf=False):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  с использованием многофазных корреляций 
@@ -402,7 +402,7 @@ class API():
 
      t_calc_from_c - температура в точке где задано давление расчета    
 
-     t_val - температура вдоль трубопровода  если число то температура на другом конце трубы  если range или таблица [0..n,0..1] то температура  окружающей среды по вертикальной гл..см.мануал   
+     t_val_c - температура вдоль трубопровода  если число то температура на другом конце трубы  если range или таблица [0..n,0..1] то температура  окружающей среды по вертикальной ..см.мануал   
 
      h_list_m - траектория трубопровода, если число то измеренная  длина, range или таблица [0..n,0..1] то траектория    
 
@@ -430,17 +430,19 @@ class API():
 
      out_curves_num_points - количество точек для вывода значений  между концами трубы.    
 
-     num_value - значение которое будет выводиться первым   
+     num_value - значение которое будет выводиться первым    
+
+     znlf - флаг для расчета вертикального барботажа (дин уровень)   
 
         """
 
         self.f_MF_p_pipeline_atma = self.book.macro("MF_p_pipeline_atma")
-        return self.f_MF_p_pipeline_atma(p_calc_from_atma,t_calc_from_C,t_val,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_method,c_calibr,roughness_m,out_curves,out_curves_num_points,num_value)
+        return self.f_MF_p_pipeline_atma(p_calc_from_atma,t_calc_from_C,t_val_C,h_list_m,diam_list_mm,qliq_sm3day,fw_perc,q_gas_sm3day,str_PVT,calc_flow_direction,hydr_corr,temp_method,c_calibr,roughness_m,out_curves,out_curves_num_points,num_value,znlf)
 
     def MF_p_pipe_atma(self, p_calc_from_atma,t_calc_from_C,t_calc_to_C,length_m,theta_deg,d_mm,qliq_sm3day,fw_perc,q_gas_sm3day=0,str_PVT=PVT_DEFAULT,calc_flow_direction=11,hydr_corr=H_CORRELATION,c_calibr=1,roughness_m=0.0001,out_curves=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
- расчет распределения давления и температуры в трубе  с использованием многофазных корреляций 
+ расчет распределения давления и температуры в трубе  (лучше не использовать - используйте MF_p_pipeline_atma) 
         
  ==========  arguments  ============== 
 
@@ -575,7 +577,7 @@ class API():
         self.f_MF_q_choke_sm3day = self.book.macro("MF_q_choke_sm3day")
         return self.f_MF_q_choke_sm3day(fw_perc,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,c_calibr_fr,str_PVT,q_gas_sm3day)
 
-    def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_bg_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  функция расчета объемного коэффициента газа 
@@ -596,15 +598,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -617,9 +619,9 @@ class API():
         """
 
         self.f_PVT_bg_m3m3 = self.book.macro("PVT_bg_m3m3")
-        return self.f_PVT_bg_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_bg_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_bo_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_bo_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет объемного коэффициента нефти 
@@ -640,15 +642,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -661,9 +663,9 @@ class API():
         """
 
         self.f_PVT_bo_m3m3 = self.book.macro("PVT_bo_m3m3")
-        return self.f_PVT_bo_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_bo_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_bw_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_bw_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет объемного коэффициента воды 
@@ -684,15 +686,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -705,9 +707,9 @@ class API():
         """
 
         self.f_PVT_bw_m3m3 = self.book.macro("PVT_bw_m3m3")
-        return self.f_PVT_bw_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_bw_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_salinity_ppm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_salinity_ppm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет солености воды 
@@ -728,15 +730,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -749,9 +751,9 @@ class API():
         """
 
         self.f_PVT_salinity_ppm = self.book.macro("PVT_salinity_ppm")
-        return self.f_PVT_salinity_ppm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_salinity_ppm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_mu_oil_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_mu_oil_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет вязкости нефти 
@@ -772,15 +774,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -793,9 +795,9 @@ class API():
         """
 
         self.f_PVT_mu_oil_cP = self.book.macro("PVT_mu_oil_cP")
-        return self.f_PVT_mu_oil_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_mu_oil_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_mu_gas_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_mu_gas_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет вязкости газа 
@@ -816,15 +818,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -837,9 +839,9 @@ class API():
         """
 
         self.f_PVT_mu_gas_cP = self.book.macro("PVT_mu_gas_cP")
-        return self.f_PVT_mu_gas_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_mu_gas_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_mu_wat_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_mu_wat_cP(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет вязкости воды 
@@ -860,15 +862,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -881,9 +883,9 @@ class API():
         """
 
         self.f_PVT_mu_wat_cP = self.book.macro("PVT_mu_wat_cP")
-        return self.f_PVT_mu_wat_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_mu_wat_cP(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rs_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rs_m3m3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет газосодержания 
@@ -904,15 +906,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -925,9 +927,9 @@ class API():
         """
 
         self.f_PVT_rs_m3m3 = self.book.macro("PVT_rs_m3m3")
-        return self.f_PVT_rs_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rs_m3m3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_z(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_z(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет коэффициента сверхсжимаемости газа 
@@ -948,15 +950,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -969,9 +971,9 @@ class API():
         """
 
         self.f_PVT_z = self.book.macro("PVT_z")
-        return self.f_PVT_z(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_z(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rho_oil_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rho_oil_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет плотности нефти в рабочих условиях 
@@ -992,15 +994,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1013,9 +1015,9 @@ class API():
         """
 
         self.f_PVT_rho_oil_kgm3 = self.book.macro("PVT_rho_oil_kgm3")
-        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rho_gas_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rho_gas_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет плотности газа в рабочих условиях 
@@ -1036,15 +1038,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1057,9 +1059,9 @@ class API():
         """
 
         self.f_PVT_rho_gas_kgm3 = self.book.macro("PVT_rho_gas_kgm3")
-        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_rho_wat_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_rho_wat_kgm3(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет плотности воды в рабочих условиях 
@@ -1080,15 +1082,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1101,9 +1103,9 @@ class API():
         """
 
         self.f_PVT_rho_wat_kgm3 = self.book.macro("PVT_rho_wat_kgm3")
-        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_pb_atma(self, t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_pb_atma(self, t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  Расчет давления насыщения 
@@ -1122,15 +1124,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1143,9 +1145,9 @@ class API():
         """
 
         self.f_PVT_pb_atma = self.book.macro("PVT_pb_atma")
-        return self.f_PVT_pb_atma(t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_pb_atma(t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_ST_oilgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_ST_oilgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения нефть - газ 
@@ -1166,15 +1168,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1187,9 +1189,9 @@ class API():
         """
 
         self.f_PVT_ST_oilgas_Nm = self.book.macro("PVT_ST_oilgas_Nm")
-        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_ST_watgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_ST_watgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения вода - газ 
@@ -1210,15 +1212,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1231,9 +1233,9 @@ class API():
         """
 
         self.f_PVT_ST_watgas_Nm = self.book.macro("PVT_ST_watgas_Nm")
-        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_ST_liqgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_ST_liqgas_Nm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения жидкость - газ 
@@ -1254,15 +1256,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1275,9 +1277,9 @@ class API():
         """
 
         self.f_PVT_ST_liqgas_Nm = self.book.macro("PVT_ST_liqgas_Nm")
-        return self.f_PVT_ST_liqgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_ST_liqgas_Nm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_cp_oil_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_cp_oil_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет теплоемкости нефти при постоянном давлении cp 
@@ -1298,15 +1300,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1319,9 +1321,9 @@ class API():
         """
 
         self.f_PVT_cp_oil_JkgC = self.book.macro("PVT_cp_oil_JkgC")
-        return self.f_PVT_cp_oil_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_cp_oil_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_cp_gas_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_cp_gas_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет теплоемкости газа при постоянном давлении cp 
@@ -1342,15 +1344,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1363,9 +1365,9 @@ class API():
         """
 
         self.f_PVT_cp_gas_JkgC = self.book.macro("PVT_cp_gas_JkgC")
-        return self.f_PVT_cp_gas_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_cp_gas_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_cv_gas_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_cv_gas_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет теплоемкости газа при постоянном давлении cp 
@@ -1386,15 +1388,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1407,9 +1409,9 @@ class API():
         """
 
         self.f_PVT_cv_gas_JkgC = self.book.macro("PVT_cv_gas_JkgC")
-        return self.f_PVT_cv_gas_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_cv_gas_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_cp_wat_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_cp_wat_JkgC(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет теплоемкости воды при постоянном давлении cp 
@@ -1430,15 +1432,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1451,9 +1453,9 @@ class API():
         """
 
         self.f_PVT_cp_wat_JkgC = self.book.macro("PVT_cp_wat_JkgC")
-        return self.f_PVT_cp_wat_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_cp_wat_JkgC(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_compressibility_wat_1atm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_compressibility_wat_1atm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет сжимаемости воды 
@@ -1474,15 +1476,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1495,9 +1497,9 @@ class API():
         """
 
         self.f_PVT_compressibility_wat_1atm = self.book.macro("PVT_compressibility_wat_1atm")
-        return self.f_PVT_compressibility_wat_1atm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_compressibility_wat_1atm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_compressibility_oil_1atm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_compressibility_oil_1atm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет сжимаемости нефти 
@@ -1518,15 +1520,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1539,9 +1541,9 @@ class API():
         """
 
         self.f_PVT_compressibility_oil_1atm = self.book.macro("PVT_compressibility_oil_1atm")
-        return self.f_PVT_compressibility_oil_1atm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_compressibility_oil_1atm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def PVT_compressibility_gas_1atm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
+    def PVT_compressibility_gas_1atm(self, p_atma,t_C,gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,t_res_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorrPVT_correlation=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,str_PVT=""):
         """
  ========== description ============== 
  расчет сжимаемости нефти 
@@ -1562,15 +1564,15 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0 то рассчитается по корреляции  t_res_c - пластовая тем..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти, м3/м3.    
 
-     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции    
+     muob_cp - вязкость нефти при давлении насыщения  по умолчанию рассчитывается по корреляции  pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе ..см.мануал   
 
-     pvtcorr - номер набора pvt корреляций для расчета:  standing_based = 0 - на основе кор-ии стендинга  mccain_based = 1 - на основе кор-ии маккейна  straigth_line = 2 - на основ..см.мануал   
+   pvtcorrpvt_correlation   
 
      ksep_fr - коэффициент сепарации - определяет изменение свойств  нефти после сепарации доли свободного газа.  изменение свойств нефти зависит от условий  сепарации газа, которы..см.мануал   
 
@@ -1583,9 +1585,9 @@ class API():
         """
 
         self.f_PVT_compressibility_gas_1atm = self.book.macro("PVT_compressibility_gas_1atm")
-        return self.f_PVT_compressibility_gas_1atm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
+        return self.f_PVT_compressibility_gas_1atm(p_atma,t_C,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorrPVT_correlation,ksep_fr,p_ksep_atma,t_ksep_C,str_PVT)
 
-    def IPR_qliq_sm3day(self, pi_sm3dayatm,pres_atma,Pwf_atma,fw_perc=0,pb_atma=-1):
+    def IPR_qliq_sm3day(self, pi_sm3dayatm,pres_atma,pwf_atma,fw_perc=0,pb_atma=-1):
         """
  ========== description ============== 
  расчет дебита по давлению и продуктивности 
@@ -1605,7 +1607,7 @@ class API():
         """
 
         self.f_IPR_qliq_sm3day = self.book.macro("IPR_qliq_sm3day")
-        return self.f_IPR_qliq_sm3day(pi_sm3dayatm,pres_atma,Pwf_atma,fw_perc,pb_atma)
+        return self.f_IPR_qliq_sm3day(pi_sm3dayatm,pres_atma,pwf_atma,fw_perc,pb_atma)
 
     def IPR_pwf_atma(self, pi_sm3dayatm,pres_atma,qliq_sm3day,fw_perc=0,pb_atma=-1):
         """
@@ -1651,7 +1653,7 @@ class API():
         self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
         return self.f_IPR_pi_sm3dayatm(Qtest_sm3day,pwf_test_atma,pres_atma,fw_perc,pb_atma)
 
-    def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr=1):
+    def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id,mu_cSt=-1,c_calibr=1):
         """
  ========== description ============== 
  номинальный напор ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1675,7 +1677,7 @@ class API():
         self.f_ESP_head_m = self.book.macro("ESP_head_m")
         return self.f_ESP_head_m(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr)
 
-    def ESP_power_W(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr=1):
+    def ESP_power_W(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=737,mu_cSt=-1,c_calibr=1):
         """
  ========== description ============== 
  номинальная мощность потребляемая ЭЦН с вала (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1699,7 +1701,7 @@ class API():
         self.f_ESP_power_W = self.book.macro("ESP_power_W")
         return self.f_ESP_power_W(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr)
 
-    def ESP_eff_fr(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=674,mu_cSt=-1,c_calibr=1):
+    def ESP_eff_fr(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=737,mu_cSt=-1,c_calibr=1):
         """
  ========== description ============== 
  номинальный КПД ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1723,7 +1725,7 @@ class API():
         self.f_ESP_eff_fr = self.book.macro("ESP_eff_fr")
         return self.f_ESP_eff_fr(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,c_calibr)
 
-    def ESP_name(self, pump_id=674):
+    def ESP_name(self, pump_id):
         """
  ========== description ============== 
  название ЭЦН по номеру 
@@ -1737,7 +1739,7 @@ class API():
         self.f_ESP_name = self.book.macro("ESP_name")
         return self.f_ESP_name(pump_id)
 
-    def ESP_rate_max_sm3day(self, freq_Hz=50,pump_id=674,mu_cSt=-1):
+    def ESP_rate_max_sm3day(self, freq_Hz=50,pump_id,mu_cSt=-1):
         """
  ========== description ============== 
  максимальный дебит ЭЦН для заданной частоты  по номинальной кривой РНХ 
@@ -1755,7 +1757,7 @@ class API():
         self.f_ESP_rate_max_sm3day = self.book.macro("ESP_rate_max_sm3day")
         return self.f_ESP_rate_max_sm3day(freq_Hz,pump_id,mu_cSt)
 
-    def ESP_optRate_m3day(self, freq_Hz=50,pump_id=674):
+    def ESP_optRate_m3day(self, freq_Hz=50,pump_id):
         """
  ========== description ============== 
  оптимальный дебит ЭЦН для заданной частоты  по номинальной кривой РНХ 
@@ -1785,7 +1787,7 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q)
 
-    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,out_curves_num_points=20,num_value=0):
+    def ESP_p_atma(self, qliq_sm3day,fw_perc,p_calc_atma,num_stages=1,freq_Hz=50,pump_id,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,out_curves_num_points=20,num_value=0,q_gas_sm3day=0):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях 
@@ -1820,12 +1822,14 @@ class API():
 
      out_curves_num_points - количество точек для вывода значений  по ступеням    
 
-     num_value - значение которое будет выводиться первым   
+     num_value - значение которое будет выводиться первым    
+
+     q_gas_sm3day - свободный газ в потоке   
 
         """
 
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,out_curves_num_points,num_value)
+        return self.f_ESP_p_atma(qliq_sm3day,fw_perc,p_calc_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,out_curves_num_points,num_value,q_gas_sm3day)
 
     def ESP_calibr_pump(self, qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages=1,freq_Hz=50,pump_id=674,str_PVT=PVT_DEFAULT,t_intake_C=50,t_dis_C=50,calc_along_flow=1,ESP_gas_correct=1,c_calibr=1,dnum_stages_integrate=1,calibr_type=0):
         """
@@ -1869,7 +1873,7 @@ class API():
         self.f_ESP_calibr_pump = self.book.macro("ESP_calibr_pump")
         return self.f_ESP_calibr_pump(qliq_sm3day,fw_perc,p_int_atma,p_dis_atma,num_stages,freq_Hz,pump_id,str_PVT,t_intake_C,t_dis_C,calc_along_flow,ESP_gas_correct,c_calibr,dnum_stages_integrate,calibr_type)
 
-    def ESP_system_calc(self, qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow=1,out_curves_num_points=20,num_value=0):
+    def ESP_system_calc(self, qliq_sm3day,fw_perc,qgas_free_sm3day,p_calc_atma,t_intake_C,t_dis_C=-1,str_PVT,str_ESP,str_motor,str_cable,str_gassep,calc_along_flow=1,out_curves_num_points=20,num_value=0):
         """
  ========== description ============== 
  расчет производительности системы УЭЦН  считает перепад давления, электрические параметры и деградацию КПД 
@@ -1880,11 +1884,23 @@ class API():
 
      fw_perc - обводненность    
 
+     qgas_free_sm3day - свободный газ в потоке    
+
      p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
+
+   t_intake_c   
+
+   t_dis_c   
 
      str_pvt - набор данных pvt    
 
      str_esp - набор данных эцн    
+
+   str_motor   
+
+   str_cable   
+
+   str_gassep   
 
      определяется параметром calc_along_flow  str_pvt - набор данных pvt  str_esp - набор данных эцн  calc_along_flow - режим расчета снизу вверх или сверху вниз  calc_along_flow ..см.мануал   
 
@@ -1895,283 +1911,121 @@ class API():
         """
 
         self.f_ESP_system_calc = self.book.macro("ESP_system_calc")
-        return self.f_ESP_system_calc(qliq_sm3day,fw_perc,p_calc_atma,str_PVT,str_ESP,calc_along_flow,out_curves_num_points,num_value)
+        return self.f_ESP_system_calc(qliq_sm3day,fw_perc,qgas_free_sm3day,p_calc_atma,t_intake_C,t_dis_C,str_PVT,str_ESP,str_motor,str_cable,str_gassep,calc_along_flow,out_curves_num_points,num_value)
 
-    def motor_M_slip_Nm(self, S,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
+    def ESP_motor_calc_mom(self, mom_Nm,freq_Hz=50,U_V=-1,U_nom_V=500,P_nom_kW=10,f_nom_Hz=50,motorID=0,eff_nom_fr=0.85,cosphi_nom_fr=0.8,slip_nom_fr=0.05,d_od_mm=117,lambda=2,alpha0=0.4,xi0=1.05,Ixcf=0.4_):
         """
  ========== description ============== 
- функция расчета момента двигателя от проскальзования 
+ функция расчета параметров двигателя по заданному моменту на валу 
         
  ==========  arguments  ============== 
 
-     s - скольжение двигателя  опциональные параметры    
+     mom_nm - момент развиваемый двигателем на валу, нм    
 
      freq_hz - частота вращения внешнего поля    
 
      u_v - напряжение рабочее, линейное, в    
 
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
+     u_nom_v - номинальное напряжение питания двигателя, линейное, в    
 
-     inom_a - номинальный ток двигателя, линейный, а    
+     p_nom_kw - номинальная мощность двигателя квт    
 
-     fnom_hz - номинальная частота вращения поля, гц    
+     f_nom_hz - номинальная частота вращения поля, гц    
 
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  корректно работает, толко для motorid = 0  выход   
+     motorid - тип 0 - постоянные значения,  1 - задается по каталожным кривым, ассинхронный  2 - задается по схеме замещения, ассинхронный    
+
+     eff_nom_fr - кпд при номинальном режиме работы    
+
+     cosphi_nom_fr - коэффициент мощности при номинальном режиме работы    
+
+     slip_nom_fr - скольжение при номинальном режиме работы    
+
+     d_od_mm - внешний диаметр - габарит пэд    
+
+     lambda - для motorid = 2 перегрузочный коэффициент  отношение макс момента к номинальному    
+
+     alpha0 - параметр. влияет на положение макс кпд.для motorid = 2    
+
+     xi0 - параметр. определяет потери момента при холостом ходе.  для motorid = 2  ixcf - поправка на поправку тока холостого хода  при изменении напряжения и частоты от минимальн..см.мануал   
+
+   ixcf_  
 
         """
 
-        self.f_motor_M_slip_Nm = self.book.macro("motor_M_slip_Nm")
-        return self.f_motor_M_slip_Nm(S,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
+        self.f_ESP_motor_calc_mom = self.book.macro("ESP_motor_calc_mom")
+        return self.f_ESP_motor_calc_mom(mom_Nm,freq_Hz,U_V,U_nom_V,P_nom_kW,f_nom_Hz,motorID,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,d_od_mm,lambda,alpha0,xi0,Ixcf_)
 
-    def motor_I_slip_A(self, S,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
+    def ESP_motor_calc_slip(self, S,freq_Hz=50,U_V=-1,U_nom_V=500,P_nom_kW=10,f_nom_Hz=50,eff_nom_fr=0.85,cosphi_nom_fr=0.8,slip_nom_fr=0.05,d_od_mm=117,lambda=2,alpha0=0.4,xi0=1.05,Ixcf=0.4):
         """
  ========== description ============== 
- Расчет потребляемого тока  погружного ассинхронного двигателя от проскальзывания 
+ расчет полной характеристики двигателя от проскальзования  по заданной величине скольжения (на основе схемы замещения) 
         
  ==========  arguments  ============== 
 
-     s - скольжение двигателя  опциональные параметры    
+     s - скольжение двигателя    
 
      freq_hz - частота вращения внешнего поля    
 
      u_v - напряжение рабочее, линейное, в    
 
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
+     u_nom_v - номинальное напряжение питания двигателя, линейное, в    
 
-     inom_a - номинальный ток двигателя, линейный, а    
+     p_nom_kw - номинальная мощность двигателя квт    
 
-     fnom_hz - номинальная частота вращения поля, гц    
+     f_nom_hz - номинальная частота вращения поля, гц    
 
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  корректно работает, толко для motorid = 0  выход   
+     eff_nom_fr - кпд при номинальном режиме работы    
 
-        """
+     cosphi_nom_fr - коэффициент мощности при номинальном режиме работы    
 
-        self.f_motor_I_slip_A = self.book.macro("motor_I_slip_A")
-        return self.f_motor_I_slip_A(S,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
+     slip_nom_fr - скольжение при номинальном режиме работы    
 
-    def motor_CosPhi_slip(self, S,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- Расчет коэффициента мощности  погружного ассинхронного двигателя от проскальзывания 
-        
- ==========  arguments  ============== 
+     d_od_mm - внешний диаметр - габарит пэд    
 
-     s - скольжение двигателя  опциональные параметры    
+     lambda - для motorid = 2 перегрузочный коэффициент  отношение макс момента к номинальному    
 
-     freq_hz - частота вращения внешнего поля    
+     alpha0 - параметр. влияет на положение макс кпд.для motorid = 2    
 
-     u_v - напряжение рабочее, линейное, в    
+     xi0 - параметр. определяет потери момента при холостом ходе.  для motorid = 2    
 
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  корректно работает, толко для motorid = 0  выход   
+     ixcf - поправка на поправку тока холостого хода  при изменении напряжения и частоты от минимальной.  для motorid = 2   
 
         """
 
-        self.f_motor_CosPhi_slip = self.book.macro("motor_CosPhi_slip")
-        return self.f_motor_CosPhi_slip(S,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
+        self.f_ESP_motor_calc_slip = self.book.macro("ESP_motor_calc_slip")
+        return self.f_ESP_motor_calc_slip(S,freq_Hz,U_V,U_nom_V,P_nom_kW,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,d_od_mm,lambda,alpha0,xi0,Ixcf)
 
-    def motor_Eff_slip(self, S,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
+    def ESP_motor_nameplate(self, Unom_V=500,Pnom_kW=10,Fnom_Hz=50,motorID=0,eff_fr=0.85,cosphi_fr=0.8,slip_fr=0.05,d_od_mm=117,num=1):
         """
  ========== description ============== 
- Расчет КПД погружного ассинхронного двигателя от проскальзывания 
-        
- ==========  arguments  ============== 
-
-     s - скольжение двигателя  опциональные параметры    
-
-     freq_hz - частота вращения внешнего поля    
-
-     u_v - напряжение рабочее, линейное, в    
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  корректно работает, толко для motorid = 0  выход   
-
-        """
-
-        self.f_motor_Eff_slip = self.book.macro("motor_Eff_slip")
-        return self.f_motor_Eff_slip(S,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def motor_M_Nm(self, Pshaft_kW,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- функция расчета момента двигателя от мощности на валу 
-        
- ==========  arguments  ============== 
-
-     pshaft_kw - мощность развиваемая двигателем на валу  опциональные параметры    
-
-     freq_hz - частота вращения внешнего поля    
-
-     u_v - напряжение рабочее, линейное, в    
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  выход   
-
-        """
-
-        self.f_motor_M_Nm = self.book.macro("motor_M_Nm")
-        return self.f_motor_M_Nm(Pshaft_kW,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def motor_I_A(self, Pshaft_kW,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- функция расчета рабочего тока двигателя 
-        
- ==========  arguments  ============== 
-
-     pshaft_kw - мощность развиваемая двигателем на валу  опциональные параметры    
-
-     freq_hz - частота вращения внешнего поля    
-
-     u_v - напряжение рабочее, линейное, в    
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  выход  число - значение тока при данном режиме работы   
-
-        """
-
-        self.f_motor_I_A = self.book.macro("motor_I_A")
-        return self.f_motor_I_A(Pshaft_kW,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def motor_CosPhi_d(self, Pshaft_kW,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- функция расчета коэффициента мощности двигателя 
-        
- ==========  arguments  ============== 
-
-     pshaft_kw - мощность развиваемая двигателем на валу  опциональные параметры    
-
-     freq_hz - частота вращения внешнего поля    
-
-     u_v - напряжение рабочее, линейное, в    
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  выход   
-
-        """
-
-        self.f_motor_CosPhi_d = self.book.macro("motor_CosPhi_d")
-        return self.f_motor_CosPhi_d(Pshaft_kW,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def motor_Eff_d(self, Pshaft_kW,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- функция расчета КПД двигателя 
-        
- ==========  arguments  ============== 
-
-     pshaft_kw - мощность развиваемая двигателем на валу  опциональные параметры    
-
-     freq_hz - частота вращения внешнего поля    
-
-     u_v - напряжение рабочее, линейное, в    
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  выход   
-
-        """
-
-        self.f_motor_Eff_d = self.book.macro("motor_Eff_d")
-        return self.f_motor_Eff_d(Pshaft_kW,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def motor_S_d(self, Pshaft_kW,freq_Hz=50,U_V=-1,Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
-функция расчета скольжения от мощности на валу 
-        
- ==========  arguments  ============== 
-
-     pshaft_kw - мощность развиваемая двигателем на валу  опциональные параметры    
-
-     freq_hz - частота вращения внешнего поля    
-
-     u_v - напряжение рабочее, линейное, в    
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым  выход   
-
-        """
-
-        self.f_motor_S_d = self.book.macro("motor_S_d")
-        return self.f_motor_S_d(Pshaft_kW,freq_Hz,U_V,Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def motor_Name(self, Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- функция выдает название двигателя по его характеристикам 
+ функция выдает номинальные параметры ПЭД 
         
  ==========  arguments  ============== 
 
      unom_v - номинальное напряжение питания двигателя, линейное, в    
 
-     inom_a - номинальный ток двигателя, линейный, а    
+     pnom_kw - номинальная мощность двигателя квт    
 
      fnom_hz - номинальная частота вращения поля, гц    
 
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым выход   
+     motorid - тип 0 - постоянные значения,  1 - задается по каталожным кривым, ассинхронный  2 - задается по схеме замещения, ассинхронный    
+
+     eff_fr - кпд для типа 0    
+
+     cosphi_fr - коэффициент мощности для типа 0    
+
+     slip_fr - проскальзывание для типа 0    
+
+     d_od_mm - внешний диаметр пэд    
+
+     num - номер который выводится первым   
 
         """
 
-        self.f_motor_Name = self.book.macro("motor_Name")
-        return self.f_motor_Name(Unom_V,Inom_A,Fnom_Hz,motorID)
+        self.f_ESP_motor_nameplate = self.book.macro("ESP_motor_nameplate")
+        return self.f_ESP_motor_nameplate(Unom_V,Pnom_kW,Fnom_Hz,motorID,eff_fr,cosphi_fr,slip_fr,d_od_mm,num)
 
-    def motor_Pnom_kW(self, Unom_V=500,Inom_A=10,Fnom_Hz=50,motorID=0):
-        """
- ========== description ============== 
- функция выдает номинальную мощность ПЭД по его характеристикам 
-        
- ==========  arguments  ============== 
-
-     unom_v - номинальное напряжение питания двигателя, линейное, в    
-
-     inom_a - номинальный ток двигателя, линейный, а    
-
-     fnom_hz - номинальная частота вращения поля, гц    
-
-     motorid - тип двигателя 0 - задается по схеме замещения,  1 - задается по каталожным кривым выход   
-
-        """
-
-        self.f_motor_Pnom_kW = self.book.macro("motor_Pnom_kW")
-        return self.f_motor_Pnom_kW(Unom_V,Inom_A,Fnom_Hz,motorID)
-
-    def ESP_ksep_gasseparator_d(self, gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz=50):
+    def ESP_gassep_ksep_d(self, gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz=50):
         """
  ========== description ============== 
  расчет коэффициента сепарации газосепаратора  по результатам стендовых испытаний РГУ нефти и газа 
@@ -2188,10 +2042,10 @@ class API():
 
         """
 
-        self.f_ESP_ksep_gasseparator_d = self.book.macro("ESP_ksep_gasseparator_d")
-        return self.f_ESP_ksep_gasseparator_d(gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz)
+        self.f_ESP_gassep_ksep_d = self.book.macro("ESP_gassep_ksep_d")
+        return self.f_ESP_gassep_ksep_d(gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz)
 
-    def ESP_gasseparator_name(self, gsep_type_TYPE):
+    def ESP_gassep_name(self, gsep_type_TYPE):
         """
  ========== description ============== 
  название газосопаратора 
@@ -2202,8 +2056,8 @@ class API():
 
         """
 
-        self.f_ESP_gasseparator_name = self.book.macro("ESP_gasseparator_name")
-        return self.f_ESP_gasseparator_name(gsep_type_TYPE)
+        self.f_ESP_gassep_name = self.book.macro("ESP_gassep_name")
+        return self.f_ESP_gassep_name(gsep_type_TYPE)
 
     def GLV_q_gas_sm3day(self, d_mm,p_in_atma,p_out_atma,gamma_g,t_C,c_calibr=1):
         """
@@ -2469,7 +2323,27 @@ class API():
         self.f_unf_version = self.book.macro("unf_version")
         return self.f_unf_version()
 
-    def PVT_encode_string(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3=-1,pb_atma=-1,tres_C=const_tres_default,bob_m3m3=-1,muob_cP=-1,PVTcorr=Standing_based,ksep_fr=0,p_ksep_atma=-1,t_ksep_C=-1,gas_only=False):
+    def decode_json_string(self, json,transpose=False,keys_filter,only_values=False):
+        """
+ ========== description ============== 
+ Функция декодирования json строки,  позволяет вывести содержимое json строки в таблицу 
+        
+ ==========  arguments  ============== 
+
+     json - строка содержащая результаты расчета    
+
+     transpose - выбор вывода в строки или в столбцы    
+
+     keys_filter - строка с ключами, которые надо вывести    
+
+     only_values - если = 1 подписи выводиться не будут   
+
+        """
+
+        self.f_decode_json_string = self.book.macro("decode_json_string")
+        return self.f_decode_json_string(json,transpose,keys_filter,only_values)
+
+    def PVT_encode_string(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,gas_only):
         """
  ========== description ============== 
  Функция кодирования параметров PVT в строку,  для передачи PVT свойств в прикладные функции Унифлок. 
@@ -2486,9 +2360,9 @@ class API():
 
      rp_m3m3 - замерной газовый фактор, м3/м3.  имеет приоритет перед rsb если rp < rsb    
 
-     pb_atma - давление насыщения при температуре пласта, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
 
-     tres_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
+     pb_atma - давление насыщения при температуре t_res_c, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.  t_res_c - пластовая т..см.мануал   
 
      bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
 
@@ -2500,14 +2374,14 @@ class API():
 
      p_ksep_atma - давление при которой была сепарация    
 
-     t_ksep_c - температура при которой была сепарация    
+     t_ksep_c - температура при которой была сепарация  gas_only - флаг - в потоке только газ  по умолчанию false (нефть вода и газ)    
 
-     gas_only - флаг - в потоке только газ  по умолчанию false (нефть вода и газ)   
+   gas_only_  
 
         """
 
         self.f_PVT_encode_string = self.book.macro("PVT_encode_string")
-        return self.f_PVT_encode_string(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,tres_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,gas_only)
+        return self.f_PVT_encode_string(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,rp_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVTcorr,ksep_fr,p_ksep_atma,t_ksep_C,gas_only_)
 
     def PVT_decode_string(self, str_PVT=PVT_DEFAULT,getStr=False):
         """
@@ -2525,323 +2399,453 @@ class API():
         self.f_PVT_decode_string = self.book.macro("PVT_decode_string")
         return self.f_PVT_decode_string(str_PVT,getStr)
 
-    def ESP_encode_string(self, esp_ID=1005,HeadNom_m=2000,ESPfreq_Hz=50,ESP_U_V=1000,MotorPowerNom_kW=30,t_intake_C=85,t_dis_C=85,KsepGS_fr=0,ksep_manual_fr=0,ESP_energy_fact_Whday=0,ESP_cable_type=0,ESP_h_mes_m=0,ESP_gas_correct=0,c_calibr=1,PKV_work_min=-1,PKV_stop_min=-1,dnum_stages_integrate=1):
+    def ESP_pump_encode_string(self, ESP_ID="1005",head_nom_m=2000,num_stages=0,freq_Hz=50,gas_correct,c_calibr,dnum_stages_integrate=1):
         """
  ========== description ============== 
- функция кодирования параметров работы УЭЦН в строку,  которую можно потом использовать для задания ЭЦН в прикладных функциях 
+ функция кодирования параметров работы УЭЦН в строку 
         
  ==========  arguments  ============== 
 
      esp_id - идентификатор насоса    
 
-     headnom_m - номинальный напор системы уэцн  - соответствует напора в записи эцн 50-2000    
+     head_nom_m - номинальный напор системы уэцн  - соответствует напора в записи эцн 50-2000    
 
-     espfreq_hz - частота, гц    
+     num_stages - количество ступеней, если задано  перекрывает значение напора    
 
-     esp_u_v - напряжение на пэд    
+     freq_hz - частота, гц  t_intake_c - температура на приеме насоа  t_dis_c - температура на выкиде насоса.  если = 0 и calc_along_flow = 1 то рассчитывается    
 
-     motorpowernom_kw - номинальная мощность двигателя    
-
-     t_intake_c - температура на приеме насоа    
-
-     t_dis_c - температура на выкиде насоса.  если = 0 и calc_along_flow = 1 то рассчитывается    
-
-     ksepgs_fr - коэффициент сепарации газосепаратора уэцн    
-
-   ksep_manual_fr   
-
-     esp_energy_fact_whday - фактическое потребление мощности эцн    
-
-     esp_cable_type - тип кабельной линии  тип 1: cable_r_omkm = 1.18  cable_name = кппапбп-120 3x16  cable_tmax_c = 120    
-
-     esp_h_mes_m - длина кабельной линии    
-
-     esp_gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым м..см.мануал   
+     gas_correct - деградация по газу:  0 - 2 задает значение вручную;  10 стандартный эцн (предел 25%);  20 эцн с газостабилизирующим модулем (предел 50%);  30 эцн с осевым модул..см.мануал   
 
      c_calibr - коэффициент поправки на напор.  если массив то второе значение - поправыка на подачу (множитель)  третье на мощность (множитель)    
-
-     pkv_work_min - время работы скважины для режима пкв в минутах    
-
-     pkv_stop_min - время ожидания запуска скважины для пкв , мин  пкв - периодическое кратковременное включение  если не заданы, то скважина в пдф  пдф - постоянно действующий фон..см.мануал   
 
      dnum_stages_integrate - шаг интегрирования для расчета   
 
         """
 
-        self.f_ESP_encode_string = self.book.macro("ESP_encode_string")
-        return self.f_ESP_encode_string(esp_ID,HeadNom_m,ESPfreq_Hz,ESP_U_V,MotorPowerNom_kW,t_intake_C,t_dis_C,KsepGS_fr,ksep_manual_fr,ESP_energy_fact_Whday,ESP_cable_type,ESP_h_mes_m,ESP_gas_correct,c_calibr,PKV_work_min,PKV_stop_min,dnum_stages_integrate)
+        self.f_ESP_pump_encode_string = self.book.macro("ESP_pump_encode_string")
+        return self.f_ESP_pump_encode_string(ESP_ID,head_nom_m,num_stages,freq_Hz,gas_correct,c_calibr,dnum_stages_integrate)
 
-    def ESP_decode_string(self, str_ESP,getStr=False):
+    def ESP_motor_encode_string(self, motor_ID=0,U_surf_high_lin_V,f_surf_Hz,power_fact_kW,U_nom_lin_V,P_nom_kW,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,d_od_mm,lambda,alpha0,xi0,Ixcf):
         """
  ========== description ============== 
- функция расшифровки параметров работы ЭЦН закодированных в строке 
+ функция кодирования параметров ПЭД в строку 
         
  ==========  arguments  ============== 
 
-     str_esp - строка с параметрами эцн    
+    motor_id - тип 0 - постоянные значения,  1 - задается по каталожным кривым, ассинхронный  2 - задается по схеме замещения, ассинхронный    
 
-     getstr - флаг проверки работы функции  по умолчанию false (0) - функция выдает объект cespsystemsimple  если задать true - функция раскодирует строку и снова закодирует  и выд..см.мануал  
+    u_surf_high_lin_v - напряжение на поверхности  на высокой стороне трансформатора    
+
+    f_surf_hz - частота питающего напряжения    
+
+   power_fact_kw   
+
+    u_nom_lin_v - номинальное напряжение двигателя, линейное, в    
+
+    p_nom_kw - номинальная мощность двигателя квт    
+
+    f_nom_hz - номинальная частота тока, гц    
+
+    eff_nom_fr - кпд при номинальном режиме работы    
+
+    cosphi_nom_fr - коэффициент мощности при номинальном режиме работы    
+
+    slip_nom_fr - скольжение при номинальном режиме работы    
+
+    d_od_mm - внешний диаметр - габарит пэд    
+
+    lambda - для motorid = 2 перегрузочный коэффициент  отношение макс момента к номинальному    
+
+    alpha0 - параметр. влияет на положение макс кпд.для motorid = 2    
+
+    xi0 - параметр. определяет потери момента при холостом ходе.  для motorid = 2    
+
+    ixcf - поправка на поправку тока холостого хода  при изменении напряжения и частоты от минимальной.   
 
         """
 
-        self.f_ESP_decode_string = self.book.macro("ESP_decode_string")
-        return self.f_ESP_decode_string(str_ESP,getStr)
+        self.f_ESP_motor_encode_string = self.book.macro("ESP_motor_encode_string")
+        return self.f_ESP_motor_encode_string(motor_ID,U_surf_high_lin_V,f_surf_Hz,power_fact_kW,U_nom_lin_V,P_nom_kW,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,d_od_mm,lambda,alpha0,xi0,Ixcf)
 
-    def GL_decode_string(self, well_GL_str,getStr=False):
+    def ESP_cable_encode_string(self, cable_R_Omkm,cable_X_Omkm,cable_t_max_C,manufacturer="no",name="no",d_mm,length_m):
+        """
+ ========== description ============== 
+ функция кодирования параметров  кабельной линии ПЭД в строку 
+        
+ ==========  arguments  ============== 
+
+     cable_r_omkm - удельное активное сопротивление    
+
+     cable_x_omkm - удельное реактивное сопротивление    
+
+     cable_t_max_c - максимально допустимая температура    
+
+     manufacturer - производитель, для справки    
+
+     name - название кабеля, для справки    
+
+     d_mm - диаметр жилы    
+
+     length_m - длина кабельной линии, м   
+
+        """
+
+        self.f_ESP_cable_encode_string = self.book.macro("ESP_cable_encode_string")
+        return self.f_ESP_cable_encode_string(cable_R_Omkm,cable_X_Omkm,cable_t_max_C,manufacturer,name,d_mm,length_m)
+
+    def ESP_separation_encode_string(self, separation_mode,gassep_type,natsep_type=0,psep_man_atma,tsep_man_C,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,M_Nm,manufacturer="no",name="no",length_m):
+        """
+ ========== description ============== 
+ функция кодирования газосепаратора 
+        
+ ==========  arguments  ============== 
+
+     separation_mode - режим расчета сепарации    
+
+     gassep_type - тип - номер из базы    
+
+     natsep_type - модель расчета естественной сепарации    
+
+     psep_man_atma - давление для расчета  коэффициента сепарации заданного вручную    
+
+     tsep_man_c - температура для расчета  коэффициента сепарации заданного вручную    
+
+     ksep_gassep_man_d - коэффициент сепарации гс заданный вручную    
+
+     ksep_nat_man_d - коэффициент сепарации натуральной  заданный вручную    
+
+     ksep_liquid_man_d - коэффициент сепарации жидкости для режима  потока через затруб    
+
+     m_nm - момент на валу    
+
+     manufacturer - производитель, для справки    
+
+     name - название кабеля, для справки    
+
+     length_m - длина кабельной линии, м   
+
+        """
+
+        self.f_ESP_separation_encode_string = self.book.macro("ESP_separation_encode_string")
+        return self.f_ESP_separation_encode_string(separation_mode,gassep_type,natsep_type,psep_man_atma,tsep_man_C,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,M_Nm,manufacturer,name,length_m)
+
+    def AmbientFormation_encode_string(self, therm_cond_form_WmC=2.4252,sp_heat_capacity_form_JkgC=200,therm_cond_cement_WmC=6.965,therm_cond_tubing_WmC=32,therm_cond_casing_WmC=32,heat_transfer_casing_liquid_Wm2C=200,heat_transfer_casing_gas_Wm2C=10,heat_transfer_fluid_convection_Wm2C=200,t_calc_hr=240):
+        """
+ ========== description ============== 
+ функция кодирования температурных парамметров окружающей среды 
+        
+ ==========  arguments  ============== 
+
+     therm_cond_form_wmc - теплопроводность породы окружающей среды    
+
+     sp_heat_capacity_form_jkgc - удельная теплоемкость породы окружающей среды    
+
+     therm_cond_cement_wmc - теплопроводность цементного камня вокруг скважины    
+
+     therm_cond_tubing_wmc - теплопроводность стенок нкт    
+
+   therm_cond_casing_wmc   
+
+     heat_transfer_casing_liquid_wm2c - теплопередача через затруб с жидкостью    
+
+     heat_transfer_casing_gas_wm2c - теплопередача через затруб с газом    
+
+     heat_transfer_fluid_convection_wm2c - теплопередача в потоке  с жидкостью за счет конвекции    
+
+     t_calc_hr - время на которое расчитывается распределение температуры   
+
+        """
+
+        self.f_AmbientFormation_encode_string = self.book.macro("AmbientFormation_encode_string")
+        return self.f_AmbientFormation_encode_string(therm_cond_form_WmC,sp_heat_capacity_form_JkgC,therm_cond_cement_WmC,therm_cond_tubing_WmC,therm_cond_casing_WmC,heat_transfer_casing_liquid_Wm2C,heat_transfer_casing_gas_Wm2C,heat_transfer_fluid_convection_Wm2C,t_calc_hr)
+
+    def GL_decode_string(self, 'well_GL_str,'getStr=False):
         """
  ========== description ============== 
  функция расшифровки параметров газлифтной компоновки скважины 
         
  ==========  arguments  ============== 
 
-     well_gl_str - строка с параметрами газлифтной скважины    
+   well_gl_str   
 
-     getstr - флаг проверки работы функции  по умолчанию false (0) - функция выдает объект cespsystemsimple  если задать true - функция раскодирует строку и снова закодирует  и выд..см.мануал  
+   getstr  
 
         """
 
         self.f_GL_decode_string = self.book.macro("GL_decode_string")
-        return self.f_GL_decode_string(well_GL_str,getStr)
+        return self.f_GL_decode_string('well_GL_str,'getStr)
 
-    def GL_encode_string(self, q_gas_inj_sm3day=0,p_gas_inj_atma=0,d_gas_inj_mm=0,HmesGLV_m=0,dGLV_mm=0,PsurfGLV_atma=0):
+    def GL_encode_string(self, ''q_gas_inj_sm3day=0,'p_gas_inj_atma=0,'d_gas_inj_mm=0,'HmesGLV_m=0,'dGLV_mm=0,'PsurfGLV_atma=0):
         """
  ========== description ============== 
  функция кодирования параметров работы скважины с газлифтом 
         
  ==========  arguments  ============== 
 
-     q_gas_inj_sm3day - расход газа закачки    
+   q_gas_inj_sm3day   
 
-     p_gas_inj_atma - давление газа закачки на поверхности    
+   p_gas_inj_atma   
 
-     d_gas_inj_mm - диаметр штуцера регулировки закачки газа на поверхности    
+   d_gas_inj_mm   
 
-     hmesglv_m - измеренные глубины установки газлифтных клапанов    
+   hmesglv_m   
 
-     dglv_mm - диаметры порта установленных газлифтных клапанов    
+   dglv_mm   
 
-     psurfglv_atma - давления зарядки газлифтных клапанов   
+   psurfglv_atma  
 
         """
 
         self.f_GL_encode_string = self.book.macro("GL_encode_string")
-        return self.f_GL_encode_string(q_gas_inj_sm3day,p_gas_inj_atma,d_gas_inj_mm,HmesGLV_m,dGLV_mm,PsurfGLV_atma)
+        return self.f_GL_encode_string(''q_gas_inj_sm3day,'p_gas_inj_atma,'d_gas_inj_mm,'HmesGLV_m,'dGLV_mm,'PsurfGLV_atma)
 
-    def well_plin_pwf_atma(self, qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def well_construction_encode_string(self, h_perf_m,h_tub_m,h_list_m,d_tub_list_mm,d_cas_list_mm,d_choke_mm,t_val_C,rough_m=0.0001):
         """
  ========== description ============== 
- Расчет устьевого давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций. 
+ функция кодирования параметров работы скважины с газлифтом 
         
  ==========  arguments  ============== 
 
-     qliq_sm3day - дебит жидкости в поверхностных условиях    
+    h_perf_m - глубина перфорации по длине скважины  точка узлового анализа для забоя    
 
-     fw_perc - обводненность    
+    h_tub_m - глубина спуска нкт, или глубина  спуска эцн    
 
-     pwf_atma - забойное давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+    h_list_m - траектория скважины, если число то измеренная  длина, range или таблица [0..n,0..1] то траектория    
 
-     h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
+    d_tub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
 
-     pcas_atma - затрубное давление (расчета ндин)    
+    d_cas_list_mm - диаметр эксп колонны.  range или таблица [0..n,0..1]    
 
-     d_choke_mm - диаметр штуцера    
+    d_choke_mm - диаметр штуцера    
 
-     str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+    t_val_c - температура вдоль скважины  если число то температура на устье скважины  если range или таблица [0..n,0..1] то температура  окружающей среды по вертикальной глубине, ..см.мануал   
 
-     str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
-
-     hmes_habs_list_m -траектория скважины. range или таблица [0..n,0..1]    
-
-     dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
-
-     dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
-
-     temp_list_c - температура среды. range или таблица [0..n,0..1]    
-
-     hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
-
-     temp_method - температурная модель    
-
-     twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
-
-     c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
-
-     c_calibr_fric - поправка на трение в перепаде давления    
-
-     c_calibr_choke - поправка на штуцер    
-
-     q_gas_sm3day - свободный газ поступающие в трубу.    
-
-     param_out - номер параметра для вывода в ячейку [0,0]    
-
-     num_pt_crv - число параметров вывода массивов   
+    rough_m - шероховатость трубы   
 
         """
 
-        self.f_well_plin_pwf_atma = self.book.macro("well_plin_pwf_atma")
-        return self.f_well_plin_pwf_atma(qliq_sm3day,fw_perc,Pwf_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
+        self.f_well_construction_encode_string = self.book.macro("well_construction_encode_string")
+        return self.f_well_construction_encode_string(h_perf_m,h_tub_m,h_list_m,d_tub_list_mm,d_cas_list_mm,d_choke_mm,t_val_C,rough_m)
 
-    def well_pwf_plin_atma(self, qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=6,num_pt_crv=21):
+    def crv_encode_string(self, list):
+        """
+ ========== description ============== 
+ функция кодирования параметров работы скважины с газлифтом 
+        
+ ==========  arguments  ============== 
+
+    list - range или таблица [0..n,0..1] c табличной функцией   
+
+        """
+
+        self.f_crv_encode_string = self.book.macro("crv_encode_string")
+        return self.f_crv_encode_string(list)
+
+    def wellESP_plin_pwf_atma(self, p_wf_atma,t_wf_C,q_liq_sm3day,fw_perc,q_gas_sm3day=0,p_cas_atma,str_PVT=PVT_DEFAULT,str_construct="",str_ESP="",str_gassep="",str_motor="",str_cable="",str_amb="",hcorrH_CORRELATION=0,tmethod=StartEndTemp,c_calibr=1,out=0):
+        """
+ ========== description ============== 
+ Расчет устьевого давления скважины c УЭЦН,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций. 
+        
+ ==========  arguments  ============== 
+
+    p_wf_atma - забойное давление с которого начинается расчет,  граничное значение для проведения расчета    
+
+    t_wf_c - температура флюида на забое qliq_sm3day - дебит жидкости в поверхностных условиях    
+
+   q_liq_sm3day   
+
+    fw_perc - обводненность    
+
+    q_gas_sm3day - свободный газ поступающие в скважину  на забое для эцн, в затруб для газлифта.    
+
+    p_cas_atma - затрубное давление (расчета ндин)    
+
+    str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+
+   str_ruct   
+
+    str_esp - закодированная строка с установленным эцн.    
+
+    str_gassep    
+
+    str_motor - параметры пэд, если необходимы для расчета    
+
+    str_cable - параметры кабеля, если есть пэд и  отличаются от стандартных    
+
+    str_amb - параметры среды вокруг скважины.  влияют на расчет температуры для модели  учитывающей эмиссию тепла    
+
+    hcorr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+
+    tmethod - температурная модель    
+
+    c_calibr - поправка на гравитационную составляющую  перепада давления, если дать ссылку на две ячейки,  то вторая будет поправка на трение.    
+
+    out - флаг вывод значений между концами трубы  1 основные, 2 все значения.  вывод может замедлять расчет (не сильно) num_value - значение которое будет выводиться первым   
+
+        """
+
+        self.f_wellESP_plin_pwf_atma = self.book.macro("wellESP_plin_pwf_atma")
+        return self.f_wellESP_plin_pwf_atma(p_wf_atma,t_wf_C,q_liq_sm3day,fw_perc,q_gas_sm3day,p_cas_atma,str_PVT,str_ruct,str_ESP,str_gassep,str_motor,str_cable,str_amb,hcorr,tmethod,c_calibr,out)
+
+    def well_pwf_plin_atma(self, ''p_lin_atma,'t_wf_C,'t_val_C,'h_list_m,'d_tub_list_mm,'d_cas_list_mm,'q_liq_sm3day,'fw_perc,'q_gas_sm3day=0,'str_PVT=PVT_DEFAULT,'str_AL="",'p_cas_atma,'d_choke_mm,'hydr_corr=H_CORRELATION,'temp_method=StartEndTemp,'c_calibr=1,'roughness_m=0.0001,'out_curves=1,'out_curves_num_points=20,'num_value=0):
         """
  ========== description ============== 
  Расчет забойного давления скважины,  расчет распределения давления и температуры в скважине  с использованием многофазных корреляций 
         
  ==========  arguments  ============== 
 
-     qliq_sm3day - дебит жидкости в поверхностных условиях    
+   p_lin_atma   
 
-     fw_perc - обводненность    
+   t_wf_c   
 
-     plin_atma - линейное давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+   t_val_c   
 
-     h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
+   h_list_m   
 
-     pcas_atma - затрубное давление (расчета ндин)    
+   d_tub_list_mm   
 
-     d_choke_mm - диаметр штуцера    
+   d_cas_list_mm   
 
-     str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+   q_liq_sm3day   
 
-     str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
+   fw_perc   
 
-     hmes_habs_list_m -траектория скважины. range или таблица [0..n,0..1]    
+   q_gas_sm3day   
 
-     dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
+   str_pvt   
 
-     dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
+   str_al   
 
-     temp_list_c - температура среды. range или таблица [0..n,0..1]    
+   p_cas_atma   
 
-     hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+   d_choke_mm   
 
-     temp_method - температурная модель    
+   hydr_corr   
 
-   twf_c   
+   temp_method   
 
-     c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+   c_calibr   
 
-     c_calibr_fric - поправка на трение в перепаде давления    
+   roughness_m   
 
-     c_calibr_choke - поправка на штуцер  roughness_m - шероховатость трубы    
+   out_curves   
 
-     q_gas_sm3day - свободный газ поступающие в трубу.    
+   out_curves_num_points   
 
-     param_out - номер параметра для вывода в ячейку [0,0]    
-
-     num_pt_crv - число параметров вывода массивов   
+   num_value  
 
         """
 
         self.f_well_pwf_plin_atma = self.book.macro("well_pwf_plin_atma")
-        return self.f_well_pwf_plin_atma(qliq_sm3day,fw_perc,plin_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_well_pwf_plin_atma(''p_lin_atma,'t_wf_C,'t_val_C,'h_list_m,'d_tub_list_mm,'d_cas_list_mm,'q_liq_sm3day,'fw_perc,'q_gas_sm3day,'str_PVT,'str_AL,'p_cas_atma,'d_choke_mm,'hydr_corr,'temp_method,'c_calibr,'roughness_m,'out_curves,'out_curves_num_points,'num_value)
 
-    def wellESP_plin_pintake_atma(self, qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,param_out=1,num_pt_crv=21):
+    def wellESP_plin_pintake_atma(self, ''qliq_sm3day,'fw_perc,'pintake_atma,'h_perf_m,'p_cas_atma,'d_choke_mm,'str_PVT=PVT_DEFAULT,'str_AL="",'hmes_habs_list_m=0,'dtub_list_mm=0,'dcas_list_mm=0,'temp_list_C=0,'hydr_corr=H_CORRELATION,'temp_method=StartEndTemp,'twf_C=0,'c_calibr_grav=1,'c_calibr_fric=1,'c_calibr_choke=1,'q_gas_sm3day=0,'param_out=1,'num_pt_crv=21):
         """
  ========== description ============== 
  Расчет устьевого давления скважины по давлению на приеме.  Расчет распределения давления и температуры в скважине  с использованием многофазных корреляций. 
         
  ==========  arguments  ============== 
 
-     qliq_sm3day - дебит жидкости в поверхностных условиях    
+   qliq_sm3day   
 
-     fw_perc - обводненность    
+   fw_perc   
 
-     pintake_atma- давление на приеме с которого начинается расчет, атм  граничное значение для проведения расчета    
+   pintake_atma   
 
-     h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
+   h_perf_m   
 
-     pcas_atma - затрубное давление (расчета ндин)    
+   p_cas_atma   
 
-     d_choke_mm - диаметр штуцера    
+   d_choke_mm   
 
-     str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+   str_pvt   
 
-     str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
+   str_al   
 
-     hmes_habs_list_m - траектория скважины. range или таблица [0..n,0..1]    
+   hmes_habs_list_m   
 
-     dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
+   dtub_list_mm   
 
-     dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
+   dcas_list_mm   
 
-     temp_list_c - температура среды. range или таблица [0..n,0..1]    
+   temp_list_c   
 
-     hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+   hydr_corr   
 
-     temp_method - температурная модель    
+   temp_method   
 
-     twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
+   twf_c   
 
-     c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+   c_calibr_grav   
 
-     c_calibr_fric - поправка на трение в перепаде давления    
+   c_calibr_fric   
 
-     c_calibr_choke - поправка на штуцер  roughness_m - шероховатость трубы    
+   c_calibr_choke   
 
-     q_gas_sm3day - свободный газ поступающие в трубу.    
+   q_gas_sm3day   
 
-     param_out - номер параметра для вывода в ячейку [0,0]    
+   param_out   
 
-     num_pt_crv - число параметров вывода массивов   
+   num_pt_crv  
 
         """
 
         self.f_wellESP_plin_pintake_atma = self.book.macro("wellESP_plin_pintake_atma")
-        return self.f_wellESP_plin_pintake_atma(qliq_sm3day,fw_perc,pintake_atma,h_perf_m,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,param_out,num_pt_crv)
+        return self.f_wellESP_plin_pintake_atma(''qliq_sm3day,'fw_perc,'pintake_atma,'h_perf_m,'p_cas_atma,'d_choke_mm,'str_PVT,'str_AL,'hmes_habs_list_m,'dtub_list_mm,'dcas_list_mm,'temp_list_C,'hydr_corr,'temp_method,'twf_C,'c_calibr_grav,'c_calibr_fric,'c_calibr_choke,'q_gas_sm3day,'param_out,'num_pt_crv)
 
-    def nodal_pwf_atma(self, pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT=PVT_DEFAULT,str_AL="",hmes_habs_list_m=0,dtub_list_mm=0,dcas_list_mm=0,temp_list_C=0,hydr_corr=H_CORRELATION,temp_method=StartEndTemp,twf_C=0,c_calibr_grav=1,c_calibr_fric=1,c_calibr_choke=1,q_gas_sm3day=0,num_pt_crv=21):
+    def nodal_pwf_atma(self, ''pi_sm3dayatm,'pres_atma,'fw_perc,'h_perf_m,'plin_atma,'p_cas_atma,'d_choke_mm,'str_PVT=PVT_DEFAULT,'str_AL="",'hmes_habs_list_m=0,'dtub_list_mm=0,'dcas_list_mm=0,'temp_list_C=0,'hydr_corr=H_CORRELATION,'temp_method=StartEndTemp,'twf_C=0,'c_calibr_grav=1,'c_calibr_fric=1,'c_calibr_choke=1,'q_gas_sm3day=0,'num_pt_crv=21):
         """
  ========== description ============== 
  Расчет забойного давления по узловому анализу,  скважины и пласта. 
         
  ==========  arguments  ============== 
 
-     pi_sm3dayatm - коэффициент продуктивности    
+   pi_sm3dayatm   
 
-     pres_atma - пластовое давление    
+   pres_atma   
 
-     fw_perc - обводненность  pwf_atma - забойное давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+   fw_perc   
 
-     h_perf_m - измеренная глубина пласта (перфорации)  точка узлового анализа при узле на забое скважины    
+   h_perf_m   
 
    plin_atma   
 
-     pcas_atma - затрубное давление (расчета ндин)    
+   p_cas_atma   
 
-     d_choke_mm - диаметр штуцера    
+   d_choke_mm   
 
-     str_pvt - закодированная строка с параметрами pvt.  если задана - перекрывает другие значения    
+   str_pvt   
 
-     str_al - закодированная параметров мех добычи.  строка параметров эцн либо строка параметров газлифта    
+   str_al   
 
-     hmes_habs_list_m -траектория скважины. range или таблица [0..n,0..1]    
+   hmes_habs_list_m   
 
-     dtub_list_mm - диаметр нкт. range или таблица [0..n,0..1]    
+   dtub_list_mm   
 
-     dcas_list_mm - диаметр эксп колонны. range или таблица [0..n,0..1]    
+   dcas_list_mm   
 
-     temp_list_c - температура среды. range или таблица [0..n,0..1]    
+   temp_list_c   
 
-     hydr_corr - гидравлическая корреляция, h_correlation  beggsbrill = 0  ansari = 1  unified = 2  gray = 3  hagedornbrown = 4  sakharovmokhov = 5    
+   hydr_corr   
 
-     temp_method - температурная модель    
+   temp_method   
 
-     twf_c - температура флюида на забое  необходима для продвинутого учета температуры    
+   twf_c   
 
-     c_calibr_grav - поправка на гравитационную составляющую  перепада давления    
+   c_calibr_grav   
 
-     c_calibr_fric - поправка на трение в перепаде давления    
+   c_calibr_fric   
 
-     c_calibr_choke - поправка на штуцер    
+   c_calibr_choke   
 
-     q_gas_sm3day - свободный газ поступающие в трубу.    
+   q_gas_sm3day   
 
-     num_pt_crv - число параметров вывода массивов   
+   num_pt_crv  
 
         """
 
         self.f_nodal_pwf_atma = self.book.macro("nodal_pwf_atma")
-        return self.f_nodal_pwf_atma(pi_sm3dayatm,pres_atma,fw_perc,h_perf_m,plin_atma,pcas_atma,d_choke_mm,str_PVT,str_AL,hmes_habs_list_m,dtub_list_mm,dcas_list_mm,temp_list_C,hydr_corr,temp_method,twf_C,c_calibr_grav,c_calibr_fric,c_calibr_choke,q_gas_sm3day,num_pt_crv)
+        return self.f_nodal_pwf_atma(''pi_sm3dayatm,'pres_atma,'fw_perc,'h_perf_m,'plin_atma,'p_cas_atma,'d_choke_mm,'str_PVT,'str_AL,'hmes_habs_list_m,'dtub_list_mm,'dcas_list_mm,'temp_list_C,'hydr_corr,'temp_method,'twf_C,'c_calibr_grav,'c_calibr_fric,'c_calibr_choke,'q_gas_sm3day,'num_pt_crv)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """
@@ -2863,7 +2867,7 @@ class API():
         self.f_crv_interpolation = self.book.macro("crv_interpolation")
         return self.f_crv_interpolation(x_points,y_points,x_val,type_interpolation)
 
-    def crv_interpolation_2D(self, xa,YA,FA,XYIA,out=1,type_interpolation=0):
+    def crv_interpolation_2D(self, XA,YA,FA,XYIA,out=1,type_interpolation=0):
         """
  ========== description ============== 
  функция поиска значения функции по двумерным табличным данным (интерполяция 2D) 
@@ -2885,7 +2889,7 @@ class API():
         """
 
         self.f_crv_interpolation_2D = self.book.macro("crv_interpolation_2D")
-        return self.f_crv_interpolation_2D(xa,YA,FA,XYIA,out,type_interpolation)
+        return self.f_crv_interpolation_2D(XA,YA,FA,XYIA,out,type_interpolation)
 
     def crv_solve(self, x_points,y_points,y_val):
         """
@@ -2925,7 +2929,7 @@ class API():
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
 
-    def crv_fit_spline_1D(self, xa,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
+    def crv_fit_spline_1D(self, XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
         """
  ========== description ============== 
 Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений. 
@@ -2953,9 +2957,9 @@ class API():
         """
 
         self.f_crv_fit_spline_1D = self.book.macro("crv_fit_spline_1D")
-        return self.f_crv_fit_spline_1D(xa,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
+        return self.f_crv_fit_spline_1D(XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
 
-    def crv_fit_linear(self, YA,xa,out,weight,constraints):
+    def crv_fit_linear(self, YA,XA,out,weight,constraints):
         """
  ========== description ============== 
 Аппроксимация данных линейной функцией. Решается задача min|XM-Y| ищется вектор M 
@@ -2975,9 +2979,9 @@ class API():
         """
 
         self.f_crv_fit_linear = self.book.macro("crv_fit_linear")
-        return self.f_crv_fit_linear(YA,xa,out,weight,raints)
+        return self.f_crv_fit_linear(YA,XA,out,weight,raints)
 
-    def crv_fit_poly(self, YA,xa,M,out,XIA,weight,constraints):
+    def crv_fit_poly(self, YA,XA,M,out,XIA,weight,constraints):
         """
  ========== description ============== 
 Аппроксимация данных полиномом функцией. Решается задача min|XM-Y| ищется вектор M 
@@ -3001,7 +3005,7 @@ class API():
         """
 
         self.f_crv_fit_poly = self.book.macro("crv_fit_poly")
-        return self.f_crv_fit_poly(YA,xa,M,out,XIA,weight,raints)
+        return self.f_crv_fit_poly(YA,XA,M,out,XIA,weight,raints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """
@@ -3025,7 +3029,7 @@ class API():
         self.f_crv_parametric_interpolation = self.book.macro("crv_parametric_interpolation")
         return self.f_crv_parametric_interpolation(x_points,y_points,x_val,type_interpolation,param_points)
 
-    def Ei(self, x):
+    def Ei(self, X):
         """
  ========== description ============== 
  Расчет интегральной показательной функции Ei(x) 
@@ -3037,9 +3041,9 @@ class API():
         """
 
         self.f_Ei = self.book.macro("Ei")
-        return self.f_Ei(x)
+        return self.f_Ei(X)
 
-    def E_1(self, x):
+    def E_1(self, X):
         """
  ========== description ============== 
  Расчет интегральной показательной функции $E_1(x)$  для вещественных положительных x, x>0 верно E_1(x)=- Ei(-x) 
@@ -3051,7 +3055,7 @@ class API():
         """
 
         self.f_E_1 = self.book.macro("E_1")
-        return self.f_E_1(x)
+        return self.f_E_1(X)
 
     def transient_pd_radial(self, td,cd=0,skin=0,rd=1,model=0):
         """
@@ -3207,7 +3211,7 @@ class API():
         self.f_transient_def_t_day = self.book.macro("transient_def_t_day")
         return self.f_transient_def_t_day(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-    def transient_def_pd(self, Pwf_atma,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+    def transient_def_pd(self, pwf_atma,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """
  ========== description ============== 
  расчет безразмерного давления (определение) 
@@ -3231,7 +3235,7 @@ class API():
         """
 
         self.f_transient_def_pd = self.book.macro("transient_def_pd")
-        return self.f_transient_def_pd(Pwf_atma,qliq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+        return self.f_transient_def_pd(pwf_atma,qliq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
 
     def transient_def_pwf_atma(self, pd,qliq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """

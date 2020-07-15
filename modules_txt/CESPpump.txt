@@ -1,4 +1,4 @@
-'=======================================================================================
+  '=======================================================================================
 'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2019
@@ -38,6 +38,7 @@ Private eff_ESP_d_ As Double           ' КПД УЭЦН по факту
 Private head_real_m_ As Double
 ' параметры определяющие установку УЭЦН
 Private db_ As ESP_PARAMS            ' набор параметров насоса из базы данных
+Private db_json_string As String
 Private gas_frac_intake_ As Double
 Private gas_corr_ As Double
 Public gas_correct As Double       ' тип для коррекции по газу
@@ -56,6 +57,7 @@ Private h_corr_qd_curve_ As New CInterpolation     ' зависимость поправочного ко
 Private p_curve_ As New CInterpolation  ' кривая распределения давления вдоль насоса   (как снаружи, так и внутри)
 Private t_curve_ As New CInterpolation  ' кривая распределения температуры флюида вдоль насоса
 Private calc_from_dis_ As Boolean
+Public gassep_M_Nm As Double
 Public Property Get db() As ESP_PARAMS
     db = db_
 End Property
@@ -79,8 +81,8 @@ Private Function stages_heigth_m(ByVal num As Double) As Double
    End If
 End Function
 ' свойство для расчета измеренной глубины расположения i ступени
-Public Property Get HmesStage_m(I As Double) As Double
-   HmesStage_m = h_mes_down_m - stages_heigth_m(I) ' тут надо отнять длину ступеней выше контрольной
+Public Property Get HmesStage_m(i As Double) As Double
+   HmesStage_m = h_mes_down_m - stages_heigth_m(i) ' тут надо отнять длину ступеней выше контрольной
 End Property
 Public Property Get area_shaft_m2() As Double
    area_shaft_m2 = db_.d_shaft_m * db_.d_shaft_m / 4 * const_Pi
@@ -288,7 +290,7 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
     ' calc_from_dis  показывает будет ли предпринята попытка проинтегрировать сверху вниз насос
     ' p_int_estimation_atma приближения для давления на приеме, используется для расчета сверху вниз
     
-    Dim I As Integer
+    Dim i As Integer
     Dim head_mix As Double
     Dim dPStage As Double
     Dim PowfluidWt As Double, PowfluidTot_Wt As Double  ' полезная мощность передаваемая насосом жидкости
@@ -302,7 +304,7 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
     Dim q_mix_ As Double, q_mix__degr As Double
     Dim dNst As Integer  ' шаг ускорения при интегрировании большими шагами
     Dim Nst As Integer   ' шаг на текущей итерации
-    Dim n As Integer     ' текущий номер ступени
+    Dim N As Integer     ' текущий номер ступени
     Dim nn As Integer    ' номер ступени от приема для записи в архив
     Dim dPav As Double   ' поправки на давление и температуру при интегрировании
     Dim dTav As Double
@@ -341,8 +343,8 @@ On Error GoTo err1:
     PowESP_Wt = 0
     PowESPTot_Wt = 0
     dTpumpSum_C = 0
-    n = 0
-    I = 0
+    N = 0
+    i = 0
     If saveCurve Then
             curves.Item("gas_fractionInPump").ClearPoints
             curves.Item("PressureInPump").ClearPoints
@@ -377,23 +379,23 @@ On Error GoTo err1:
             gas_frac_intake_ = .gas_fraction_d
             gas_corr_ = GasCorrection_d(gas_frac_intake_, gas_correct) ' reinit gas correction
             
-            curves.Item("gas_fractionInPump").AddPoint n, .f_g
-            curves.Item("PressureInPump").AddPoint n, Pst_atma
-            curves.Item("TempInPump").AddPoint n, Tst_C
-            curves.Item("PowerfluidInPump").AddPoint n, 0
-            curves.Item("PowerESPInPump").AddPoint n, 0
-            curves.Item("EffESPInPump").AddPoint n, 0
-            curves.Item("q_mix_InPump").AddPoint n, .q_mix_rc_m3day
+            curves.Item("gas_fractionInPump").AddPoint N, .f_g
+            curves.Item("PressureInPump").AddPoint N, Pst_atma
+            curves.Item("TempInPump").AddPoint N, Tst_C
+            curves.Item("PowerfluidInPump").AddPoint N, 0
+            curves.Item("PowerESPInPump").AddPoint N, 0
+            curves.Item("EffESPInPump").AddPoint N, 0
+            curves.Item("q_mix_InPump").AddPoint N, .q_mix_rc_m3day
             
-            curves.Item("mu_stage_cP").AddPoint n, .mu_mix_cP
-            curves.Item("corr_visc_h_").AddPoint n, corr_visc_h_
-            curves.Item("corr_visc_q_").AddPoint n, corr_visc_q_
-            curves.Item("corr_visc_pow_").AddPoint n, corr_visc_pow_
-            curves.Item("corr_visc_eff_").AddPoint n, corr_visc_eff_
-            curves.Item("gas_corr_").AddPoint n, gas_corr_
+            curves.Item("mu_stage_cP").AddPoint N, .mu_mix_cP
+            curves.Item("corr_visc_h_").AddPoint N, corr_visc_h_
+            curves.Item("corr_visc_q_").AddPoint N, corr_visc_q_
+            curves.Item("corr_visc_pow_").AddPoint N, corr_visc_pow_
+            curves.Item("corr_visc_eff_").AddPoint N, corr_visc_eff_
+            curves.Item("gas_corr_").AddPoint N, gas_corr_
             
-            p_curve_.AddPoint HmesStage_m(CDbl(n)), Pst_atma
-            t_curve_.AddPoint HmesStage_m(CDbl(n)), Tst_C
+            p_curve_.AddPoint HmesStage_m(CDbl(N)), Pst_atma
+            t_curve_.AddPoint HmesStage_m(CDbl(N)), Tst_C
         End If
         
         If calc_from_dis And saveCurve Then
@@ -422,15 +424,15 @@ On Error GoTo err1:
         
               
         ' ====================== start main loop ================================================
-        Do While n < stage_num '+ 1
+        Do While N < stage_num '+ 1
             If calc_from_dis Then
-                If stage_num - n - dNst > 0 Then  ' смотрим какой будет величина следующего шага
+                If stage_num - N - dNst > 0 Then  ' смотрим какой будет величина следующего шага
                     Nst = dNst                          ' мелкие шаги оставляем в зоне низкий давлений
                 Else
                     Nst = 1
                 End If
             Else
-                If (stage_num - n) Mod dNst = 0 Then  ' смотрим какой будет величина следующего шага
+                If (stage_num - N) Mod dNst = 0 Then  ' смотрим какой будет величина следующего шага
                     Nst = dNst                          ' мелкие шаги оставляем в зоне низкий давлений
                 Else
                     Nst = 1
@@ -497,13 +499,13 @@ On Error GoTo err1:
                 EffESP_d = 0
             End If
             
-            n = n + Nst
+            N = N + Nst
             
             If saveCurve Then
                 If calc_from_dis Then
-                    nn = stage_num - n + 1
+                    nn = stage_num - N + 1
                 Else
-                    nn = n
+                    nn = N
                 End If
                 curves.Item("gas_fractionInPump").AddPoint nn, .f_g
                 curves.Item("PressureInPump").AddPoint nn, Pst_atma
@@ -524,7 +526,7 @@ On Error GoTo err1:
                 p_curve_.AddPoint HmesStage_m(CDbl(nn)), Pst_atma
                 t_curve_.AddPoint HmesStage_m(CDbl(nn)), Tst_C
             End If
-            I = I + 1
+            i = i + 1
         Loop
         ' ====================== end main loop ================================================
         If calc_from_dis Then
@@ -559,7 +561,7 @@ On Error GoTo err1:
                               " Температура исправлена на 299"
         End If
     End With
-    power_ESP_Wt_ = PowESPTot_Wt
+    power_ESP_Wt_ = PowESPTot_Wt + gassep_M_Nm * w_radsec
     power_fluid_Wt_ = PowfluidTot_Wt
     
     If calc_from_dis Then
@@ -595,10 +597,16 @@ Public Function get_num_stages(q_mix_rc_m3day As Double, head_m As Double) As In
         get_num_stages = 0
     End If
 End Function
-Public Sub calc_ESP(p_atma As Double, t_intake_C As Double, Optional t_dis_C As Double = 0, _
-                        Optional calc_from_intake As Boolean = True, _
-                        Optional saveCurve As Boolean = False)
+Public Sub calc_ESP(p_atma As Double, _
+                    t_intake_C As Double, _
+           Optional t_dis_C As Double = 0, _
+           Optional calc_from_intake As Boolean = True, _
+           Optional saveCurve As Boolean = False, _
+           Optional f_Hz As Double = -1)
 ' метод расчета работы насоса
+    If f_Hz > 0 Then
+        Me.freq_Hz = f_Hz
+    End If
     Call ESP_dPIntegration(p_atma, t_intake_C, t_dis_C, Not calc_from_intake, saveCurve)
 End Sub
 Private Sub Class_Initialize()
@@ -623,7 +631,7 @@ Private Sub Class_Initialize()
 End Sub
 ' метод для построения кривых характеристик УЭЦН
 Public Sub build_curves(Optional ByVal qliq As Double = -1)
-    Dim I As Integer
+    Dim i As Integer
     Dim degr_temp As Double
     Dim qmin As Double, qmax As Double, qcalc As Double
     Dim qold As Double
@@ -643,8 +651,8 @@ Public Sub build_curves(Optional ByVal qliq As Double = -1)
     
     qmin = 0.1
     qmax = rate_max_sm3day(-1)
-    For I = 0 To num_points
-        qcalc = (qmax - qmin) / num_points * I + qmin
+    For i = 0 To num_points
+        qcalc = (qmax - qmin) / num_points * i + qmin
         
         Me.fluid.fw_perc = fluid.fw_perc
         Me.fluid.qliq_sm3day = qcalc
@@ -666,7 +674,7 @@ Public Sub build_curves(Optional ByVal qliq As Double = -1)
         curves.Item("RealHead").AddPoint qcalc, head_real_m_
         curves.Item("PumpTdis").AddPoint qcalc, t_dis_C_
         curves.Item("PumpTint").AddPoint qcalc, t_int_C_
-    Next I
+    Next i
     If qliq < 0 Then Me.fluid.qliq_sm3day = qold
     Call calc_ESP(p_int_atma_, t_int_C_)
 End Sub
@@ -868,8 +876,13 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     Dim M As Integer
    ' Dim FlowParams_out As PIPE_FLOW_PARAMS
     Dim offset As Integer
-    Dim I As Integer
+    Dim i As Integer
     Dim hh As Double
+    Dim dict_pressure As New Dictionary
+    Dim dict_power As New Dictionary
+    Dim dict_ESP As New Dictionary
+    Dim dict_curves As New Dictionary
+    Dim dict_geometry As New Dictionary
     
     offset = 2
 On Error Resume Next
@@ -881,250 +894,332 @@ On Error Resume Next
     Set crv_T = curves.Item("TempInPump").ClonePointsToNum(num_points)
     
     M = crv_P.num_points
-    ReDim arr(M + offset + 4, 16)
+    ReDim arr(M + offset, 10)
     
     ' в первом ряду параметров выведем результаты расчета
     ' которые могут пригодится в явном виде при массовых расчетах
     arr(0, 0) = 0
-    arr(0, 1) = p_int_atma
-    arr(0, 2) = t_int_C
-    arr(0, 3) = p_dis_atma
-    arr(0, 4) = t_dis_C
-    arr(0, 5) = head_m
-    arr(0, 6) = M_Nm
-    arr(0, 7) = length_m
-    arr(0, 8) = power_fluid_W
-    arr(0, 9) = power_ESP_W
-    arr(0, 10) = eff_ESP_d
-    arr(0, 11) = gas_frac_intake_
-    arr(0, 12) = gas_corr_
-    
     arr(1, 0) = "0"
-    arr(1, 1) = "p_int_atma"
-    arr(1, 2) = "t_int_C"
-    arr(1, 3) = "p_dis_atma"
-    arr(1, 4) = "t_dis_C"
-    arr(1, 5) = "head_m"
-    arr(1, 6) = "m_Nm"
-    arr(1, 7) = "length_m"
-    arr(1, 8) = "power_fluid_W"
-    arr(1, 9) = "power_ESP_W"
-    arr(1, 10) = "eff_ESP_d"
-    arr(1, 11) = "gas_frac_intake_"
-    arr(1, 12) = "gas_corr_"
+    
+    arr(0, 1) = head_m
+    arr(1, 1) = "head_m"
+    
+    arr(0, 2) = M_Nm
+    arr(1, 2) = "m_Nm"
+    
+    With dict_geometry
+        .Add "length_pump_m", length_m
+        .Add "angle", angle_deg
+        .Add "d_od_m", db.d_od_m
+        .Add "d_cas_min_m", db.d_cas_min_m
+        .Add "d_motor_od_m", db.d_motor_od_m
+    End With
+    
+    arr(0, 3) = ConvertToJson(dict_geometry)
+    arr(1, 3) = "geometry"
+    
+    arr(0, 4) = gas_frac_intake_
+    arr(1, 4) = "gas_frac_intake"
+    
+    arr(0, 5) = eff_ESP_d
+    arr(1, 5) = "eff_ESP_d"
+    
+    With dict_pressure
+        .Add "p_int_atma", p_int_atma
+        .Add "t_int_C", t_int_C
+        .Add "p_dis_atma", p_dis_atma
+        .Add "t_dis_C", t_dis_C
+    End With
+    arr(0, 6) = ConvertToJson(dict_pressure)
+    arr(1, 6) = "dict_pressure"
+    
+    With dict_power
+        .Add "power_fluid_W", power_fluid_W
+        .Add "power_ESP_W", power_ESP_W
+        .Add "p_dis_atma", p_dis_atma
+        .Add "eff_ESP_d", eff_ESP_d
+    End With
+    arr(0, 7) = ConvertToJson(dict_power)
+    arr(1, 7) = "dict_power"
+    
+    arr(0, 8) = db_json_string
+    arr(1, 8) = "db_json_string"
     
     
+    With dict_ESP
+        .Add "calc_from_dis", calc_from_dis_
+        .Add "stage_num", stage_num
+        .Add "freq_Hz", freq_Hz
+        .Add "w_obmin", w_obmin
+        .Add "rate_nom_sm3day", rate_nom_sm3day
+        .Add "rate_max_sm3day", rate_max_sm3day(-1)
+        .Add "c_calibr_head", c_calibr_head
+        .Add "c_calibr_rate", c_calibr_rate
+        .Add "c_calibr_power", c_calibr_power
+        .Add "gas_correct", gas_correct
+        .Add "gas_corr_", gas_corr_
+        .Add "turb_head_factor", turb_head_factor
+        .Add "turb_rate_factor", turb_rate_factor
+    End With
+    arr(0, 9) = ConvertToJson(dict_ESP)
+    arr(1, 9) = "dict_ESP"
     
-'    arr(offset, 1) = "n stage"
-'    arr(offset, 2) = "p atma"
-'    arr(offset, 3) = "t C"
-'    arr(offset, 4) = "gas fraction"
-'    arr(offset, 5) = "qmix rm3day"
-'    arr(offset, 6) = "Power fluid W"
-'    arr(offset, 7) = "Power ESP W"
-'    arr(offset, 8) = "eff fluid"
-'    arr(offset, 9) = "length m"
-'    arr(offset, 10) = "p atma length"
-'    arr(offset, 11) = "t C length"
+    With dict_curves
+        .Add "gas_corr_", curves.Item("gas_corr_").getJson
+        .Add "corr_visc_eff_", curves.Item("corr_visc_eff_").getJson
+        .Add "corr_visc_pow_", curves.Item("corr_visc_pow_").getJson
+        .Add "corr_visc_q_", curves.Item("corr_visc_q_").getJson
+        .Add "corr_visc_h_", curves.Item("corr_visc_h_").getJson
+        .Add "mu_stage_cP", curves.Item("mu_stage_cP").getJson
+        .Add "EffESPInPump", curves.Item("EffESPInPump").getJson
+        .Add "PowerESPInPump", curves.Item("PowerESPInPump").getJson
+        .Add "PowerfluidInPump", curves.Item("PowerfluidInPump").getJson
+        .Add "q_mix_InPump", curves.Item("q_mix_InPump").getJson
+        .Add "gas_fractionInPump", curves.Item("gas_fractionInPump").getJson
+        .Add "TempInPump", curves.Item("TempInPump").getJson
+        .Add "PressureInPump", curves.Item("PressureInPump").getJson
+    End With
+    arr(0, 9) = ConvertToJson(dict_curves)
+    arr(1, 9) = "dict_curves"
     
     Dim j As Integer
     
-    For I = 0 To M
+    For i = 0 To M
       
         j = 0
-        hh = crv_P.pointX(I)   ' fractional stage number :)
-        If I = 0 Then
-            arr(offset + I, j) = "i"
+        hh = crv_P.pointX(i)   ' fractional stage number :)
+        If i = 0 Then
+            arr(offset + i, j) = "i"
         Else
-            arr(offset + I, 0) = I
+            arr(offset + i, 0) = i
         End If
         
         j = j + 1
-        If I = 0 Then
-            arr(offset + I, j) = "n_stage"
+        If i = 0 Then
+            arr(offset + i, j) = "n_stage"
         Else
-            arr(offset + I, j) = hh
+            arr(offset + i, j) = hh
         End If
         
         j = j + 1
-        If I = 0 Then
+        If i = 0 Then
             arr(offset, j) = "length_m"
         Else
-            arr(offset + I, j) = HmesStage_m(hh)
+            arr(offset + i, j) = HmesStage_m(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
-            arr(offset + I, j) = "p_atma"
+        If i = 0 Then
+            arr(offset + i, j) = "p_atma"
         Else
-            arr(offset + I, j) = curves.Item("PressureInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("PressureInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
-            arr(offset + I, j) = "t_C"
+        If i = 0 Then
+            arr(offset + i, j) = "t_C"
         Else
-            arr(offset + I, j) = curves.Item("TempInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("TempInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
-            arr(offset + I, j) = "gas_fraction"
+        If i = 0 Then
+            arr(offset + i, j) = "gas_fraction"
         Else
-            arr(offset + I, j) = curves.Item("gas_fractionInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("gas_fractionInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
-            arr(offset + I, j) = "qmix_rm3day"
+        If i = 0 Then
+            arr(offset + i, j) = "qmix_rm3day"
         Else
-            arr(offset + I, j) = curves.Item("q_mix_InPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("q_mix_InPump").getPoint(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
+        If i = 0 Then
             arr(offset, j) = "Power_fluid_W"
         Else
-            arr(offset + I, j) = curves.Item("PowerfluidInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("PowerfluidInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
+        If i = 0 Then
             arr(offset, j) = "Power_ESP_W"
         Else
-            arr(offset + I, j) = curves.Item("PowerESPInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("PowerESPInPump").getPoint(hh)
         End If
         
         j = j + 1
-        If I = 0 Then
+        If i = 0 Then
             arr(offset, j) = "eff fluid"
         Else
-            arr(offset + I, j) = curves.Item("EffESPInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("EffESPInPump").getPoint(hh)
         End If
         
         
         j = j + 1
-        If I = 0 Then
+        If i = 0 Then
             arr(offset, j) = "mu_stage_cP"
         Else
-            arr(offset + I, j) = curves.Item("mu_stage_cP").getPoint(hh)
-        End If
-        
-        j = j + 1
-        If I = 0 Then
-            arr(offset, j) = "corr_visc_h_"
-        Else
-            arr(offset + I, j) = curves.Item("corr_visc_h_").getPoint(hh)
-        End If
-        
-        j = j + 1
-        If I = 0 Then
-            arr(offset, j) = "corr_visc_q_"
-        Else
-            arr(offset + I, j) = curves.Item("corr_visc_q_").getPoint(hh)
+            arr(offset + i, j) = curves.Item("mu_stage_cP").getPoint(hh)
         End If
         
         
-        j = j + 1
-        If I = 0 Then
-            arr(offset, j) = "corr_visc_pow_"
-        Else
-            arr(offset + I, j) = curves.Item("corr_visc_pow_").getPoint(hh)
-        End If
-        
-        
-        j = j + 1
-        If I = 0 Then
-            arr(offset, j) = "corr_visc_eff_"
-        Else
-            arr(offset + I, j) = curves.Item("corr_visc_eff_").getPoint(hh)
-        End If
-        
-        
-        j = j + 1
-        If I = 0 Then
-            arr(offset, j) = "gas_corr_"
-        Else
-            arr(offset + I, j) = curves.Item("gas_corr_").getPoint(hh)
-        End If
-        
-    Next I
-    
-'            curves.Item("mu_stage_cP").ClearPoints
-'        curves.Item("corr_visc_h_").ClearPoints
-'        curves.Item("corr_visc_q_").ClearPoints
-'        curves.Item("corr_visc_pow_").ClearPoints
-'        curves.Item("corr_visc_eff_").ClearPoints
-'        curves.Item("gas_corr_").ClearPoints
-    
-        ' во втором ряде параметров справочные параметры
-    arr(M + offset + 2, 0) = calc_from_dis_
-    arr(M + offset + 2, 1) = db_.name
-    arr(M + offset + 2, 2) = stage_num
-    arr(M + offset + 2, 3) = freq_Hz
-    arr(M + offset + 2, 4) = w_obmin
-    arr(M + offset + 2, 5) = rate_nom_sm3day
-    arr(M + offset + 2, 6) = rate_max_sm3day(-1)
-    arr(M + offset + 2, 7) = c_calibr_head
-    arr(M + offset + 2, 8) = c_calibr_rate
-    arr(M + offset + 2, 9) = c_calibr_power
-    arr(M + offset + 2, 10) = gas_correct
-    arr(M + offset + 2, 11) = turb_head_factor
-    arr(M + offset + 2, 12) = turb_rate_factor
-    
-    arr(M + offset + 1, 0) = "calc_from_dis"
-    arr(M + offset + 1, 1) = "name"
-    arr(M + offset + 1, 2) = "stage_num"
-    arr(M + offset + 1, 3) = "freq_Hz"
-    arr(M + offset + 1, 4) = "w_obmin"
-    arr(M + offset + 1, 5) = "rate_nom_sm3day"
-    arr(M + offset + 1, 6) = "rate_max_sm3day"
-    arr(M + offset + 1, 7) = "c_calibr_head"
-    arr(M + offset + 1, 8) = "c_calibr_rate"
-    arr(M + offset + 1, 9) = "c_calibr_power"
-    arr(M + offset + 1, 10) = "gas_degr"
-    arr(M + offset + 1, 11) = "turb_head_factor"
-    arr(M + offset + 1, 12) = "turb_rate_factor"
-    arr(M + offset + 1, 13) = ""
-    arr(M + offset + 1, 14) = ""
-    arr(M + offset + 1, 15) = ""
-    arr(M + offset + 4, 0) = db_.ID
-    arr(M + offset + 4, 1) = db_.source
-    arr(M + offset + 4, 2) = db_.manufacturer
-    arr(M + offset + 4, 3) = db_.name
-    arr(M + offset + 4, 4) = db_.freq_Hz
-    arr(M + offset + 4, 5) = db_.slip_nom_rpm
-    arr(M + offset + 4, 6) = db_.rate_nom_sm3day
-    arr(M + offset + 4, 7) = db_.rate_opt_min_sm3day
-    arr(M + offset + 4, 8) = db_.rate_opt_max_sm3day
-    arr(M + offset + 4, 9) = db_.height_stage_m
-    arr(M + offset + 4, 10) = db_.stages_max
-    arr(M + offset + 4, 11) = db_.d_od_m
-    arr(M + offset + 4, 12) = db_.d_motor_od_m
-    arr(M + offset + 4, 13) = db_.d_cas_min_m
-    arr(M + offset + 4, 14) = db_.d_shaft_m
-    arr(M + offset + 4, 15) = db_.power_limit_shaft_kW
-    arr(M + offset + 4, 16) = db_.pressure_limit_housing_atma
-    
-    arr(M + offset + 3, 0) = "ID"
-    arr(M + offset + 3, 1) = "source"
-    arr(M + offset + 3, 2) = "manufacturer"
-    arr(M + offset + 3, 3) = "name"
-    arr(M + offset + 3, 4) = "freq_Hz"
-    arr(M + offset + 3, 5) = "slip_nom_rpm"
-    arr(M + offset + 3, 6) = "rate_nom_sm3day"
-    arr(M + offset + 3, 7) = "rate_opt_min_sm3day"
-    arr(M + offset + 3, 8) = "rate_opt_max_sm3day"
-    arr(M + offset + 3, 9) = "height_stage_m"
-    arr(M + offset + 3, 10) = "stages_max"
-    arr(M + offset + 3, 11) = "d_od_m"
-    arr(M + offset + 3, 12) = "d_motor_od_m"
-    arr(M + offset + 3, 13) = "d_cas_min_m"
-    arr(M + offset + 3, 14) = "d_shaft_m"
-    arr(M + offset + 3, 15) = "power_limit_shaft_kW"
-    arr(M + offset + 3, 16) = "pressure_limit_housing_atma"
+    Next i
     
     
     array_out = arr
 End Function
+Private Sub read_json_to_dict()
+    ' read ESP database in json format
+    ' ESP database in json format can be prepared with ESP_db.xlsm file
+    
+    Dim ss As String
+    Dim line_from_file As String
+    Dim lines_all As String
+    Dim fname As String
+    
+    fname = ThisWorkbook.Path & esp_db_name
+    
+On Error GoTo err1:
+    
+    Open fname For Input As #1
+    Do While Not EOF(1)
+        Line Input #1, line_from_file
+        lines_all = lines_all & line_from_file & vbCrLf
+    Loop
+    Close #1
+    Set ESP_base_dictionary = ParseJson(lines_all)
+    
+    Exit Sub
+err1:
+    Dim msg As String
+    msg = "read_json_to_dict:" & fname & "read error"
+    Err.Raise kErrESPbase, , msg & Err.Description
+End Sub
+Public Sub set_ID(ESP_ID As Long)
+    Dim esp_db As ESP_PARAMS
+    Dim dict As Dictionary
+    Dim j As Integer, num As Integer
+    
+    If ESP_base_dictionary Is Nothing Then
+        Call read_json_to_dict
+    End If
+    
+    Set dict = ESP_base_dictionary(CStr(ESP_ID))
+    db_json_string = ConvertToJson(dict)
+  On Error GoTo err_load_pump:
+    num = dict("rate_points").Count
+    With esp_db
+        
+        ReDim .head_points(1 To num)
+        ReDim .rate_points(1 To num)
+        ReDim .power_points(1 To num)
+        ReDim .eff_points(1 To num)
+              
+        For j = 1 To num
+               .head_points(j) = dict("head_points")(j)
+               .rate_points(j) = dict("rate_points")(j)
+               .power_points(j) = dict("power_points")(j)
+               .eff_points(j) = dict("eff_points")(j)
+        Next j
+        
+            ' read all data from first line in DB table
+        .ID = dict("ID")
+        .manufacturer = dict("manufacturer")
+        .name = dict("name")
+        .stages_max = dict("stages_max")
+        .rate_nom_sm3day = dict("rate_nom_sm3day")
+        .rate_opt_min_sm3day = dict("rate_opt_min_sm3day")
+        .rate_opt_max_sm3day = dict("rate_opt_max_sm3day")
+        .rate_max_sm3day = dict("rate_max_sm3day")
+        .slip_nom_rpm = dict("slip_nom_rpm")
+        .freq_Hz = dict("freq_Hz")
+        .eff_max = dict("eff_max")
+        .d_od_m = dict("d_od_mm") / 1000 ' читаем габарит насоса
+        .d_motor_od_m = dict("d_motor_od_mm") / 1000  ' читаем габарит насоса
+        .d_cas_min_m = dict("d_cas_min_mm") / 1000
+        .d_shaft_m = dict("d_shaft_mm") / 1000
+        .power_limit_shaft_kW = dict("power_limit_shaft_kW")
+        .power_limit_shaft_max_kW = dict("power_limit_shaft_max_kW")
+        .pressure_limit_housing_atma = dict("pressure_limit_housing_atma")
+        
+        If dict("height_stage_m") <> "" Then
+            .height_stage_m = dict("height_stage_m")
+        Else
+            .height_stage_m = 0.05   ' по умолчанию 5 см высота. Можно сделать зависимость от дебита
+        End If
+    End With
+    
+    db_ = esp_db
+    
+    Exit Sub
+    
+err_load_pump:
+    On Error GoTo 0
+    Dim msg As String
+    msg = "CESPpump.set_ID error - Problem while loading pump . " & CStr(esp_db.ID) & Err.Description
+    Err.Raise kErrESPcalc, , msg
+    
+End Sub
+Public Sub init_json(json As String)
+    Dim d As Dictionary
+    
+    Set d = ParseJson(json)
+    
+    Call init_dictionary(d)
+ End Sub
+ 
+ Private Sub init_dictionary(dict As Dictionary)
+ 
+ Dim ESP_ID As Long
+ Dim head_nom_m As Double
+ Dim msg As String
+On Error GoTo err1:
+    With dict
+        If .Exists("ESP_ID") Then
+            ESP_ID = .Item("ESP_ID")
+            Call set_ID(ESP_ID)
+        Else
+            msg = "CESPpump.init_dictionary error - wrong input. No ESP_ID key in pump json"
+            Err.Raise kErrESPcalc, , msg
+        End If
+        stage_num = 0
+        If .Exists("num_stages") Then stage_num = .Item("num_stages")
+        
+        If stage_num <= 0 And .Exists("head_nom_m") Then
+            head_nom_m = .Item("head_nom_m")
+            Call set_num_stages(head_nom_m)
+        End If
+        
+        If stage_num <= 0 Then
+            msg = "CESPpump.init_dictionary error - wrong input. No stages in ESP defined"
+            Err.Raise kErrESPcalc, , msg
+        End If
+        If .Exists("freq_Hz") Then freq_Hz = .Item("freq_Hz")
+        If .Exists("gas_correct") Then gas_correct = .Item("gas_correct")
+        If .Exists("c_calibr_head") Then c_calibr_head = .Item("c_calibr_head")
+        If .Exists("c_calibr_rate") Then c_calibr_rate = .Item("c_calibr_rate")
+        If .Exists("c_calibr_power") Then c_calibr_power = .Item("c_calibr_power")
+        If .Exists("dnum_stages_integrate") Then dnum_stages_integrate = .Item("dnum_stages_integrate")
+    End With
+    
+'    If Not IsMissing(dict_gassep) Then
+'        If Not dict_gassep Is Nothing Then
+'            With dict_gassep
+'                If .Exists("gassep_type") Then gassep_type = .Item("gassep_type")
+'                If .Exists("ksep_man_d") Then gassep_ksep_man_d = .Item("ksep_man_d")
+'                gassep_M_Nm = 0
+'                If .Exists("M_Nm") Then gassep_M_Nm = .Item("M_Nm")
+'            End With
+'        End If
+'    End If
+    Exit Sub
+err1:
+    Dim errmsg As String
+    errmsg = "Error:CESPpump.init_dictionary: init error " & sDELIM & Err.Description
+    addLogMsg errmsg
+    Err.Raise kErrESPcalc, Err.source, errmsg
+ End Sub
 

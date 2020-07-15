@@ -12,46 +12,99 @@ Option Explicit
 ' параметры асинхронного двигателя номинальные
 ' предполагается что ассинхронный двигатель соединен звездой
 ' надо будет сделать возможность задания треугольником и сделать вентильные привода
-Private is_induction_ As Boolean   ' признак того что двигатель ассинхронный
-Private is_star_ As Boolean        ' соединение звезда (альтернатива - треугольник если ассинхронный)
-Private nom_data_ As MOTOR_DATA
-Private data_ As MOTOR_DATA
-Private m_Nm_ As Double           ' момент развиваемый при текущих параметрах
-' параметры холостого хода
-Private Ix_A_ As Double            ' ток холостого хода
-Private cos_phix_d_ As Double       ' коэф мощности при холостом ходе
-Private phix_d_ As Double          ' коэф мощности при холостом ходе
+Public h_mes_top_m As Double        ' глубина установки ЭЦН (по верхней части)
+Public m_kg  As Double            ' масса, кг
+Public length_m  As Double        ' установочная длина, м  вместе с гидрозащитой
+Public d_od_mm As Double         ' диаметр насоса - габарит
+Public manufacturer_name As String
+Public name As String
+Public source As String ' источник данных по мотору.0 дефлтный, другой потом
+Public dPower_protector_W As Double ' потребление мощности гидрозашитой
+Public CS_eff_fr As Double          ' номинальный КПД станции управления УЭЦН
+Public Transform_eff_fr As Double   ' номинальный КПД трансформатора УЭЦН
+Public dPower_CS_W As Double        ' потребление мощности станцией управления
+Public dPower_transform_W As Double ' потребление мощности трансформатором
+' параметры описывающие кабельную систему
+Public cable_type_num As Integer    ' номер кабеля todo сделать базу кабелей
+Public cable_name As String         ' название кабеля
+Public cable_manufacturer As String
+Public cable_d_mm As Double
+Public cable_R_Omkm As Double       ' удельное сопротивление
+Public cable_X_Omkm As Double       ' удельное реактивое сопротивление
+Public cable_Tmax_C As Double       ' температурный рейтинг  todo сделать проверки на температурный рейтинг
+Public cable_dU_V As Double         ' падение напряжения на кабеле
+Public cable_dPower_W As Double     ' мощность потребляемая кабелем
+Public cable_power_W As Double      ' мощность на входе в кабель
+'Public c_calibr_power As Double
+'Public dPower_protector_W As Double ' потребление мощности гидрозашитой
+Public power_CS_calc_W As Double        ' мощность на входе в станцию управления (с учетом корректировки) факт
+Public power_CS_teor_calc_W As Double   ' мощность на входе в станцию управления  расчетная без корретировки
+' параметры из каталога, которые потенциально могут пригодится
+Public d_cas_min_mm As Double     ' минимальный диаметр скважины, мм
+Public v_liq_min_msec As Double   ' минимально допустимая скорость жидкости для охлаждения, м/с
+Private U_motor_V_ As Double         ' напряжение на ПЭД фактическое
+Private U_trans_high_V_ As Double   ' напряжение на трансформатере на высокой стороне, расчетное
+Private f_power_Hz_ As Double
+'Private power_motor_W_ As Double     ' расчетная мощность на ПЭД, только читать
+'Private power_CS_fact_W_ As Double   ' фактическая мощность системы замеренная на СУ, задается для коррекции мощности
+Public power_fact_kW As Double        ' фактическое потребление мощности мгновенное (чтобы учесть ПКВ)
+Private nom_data_ As MOTOR_DATA     ' номинальные параметры двигателя
+Private data_ As MOTOR_DATA         ' фактические параметры после расчета
 ' параметры двигателя по схеме замещения
-Private lambda_d_ As Double       ' отношение максимального момента к номинальному для АД
-Private I_start_A_ As Double       ' пусковой ток для двигателя
+Private lambda_d_ As Double        ' отношение максимального момента к номинальному для АД
 Private R1_  As Double             ' активное сопротивление обмотки статора для схемы замещения
 Private R2__ As Double             ' активное сопротивление обмотки ротока приведеное к обмотке статора
 Private xk_  As Double             ' индуктивное сопротивление обмоток для режима короткого замыкания
 Private xi_  As Double
-Private C1    As Double             ' коээфициент приведения Т образной схемы к Г образной
-' параметры из каталога, которые потенциально могут пригодится
-Private d_cas_min_mm_ As Double      ' минимальный диаметр скважины, мм
-Private v_liq_min_msec_ As Double    ' минимально допустимая скорость жидкости для охлаждения, м/с
-'Private num_sections_ As Integer    ' количество секций
-Private h_mes_top_ As Double                 ' глубина установки ЭЦН (по верхней части)
-Private m_kg_  As Double           ' масса, кг
-Private length_m_  As Double        ' установочная длина, м  вместе с гидрозащитой
-Private diam_mm_ As Double         ' диаметр насоса - габарит
+' параметры холостого хода
+Private Ix_A_ As Double            ' ток холостого хода
+Private cos_phix_d_ As Double      ' коэф мощности при холостом ходе
+Private phix_d_ As Double          ' коэф мощности при холостом ходе
+Private alpha0 As Double            ' константа рекомендованная в методичке Гридина
+Private Ix_cf As Double             ' константа корректировки поправки зависимости Ix от напряжения
+ 
 Private ID_ As Integer
-Private motor_name_ As String
-Private manufacturer_name_ As String
-Public alpha0 As Double   '= 0.65  ' константа рекомендованная в методичке Гридина
-'Public xi_ As Double '= 1.05
-Private motor_source_ As Integer             ' источник данных по мотору.0 дефлтный, другой потом
-Public dPower_protector_W As Double ' потребление мощности гидрозашитой
+Sub Class_Initialize()
+     ' проинициализируем параметры двигателя значениями по  умолчанию, чтобы с ходу можно было счиатать
+   ' Call InitMotor
+   ' Call calc_motor_power(8)  ' инициализируем более менее разумными параметрами
+    length_m = 5
+    d_od_mm = 117
+    dPower_protector_W = 400
+    power_fact_kW = 0
+    
+    alpha0 = 0.4  ' константа рекомендованная в методичке Гридина
+    xi_ = 1.06
+    d_cas_min_mm = 120
+    v_liq_min_msec = 0.06
+    Ix_cf = 0.4
+    CS_eff_fr = 0.97
+    Transform_eff_fr = 0.97
+    
+    Call set_cable(1)
+    cable_dU_V = -1
+    
+    U_trans_high_V_ = 1000
+    f_power_Hz_ = 50
+End Sub
+'Public Property Get power_CS_fact_W() As Double
+'   power_CS_fact_W = power_CS_fact_W_
+'End Property
+'
+Public Property Get power_motor_W() As Double
+   power_motor_W = data_.Pelectr_kW * 1000
+End Property
+Public Property Get U_trans_high_V() As Double
+' напряжение на трансфоратере по высокой стороне
+    U_trans_high_V = U_trans_high_V_
+End Property
+Public Property Get U_motor_V() As Double
+' напряжение на ПЭД фактическое
+    U_motor_V = U_motor_V_
+End Property
 'публичное свойство для номинального момента двигателя
 Public Property Get Mnom_Nm() As Double
     Mnom_Nm = nom_data_.Mshaft_Nm
-End Property
-' максимальный момент двигателя
-Public Property Get Mmax_Nm() As Double
-' рассчитывается из перегрузочной способности
-    Mmax_Nm = Mnom_Nm * lambda_d_
 End Property
 ' отношение максимального момента к номинальному
 Public Property Get lambda_d() As Double
@@ -86,9 +139,6 @@ Public Property Get Snom_d() As Double
     Snom_d = nom_data_.s_d
 End Property
 ' номинальная мощность двигателя при номинальной частоте тока
-Public Property Get Pnom_W() As Double
-    Pnom_W = nom_data_.Pshaft_kW * 1000
-End Property
 Public Property Get Pnom_kW() As Double
     Pnom_kW = nom_data_.Pshaft_kW
 End Property
@@ -182,8 +232,21 @@ Public Property Get Ix_A() As Double
     Dim Kn As Double
     UUn_fnf = U_phase_V / Unom_phase_V * Fnom_Hz / f_Hz
     Kn = 1.2786 * UUn_fnf - 0.2689   ' поправка по Гридину для учета намагничивающего тока
-    Ix_A = Kn * Ix_A_ * UUn_fnf
+    Kn = 1.2786 * UUn_fnf - 0.2786   ' поправка по Гридину для учета намагничивающего тока
+    Dim a#, b#, g#
+    a = 0.229
+    b = 0.988
+    g = 0.242
+    Kn = (b - (b ^ 2 - 4 * a * (UUn_fnf - g)) ^ 0.5) / 2 / a
+    Dim cr As Double
+    If Kn < 1 Then   ' после экспериемнтов осталось деление на два участка, если потребуется можно использовать
+        cr = Ix_cf
+    Else
+        cr = Ix_cf
+    End If
+    Kn = Kn + (Kn - 1) * cr
     
+    Ix_A = Kn * Ix_A_ * UUn_fnf
 End Property
 Public Property Get cosPhix_d() As Double
     cosPhix_d = cos_phix_d_
@@ -212,26 +275,67 @@ End Property
 Public Property Get eff_d() As Double
     eff_d = data_.eff_d
 End Property
+ ' глубина нижней точки установки
+Public Property Get h_mes_down_m() As Double
+   h_mes_down_m = h_mes_top_m + length_m
+End Property
+Public Property Get ID() As Integer
+   ID = ID_
+End Property
 Public Sub InitMotor(Optional ByVal M_ID As Integer = 0, _
-                     Optional ByVal Unomlin_V As Double = 1000, _
-                     Optional ByVal Pnom_kW As Double = 10, _
-                     Optional ByVal Fnom_Hz As Double = 50, _
-                     Optional ByVal eff_fr As Double = 0.85, _
-                     Optional ByVal cosphi_fr As Double = 0.8, _
-                     Optional ByVal slip_fr As Double = 0.05, _
-                     Optional ByVal diam_mm As Double = 117, _
-                     Optional ByVal lambda As Double = 2, _
-                     Optional ByVal alpha0 As Double = 0.4, _
-                     Optional ByVal xi0 As Double = 1.05)
+                     Optional ByVal U_nom_lin_V As Double = 0, _
+                     Optional ByVal P_nom_kW As Double = 0, _
+                     Optional ByVal f_nom_Hz As Double = 0, _
+                     Optional ByVal eff_nom_fr As Double = 0, _
+                     Optional ByVal cosphi_nom_fr As Double = 0, _
+                     Optional ByVal slip_nom_fr As Double = 0, _
+                     Optional ByVal d_od_mm As Double = 0, _
+                     Optional ByVal lambda As Double = 0, _
+                     Optional ByVal alpha0 As Double = 0, _
+                     Optional ByVal xi0 As Double = 0, _
+                     Optional Ixcf As Double = 0)
+    
+    
+    If U_nom_lin_V = 0 Then U_nom_lin_V = 1000
+    If P_nom_kW = 0 Then P_nom_kW = 10
+    If f_nom_Hz = 0 Then f_nom_Hz = 50
+    If eff_nom_fr = 0 Then eff_nom_fr = 0.82
+    If cosphi_nom_fr = 0 Then cosphi_nom_fr = 0.88
+    If slip_nom_fr = 0 Then slip_nom_fr = 0.053
+    If d_od_mm = 0 Then d_od_mm = 117
+    If lambda = 0 Then lambda = 2.8
+    If alpha0 = 0 Then alpha0 = 0.5
+    If xi0 = 0 Then xi0 = 1.05
+    If Ixcf = 0 Then Ixcf = 0.4
+    
+    
     ID_ = M_ID
+    
+    If slip_nom_fr <= 0 Then slip_nom_fr = (1 - motor_rot_speed_default0_rmp(100, 50) / 3000)
+    If cosphi_nom_fr <= 0 Then cosphi_nom_fr = motor_cosphi_default0_d(100)
+    If eff_nom_fr <= 0 Then eff_nom_fr = motor_eff_default0_d(100)
+    
     Select Case ID_
         Case 0
-            Call InitMotorSimple(Unomlin_V, Pnom_kW, Fnom_Hz, eff_fr, cosphi_fr, slip_fr)
+            ' все параметры константы и не зависят от загрузки
+            Call InitMotorSimple(U_nom_lin_V, P_nom_kW, f_nom_Hz, eff_nom_fr, cosphi_nom_fr, slip_nom_fr)
         Case 1
-            Call InitMotorDefaultPower(Unomlin_V, Pnom_kW, Fnom_Hz)
+            ' параметры заданы оцифрованной характеристикой ЭЦН
+            Call InitMotorDefaultPower(U_nom_lin_V, P_nom_kW, f_nom_Hz, eff_nom_fr, cosphi_nom_fr, slip_nom_fr)
         Case 2
-            Call InitMotorGridin(Unomlin_V, Pnom_kW, eff_fr, cosphi_fr, Fnom_Hz, slip_fr, diam_mm, lambda, alpha0, xi0)
+            ' параметры заданы простой схемой замещения
+            ' http://wwwcdl.bmstu.ru/fn7/Gridin.pdf
+            ' http://old-etr1880.mpei.ru/index.php/electricity/article/view/1053
+            Call InitMotorGridin(U_nom_lin_V, P_nom_kW, eff_nom_fr, cosphi_nom_fr, f_nom_Hz, slip_nom_fr, lambda, alpha0, xi0, Ixcf)
     End Select
+    
+    d_cas_min_mm = d_od_mm + 6
+    Me.d_od_mm = d_od_mm
+    v_liq_min_msec = 0.06
+    name = "ПЭД " & nom_data_.Pshaft_kW & "-" & d_od_mm & "-" & U_nom_lin_V
+    manufacturer_name = "Generic"
+    length_m = 10
+    m_kg = 300
 End Sub
 Private Sub InitMotorSimple(Unomlin_V As Double, _
                             Pnom_kW As Double, _
@@ -241,18 +345,18 @@ Private Sub InitMotorSimple(Unomlin_V As Double, _
                             slip_fr As Double)
            
     nom_data_ = set_motor_data_simple_(True, Pnom_kW, Unomlin_V, Fnom_Hz, eff_fr, slip_fr, cosphi_fr)
-    
+    source = "Unifloc default"
 End Sub
-Private Sub InitMotorGridin(Optional Unomlin_V As Double = 1000, _
-                            Optional Pnom_kW As Double = 10, _
-                            Optional eff As Double = 0.85, _
-                            Optional cosphi As Double = 0.85, _
-                            Optional f_Hz As Double = 50, _
-                            Optional S As Double = 0.065, _
-                     Optional ByVal diam_mm As Double = 117, _
-                     Optional ByVal lambda As Double = 2, _
-                     Optional ByVal alpha0 As Double = 0.4, _
-                     Optional ByVal xi0 As Double = 1.05)
+Private Sub InitMotorGridin(Unomlin_V As Double, _
+                             Pnom_kW As Double, _
+                             eff As Double, _
+                             cosphi As Double, _
+                             f_Hz As Double, _
+                             S As Double, _
+                      ByVal lambda As Double, _
+                      ByVal alpha As Double, _
+                      ByVal xi As Double, _
+                      ByVal Ixcf As Double)
 ' инициализация двигателя на основе схемы замещения по Гридину
         Dim Inomlin_A As Double
 On Error GoTo er1:
@@ -260,8 +364,7 @@ On Error GoTo er1:
         nom_data_.Pelectr_kW = Pnom_kW / eff
         Inomlin_A = nom_data_.Pelectr_kW / (root3 * Unomlin_V * cosphi / 1000)
         
-        motor_name_ = "ПЭД " & nom_data_.Pshaft_kW & "-" & diam_mm & "-" & Unomlin_V
-        manufacturer_name_ = "Induction_motor"
+        source = "Unifloc equivalent circuit"
         nom_data_.U_phase_V = Unomlin_V / root3
         nom_data_.I_phase_A = Inomlin_A
         nom_data_.U_lin_V = Unomlin_V
@@ -271,35 +374,30 @@ On Error GoTo er1:
         nom_data_.f_Hz = f_Hz
         nom_data_.s_d = S
         lambda_d_ = lambda
-        Me.alpha0 = alpha0
-        xi_ = xi0
-        d_cas_min_mm_ = diam_mm + 6
-        diam_mm_ = diam_mm
+        alpha0 = alpha
+        xi_ = xi
+        Ix_cf = Ixcf
         
         nom_data_.Mshaft_Nm = nom_data_.Pshaft_kW * 1000 / (f_Hz * (1 - S) * 2 * const_Pi)
         nom_data_.load_d = 1
                 
-        Call CalcModelGridin
+        Call set_motor_model_Gridin_
         Exit Sub
 er1:
      addLogMsg "Не удалось инициализировать асинхронный двигатель"
 End Sub
 Private Sub InitMotorDefaultPower(ByVal Unomlin_V As Double, _
                                   ByVal Pnom_kW As Double, _
-                                  ByVal Fnom_Hz As Double)
+                                  ByVal Fnom_Hz As Double, _
+                                 ByVal effNom As Double, _
+                                 ByVal cosphiNom As Double, _
+                                 ByVal slipNom As Double)
    
-    nom_data_ = set_motor_data_pow_nom_(Pnom_kW, Unomlin_V, Fnom_Hz)
+    nom_data_ = set_motor_data_pow_nom_(Pnom_kW, Unomlin_V, Fnom_Hz, effNom, cosphiNom, slipNom)
    
-    motor_name_ = "ПЭД " & Format(nom_data_.Pshaft_kW, 0)
     ' проверяем - если дефолтный мотор тогда грузим что есть
-    lambda_d_ = 5 ' перегрузочная способность - с потолка экспертно
-    I_start_A_ = nom_data_.I_lin_A * 5 ' пусковой ток тоже с потолка экспертно
-    d_cas_min_mm_ = 120
-    v_liq_min_msec_ = 0.06
-    'num_sections_ = 1
-    length_m_ = 10
-    m_kg_ = 300
-    manufacturer_name_ = "Тестовый ПЭД"
+    lambda_d_ = 2 ' перегрузочная способность - с потолка экспертно
+    source = "Base on catalog curve"
     
 End Sub
 Public Sub calc_motor_slip(S As Double, _
@@ -308,6 +406,13 @@ Public Sub calc_motor_slip(S As Double, _
     ' Расчет по схеме замещения в зависимости от проскальзывания
     ' чтобы построить красивый график электромеханической характеристики
     '   в основных расчетах не применяется
+    Dim Uf As Double
+    
+    Uf = Ulin_V / Unom_lin_V
+    
+    If Uf < 0.8 Or Uf > 1.2 Then
+        addLogMsg "Motor warning. Ulin_V / Unom_lin_V out of range " + CStr(Uf)
+    End If
     
     If S = 0 Then
         S = 0.00015
@@ -315,7 +420,7 @@ Public Sub calc_motor_slip(S As Double, _
     data_.U_lin_V = Ulin_V
     data_.U_phase_V = Ulin_V / root3
     If ID = 2 Then
-        Call calc_ADGridin(S, data_.U_phase_V, freq_Hz)
+        Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
     End If
 End Sub
 Public Sub calc_motor_power(pow_mech_kW As Double, _
@@ -324,9 +429,16 @@ Public Sub calc_motor_power(pow_mech_kW As Double, _
 ' расчет параметров двигателя при заданном моменте на валу
     Dim load As Double
     Dim S As Double, S1 As Double, S2 As Double
-    Dim I As Integer
+    Dim i As Integer
+    Dim Uf As Double
     
-    I = 0
+    Uf = Ulin_V / Unom_lin_V
+    
+    If Uf < 0.8 Or Uf > 1.2 Then
+        addLogMsg "Motor warning. Ulin_V / Unom_lin_V out of range " + CStr(Uf)
+    End If
+    
+    i = 0
     data_.U_lin_V = Ulin_V
     data_.U_phase_V = Ulin_V / root3
     
@@ -338,18 +450,18 @@ Public Sub calc_motor_power(pow_mech_kW As Double, _
         ' можно и быстрее сделать, но потом
         Do
             S = (S1 + S2) / 2
-            Call calc_ADGridin(S, data_.U_phase_V, freq_Hz)
+            Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
             If pow_mech_kW > data_.Pshaft_kW Then
                 S1 = S
             Else
                 S2 = S
             End If
-            I = I + 1
-        Loop Until Abs(pow_mech_kW - data_.Pshaft_kW) < 0.01 Or I > 25
+            i = i + 1
+        Loop Until Abs(pow_mech_kW - data_.Pshaft_kW) < 0.01 Or i > 25
        
-        If I >= 25 Then
+        If i >= 25 Then
             Dim msg As String
-            msg = "CESPMotor.calc_motor method Gridin Ошибка при расчете мотора, расчет проскальзования по мощности не сошелся, i =" + CStr(I)
+            msg = "CESPMotor.calc_motor method Gridin Ошибка при расчете мотора, расчет проскальзования по мощности не сошелся, i =" + CStr(i)
             Err.Raise kErrESPcalc, , msg
         End If
         
@@ -360,21 +472,81 @@ Public Sub calc_motor_power(pow_mech_kW As Double, _
         
     End If
 End Sub
+' расчет работы мотора по параметрам напряжения и частоты на поверхности и известному моменту на валу
+Public Sub calc_motor_mom_from_surf(Mshaft_Nm As Double, _
+                      Optional freq_Hz As Double = -1, _
+                      Optional Ulin_surf_V As Double = -1)
+    ' цель этой процедуры - определить параметры ПЭД при заданном напряжении на поверхности
+    ' на высокой стороне трансформатора
+    ' сложность в падении напряжения в кабельной линии
+    ' - кабельная линия будет определять напряжение на ПЭД
+    ' которое в свою очередь будет определять ток (при фиксированном моменте на валу)
+    ' который в свою очередь, будет определять падение напряжения в кабеле
+    ' итого - пытаемся итерациями оценить правильное падение напряжения в кабеле
+    
+    Dim dU As Double, dU_1 As Double
+    Dim Umotor As Double
+    Dim I_A As Double
+    Dim i As Integer
+    
+    If Ulin_surf_V <= 0 Then
+        Ulin_surf_V = U_trans_high_V_
+    End If
+    If freq_Hz <= 0 Then
+        freq_Hz = f_Hz
+    End If
+    
+    i = 0
+    '1. предполагаем, что нет падения напряжения сначала
+    dU_1 = 0
+    Do
+        dU = dU_1
+        ' 2. оцениваем напряжения на ПЭД
+        Umotor = Ulin_surf_V - dU
+        ' 3. считаем параметры ПЭД при фиксированном моменте на валу
+        Call calc_motor_mom_Nm(Mshaft_Nm, freq_Hz, Umotor)
+        I_A = I_lin_A
+        ' 4. по получившемуся току определяем падение напряжения на кабеле
+        dU_1 = I_A * cable_R_Omkm * h_mes_top_m / 1000
+        i = i + 1
+    ' проверяем условие сходимости итерации (или аварийно выходим из цикла, если сходимости нет)
+    Loop Until (Abs(dU_1 - dU) < 0.1) Or (i >= 10)
+    cable_dU_V = dU_1
+    '5 по падению напряжения оценим мощность рассеиваемую кабелем в тепло. учитываем 3 жилы. Тут учитывается полный ток и активный и реактивный
+    cable_dPower_W = 3 * cable_dU_V * I_A
+    '6 найдет мощность электрическую на входе в кабель
+    cable_power_W = data_.Pelectr_kW * 1000 + cable_dPower_W
+    '7. оценим потери мощность в трансформаторе и станции управления
+    dPower_transform_W = (1 - CS_eff_fr) * cable_power_W
+    dPower_CS_W = (1 - Transform_eff_fr) * (cable_power_W + dPower_transform_W)
+    power_CS_teor_calc_W = cable_power_W + dPower_transform_W + dPower_CS_W
+    power_CS_calc_W = power_CS_teor_calc_W
+    
+End Sub
 Public Sub calc_motor_mom_Nm(Mshaft_Nm As Double, _
                       Optional freq_Hz As Double = 50, _
                       Optional Ulin_V As Double = 1000)
 ' расчет параметров двигателя при заданном моменте на валу
     Dim load As Double
     Dim S As Double, S1 As Double, S2 As Double
-    Dim I As Integer
+    Dim i As Integer
     Dim pow_mech_kW As Double
+    Dim iter_max As Long
+    Dim Uf As Double
     
-    I = 0
+    Uf = Ulin_V / Unom_lin_V
+    
+    If Uf < 0.8 Or Uf > 1.2 Then
+        addLogMsg "Motor warning. Ulin_V / Unom_lin_V out of range " + CStr(Uf)
+    End If
+    
+    iter_max = 50
+    i = 0
     data_.U_lin_V = Ulin_V
     data_.U_phase_V = Ulin_V / root3
     
     If ID = 2 Then
-        S2 = nom_data_.s_d * 3 ' макс граница
+        S2 = calc_s_M_krit(Ulin_V, freq_Hz)(1, 1)  ' макс граница
         S1 = 0
         ' дихотомией найдем значение проскальзывания
         ' до 8 итераций обычно надо
@@ -382,80 +554,44 @@ Public Sub calc_motor_mom_Nm(Mshaft_Nm As Double, _
         If Mshaft_Nm > 0 Then
             Do
                 S = (S1 + S2) / 2
-                Call calc_ADGridin(S, data_.U_phase_V, freq_Hz)
+                Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
                 If Mshaft_Nm > data_.Mshaft_Nm Then
                     S1 = S
                 Else
                     S2 = S
                 End If
-                I = I + 1
-            Loop Until Abs(Mshaft_Nm - data_.Mshaft_Nm) < 0.01 Or I > 25
+                i = i + 1
+            Loop Until Abs(Mshaft_Nm - data_.Mshaft_Nm) < 0.01 Or i > iter_max
         Else
             S = 0
-            Call calc_ADGridin(S, data_.U_phase_V, freq_Hz)
+            Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
         End If
        
-        If I >= 25 Then
+        If i >= iter_max Then
             Dim msg As String
-            msg = "CESPMotor.calc_motor method Gridin Ошибка при расчете мотора, расчет проскальзования по мощности не сошелся, i =" + CStr(I)
+            msg = "CESPMotor.calc_motor method Gridin Ошибка при расчете мотора, расчет проскальзования по мощности не сошелся, i =" + CStr(i)
             Err.Raise kErrESPcalc, , msg
         End If
         
     ElseIf ID = 1 Then
         data_ = set_motor_data_mom_(Mshaft_Nm, Ulin_V, freq_Hz)
     ElseIf ID = 0 Then
+        pow_mech_kW = Mshaft_Nm * (freq_Hz * (1 - Snom_d) * 2 * const_Pi) / 1000
+        
+'        d.Mshaft_Nm = d.Pshaft_kW * 1000 /
         data_ = set_motor_data_simple_(False, pow_mech_kW, Unom_lin_V, Fnom_Hz, Effnom_d, Snom_d, CosPhinom_d)
         
     End If
-End Sub
-Sub Class_Initialize()
-     ' проинициализируем параметры двигателя значениями по  умолчанию, чтобы с ходу можно было счиатать
-    Call InitMotor
-    Call calc_motor_power(8)  ' инициализируем более менее разумными параметрами
-    length_m_ = 5
-    diam_mm_ = 117
-    dPower_protector_W = 400
     
-     alpha0 = 0.4  ' константа рекомендованная в методичке Гридина
-     xi_ = 1.06
+    
 End Sub
-Public Property Get minDcas_mm() As Double
-    minDcas_mm = d_cas_min_mm_
-End Property
-Public Property Get minVliq_msec() As Double
-   minVliq_msec = v_liq_min_msec_
-End Property
- ' глубина установки  (верхняя точка)
- Public Property Get h_mes_top_m() As Double
-    h_mes_top_m = h_mes_top_
- End Property
- 
- Public Property Let h_mes_top_m(val As Double)
-    h_mes_top_ = val
- End Property
- ' глубина нижней точки установки
- Public Property Get h_mes_down_m() As Double
-    h_mes_down_m = h_mes_top_m + length_m
- End Property
-Public Property Get length_m() As Double
-   length_m = length_m_
-End Property
-Public Property Get M_kg() As Double
-   M_kg = m_kg_
-End Property
-Public Property Get ID() As Integer
-   ID = ID_
-End Property
-Public Property Get motorName() As String
-    motorName = motor_name_
-End Property
-Public Property Get manufacturer_name() As String
-    manufacturer_name = manufacturer_name_
-End Property
 Private Function set_motor_data_pow_nom_( _
                                  ByVal pow_kW As Double, _
                                  ByVal U As Double, _
-                        Optional ByVal f As Double = 50) As MOTOR_DATA
+                                 ByVal f As Double, _
+                                 ByVal effNom As Double, _
+                                 ByVal cosphiNom As Double, _
+                                 ByVal slipNom As Double) As MOTOR_DATA
     ' расчет параметров ПЭД по паспортным характеристикам
     ' load - загрузка на заданной частоте
     ' Unm, Inm, fnm - номинальные показатели, определяющие характеристики двигателя
@@ -474,9 +610,9 @@ Private Function set_motor_data_pow_nom_( _
         d.U_lin_V = U
         d.U_phase_V = d.U_lin_V / root3
         ' напряжение оценили - возможно надо сделать поправку на напряжение
-        d.eff_d = motor_eff_default_d(load, d.f_Hz) '* Eff_cf
-        d.cosphi = motor_cosphi_default_d(load, d.f_Hz) '* cosphi_cf
-        d.s_d = (1 - motor_rot_speed_default_rmp(load, d.f_Hz) / (d.f_Hz * 60)) '/ S_cf
+        d.eff_d = effNom 'motor_eff_default_d(load) '* Eff_cf
+        d.cosphi = cosphiNom ' motor_cosphi_default_d(load) '* cosphi_cf
+        d.s_d = slipNom
         d.Pshaft_kW = pow_kW
         d.Mshaft_Nm = d.Pshaft_kW * 1000 / ((d.f_Hz * (1 - d.s_d) * 2 * const_Pi))
         d.Pelectr_kW = d.Pshaft_kW / d.eff_d
@@ -489,7 +625,7 @@ End Function
 Private Function set_motor_data_mom_( _
                                  ByVal mom_Nm As Double, _
                                  ByVal U As Double, _
-                        Optional ByVal f As Double = 50) As MOTOR_DATA
+                                 ByVal f As Double) As MOTOR_DATA
     ' расчет параметров ПЭД по паспортным характеристикам
     ' load - загрузка на заданной частоте
     ' Unm, Inm, fnm - номинальные показатели, определяющие характеристики двигателя
@@ -530,9 +666,9 @@ Private Function set_motor_data_mom_( _
             S_cf = motor_slip_u_corr(Uf)
         End If
         
-        d.eff_d = motor_eff_default_d(load, d.f_Hz) * Eff_cf
-        d.I_phase_A = motor_current_default_d(load, d.f_Hz) * I_cf * Inom_lin_A
-        d.s_d = (1 - motor_rot_speed_default_rmp(load, d.f_Hz) / (d.f_Hz * 60)) / S_cf
+        d.eff_d = motor_eff_default_d(load) * Eff_cf
+        d.I_phase_A = motor_current_default_d(load) * I_cf * Inom_lin_A
+        d.s_d = (1 - motor_rot_speed_default_rmp(load, f) / (d.f_Hz * 60)) / S_cf
         d.Mshaft_Nm = mom_Nm
         d.Pshaft_kW = d.Mshaft_Nm * (d.f_Hz * (1 - d.s_d) * 2 * const_Pi) / 1000
         d.Pelectr_kW = d.Pshaft_kW / d.eff_d
@@ -595,13 +731,22 @@ Private Function set_motor_data_simple_(ByVal nom As Boolean, _
         d.I_lin_A = d.I_phase_A
         ' оценим мощность на валу с учетом скольжения и частоты
         d.Mshaft_Nm = d.Pshaft_kW * 1000 / (d.f_Hz * (1 - d.s_d) * 2 * const_Pi)
-        d.load_d = pow_mech_kW / Pnom_kW * f / Fnom_Hz
+        d.load_d = pow_mech_kW / Pnom_kW * f / Fnom_Hz * 100
     End If
     
     set_motor_data_simple_ = d
         
 End Function
-Private Function motor_rot_speed_default_rmp(load, Optional freq_Hz = 50, Optional motID = 0)
+Private Function motor_rot_speed_default_rmp(load As Double, freq_Hz As Double)
+    
+    Dim s100 As Double
+    Dim K As Double
+    s100 = motor_rot_speed_default0_rmp(100, 50)
+    K = (3000 - s100) / 3000 / Snom_d
+    motor_rot_speed_default_rmp = (freq_Hz * 60) * (1 - ((freq_Hz * 60) - motor_rot_speed_default0_rmp(load, freq_Hz)) / (freq_Hz * 60) / K)
+    
+End Function
+Private Function motor_rot_speed_default0_rmp(load As Double, freq_Hz As Double)
 ' вывод параметров стандартного двигателя
 ' обороты -2.07391E-09    5.66468E-07 -4.70742E-05    -0.004462241    -1.526740367    3012.664336
     Dim l As Double
@@ -609,12 +754,13 @@ Private Function motor_rot_speed_default_rmp(load, Optional freq_Hz = 50, Option
     If load >= 0 Or load < 150 Then
         l = load
         SPD = -0.00000000207391 * l ^ 5 + 0.000000566468 * l ^ 4 - 0.0000470742 * l ^ 3 - 0.004462241 * l ^ 2 - 1.526740367 * l + 3012.664336
-        motor_rot_speed_default_rmp = SPD + (freq_Hz * 60 - 3000) - 0.0035 * 3000
+        
+        motor_rot_speed_default0_rmp = SPD + (freq_Hz * 60 - 3000) - 0.0035 * 3000
     Else
-        motor_rot_speed_default_rmp = 0
+        motor_rot_speed_default0_rmp = 0
     End If
 End Function
-Private Function motor_current_default_d(load, Optional freq_Hz = 50, Optional motID = 0)
+Private Function motor_current_default_d(load)
 ' вывод параметров стандартного двигателя
 'ток 6.03318E-10 -3.73389E-07    5.7149E-05  0.000128248 0.362600747 36.76223776
     Dim l As Double
@@ -626,85 +772,113 @@ Private Function motor_current_default_d(load, Optional freq_Hz = 50, Optional m
         motor_current_default_d = 0
     End If
 End Function
-Private Function motor_cosphi_default_d(load, Optional freq_Hz = 50, Optional motID = 0)
+Private Function motor_cosphi_default_d(load As Double, freq_Hz As Double)
+    
+    Dim cs100 As Double
+    Dim K As Double
+    cs100 = motor_cosphi_default0_d(100)
+    K = (1 - cs100) / CosPhinom_d
+    motor_cosphi_default_d = (1 - (1 - motor_cosphi_default0_d(load)) / K)
+    
+End Function
+Private Function motor_cosphi_default0_d(load)
 ' вывод параметров стандартного двигателя
 'коэф мощ    -5.46757E-10    -1.08923E-07    0.000123969 -0.026538059    2.410930241 0.394405594
     Dim l As Double
     If load >= 0 Or load < 150 Then
         l = load
-        motor_cosphi_default_d = -0.000000000546757 * l ^ 5 - 0.000000108923 * l ^ 4 + _
+        motor_cosphi_default0_d = -0.000000000546757 * l ^ 5 - 0.000000108923 * l ^ 4 + _
                                     0.000123969 * l ^ 3 - 0.026538059 * l ^ 2 + 2.410930241 * l + 0.394405594
-        motor_cosphi_default_d = motor_cosphi_default_d / 100
+        motor_cosphi_default0_d = motor_cosphi_default0_d / 100
         
-        motor_cosphi_default_d = (motor_cosphi_default_d + 0.25) / 1.25
+        motor_cosphi_default0_d = (motor_cosphi_default0_d + 0.25) / 1.25
         
     Else
-        motor_cosphi_default_d = 0
+        motor_cosphi_default0_d = 0
     End If
 End Function
-Private Function motor_eff_default_d(load, Optional freq_Hz = 50, Optional motID = 0)
+Private Function motor_eff_default_d(load As Double)
+    
+    Dim e100 As Double
+    Dim K As Double
+    e100 = motor_eff_default0_d(100)
+    K = e100 / Effnom_d
+    motor_eff_default_d = motor_eff_default0_d(load) / K
+    
+End Function
+Private Function motor_eff_default0_d(load)
 ' вывод параметров стандартного двигателя
 'КПД 1.0313E-08  -4.9338E-06 0.000914116 -0.083174452    3.73047825  16.13321678
     Dim l As Double
     If load >= 0 Or load < 150 Then
         l = load
-        motor_eff_default_d = 0.000000010313 * l ^ 5 - 0.0000049338 * l ^ 4 + _
+        motor_eff_default0_d = 0.000000010313 * l ^ 5 - 0.0000049338 * l ^ 4 + _
                               0.000914116 * l ^ 3 - 0.083174452 * l ^ 2 + 3.73047825 * l + 16.13321678
-        motor_eff_default_d = motor_eff_default_d / 100
+        motor_eff_default0_d = motor_eff_default0_d / 100
     Else
-        motor_eff_default_d = 0
+        motor_eff_default0_d = 0
     End If
 End Function
 ' ====== расчет по Гридину по П образной схеме замещения
 ' расчет текущих параметров работы двигателя при заданных частоте и напряжении и при вращении
-Public Sub calc_ADGridin(ByVal S As Double, _
+Private Sub set_motor_data_Gridin_(ByVal S As Double, _
                          ByVal Uph_V As Double, _
                          ByVal Fw_Hz As Double)
      Dim R2_s As Double
      Dim I2_ As Double
      Dim phi2 As Double
      
-     data_.s_d = S     ' сохраняем скольжение
-     data_.f_Hz = Fw_Hz
-     data_.U_phase_V = Uph_V
-     data_.U_lin_V = Uph_V * 3 ^ 0.5
-     If S < 0.00015 Then
-         S = 0.00015
-     End If
-     'S = 0.065
-     R2_s = R2__ / S     ' вычисляем вспомогательный параметр - активное сопротивление обмотки ротора деленное на скольжение
-    data_.Mshaft_Nm = 3 * Uph_V ^ 2 * R2_s / (Fw_Hz * (2 * const_Pi) * ((R1_ + R2_s) ^ 2 + xk ^ 2)) * (2 - xi_) '- M0_Nm
-'    data_.Mshaft_Nm = data_.Mshaft_Nm - data_.Mshaft_Nm * (xi_ - 1)
-    I2_ = Uph_V / ((R1 + R2_s) ^ 2 + xk ^ 2) ^ 0.5
-    phi2 = Atn(xk / (R1 + R2_s))
-    data_.I_phase_A = (Ix_A ^ 2 + I2_ ^ 2 + 2 * Ix_A * I2_ * Cos(Phix_d - phi2)) ^ 0.5
-    data_.I_lin_A = data_.I_phase_A
-    data_.cosphi = (Ix_A * Cos(phix_d_) + I2_ * Cos(phi2)) / data_.I_phase_A
-    data_.Pelectr_kW = 3 * U_phase_V * data_.I_phase_A * data_.cosphi / 1000
-    data_.Pshaft_kW = data_.Mshaft_Nm * Fw_Hz * (1 - S) * (2 * const_Pi) / 1000
-    data_.eff_d = data_.Pshaft_kW / data_.Pelectr_kW
-     
-   
+     With data_
+        .s_d = S     ' сохраняем скольжение
+        .f_Hz = Fw_Hz
+        .U_phase_V = Uph_V
+        .U_lin_V = Uph_V * 3 ^ 0.5
+        If S < 0.00015 Then
+            S = 0.00015
+        End If
+        R2_s = R2__ / S     ' вычисляем вспомогательный параметр - активное сопротивление обмотки ротора деленное на скольжение
+        .Mshaft_Nm = 3 * Uph_V ^ 2 * R2_s / (Fw_Hz * (2 * const_Pi) * ((R1_ + R2_s) ^ 2 + xk ^ 2)) - M0_Nm
+        I2_ = Uph_V / ((R1 + R2_s) ^ 2 + xk ^ 2) ^ 0.5
+        phi2 = Atn(xk / (R1 + R2_s))
+        .I_phase_A = (Ix_A ^ 2 + I2_ ^ 2 + 2 * Ix_A * I2_ * Cos(Phix_d - phi2)) ^ 0.5
+        .I_lin_A = data_.I_phase_A
+        .cosphi = (Ix_A * Cos(phix_d_) + I2_ * Cos(phi2)) / .I_phase_A
+        .Pelectr_kW = 3 * U_phase_V * .I_phase_A * .cosphi / 1000
+        .Pshaft_kW = .Mshaft_Nm * Fw_Hz * (1 - S) * (2 * const_Pi) / 1000
+        .eff_d = .Pshaft_kW / .Pelectr_kW
+        .load_d = .Mshaft_Nm / nom_data_.Mshaft_Nm * 100
+    End With
 End Sub
 ' процедура расчета скольжения по заданному моменту на валу двигателя
-Public Function calc_s_d(M_Nm As Double, Uphase_V As Double, f_Hz) As Double
+' функция расчета s для проверки - нигде не используется
+Private Function calc_s_d(M_Nm As Double, Uphase_V As Double, f_Hz As Double) As Double
     Dim Rs As Double
     Dim S As Double
     
     Rs = 3 * (Uphase_V ^ 2) / (2 * (M_Nm + M0_Nm) * f_Hz * 2 * const_Pi) - R1
     S = R2_ / (Rs + (Rs ^ 2 - (R1 ^ 2 + xk ^ 2)) ^ 0.5)
-    Call calc_ADGridin(S, Uphase_V, f_Hz)
+    Call set_motor_data_Gridin_(S, Uphase_V, f_Hz)
     calc_s_d = S
 End Function
+Public Function calc_s_M_krit(ByVal Ulin_V As Double, _
+                             ByVal f_Hz As Double)
+    Dim sk As Double
+    data_.f_Hz = f_Hz
+    sk = (R2_ / (xk ^ 2 + R1 ^ 2) ^ 0.5)
+    Call set_motor_data_Gridin_(sk, Ulin_V / root3, f_Hz)
+    
+    calc_s_M_krit = array_join(Array(Array(sk, data_.Mshaft_Nm), _
+                                     Array("s_crit", "M_shaft_max_Nm")))
+End Function
 ' процедура расчета параметров схемы замещения по Гридину
-Public Sub CalcModelGridin()
+Private Sub set_motor_model_Gridin_()
     ' при расчете модели идет расчет на номинальной частоте вращения и номинальном напряжении
      
     ' Dim alpha0 As Double
-     Dim A As Double
+     Dim a As Double
      Dim b As Double
      Dim Rm As Double
-     Dim G As Double
+     Dim g As Double
      Dim P1n_W As Double  ' потребляемая мощность двигателя
      Dim I1n_A As Double  ' фазный ток
      Dim I2n__A As Double
@@ -713,14 +887,14 @@ Public Sub CalcModelGridin()
      Dim R2s_ As Double
      With nom_data_
         ' расчитываем показатели схемы замещения. Сначала вспомогательные переменные
-        A = alpha0 / xi_ * (1 - .eff_d) / .eff_d * (1 - .s_d) / .s_d - 1
+        a = alpha0 / xi_ * (1 - .eff_d) / .eff_d * (1 - .s_d) / .s_d - 1
         Rm = 3 * .U_phase_V ^ 2 * (1 - .s_d) / (2 * .Pshaft_kW * 1000 * (lambda_d_ + xi_ - 1))
-        G = 1 / .s_d ^ 2 + 2 * A / .s_d + A ^ 2
+        g = 1 / .s_d ^ 2 + 2 * a / .s_d + a ^ 2
         b = (lambda_d_ + xi_ - 1) / xi_
         ' далее считаем сопротивления статора и ротора и индуктивность
-        R2__ = Rm / G * (b / .s_d + A + ((b / .s_d + A) ^ 2 - G) ^ 0.5)
+        R2__ = Rm / g * (b / .s_d + a + ((b / .s_d + a) ^ 2 - g) ^ 0.5)
         R2s_ = R2__ / .s_d
-        R1_ = A * R2__ '* 2
+        R1_ = a * R2__
         xk_ = (Rm ^ 2 - 2 * Rm * R1_) ^ 0.5
         ' теперь считаем показатели холостого хода при номинальной частоте вращения
         P1n_W = .Pshaft_kW * 1000 / .eff_d
@@ -728,11 +902,133 @@ Public Sub CalcModelGridin()
         ' найдем ток в обмотке ротока приведенный к обмотке статора
         I2n__A = .U_phase_V / ((R1_ + R2s_) ^ 2 + xk_ ^ 2) ^ 0.5
         phinom = ArcCos(.cosphi)
-        phi2n = Atn(xk_ / (R1_ + R2s_))  ' * 3
+        phi2n = Atn(xk_ / (R1_ + R2s_))
         Ix_A_ = (I1n_A ^ 2 + I2n__A ^ 2 - 2 * I1n_A * I2n__A * Cos(phinom - phi2n)) ^ 0.5
         cos_phix_d_ = (I1n_A * .cosphi - I2n__A * Cos(phi2n)) / Ix_A_
         phix_d_ = ArcCos(cos_phix_d_)
     End With
      
 End Sub
+Private Function motor_eff_u_corr(Uf)
+    
+    Uf = Uf - 2.5
+    motor_eff_u_corr = -0.00010442 * (Uf) ^ 2 + 0.020574732 * (Uf) - 0.013469505
+End Function
+Private Function motor_I_u_corr(Uf)
+    Uf = Uf + 2
+    motor_I_u_corr = (0.0000333333 * (Uf) ^ 4 - 0.013577778 * (Uf) ^ 3 + 2.093833333 * (Uf) ^ 2 - 144.8529365 * (Uf) + 3891.666667) / 100 - 0.001661
+End Function
+Private Function motor_cosphi_u_corr(Uf)
+    Uf = Uf + 0
+    motor_cosphi_u_corr = (0.0000000731957 * (Uf) ^ 4 - 0.0000262041 * (Uf) ^ 3 + 0.00332089 * (Uf) ^ 2 - 0.179141048 * (Uf) + 4.589348453)
+    motor_cosphi_u_corr = motor_cosphi_u_corr * (1 - (1 - Uf / 100) * 0.08)
+End Function
+Private Function motor_slip_u_corr(Uf)
+    Uf = Uf + 0
+    motor_slip_u_corr = (0.00000204082 * (Uf) ^ 3 - 0.0007138 * (Uf) ^ 2 + 0.084499514 * (Uf) - 2.353571429)
+    motor_slip_u_corr = motor_slip_u_corr * (1 + (1 - Uf / 100) * 0.05)
+    
+End Function
+Public Sub set_cable(ByVal cable_type As Integer)
+    Select Case cable_type
+        Case 1
+            ' http://pskovgeokabel.ru/products/1_16/
+            cable_R_Omkm = 1.18
+            cable_X_Omkm = 0.01
+            cable_name = "КПпАпБП-120 3x16"
+            cable_Tmax_C = 120
+            cable_manufacturer = "pskovgeokabel"
+            cable_d_mm = 16
+    End Select
+    ' здесь добавить другие марки кабеля при необходимости
+    ' потом когда нибудь можно будет и расчет параметров кабеля сделать в термовставку тоже
+    cable_type_num = cable_type
+End Sub
+Public Sub init_json(json As String, _
+                    Optional json_cable As String)
+    Dim d As Dictionary
+    Dim DC As Dictionary
+    
+    Set d = ParseJson(json)
+    
+    If Not IsMissing(json_cable) Then
+        If Len(json_cable) > 3 Then
+            Set DC = ParseJson(json_cable)
+        Else
+            Set DC = Nothing
+        End If
+    End If
+    
+   
+    Call init_dictionary(d, DC)
+    
+ End Sub
+ 
+ Public Sub init_dictionary(dict As Dictionary, _
+                            Optional dict_cable As Dictionary)
+ 
+ Dim ESP_ID As Long
+ Dim HeadNom_m As Double
+ Dim U_nom_lin_V As Double
+ Dim P_nom_kW As Double
+ Dim f_nom_Hz As Double
+ Dim eff_nom_fr As Double
+ Dim cosphi_nom_fr As Double
+ Dim slip_nom_fr As Double
+ 
+On Error GoTo err1:
+    With dict
+        If .Exists("motor_ID") Then
+            ID_ = .Item("motor_ID")
+        Else
+            Dim msg As String
+            msg = "CESPMotor.init_dictionary error - wrong input no motor_ID key in motor json"
+            Err.Raise kErrESPcalc, , msg
+        End If
+          
+        If .Exists("U_surf_high_lin_V") Then U_trans_high_V_ = .Item("U_surf_high_lin_V")
+        If .Exists("f_surf_Hz") Then data_.f_Hz = .Item("f_surf_Hz")
+        If .Exists("power_fact_kW") Then power_fact_kW = .Item("power_fact_kW")
+        
+        If .Exists("U_nom_lin_V") Then U_nom_lin_V = .Item("U_nom_lin_V")
+        If .Exists("P_nom_kW") Then P_nom_kW = .Item("P_nom_kW")
+        If .Exists("F_nom_Hz") Then f_nom_Hz = .Item("F_nom_Hz")
+        If .Exists("eff_nom_fr") Then eff_nom_fr = .Item("eff_nom_fr")
+        If .Exists("cosphi_nom_fr") Then cosphi_nom_fr = .Item("cosphi_nom_fr")
+        If .Exists("slip_nom_fr") Then slip_nom_fr = .Item("slip_nom_fr")
+        
+        
+        If .Exists("d_od_mm") Then d_od_mm = .Item("d_od_mm")
+        If .Exists("lambda") Then lambda_d_ = .Item("lambda")
+        If .Exists("alpha0") Then alpha0 = .Item("alpha0")
+        If .Exists("xi0") Then xi_ = .Item("xi0")
+        If .Exists("Ixcf") Then Ix_cf = .Item("Ixcf")
+        
+        Call InitMotor(ID_, U_nom_lin_V, P_nom_kW, f_nom_Hz, eff_nom_fr, cosphi_nom_fr, slip_nom_fr, d_od_mm, _
+                    lambda_d_, alpha0, xi_, Ix_cf)
+    End With
+    
+    Call set_cable(1)
+    
+    If Not IsMissing(dict_cable) Then
+        If Not dict_cable Is Nothing Then
+            With dict_cable
+                If .Exists("cable_R_Omkm") Then cable_R_Omkm = .Item("cable_R_Omkm")
+                If .Exists("cable_X_Omkm") Then cable_X_Omkm = .Item("cable_X_Omkm")
+                If .Exists("cable_t_max_C") Then cable_Tmax_C = .Item("cable_t_max_C")
+                If .Exists("manufacturer") Then cable_manufacturer = .Item("manufacturer")
+                If .Exists("name") Then cable_name = .Item("name")
+                If .Exists("d_mm") Then cable_d_mm = .Item("d_mm")
+                If .Exists("length_m") Then h_mes_top_m = .Item("length_m")
+            End With
+        End If
+    End If
+    
+    Exit Sub
+err1:
+    Dim errmsg As String
+    errmsg = "Error:CESPpump.init_dictionary: init error " & sDELIM & Err.Description
+    addLogMsg errmsg
+    Err.Raise kErrESPcalc, Err.source, errmsg
+ End Sub
 
