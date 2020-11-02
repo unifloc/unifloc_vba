@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.25  coronav                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.26  coronav2                                          khabibullin.ra@gubkin.ru
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2020
 '
@@ -23,6 +23,7 @@
 ' через соответствующие свойства.
 'description_end_rus
 Option Explicit
+ Public log As New CLogger                      ' create new log list for each object
  Public gas_only As Boolean
  Public ksep_fr As Double
  Public p_ksep_atma As Double
@@ -89,6 +90,9 @@ Option Explicit
  
  Private cv_gas_JkgC_ As Double
  Private cp_oil_JkgC_ As Double
+ Public Sub addLogMsg(msg As String)
+    Call log.AddMsg(msg)
+ End Sub
  Public Property Get heat_capacity_ratio_gas() As Double
     heat_capacity_ratio_gas = heat_capacity_ratio_gas_
  End Property
@@ -592,12 +596,13 @@ End Function
         p_ksep_atma = 0
         t_ksep_C = 0
     
+        Call addLogMsg("CPVT object created ")
  End Sub
  
  Public Sub init_json(json As String)
-    Dim d As Dictionary
-    Set d = ParseJson(json)
-    Call init_dictionary(d)
+    Dim D As Dictionary
+    Set D = ParseJson(json)
+    Call init_dictionary(D)
  End Sub
  
  Public Sub init_dictionary(dict As Dictionary)
@@ -724,8 +729,8 @@ er2:
         gas_only = fl.gas_only
         
  End Sub
-Public Sub calc_PVT_PT(pt As PTtype)
-        Call calc_PVT(pt.p_atma, pt.t_C)
+Public Sub calc_PVT_PT(PT As PTtype)
+        Call calc_PVT(PT.p_atma, PT.t_C)
 End Sub
 Public Sub calc_PVT(ByVal p_atma As Double, ByVal t_C As Double)
  ' расчет свойств воды нефти и газа при заданных давлении и температуре
@@ -946,8 +951,8 @@ On Error GoTo err1:
 'Расчет коэффициента поверхностного натяжения газ-нефть
     Dim ST68 As Double, ST100 As Double
     Dim STw74 As Double, STw280 As Double
-    Dim Tst As Double, Tstw As Double
-    Dim STo As Double, STw As Double, st As Double
+    Dim TST As Double, Tstw As Double
+    Dim STo As Double, STw As Double, ST As Double
     Dim t_F As Double
     Dim P_psia As Double, p_MPa As Double
         t_F = t_C * 1.8 + 32
@@ -958,9 +963,9 @@ On Error GoTo err1:
         If t_F < 68 Then
             STo = ST68
         Else
-            Tst = t_F
-            If t_F > 100 Then Tst = 100
-            STo = (68 - (((Tst - 68) * (ST68 - ST100)) / 32)) * Exp(-0.00086306 * P_psia)
+            TST = t_F
+            If t_F > 100 Then TST = 100
+            STo = (68 - (((TST - 68) * (ST68 - ST100)) / 32)) * Exp(-0.00086306 * P_psia)
             ' https://petrowiki.org/Interfacial_tension
             'If STo < 0 Then STo = ST68
         End If
@@ -977,10 +982,10 @@ On Error GoTo err1:
         ' далее второй способ
         STw = 10 ^ (-(1.19 + 0.01 * p_MPa)) * 1000
         ' Расчет коэффициента поверхностного натяжения газ-жидкость
-        st = (STw * fw_fr_) + STo * (1 - fw_fr_)
+        ST = (STw * fw_fr_) + STo * (1 - fw_fr_)
         ST_oilgas_dyncm_ = STo
         ST_watgas_dyncm_ = STw
-        ST_liqgas_dyncm_ = st
+        ST_liqgas_dyncm_ = ST
     Exit Sub
 err1:
     Dim errmsg As String
@@ -1031,25 +1036,25 @@ Public Function p_gas_fraction_atma(FreeGas As Double, t_C As Double, Optional E
     'P_init     - давление инициализации, атм
     'FreeGas    - доля газ на приеме целевая
     'Es         - коэффициент сепарации насоса
-    Dim p1 As Double
-    Dim p2 As Double
+    Dim P1 As Double
+    Dim P2 As Double
     Dim max_iter As Integer, i As Integer
-    Dim e As Double
+    Dim E As Double
     Dim p_gas As Double, p As Double
     max_iter = 100
-    e = 0.0001
-    p1 = P_init_atma
-    p2 = 0
+    E = 0.0001
+    P1 = P_init_atma
+    P2 = 0
 On Error GoTo err1:
     For i = 1 To max_iter
-        p = (p1 + p2) / 2
+        p = (P1 + P2) / 2
         Call calc_PVT(p, t_C)
         p_gas = gas_fraction_d(Es)
-        If Abs(p_gas - FreeGas) <= e Then Exit For
+        If Abs(p_gas - FreeGas) <= E Then Exit For
         If p_gas > FreeGas Then
-           p2 = p
+           P2 = p
         Else
-           p1 = p
+           P1 = p
         End If
     Next
     p_gas_fraction_atma = p
@@ -1064,30 +1069,30 @@ Public Function rp_gas_fraction_m3m3(FreeGas As Double, p_atma As Double, t_C As
     Dim G1 As Double
     Dim g2 As Double
     Dim max_iter As Integer, i As Integer
-    Dim e As Double
-    Dim p_gas As Double, g As Double
+    Dim E As Double
+    Dim p_gas As Double, G As Double
     Dim rsb_back As Double
     max_iter = 100
-    e = 0.0001
+    E = 0.0001
     G1 = Rp_init_m3m3
     g2 = 0
     rsb_back = rsb_m3m3_
 On Error GoTo err1:
     For i = 1 To max_iter
-        g = (G1 + g2) / 2
-        Call set_rp_rsb(g, rsb_back)
+        G = (G1 + g2) / 2
+        Call set_rp_rsb(G, rsb_back)
 '        rsb_m3m3 = rsb_back
 '        rp_m3m3 = g
         Call calc_PVT(p_atma, t_C)
         p_gas = gas_fraction_d(Es)
-        If Abs(p_gas - FreeGas) <= e Then Exit For
+        If Abs(p_gas - FreeGas) <= E Then Exit For
         If p_gas > FreeGas Then
-           G1 = g
+           G1 = G
         Else
-           g2 = g
+           g2 = G
         End If
     Next
-    rp_gas_fraction_m3m3 = g
+    rp_gas_fraction_m3m3 = G
     Exit Function
 err1:
     rp_gas_fraction_m3m3 = 0
