@@ -16,7 +16,7 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция декодирования json строки,
 ' позволяет вывести содержимое json строки в таблицу
-Public Function decode_json_string(json, _
+Public Function decode_json(json, _
                           Optional transpose As Boolean = False, _
                           Optional keys_filter, _
                           Optional only_values As Boolean = False)
@@ -26,7 +26,7 @@ Public Function decode_json_string(json, _
 ' only_values - если = 1 подписи выводиться не будут
 ' результат - закодированная строка
 'description_end
-    Dim D As Dictionary
+    Dim d As Dictionary
     Dim C As Collection
     Dim p
     Dim i As Integer
@@ -45,34 +45,34 @@ Public Function decode_json_string(json, _
     Set p = ParseJson(json)
     If TypeName(p) = "Dictionary" Then
     
-        Set D = p
+        Set d = p
         
         If Not IsMissing(keys_filter) Then
             arrkeys = Split(keys_filter, ",")
             Set keylist = New Dictionary
             For i = LBound(arrkeys) To UBound(arrkeys)
-                If D.Exists(arrkeys(i)) Then
-                    keylist.Add arrkeys(i), D.Item(arrkeys(i))
+                If d.Exists(arrkeys(i)) Then
+                    keylist.Add arrkeys(i), d.Item(arrkeys(i))
                 End If
             Next i
             If keylist.Count > 0 Then
-                Set D = keylist
+                Set d = keylist
             End If
         End If
     
         If transpose Then
             If only_values Then
-                ReDim outarr(1 To 1, 1 To D.Count)
+                ReDim outarr(1 To 1, 1 To d.Count)
             Else
-                ReDim outarr(1 To 2, 1 To D.Count)
+                ReDim outarr(1 To 2, 1 To d.Count)
             End If
-            For i = 1 To D.Count
-                K = D.keys(i - 1)
+            For i = 1 To d.Count
+                K = d.keys(i - 1)
                 outarr(1, i) = K
-                If IsObject(D.Items(i - 1)) Then
-                    Set V = D.Items(i - 1)
+                If IsObject(d.Items(i - 1)) Then
+                    Set V = d.Items(i - 1)
                 Else
-                    V = D.Items(i - 1)
+                    V = d.Items(i - 1)
                 End If
                 If TypeName(V) = "Collection" Then
                     If only_values Then
@@ -91,17 +91,17 @@ Public Function decode_json_string(json, _
             Next
         Else
             If only_values Then
-                ReDim outarr(1 To D.Count, 1 To 1)
+                ReDim outarr(1 To d.Count, 1 To 1)
             Else
-                ReDim outarr(1 To D.Count, 1 To 2)
+                ReDim outarr(1 To d.Count, 1 To 2)
             End If
-            For i = 1 To D.Count
-                K = D.keys(i - 1)
-                outarr(i, 1) = D.keys(i - 1)
-                If IsObject(D.Items(i - 1)) Then
-                    Set V = D.Items(i - 1)
+            For i = 1 To d.Count
+                K = d.keys(i - 1)
+                outarr(i, 1) = d.keys(i - 1)
+                If IsObject(d.Items(i - 1)) Then
+                    Set V = d.Items(i - 1)
                 Else
-                    V = D.Items(i - 1)
+                    V = d.Items(i - 1)
                 End If
                 If TypeName(V) = "Collection" Then
                     If only_values Then
@@ -124,6 +124,9 @@ Public Function decode_json_string(json, _
         If C.Count = 1 Then
             If TypeName(C.Item(1)) = "Collection" Then
                 outarr = CollectionToArray2D(C.Item(1))
+            Else
+                ReDim outarr(1 To 1, 1 To C.Count)
+                outarr(1, 1) = C.Item(1)
             End If
         Else
             i = 1
@@ -142,29 +145,24 @@ Public Function decode_json_string(json, _
             End If
         End If
     End If
-    decode_json_string = outarr
+    decode_json = outarr
     Exit Function
 err1:
-    decode_json_string = "error"
+    decode_json = "error"
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция кодирования параметров PVT в строку,
 ' для передачи PVT свойств в прикладные функции Унифлок.
-Public Function PVT_encode_string( _
+Public Function encode_PVT_prop( _
                     Optional ByVal gamma_gas As Double = const_gg_, _
                     Optional ByVal gamma_oil As Double = const_go_, _
                     Optional ByVal gamma_wat As Double = const_gw_, _
                     Optional ByVal rsb_m3m3 = const_rsb_default, _
-                    Optional ByVal rp_m3m3, _
                     Optional ByVal pb_atma, _
                     Optional ByVal t_res_C, _
                     Optional ByVal bob_m3m3, _
                     Optional ByVal muob_cP, _
-                    Optional ByVal PVTcorr, _
-                    Optional ByVal ksep_fr, _
-                    Optional ByVal p_ksep_atma, _
-                    Optional ByVal t_ksep_C, _
-                    Optional ByVal gas_only As Boolean _
+                    Optional ByVal PVT_corr_set _
                     )
 ' gamma_gas - удельная плотность газа, по воздуху.
 '             По умолчанию const_gg_ = 0.6
@@ -188,18 +186,10 @@ Public Function PVT_encode_string( _
 ' muob_cP  - вязкость нефти при давлении насыщения.
 '            и пластовой температуре, сП.
 '            По умолчанию рассчитывается по корреляции.
-' PVTcorr - номер набора PVT корреляций для расчета:
+' PVT_corr_set - номер набора PVT корреляций для расчета:
 '           0 - на основе корреляции Стендинга;
 '           1 - на основе кор-ии Маккейна;
 '           2 - на основе упрощенных зависимостей.
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации части свободного газа.
-'           Зависит от давления и температуры
-'           сепарации газа, которые должны быть явно заданы.
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' gas_only   - флаг - в потоке только газ
-'              по умолчанию False (нефть вода и газ)
 ' результат - закодированная строка
 'description_end
     
@@ -214,60 +204,79 @@ Public Function PVT_encode_string( _
     pvt_dict.Add "gamma_wat", gamma_wat
     pvt_dict.Add "rsb_m3m3", rsb_m3m3
     
-    If Not IsMissing(rp_m3m3) Then pvt_dict.Add "rp_m3m3", rp_m3m3
+  '  If Not IsMissing(rp_m3m3) Then pvt_dict.Add "rp_m3m3", rp_m3m3
     If Not IsMissing(pb_atma) Then pvt_dict.Add "pb_atma", pb_atma
     If Not IsMissing(t_res_C) Then pvt_dict.Add "t_res_C", t_res_C
     If Not IsMissing(bob_m3m3) Then pvt_dict.Add "bob_m3m3", bob_m3m3
     If Not IsMissing(muob_cP) Then pvt_dict.Add "muob_cP", muob_cP
-    If Not IsMissing(PVTcorr) Then pvt_dict.Add "PVTcorr", PVTcorr
-    If Not IsMissing(ksep_fr) Then pvt_dict.Add "ksep_fr", ksep_fr
-    If Not IsMissing(p_ksep_atma) Then pvt_dict.Add "p_ksep_atma", p_ksep_atma
-    If Not IsMissing(t_ksep_C) Then pvt_dict.Add "t_ksep_C", t_ksep_C
-    If gas_only Then pvt_dict.Add "gas_only", gas_only
+    If Not IsMissing(PVT_corr_set) Then pvt_dict.Add "PVT_corr_set", PVT_corr_set
     
-    
-    PVT_encode_string = ConvertToJson(pvt_dict)
+    encode_PVT_prop = ConvertToJson(pvt_dict)
  '   Debug.Print PVT_encode_string
 End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' функция расшифровки параметров PVT закодированных в строке
-Public Function PVT_decode_string( _
-                    Optional ByVal str_PVT As String = PVT_DEFAULT, _
-                    Optional ByVal getStr As Boolean = False)
-' str_PVT  - строка с параметрами PVT
-' getStr  - флаг проверки работы функции
-'    по умолчанию False (0) - функция выдает объект CPVT
-'    если задать True - функция раскодирует строку и снова закодирует
-'                и выдаст строку (можно использовать из рабочей книги)
-' результат - объект CPVT
-'description_end
-' при разбиении строки на части ошибки недопустимы
-    Dim PVT As New CPVT
-On Error GoTo er1:
-    If Len(str_PVT) < 3 Then
-        Set PVT_decode_string = Nothing
-        Exit Function
-    End If
-    Call PVT.init_json(str_PVT)
+Public Function encode_PVT_stream( _
+             ByVal q_liq_sm3day As Double, _
+             ByVal fw_perc As Double, _
+             ByVal rp_m3m3 As Double, _
+          Optional ByVal q_gas_free_sm3day As Double = 0)
     
-    If getStr Then
-        With PVT
-            PVT_decode_string = PVT_encode_string(.gamma_g, .gamma_o, _
-              .gamma_w, .rsb_m3m3, .rsb_m3m3, _
-              .pb_atma, .t_res_C, .bob_m3m3, .muob_cP, .PVT_correlation, .ksep_fr, .p_ksep_atma, _
-              .t_ksep_C, PVT.gas_only)
-        End With
-    Else
-        Set PVT_decode_string = PVT
-    End If
-    Exit Function
-er1:
-    Dim errmsg As String
-    errmsg = "PVT_decode_string. error:" & Err.Description & " :" & str_PVT
-    addLogMsg errmsg
-    Err.Raise kErrPVTinput, Err.source, errmsg
     
+    Dim str As String
+    Dim frmt As String
+    Dim frmt_int As String
+    
+    Dim dict As New Dictionary
+    
+    dict.Add "q_liq_sm3day", q_liq_sm3day
+    dict.Add "fw_perc", fw_perc
+    dict.Add "rp_m3m3", rp_m3m3
+   ' dict.Add "q_gas_free_sm3day", q_gas_free_sm3day
+    
+    If Not IsMissing(q_gas_free_sm3day) Then dict.Add "q_gas_free_sm3day", q_gas_free_sm3day
+    
+    encode_PVT_stream = ConvertToJson(dict)
 End Function
+''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'' функция расшифровки параметров PVT закодированных в строке
+'Public Function PVT_decode_string( _
+'                    Optional ByVal str_PVT As String = PVT_DEFAULT, _
+'                    Optional ByVal getStr As Boolean = False)
+'' str_PVT  - строка с параметрами PVT
+'' getStr  - флаг проверки работы функции
+''    по умолчанию False (0) - функция выдает объект CPVT
+''    если задать True - функция раскодирует строку и снова закодирует
+''                и выдаст строку (можно использовать из рабочей книги)
+'' результат - объект CPVT
+''description_end
+'
+'' при разбиении строки на части ошибки недопустимы
+'    Dim PVT As New CPVT
+'On Error GoTo er1:
+'    If Len(str_PVT) < 3 Then
+'        Set PVT_decode_string = Nothing
+'        Exit Function
+'    End If
+'
+'    Call PVT.init_prop(str_PVT)
+'
+'    If getStr Then
+'        With PVT
+'            PVT_decode_string = encode_PVT(.gamma_g, .gamma_o, _
+'              .gamma_w, .rsb_m3m3, _
+'              .pb_atma, .t_res_C, .bob_m3m3, .muob_cP, .PVT_correlation, .ksep_fr, .p_ksep_atma, _
+'              .t_ksep_C, PVT.gas_only)
+'        End With
+'    Else
+'        Set PVT_decode_string = PVT
+'    End If
+'    Exit Function
+'er1:
+'    Dim errmsg As String
+'    errmsg = "PVT_decode_string. error:" & Err.Description & " :" & str_PVT
+'    addLogMsg errmsg
+'    Err.Raise kErrPVTinput, Err.source, errmsg
+'
+'End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы УЭЦН в строку
 Public Function encode_ESP_pump_string( _
@@ -749,7 +758,7 @@ Public Function encode_json(rng)
 ' rng       - диапазон ячеек для кодирования
 ' результат - закодированная строка
 'description_end
-    Dim D As New Dictionary
+    Dim d As New Dictionary
     Dim C As New Collection
     
     Dim T As Variant
@@ -762,9 +771,9 @@ Public Function encode_json(rng)
         encode_json = ConvertToJson(C)
     Else
         For i = 1 To UBound(T)
-            Call D.Add(T(i, 1), T(i, 2))
+            Call d.Add(T(i, 1), T(i, 2))
         Next i
-        encode_json = ConvertToJson(D)
+        encode_json = ConvertToJson(d)
     End If
     
 End Function

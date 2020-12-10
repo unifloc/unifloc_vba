@@ -7,1591 +7,1240 @@
 'PVT UDF  (user defined functions for PVT calculation)
 Option Explicit
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета всех PVT свойств нефти при заданных
+' давлении и температуре
+Public Function PVT_calc( _
+            ByVal p_atma As Double, _
+            ByVal t_C As Double, _
+            ByVal PVT_prop As String, _
+            Optional ByVal param As String = "")
+' p_atma   - давление, атм
+' t_C      - температура, С.
+' PVT_prop - статичные свойства флюида - плотности rsb и пр
+'            используйте encode_pvt_prop для генерации
+' param    - набор параметров расчета в виде json строки
+'
+' Возвращает значения всех PVT свойств
+' для заданных термобарических условий.
+'description_end
+    Const nv = 23
+On Error GoTo err1:
+    Dim PVT As New CPVT
+    Dim res(0 To 2, 0 To nv) As Variant
+    
+    ' param dictionary and settings variables with default values
+    Dim prmd As Dictionary
+    Dim show_log As Boolean
+    Dim num_value As Integer
+    
+    show_log = True
+    num_value = 1
+    
+    ' auxiliary variables
+    Dim log_str As String
+    Dim i As Integer
+    
+    Call PVT.init_prop(PVT_prop)
+    
+On Error GoTo err2:
+    
+    If Len(param) > 1 Then
+        Set prmd = ParseJson(param)
+        ' for references to parameter names we use constants to make it easier to manage later.
+        ' by default the variables will be set to zero or empty (if no key is found)
+        
+        show_log = prmd(prm_show_log)
+        
+        num_value = prmd(prm_num_value)
+        If num_value < 1 Or num_value > nv Then num_value = 1
+    Else
+        Call PVT.addLogMsg("info: no param found. default Standing model set")
+    End If
+' param read done start calc
+On Error GoTo err1:
+    
+    Call PVT.calc_PVT(p_atma, t_C)
+    
+On Error Resume Next
+    
+    ' prepare output
+    res(0, 1) = PVT.rs_m3m3:                    res(1, 1) = "rs_m3m3"
+    res(0, 2) = PVT.pb_calc_atma:               res(1, 2) = "pb_atma"
+    res(0, 3) = PVT.bo_m3m3:                    res(1, 3) = "bo_m3m3"
+    res(0, 4) = PVT.bg_m3m3:                    res(1, 4) = "bg_m3m3"
+    res(0, 5) = PVT.bw_m3m3:                    res(1, 5) = "bw_m3m3"
+    res(0, 6) = PVT.mu_oil_cP:                  res(1, 6) = "mu_oil_cP"
+    res(0, 7) = PVT.mu_gas_cP:                  res(1, 7) = "mu_gas_cP"
+    res(0, 8) = PVT.mu_wat_cP:                  res(1, 8) = "mu_wat_cP"
+    res(0, 9) = PVT.rho_oil_rc_kgm3:            res(1, 9) = "rho_oil_rc_kgm3"
+    res(0, 10) = PVT.rho_gas_rc_kgm3:           res(1, 10) = "rho_gas_rc_kgm3"
+    res(0, 11) = PVT.rho_wat_rc_kgm3:           res(1, 11) = "rho_wat_rc_kgm3"
+    res(0, 12) = PVT.compressibility_oil_1atm:  res(1, 12) = "compressibility_oil_1atm"
+    res(0, 13) = PVT.compressibility_gas_1atm:  res(1, 13) = "compressibility_gas_1atm"
+    res(0, 14) = PVT.compressibility_wat_1atm:  res(1, 14) = "compressibility_wat_1atm"
+    res(0, 15) = PVT.sigma_liq_Nm:              res(1, 15) = "sigma_liq_Nm"
+    res(0, 16) = PVT.sigma_oil_gas_Nm:          res(1, 16) = "sigma_oil_gas_Nm"
+    res(0, 17) = PVT.sigma_wat_gas_Nm:          res(1, 17) = "sigma_wat_gas_Nm"
+    res(0, 18) = PVT.cp_oil_JkgC:               res(1, 18) = "cp_oil_JkgC"
+    res(0, 19) = PVT.cp_gas_JkgC:               res(1, 19) = "cp_gas_JkgC"
+    res(0, 20) = PVT.cv_gas_JkgC:               res(1, 20) = "cv_gas_JkgC"
+    res(0, 21) = PVT.cp_wat_JkgC:               res(1, 21) = "cp_wat_JkgC"
+    res(0, 22) = PVT.z:                         res(1, 22) = "z"
+    res(0, 23) = PVT.sal_ppm:                   res(1, 23) = "sal_ppm"
+      
+    res(0, 0) = res(0, num_value): res(1, 0) = res(1, num_value)
+    For i = 0 To nv
+        res(2, i) = ""
+    Next i
+err1done:
+    If show_log Then
+        log_str = PVT.log.get_str
+        If Len(log_str) > 32000 Then
+            log_str = "log too long"
+        End If
+    Else
+        log_str = "[""set show_log=1 in param to show calc log""]"
+    End If
+    res(2, 0) = log_str
+    PVT_calc = res
+    Exit Function
+    
+err1:
+    For i = 0 To nv
+        res(0, i) = -1
+    Next i
+    Call PVT.addLogMsg("error: " & Err.Description)
+    Resume err1done:
+err2:
+    Call PVT.addLogMsg("warning: some error while param read detected " & Err.Description)
+    
+    Resume Next:
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета объемного коэффициента газа
 Public Function PVT_bg_m3m3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal param = "", _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
-' param   - набор параметров расчета в виде json строки
-'           включает и тип корреляции, и параметры вывода
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' Возвращает значение объемного коэффициента газа, м3/м3
 ' для заданных термобарических условий.
 ' В основе расчета корреляция для z факотора
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Dim PVTcorr As PVT_correlation
-    Dim bg_m3m3 As Double
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 4    ' номер результата, который нужен
     
-    ' todo надо чтобы корректно и универсально обрабатывались PVT расчеты
-    PVTcorr = Standing_based
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_bg_m3m3 = Array(Array(PVT.bg_m3m3), _
-                        Array("bg"), _
-                        Array(PVT.log.get_str))
-    Exit Function
-err1:
-    PVT_bg_m3m3 = -1
-    addLogMsg "Error:PVT_bg_m3m3:" & Err.Description
+    res_all = PVT_calc(p_atma, t_C, PVT_prop:=PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    PVT_bg_m3m3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет объемного коэффициента нефти
 Public Function PVT_bo_m3m3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число
 ' Возвращает значение объемного коэффициента нефти, м3/м3
 ' для заданных термобарических условий.
-' В основе расчета корреляции PVT
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_bo_m3m3 = PVT.bo_m3m3
-    Exit Function
-err1:
-    PVT_bo_m3m3 = -1
-    addLogMsg "Error:PVT_bo_m3m3:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 3  ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_bo_m3m3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет объемного коэффициента воды
 Public Function PVT_bw_m3m3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число
 ' Возвращает значение объемного коэффициента воды, м3/м3
 ' для заданных термобарических условий.
-' В основе расчета корреляции PVT
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_bw_m3m3 = PVT.bw_m3m3
-    Exit Function
-err1:
-    PVT_bw_m3m3 = -1
-    addLogMsg "Error:PVT_bw_m3m3:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 5 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_bw_m3m3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет солености воды
 Public Function PVT_salinity_ppm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число
-' Возвращает соленость воды, ppm
+' Возвращает значение солености воды, ppm
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_salinity_ppm = PVT.sal_ppm
-    Exit Function
-err1:
-    PVT_salinity_ppm = -1
-    addLogMsg "Error:PVT_salinity_ppm:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 23 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_salinity_ppm = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет вязкости нефти
 Public Function PVT_mu_oil_cP( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число - вязкость нефти
-'           при заданных термобарических условиях, сП
+' Возвращает значение вязкости нефти, сП
+' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_mu_oil_cP = PVT.mu_oil_cP
-    Exit Function
-err1:
-    PVT_mu_oil_cP = -1
-    addLogMsg "Error:PVT_mu_oil_cP:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 6 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_mu_oil_cP = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет вязкости газа
 Public Function PVT_mu_gas_cP( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число - вязкость газа
-'           при заданных термобарических условиях, сП
+' Возвращает значение вязкости газа, сП
+' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_mu_gas_cP = PVT.mu_gas_cP
-    Exit Function
-err1:
-    PVT_mu_gas_cP = -1
-    addLogMsg "Error:PVT_mu_gas_cP:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 7 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_mu_gas_cP = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет вязкости воды
 Public Function PVT_mu_wat_cP( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число - вязкость воды
-'           при заданных термобарических условиях, сП
+' Возвращает значение вязкости воды, сП
+' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_mu_wat_cP = PVT.mu_wat_cP
-    Exit Function
-err1:
-    PVT_mu_wat_cP = -1
-    addLogMsg "Error:PVT_mu_wat_cP:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 8 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_mu_wat_cP = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет газосодержания
 Public Function PVT_rs_m3m3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число - газосодержание при
-'           заданных термобарических условиях, м3/м3.
+' Возвращает значение газосодержания, м3/м3
+' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_rs_m3m3 = PVT.rs_m3m3
-    Exit Function
-err1:
-    PVT_rs_m3m3 = -1
-    addLogMsg "Error:PVT_Rs_m3m3:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 1 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_rs_m3m3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет коэффициента сверхсжимаемости газа
 Public Function PVT_z( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число - z фактор газа.
+' Результат - z фактор газа.
 '           коэффициент сверхсжимаемости газа,
 '           безразмерная величина
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_z = PVT.z
-    Exit Function
-err1:
-    PVT_z = -1
-    addLogMsg "Error:PVT_Z:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 22 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_z = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет плотности нефти в рабочих условиях
 Public Function PVT_rho_oil_kgm3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
-' результат - число - плотность нефти
+' результат - плотность нефти
 '           при заданных термобарических условиях, кг/м3.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_rho_oil_kgm3 = PVT.rho_oil_rc_kgm3
-    Exit Function
-err1:
-    PVT_rho_oil_kgm3 = -1
-    addLogMsg "Error:PVT_rho_oil_kgm3:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 9 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+                     
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_rho_oil_kgm3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет плотности газа в рабочих условиях
 Public Function PVT_rho_gas_kgm3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число - плотность газа
 '           при заданных термобарических условиях, кг/м3.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_rho_gas_kgm3 = PVT.rho_gas_rc_kgm3
-    Exit Function
-err1:
-    PVT_rho_gas_kgm3 = -1
-    addLogMsg "Error:PVT_rho_gas_kgm3:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 10 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_rho_gas_kgm3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет плотности воды в рабочих условиях
 Public Function PVT_rho_wat_kgm3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число - плотность воды
 '           при заданных термобарических условиях, кг/м3.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_rho_wat_kgm3 = PVT.rho_wat_rc_kgm3
-    Exit Function
-err1:
-    PVT_rho_wat_kgm3 = -1
-    addLogMsg "Error:PVT_rho_wat_kgm3:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 11 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_rho_wat_kgm3 = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Расчет давления насыщения
 Public Function PVT_pb_atma( _
-                 ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal t_C As Double, _
+            ByVal PVT_prop As String)
+' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число - давление насыщения.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    PVT_pb_atma = PVT.calc_pb_atma(rsb_m3m3, t_C)
-    Exit Function
-err1:
-    PVT_pb_atma = -1
-    addLogMsg "Error:PVT_pb_atma:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 2 ' номер результата, который нужен
+    
+    res_all = PVT_calc(1, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_pb_atma = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет коэффициента поверхностного натяжения нефть - газ
 Public Function PVT_ST_oilgas_Nm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения нефть - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_ST_oilgas_Nm = PVT.sigma_oil_gas_Nm
-    Exit Function
-err1:
-    PVT_ST_oilgas_Nm = -1
-    addLogMsg "Error:PVT_ST_oilgas_Nm:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 16 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+                     
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_ST_oilgas_Nm = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет коэффициента поверхностного натяжения вода - газ
 Public Function PVT_ST_watgas_Nm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения вода - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_ST_watgas_Nm = PVT.sigma_wat_gas_Nm
-    Exit Function
-err1:
-    PVT_ST_watgas_Nm = -1
-    addLogMsg "Error:PVT_ST_watgas_Nm:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 17 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_ST_watgas_Nm = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет коэффициента поверхностного натяжения жидкость - газ
 Public Function PVT_ST_liqgas_Nm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_ST_liqgas_Nm = PVT.sigma_liq_Nm
-    Exit Function
-err1:
-    PVT_ST_liqgas_Nm = -1
-    addLogMsg "Error:PVT_ST_liqgas_Nm:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 15 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_ST_liqgas_Nm = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет теплоемкости нефти при постоянном давлении cp
 Public Function PVT_cp_oil_JkgC( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_cp_oil_JkgC = PVT.cp_oil_JkgC
-    Exit Function
-err1:
-    PVT_cp_oil_JkgC = -1
-    addLogMsg "Error:PVT_cp_oil_JkgC:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 18 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_cp_oil_JkgC = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет теплоемкости газа при постоянном давлении cp
 Public Function PVT_cp_gas_JkgC( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_cp_gas_JkgC = PVT.cp_gas_JkgC
-    Exit Function
-err1:
-    PVT_cp_gas_JkgC = -1
-    addLogMsg "Error:PVT_cp_gas_JkgC:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 19 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_cp_gas_JkgC = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет теплоемкости газа при постоянном давлении cp
 Public Function PVT_cv_gas_JkgC( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_cv_gas_JkgC = PVT.cv_gas_JkgC
-    Exit Function
-err1:
-    PVT_cv_gas_JkgC = -1
-    addLogMsg "Error:PVT_cv_gas_JkgC:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 20 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+                     
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_cv_gas_JkgC = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет теплоемкости воды при постоянном давлении cp
 Public Function PVT_cp_wat_JkgC( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_cp_wat_JkgC = PVT.cp_wat_JkgC
-    Exit Function
-err1:
-    PVT_cp_wat_JkgC = -1
-    addLogMsg "Error:PVT_cp_wat_JkgC:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 21 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_cp_wat_JkgC = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет сжимаемости воды
 Public Function PVT_compressibility_wat_1atm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_compressibility_wat_1atm = PVT.compressibility_wat_1atm
-    Exit Function
-err1:
-    PVT_compressibility_wat_1atm = -1
-    addLogMsg "Error:PVT_compressibility_wat_1atm:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 14 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_compressibility_wat_1atm = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет сжимаемости нефти
 Public Function PVT_compressibility_oil_1atm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
-On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
-    Call PVT.calc_PVT(p_atma, t_C)
-    PVT_compressibility_oil_1atm = PVT.compressibility_oil_1atm
-    Exit Function
-err1:
-    PVT_compressibility_oil_1atm = -1
-    addLogMsg "Error:PVT_compressibility_oil_1atm:" & Err.Description
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 12 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_compressibility_oil_1atm = res
+    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет сжимаемости нефти
 Public Function PVT_compressibility_gas_1atm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "")
+            ByVal PVT_prop As String)
 ' p_atma  - давление, атм
 ' t_C     - температура, С.
-' gamma_gas - удельная плотность газа, по воздуху.
-'           const_gg_ = 0.6
-' gamma_oil - удельная плотность нефти, по воде.
-'           const_go_ = 0.86
-' gamma_wat - удельная плотность воды, по воде.
-'           const_gw_ = 1
-' rsb_m3m3 -  газосодержание при давлении насыщения, м3/м3.
-'           const_rsb_default = 100
-' rp_m3m3 - замерной газовый фактор, м3/м3.
-'           имеет приоритет перед rsb если Rp < rsb
-' pb_atma - Давление насыщения при  температуре t_res_C, атма.
-'           Опциональный калибровочный параметр,
-'           если не задан или = 0 то рассчитается по корреляции
-' t_res_C  - пластовая температура, С.
-'           Учитывается при расчете давления насыщения.
-'           const_tres_default = 90
-' bob_m3m3 - объемный коэффициент нефти, м3/м3.
-' muob_cP - вязкость нефти при давлении насыщения
-'           По умолчанию рассчитывается по корреляции
-' PVTcorr - номер набора PVT корреляций для расчета:
-'           Standing_based = 0 - на основе кор-ии Стендинга
-'           McCain_based = 1 - на основе кор-ии Маккейна
-'           straigth_line = 2 - на основе упрощенных зависимостей
-' ksep_fr - коэффициент сепарации - определяет изменение свойств
-'           нефти после сепарации доли свободного газа.
-'           изменение свойств нефти зависит от условий
-'           сепарации газа, которые должны быть явно заданы
-' p_ksep_atma - давление при которой была сепарация
-' t_ksep_C    - температура при которой была сепарация
-' str_PVT - закодированная строка с параметрами PVT.
-'           Если задана - перекрывает другие значения
+' PVT_prop - строка с параметрами флюида,
+'           используйте encode_pvt для ее генерации
 '
 ' результат - число
 ' Возвращает коэффициента поверхностного натяжения жидкость - газ, Нм
 ' для заданных термобарических условий.
 'description_end
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    Const num As Integer = 13 ' номер результата, который нужен
+    
+    res_all = PVT_calc(p_atma, t_C, PVT_prop)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    
+    PVT_compressibility_gas_1atm = res
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета параметров потока
+Public Function PVT_stream_calc( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив всех расчетных значений,
+'              с подписями во второй строке
+'description_end
+    Const nv = 13
 On Error GoTo err1:
-    Dim PVT As CPVT
-    Set PVT = readPVT(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, rp_m3m3, pb_atma, t_res_C, bob_m3m3, _
-                    muob_cP, PVTcorr, ksep_fr, p_ksep_atma, t_ksep_C, str_PVT)
+    Dim fluid_stream As New CPVT
+    
+    Dim res(0 To 2, 0 To nv) As Variant
+    ' param dictionary and settings variables with default values
+    Dim prmd As Dictionary
+    Dim show_log As Boolean
+    Dim num_value As Integer
+    
+    show_log = True
+    num_value = 1
+    
+    ' auxiliary variables
+    Dim log_str As String
+    Dim i As Integer
+    With fluid_stream
+        Call .init_prop(PVT_prop)
+        Call .init_stream(PVT_stream)
+        
+On Error GoTo err2:
+    
+        If Len(param) > 1 Then
+            Set prmd = ParseJson(param)
+            ' for references to parameter names we use constants to make it easier to manage later.
+            ' by default the variables will be set to zero or empty (if no key is found)
+            
+            show_log = prmd(prm_show_log)
+            
+            num_value = prmd(prm_num_value)
+            If num_value < 1 Or num_value > nv Then num_value = 1
+        Else
+            Call .addLogMsg("info: no param found. default Standing model set")
+        End If
+' param read done start calc
+On Error GoTo err1:
+        Call .calc_PVT(p_atma, t_C)
+        
+On Error Resume Next
+    
+        ' prepare output
+        res(0, 1) = .q_mix_rc_m3day:                res(1, 1) = "q_mix_rc_m3day"
+        res(0, 2) = .q_oil_rc_m3day:                res(1, 2) = "q_oil_rc_m3day"
+        res(0, 3) = .q_wat_rc_m3day:                res(1, 3) = "q_wat_rc_m3day"
+        res(0, 4) = .q_gas_rc_m3day:                res(1, 4) = "q_gas_rc_m3day"
+        res(0, 5) = .gas_fraction_d:                res(1, 5) = "gas_fraction_d"
+        res(0, 6) = .rho_mix_rc_kgm3:               res(1, 6) = "rho_mix_rc_kgm3"
+        res(0, 7) = .mu_mix_cP:                     res(1, 7) = "mu_mix_cP"
+        res(0, 8) = .mo_kgsec:                      res(1, 8) = "mo_kgsec"
+        res(0, 9) = .mw_kgsec:                      res(1, 9) = "mw_kgsec"
+        res(0, 10) = .mg_kgsec:                     res(1, 10) = "mg_kgsec"
+        res(0, 11) = .mg_kgmol:                     res(1, 11) = "mg_kgmol"
+        res(0, 12) = .cmix_JkgC:                    res(1, 12) = "cmix_JkgC"
+        res(0, 13) = .cJT_Katm:                     res(1, 13) = "cJT_Katm"
+          
+        res(0, 0) = res(0, num_value): res(1, 0) = res(1, num_value)
+    
+        For i = 0 To nv
+            res(2, i) = ""
+        Next i
+    
+    End With
+err1done:
+    If show_log Then
+        log_str = fluid_stream.log.get_str
+        If Len(log_str) > 32000 Then
+            log_str = "log too long"
+        End If
+    Else
+        log_str = "[""set show_log=1 in param to show calc log""]"
+    End If
+    res(2, 0) = log_str
+    PVT_stream_calc = res
+    Exit Function
+    
+err1:
+    For i = 0 To nv
+        res(0, i) = -1
+    Next i
+    Call fluid_stream.addLogMsg("error: " & Err.Description)
+    Resume err1done:
+err2:
+    Call fluid_stream.addLogMsg("warning: some error while param read detected " & Err.Description)
+    
+    Resume Next:
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета коэффициента Джоуля Томсона
+Public Function PVT_stream_gas_fraction_d( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "", _
+      Optional ByVal ksep_add_fr As Double = 0)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' ksep_add_fr - коэффициент сепарации газа из потока
+' результат  - массив, значение коэффициента Джоуля Томсона потока,
+'              подпись, и лог расчета если подключен
+'description_end
+      
+    Dim PVT As New CPVT
+    Dim res(0 To 2, 0 To 0)
+    
+    Call PVT.init_prop(PVT_prop)
+    Call PVT.init_stream(PVT_stream)
     Call PVT.calc_PVT(p_atma, t_C)
-    PVT_compressibility_gas_1atm = PVT.compressibility_gas_1atm
+    
+    res(0, 0) = PVT.gas_fraction_d(ksep_add_fr)
+    res(1, 0) = "gas_fraction_d"
+    res(2, 0) = PVT.log.get_str
+    PVT_stream_gas_fraction_d = res
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет давления при котором
+' достигается заданная доля газа в потоке
+Public Function PVT_stream_p_gas_fraction_atma( _
+               ByVal free_gas_d As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "", _
+      Optional ByVal ksep_add_fr As Double = 0)
+' free_gas_d - допустимая доля газа в потоке;
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' ksep_add_fr - коэффициент сепарации газа из потока
+' результат  - массив, число - давление,
+'              подпись, и лог расчета если подключен
+'description_end
+      
+    Dim PVT As New CPVT
+    Dim res(0 To 2, 0 To 0)
+    
+    Call PVT.init_prop(PVT_prop)
+    Call PVT.init_stream(PVT_stream)
+   ' Call PVT.calc_PVT(p_atma, t_C)
+    
+    res(0, 0) = PVT.p_gas_fraction_atma(free_gas_d, t_C, ksep_add_fr)
+    res(1, 0) = "p_gas_fraction_atma"
+    res(2, 0) = PVT.log.get_str
+    PVT_stream_p_gas_fraction_atma = res
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет газового фактора
+' при котором достигается заданная доля газа в потоке
+Public Function PVT_stream_rp_gas_fraction_m3m3( _
+               ByVal free_gas_d As Double, _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "", _
+      Optional ByVal ksep_add_fr As Double = 0)
+' free_gas_d - допустимая доля газа в потоке;
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' ksep_add_fr - коэффициент сепарации газа из потока
+' результат  - массив, число - давление,
+'              подпись, и лог расчета если подключен
+'description_end
+      
+    Dim PVT As New CPVT
+    Dim res(0 To 2, 0 To 0)
+    
+    Call PVT.init_prop(PVT_prop)
+    Call PVT.init_stream(PVT_stream)
+  '  Call PVT.calc_PVT(p_atma, t_C)
+    
+    res(0, 0) = PVT.rp_gas_fraction_m3m3(free_gas_d, p_atma, t_C, ksep_add_fr)
+    res(1, 0) = "rp_gas_fraction_m3m3"
+    res(2, 0) = PVT.log.get_str
+    PVT_stream_rp_gas_fraction_m3m3 = res
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета коэффициента Джоуля Томсона
+Public Function PVT_stream_CJT_Katm( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, значение коэффициента Джоуля Томсона потока,
+'              подпись, и лог расчета если подключен
+'description_end
+    Const num As Integer = 13    ' номер результата, который нужен
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    
+On Error GoTo err1:
+    
+    res_all = PVT_stream_calc(p_atma, t_C, PVT_stream, PVT_prop, param)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    PVT_stream_CJT_Katm = res
     Exit Function
 err1:
-    PVT_compressibility_gas_1atm = -1
-    addLogMsg "Error:PVT_compressibility_gas_1atm:" & Err.Description
+    res(0, 0) = -1
+    res(1, 0) = "CJT_Katm"
+    res(2, 0) = "Error:MF_CJT_Katm:" & Err.Description
+    PVT_stream_CJT_Katm = res
 End Function
-' вспомогательная функция для создания PVT объекта из исходных данных
-Private Function readPVT( _
-            Optional ByVal gamma_gas As Double = const_gg_, _
-            Optional ByVal gamma_oil As Double = const_go_, _
-            Optional ByVal gamma_wat As Double = const_gw_, _
-            Optional ByVal rsb_m3m3 As Double = const_rsb_default, _
-            Optional ByVal rp_m3m3 As Double = -1, _
-            Optional ByVal pb_atma As Double = -1, _
-            Optional ByVal t_res_C As Double = const_tres_default, _
-            Optional ByVal bob_m3m3 As Double = -1, _
-            Optional ByVal muob_cP As Double = -1, _
-            Optional ByVal PVTcorr As PVT_correlation = Standing_based, _
-            Optional ByVal ksep_fr As Double = 0, _
-            Optional ByVal p_ksep_atma As Double = -1, _
-            Optional ByVal t_ksep_C As Double = -1, _
-            Optional ByVal str_PVT As String = "" _
-                    ) As CPVT
-    Dim PVT As CPVT
-    If str_PVT <> "" Then
-        Set PVT = PVT_decode_string(str_PVT)
-    Else
-        Set PVT = New CPVT
-        PVT.init gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, t_res_C, rp_m3m3, muob_cP
-        If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
-            Call PVT.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, True)
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета расхода газо жидкостной смеси (ГЖС)
+Public Function PVT_stream_q_mix_rc_m3day( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+    Const num As Integer = 1    ' номер результата, который нужен
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    
+On Error GoTo err1:
+    
+    res_all = PVT_stream_calc(p_atma, t_C, PVT_stream, PVT_prop, param)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    PVT_stream_q_mix_rc_m3day = res
+    Exit Function
+err1:
+    res(0, 0) = -1
+    res(1, 0) = "CJT_Katm"
+    res(2, 0) = "Error:MF_CJT_Katm:" & Err.Description
+    PVT_stream_q_mix_rc_m3day = res
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета плотности газо жидкостной смеси (ГЖС)
+Public Function PVT_stream_rho_mix_kgm3( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+    Const num As Integer = 6    ' номер результата, который нужен
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    
+On Error GoTo err1:
+    
+    res_all = PVT_stream_calc(p_atma, t_C, PVT_stream, PVT_prop, param)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    PVT_stream_rho_mix_kgm3 = res
+    Exit Function
+err1:
+    res(0, 0) = -1
+    res(1, 0) = "CJT_Katm"
+    res(2, 0) = "Error:MF_CJT_Katm:" & Err.Description
+    PVT_stream_rho_mix_kgm3 = res
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета плотности газо жидкостной смеси (ГЖС)
+Public Function PVT_stream_mu_mix_cP( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+    Const num As Integer = 7    ' номер результата, который нужен
+    Dim res(0 To 2, 0 To 0)
+    Dim res_all As Variant
+    
+On Error GoTo err1:
+    
+    res_all = PVT_stream_calc(p_atma, t_C, PVT_stream, PVT_prop, param)
+    
+    ' выделим в вывод только то, что необходимо
+    res(0, 0) = res_all(0, num)
+    res(1, 0) = res_all(1, num)
+    res(2, 0) = res_all(2, 0)
+    PVT_stream_mu_mix_cP = res
+    Exit Function
+err1:
+    res(0, 0) = -1
+    res(1, 0) = "CJT_Katm"
+    res(2, 0) = "Error:MF_CJT_Katm:" & Err.Description
+    PVT_stream_mu_mix_cP = res
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета свойст потока после сепарации газа
+Public Function PVT_mod_separate_gas( _
+               ByVal k_sep As Double, _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' k_sep      - коэффициент сепарации газа
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+    Const nv = 0
+    Dim fluid_stream As New CPVT
+    
+    Dim res(0 To 2, 0 To nv) As Variant
+    ' param dictionary and settings variables with default values
+    Dim prmd As Dictionary
+    Dim show_log As Boolean
+    Dim gas_goes_into_solution As Double
+    
+    show_log = True
+    
+    ' auxiliary variables
+    Dim log_str As String
+    Dim i As Integer
+    With fluid_stream
+        Call .init_prop(PVT_prop)
+        Call .init_stream(PVT_stream)
+        
+'On Error GoTo err2:
+    
+        If Len(param) > 1 Then
+            Set prmd = ParseJson(param)
+            ' for references to parameter names we use constants to make it easier to manage later.
+            ' by default the variables will be set to zero or empty (if no key is found)
+            
+            show_log = prmd(prm_show_log)
+            gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
+            
+        Else
+            Call .addLogMsg("info: no param found. default Standing model set")
         End If
-    End If
-    Set readPVT = PVT
+' param read done start calc
+'On Error GoTo err1:
+        
+       ' Dim fl As CPVT
+        
+        Call fluid_stream.mod_after_separation(p_atma, t_C, k_sep, gas_goes_into_solution)
+        
+        res(0, 0) = fluid_stream.get_json
+        res(1, 0) = "fluid after separation"
+        res(2, 0) = fluid_stream.log.get_str
+    End With
+    
+    PVT_mod_separate_gas = res
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета свойств разделенного потока флюидов
+Public Function PVT_mod_split( _
+               ByVal k_sep_gas As Double, _
+               ByVal k_sep_oil As Double, _
+               ByVal k_sep_wat As Double, _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal PVT_stream As String, _
+               ByVal PVT_prop As String, _
+      Optional ByVal param As String = "")
+' k_sep_gas  - коэффициент сепарации газа
+' k_sep_oil  - коэффициент сепарации газа
+' k_sep_wat  - коэффициент сепарации газа
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета свойств разделенного потока флюидов
+Public Function PVT_mod_mix( _
+               ByVal PVT_stream_1 As String, _
+               ByVal PVT_prop_1 As String, _
+               ByVal PVT_stream_2 As String, _
+               ByVal PVT_prop_2 As String, _
+      Optional ByVal param As String = "")
+' k_sep      - коэффициент сепарации газа
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' PVT_stream - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_pvt_stream для генерации
+' PVT_prop   - статичные свойства флюида - плотности rsb и пр
+'              используйте encode_pvt_prop для генерации
+' param      - параметры расчета и вывода результатов
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
 End Function
 

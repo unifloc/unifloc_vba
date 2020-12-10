@@ -13,13 +13,37 @@ Function unf_pvt_viscosity_dead_oil_Standing_cP(ByVal Temperature_K As Double, _
         
         unf_pvt_viscosity_dead_oil_Standing_cP = (0.32 + 1.8 * 10 ^ 7 / (141.5 / gamma_oil - 131.5) ^ 4.53) * (360 / (1.8 * Temperature_K - 260)) ^ (10 ^ (0.43 + 8.33 / (141.5 / gamma_oil - 131.5)))
 End Function
-Function unf_pvt_compressibility_oil_VB_1atm(ByVal rs_m3m3 As Double, _
+Function unf_pvt_compressibility_oil_VB_1MPa(ByVal rs_m3m3 As Double, _
                                              ByVal gamma_gas As Double, _
                                              ByVal t_K As Double, _
                                              ByVal gamma_oil As Double, _
                                              ByVal p_MPa As Double) As Double
         
-        unf_pvt_compressibility_oil_VB_1atm = (28.1 * rs_m3m3 + 30.6 * t_K - 1180 * gamma_gas + 1784 / gamma_oil - 10910) / (100000 * p_MPa)
+        unf_pvt_compressibility_oil_VB_1MPa = (28.1 * rs_m3m3 + 30.6 * t_K - 1180 * gamma_gas + 1784 / gamma_oil - 10910) / (100000 * p_MPa)
+End Function
+Function unf_pvt_compressibility_oil_saturated_McCain_1MPa( _
+                                            ByVal rsb_m3m3 As Double, _
+                                            ByVal gamma_oil As Double, _
+                                            ByVal t_K As Double, _
+                                            ByVal p_MPa As Double, _
+                                            ByVal pb_MPa As Double) As Double
+    Dim co_1psi As Double
+    Dim rsb_scfstb As Double
+    Dim t_F As Double
+    Dim API As Double
+    Dim p_psia As Double
+    Dim pb_psia As Double
+    
+    rsb_scfstb = rsb_m3m3 * const_convert_m3m3_scfbbl
+    t_F = UC_Temperature_K_to_F(t_K)
+    API = UC_density_gamma_oil_to_API(gamma_oil)
+    
+    p_psia = UC_pressure_MPa_to_psia(p_MPa)
+    pb_psia = UC_pressure_MPa_to_psia(pb_MPa)
+    
+    co_1psi = Exp(-7.573 - 1.45 * log(p_psia) - 0.383 * log(pb_psia) + 1.402 * log(t_F) + 0.256 * log(API) + 0.449 * log(rsb_scfstb))
+    
+    unf_pvt_compressibility_oil_saturated_McCain_1MPa = UC_compressibility_1psia_to_1MPa(co_1psi)
 End Function
 Function unf_pvt_pb_Standing_MPa(ByVal rsb_m3m3 As Double, _
                                  ByVal gamma_gas As Double, _
@@ -29,25 +53,32 @@ Function unf_pvt_pb_Standing_MPa(ByVal rsb_m3m3 As Double, _
         Const Min_rsb As Double = 1.8
         
         Dim rsb_old As Double
+        Dim yg As Double
         
         rsb_old = rsb_m3m3
-                
         If (rsb_m3m3 < Min_rsb) Then
-          
-          rsb_m3m3 = Min_rsb
-          
+            rsb_m3m3 = Min_rsb
         End If
         
-        Dim yg As Double
-                
         yg = 1.225 + 0.001648 * Temperature_K - 1.769 / gamma_oil
         unf_pvt_pb_Standing_MPa = 0.5197 * (rsb_m3m3 / gamma_gas) ^ 0.83 * 10 ^ yg
         
         If (rsb_old < Min_rsb) Then
-          
-          unf_pvt_pb_Standing_MPa = (unf_pvt_pb_Standing_MPa - 0.1013) * rsb_old / Min_rsb + 0.1013
-           
+            unf_pvt_pb_Standing_MPa = (unf_pvt_pb_Standing_MPa - 0.1013) * rsb_old / Min_rsb + 0.1013
         End If
+End Function
+Function unf_pvt_dBo_drs_Saturated_Oil_Standing(ByVal rs_m3m3 As Double, _
+                                                 ByVal gamma_gas As Double, _
+                                                 ByVal Temperature_K As Double, _
+                                                 ByVal gamma_oil As Double) As Double
+' произоводна€ по rs дл€ расчета сжимаемости
+        Dim F As Double
+        Dim alpha As Double
+        Dim beta As Double
+        
+        alpha = 5.615 * (gamma_gas / gamma_oil) ^ 0.5
+        F = alpha * rs_m3m3 + 2.25 * Temperature_K - 575
+        unf_pvt_dBo_drs_Saturated_Oil_Standing = 0.000147 * 1.175 * F ^ (1.175 - 1) * alpha
 End Function
 Function unf_pvt_FVF_Saturated_Oil_Standing_m3m3(ByVal rs_m3m3 As Double, _
                                                  ByVal gamma_gas As Double, _
@@ -94,13 +125,17 @@ Function unf_pvt_density_oil_Standing_kgm3(ByVal rs_m3m3 As Double, _
         unf_pvt_density_oil_Standing_kgm3 = unf_pvt_density_oil_Standing_kgm3 * Exp(Compressibility_1MPa * (p_MPa - BP_p_MPa))
      End If
 End Function
-Function unf_pvt_GOR_Standing_m3m3(ByVal p_MPa As Double, _
+Function unf_pvt_rs_Standing_m3m3(ByVal p_MPa As Double, _
                                    ByVal gamma_gas As Double, _
                                    ByVal Temperature_K As Double, _
-                                   ByVal gamma_oil As Double) As Double
+                                   ByVal gamma_oil As Double, _
+                          Optional ByRef drs_dp As Double) As Double
     Dim yg As Double
         yg = 1.225 + 0.001648 * Temperature_K - 1.769 / gamma_oil
-        unf_pvt_GOR_Standing_m3m3 = gamma_gas * (1.92 * p_MPa / 10 ^ yg) ^ 1.204
+        
+        unf_pvt_rs_Standing_m3m3 = gamma_gas * (1.92 * p_MPa / 10 ^ yg) ^ 1.204
+        
+        drs_dp = gamma_gas * (1.92 * 1 / 10 ^ yg) ^ 1.204 * 1.204 * p_MPa ^ 0.204
 End Function
 Function unf_pvt_pb_Valko_McCain_MPa(ByVal rsb_m3m3 As Double, _
                                      ByVal gamma_gas As Double, _
@@ -139,85 +174,82 @@ Function unf_pvt_pb_Valko_McCain_MPa(ByVal rsb_m3m3 As Double, _
           unf_pvt_pb_Valko_McCain_MPa = (unf_pvt_pb_Valko_McCain_MPa - 0.1013) * rsb_old / Max_rsb + 0.1013
         End If
 End Function
-Function unf_pvt_GOR_Velarde_m3m3(ByVal p_MPa As Double, _
-                                  ByVal pb_MPa As Double, _
-                                  ByVal gamma_gas As Double, _
-                                  ByVal Temperature_K As Double, _
-                                  ByVal gamma_oil As Double, _
-                                  ByVal rsb_m3_m3 As Double) As Double
+Function unf_pvt_rs_Velarde_m3m3(ByVal p_MPa As Double, _
+                                 ByVal pb_MPa As Double, _
+                                 ByVal gamma_gas As Double, _
+                                 ByVal Temperature_K As Double, _
+                                 ByVal gamma_oil As Double, _
+                                 ByVal rsb_m3_m3 As Double, _
+                        Optional ByRef drs_dp As Double) As Double
+'        Solution Gas-oil ratio calculation according to Velarde McCain (1999) correlation
+'
+': param p_MPaa: pressure , MPa
+'    :param pb_MPaa: buble point pressure, MPa
+'    :param rsb_m3m3: gas-oil ratio at the bubble point pressure, m3/m3
+'    :param gamma_oil: specific oil density (by water)
+'    :param gamma_gas: specific gas density (by air)
+': param t_K: temperature , K
+'    :return: gas-oil ratio in m3/m3
+'
+'    ref1 "Correlation of Black Oil Properties at Pressures Below Bubble point PressureЧA New Approach",
+'    J. VELARDE, T.A. BLASINGAME Texas A&M University, W.D. MCCAIN, JR. S.A. Holditch & Associates, Inc 1999
+'
+                                  
 Dim API As Double
-API = 141.5 / gamma_oil - 131.5
-Const MaxRs As Double = 800
-If (pb_MPa > unf_pvt_pb_Valko_McCain_MPa(MaxRs, gamma_gas, Temperature_K, gamma_oil)) Then
-  
-  If p_MPa < pb_MPa Then
-    unf_pvt_GOR_Velarde_m3m3 = (rsb_m3_m3) * (p_MPa / pb_MPa)
-  Else
-    unf_pvt_GOR_Velarde_m3m3 = rsb_m3_m3
-  End If
-  Exit Function
-End If
+Dim t_F As Double
 Dim Pr As Double
+Dim a1 As Double
+Dim a2 As Double
+Dim a3 As Double, Rsr As Double
+Const MaxRs As Double = 800
+API = 141.5 / gamma_oil - 131.5
+If (pb_MPa > unf_pvt_pb_Valko_McCain_MPa(MaxRs, gamma_gas, Temperature_K, gamma_oil)) Then
+    If p_MPa < pb_MPa Then
+        unf_pvt_rs_Velarde_m3m3 = (rsb_m3_m3) * (p_MPa / pb_MPa)
+    Else
+        unf_pvt_rs_Velarde_m3m3 = rsb_m3_m3
+    End If
+    Exit Function
+End If
 If (pb_MPa > 0) Then
-  
-  Pr = (p_MPa - 0.101) / (pb_MPa)
+    Pr = (p_MPa - 0.101) / (pb_MPa - 0.101)
 Else
-  
-  Pr = 0
+    Pr = 0
 End If
 If Pr <= 0 Then
-  unf_pvt_GOR_Velarde_m3m3 = 0
-  Exit Function
+    unf_pvt_rs_Velarde_m3m3 = 0
+    Exit Function
 End If
-Dim a_0 As Double
-Dim a_1 As Double
-Dim a_2 As Double
-Dim a_3 As Double
-Dim a_4 As Double
-Dim A1 As Double
-Dim b_0 As Double
-Dim b_1 As Double
-Dim b_2 As Double
-Dim b_3 As Double
-Dim b_4 As Double
-Dim A2 As Double
-Dim c_0 As Double
-Dim c_1 As Double
-Dim c_2 As Double
-Dim c_3 As Double
-Dim c_4 As Double
-Dim A3 As Double, Rsr As Double
+Const a_0 As Double = 1.8653 * 10 ^ (-4)
+Const a_1 As Double = 1.672608
+Const a_2 As Double = 0.92987
+Const a_3 As Double = 0.247235
+Const a_4 As Double = 1.056052
+Const b_0 As Double = 0.1004
+Const b_1 As Double = -1.00475
+Const b_2 As Double = 0.337711
+Const b_3 As Double = 0.132795
+Const b_4 As Double = 0.302065
+Const c_0 As Double = 0.9167
+Const c_1 As Double = -1.48548
+Const c_2 As Double = -0.164741
+Const c_3 As Double = -0.09133
+Const c_4 As Double = 0.047094
 If Pr >= 1 Then
-    unf_pvt_GOR_Velarde_m3m3 = rsb_m3_m3
+    unf_pvt_rs_Velarde_m3m3 = rsb_m3_m3
+    drs_dp = 0
 Else
-'If Pr < 1 Then
-    a_0 = 1.8653 * 10 ^ (-4)
-    a_1 = 1.672608
-    a_2 = 0.92987
-    a_3 = 0.247235
-    a_4 = 1.056052
+    t_F = 1.8 * Temperature_K - 460
+    a1 = a_0 * gamma_gas ^ a_1 * API ^ a_2 * (t_F) ^ a_3 * pb_MPa ^ a_4
+    a2 = b_0 * gamma_gas ^ b_1 * API ^ b_2 * (t_F) ^ b_3 * pb_MPa ^ b_4
+    a3 = c_0 * gamma_gas ^ c_1 * API ^ c_2 * (t_F) ^ c_3 * pb_MPa ^ c_4
     
-    A1 = a_0 * gamma_gas ^ a_1 * API ^ a_2 * (1.8 * Temperature_K - 460) ^ a_3 * pb_MPa ^ a_4
+    Rsr = a1 * Pr ^ a2 + (1 - a1) * Pr ^ a3
+    drs_dp = a1 * a2 * Pr ^ (a2 - 1) + (1 - a1) * a3 * Pr ^ (a3 - 1)
+    drs_dp = drs_dp * rsb_m3_m3 / (pb_MPa - 0.101)
     
-    b_0 = 0.1004
-    b_1 = -1.00475
-    b_2 = 0.337711
-    b_3 = 0.132795
-    b_4 = 0.302065
+    unf_pvt_rs_Velarde_m3m3 = Rsr * rsb_m3_m3
     
-    A2 = b_0 * gamma_gas ^ b_1 * API ^ b_2 * (1.8 * Temperature_K - 460) ^ b_3 * pb_MPa ^ b_4
-    
-    c_0 = 0.9167
-    c_1 = -1.48548
-    c_2 = -0.164741
-    c_3 = -0.09133
-    c_4 = 0.047094
-    
-    A3 = c_0 * gamma_gas ^ c_1 * API ^ c_2 * (1.8 * Temperature_K - 460) ^ c_3 * pb_MPa ^ c_4
-    
-    Rsr = A1 * Pr ^ A2 + (1 - A1) * Pr ^ A3
-    
-    unf_pvt_GOR_Velarde_m3m3 = Rsr * rsb_m3_m3
 End If
 End Function
 Function unf_pvt_FVF_McCain_m3m3(ByVal rs_m3m3 As Double, _
@@ -230,58 +262,60 @@ Function unf_pvt_density_McCain_kgm3(ByVal p_MPa As Double, _
                                      ByVal gamma_gas As Double, _
                                      ByVal Temperature_K As Double, _
                                      ByVal gamma_oil As Double, _
-                                     ByVal Rs_m3_m3 As Double, _
+                                     ByVal rs_m3_m3 As Double, _
                                      ByVal BP_p_MPa As Double, ByVal _
-                                           Compressibility As Double) As Double
-Dim API As Double, ropo As Double, pm As Double, pmmo As Double, epsilon As Double
-Dim i As Integer, counter As Integer
-Dim A0, A1, A2, A3, a4, a5
-Dim roa As Double
-API = 141.5 / gamma_oil - 131.5
-'limit input range to Rs = 800, Pb =1000
-If (Rs_m3_m3 > 800) Then
-  Rs_m3_m3 = 800
-  BP_p_MPa = unf_pvt_pb_Valko_McCain_MPa(Rs_m3_m3, gamma_gas, Temperature_K, gamma_oil)
-End If
-ropo = 845.8 - 0.9 * Rs_m3_m3
-pm = ropo
-pmmo = 0
-epsilon = 0.000001
-i = 0
-counter = 0
-Const MaxIter As Integer = 100
-While (Abs(pmmo - pm) > epsilon And counter < MaxIter)
+                                           Compressibility_1MPa As Double) As Double
+    Dim ropo As Double, pm As Double, pmmo As Double, epsilon As Double
+    Dim counter As Integer
+    Dim roa As Double
+    Dim dpp As Double, pbs As Double, dPT As Double
     
-    i = i + 1
+    'limit input range to Rs = 800, Pb =1000
+    If (rs_m3_m3 > 800) Then
+        rs_m3_m3 = 800
+        BP_p_MPa = unf_pvt_pb_Valko_McCain_MPa(rs_m3_m3, gamma_gas, Temperature_K, gamma_oil)
+    End If
     
-    pmmo = pm
-    A0 = -799.21
-    A1 = 1361.8
-    A2 = -3.70373
-    A3 = 0.003
-    a4 = 2.98914
-    a5 = -0.00223
-    
-    roa = A0 + A1 * gamma_gas + A2 * gamma_gas * ropo + A3 * gamma_gas * ropo ^ 2 + a4 * ropo + a5 * ropo ^ 2
-    ropo = (Rs_m3_m3 * gamma_gas + 818.81 * gamma_oil) / (0.81881 + Rs_m3_m3 * gamma_gas / roa)
+    ropo = 845.8 - 0.9 * rs_m3_m3
     pm = ropo
-    counter = counter + 1
-   ' Debug.Assert counter < 20
-Wend
-Dim dpp As Double, pbs As Double, dPT As Double
-If p_MPa <= BP_p_MPa Then
-        dpp = (0.167 + 16.181 * (10 ^ (-0.00265 * pm))) * (2.32328 * p_MPa) - 0.16 * (0.299 + 263 * (10 ^ (-0.00376 * pm))) * (0.14503774 * p_MPa) ^ 2
-        pbs = pm + dpp
-        dPT = (0.04837 + 337.094 * pbs ^ (-0.951)) * (1.8 * Temperature_K - 520) ^ 0.938 - (0.346 - 0.3732 * (10 ^ (-0.001 * pbs))) * (1.8 * Temperature_K - 520) ^ 0.475
-        pm = pbs - dPT
-        unf_pvt_density_McCain_kgm3 = pm
-Else
-        dpp = (0.167 + 16.181 * (10 ^ (-0.00265 * pm))) * (2.32328 * BP_p_MPa) - 0.16 * (0.299 + 263 * (10 ^ (-0.00376 * pm))) * (0.14503774 * BP_p_MPa) ^ 2
-        pbs = pm + dpp
-        dPT = (0.04837 + 337.094 * pbs ^ (-0.951)) * (1.8 * Temperature_K - 520) ^ 0.938 - (0.346 - 0.3732 * (10 ^ (-0.001 * pbs))) * (1.8 * Temperature_K - 520) ^ 0.475
-        pm = pbs - dPT
-        unf_pvt_density_McCain_kgm3 = pm * Exp(Compressibility * (p_MPa - BP_p_MPa))
-End If
+    pmmo = 0
+    epsilon = 0.000001
+    counter = 0
+    
+    Const MaxIter As Integer = 100
+    
+    Const a0  As Double = -799.21
+    Const a1  As Double = 1361.8
+    Const a2  As Double = -3.70373
+    Const a3  As Double = 0.003
+    Const a4  As Double = 2.98914
+    Const a5  As Double = -0.00223
+    
+    While (Abs(pmmo - pm) > epsilon And counter < MaxIter)
+        pmmo = pm
+        roa = a0 + a1 * gamma_gas + a2 * gamma_gas * ropo + a3 * gamma_gas * ropo ^ 2 + a4 * ropo + a5 * ropo ^ 2
+        ropo = (rs_m3_m3 * gamma_gas + 818.81 * gamma_oil) / (0.81881 + rs_m3_m3 * gamma_gas / roa)
+        pm = ropo
+        counter = counter + 1
+       ' Debug.Assert counter < 20
+    Wend
+    
+    Dim t_F_60 As Double
+    t_F_60 = 1.8 * Temperature_K - 520
+    
+    If p_MPa <= BP_p_MPa Then
+            dpp = (0.167 + 16.181 * (10 ^ (-0.00265 * pm))) * (2.32328 * p_MPa) - 0.16 * (0.299 + 263 * (10 ^ (-0.00376 * pm))) * (0.14503774 * p_MPa) ^ 2
+            pbs = pm + dpp
+            dPT = (0.04837 + 337.094 * pbs ^ (-0.951)) * t_F_60 ^ 0.938 - (0.346 - 0.3732 * (10 ^ (-0.001 * pbs))) * t_F_60 ^ 0.475
+            pm = pbs - dPT
+            unf_pvt_density_McCain_kgm3 = pm
+    Else
+            dpp = (0.167 + 16.181 * (10 ^ (-0.00265 * pm))) * (2.32328 * BP_p_MPa) - 0.16 * (0.299 + 263 * (10 ^ (-0.00376 * pm))) * (0.14503774 * BP_p_MPa) ^ 2
+            pbs = pm + dpp
+            dPT = (0.04837 + 337.094 * pbs ^ (-0.951)) * t_F_60 ^ 0.938 - (0.346 - 0.3732 * (10 ^ (-0.001 * pbs))) * t_F_60 ^ 0.475
+            pm = pbs - dPT
+            unf_pvt_density_McCain_kgm3 = pm * Exp(Compressibility_1MPa * (p_MPa - BP_p_MPa))
+    End If
 End Function
 Function unf_pvt_viscosity_dead_oil_Beggs_Robinson_cP(ByVal Temperature_K As Double, _
                                                       ByVal gamma_oil As Double) As Double
@@ -474,9 +508,9 @@ Private Function ZFactorEstimateDranchuk(ByVal Tpr As Double, _
   'Continious function which return 0 if Z factor is correct for given pseudoreduced temperature and pressure
   'Used to find Z factor
   
-  Const A1 As Double = 0.3265
-  Const A2 As Double = -1.07
-  Const A3 As Double = -0.5339
+  Const a1 As Double = 0.3265
+  Const a2 As Double = -1.07
+  Const a3 As Double = -0.5339
   Const a4 As Double = 0.01569
   Const a5 As Double = -0.05165
   Const a6 As Double = 0.5475
@@ -487,7 +521,7 @@ Private Function ZFactorEstimateDranchuk(ByVal Tpr As Double, _
   Const A11 As Double = 0.721
   Dim rho_r As Double
   rho_r = 0.27 * Ppr / (z * Tpr)
-  ZFactorEstimateDranchuk = -z + (A1 + A2 / Tpr + A3 / Tpr ^ 3 + a4 / Tpr ^ 4 + a5 / Tpr ^ 5) * rho_r + _
+  ZFactorEstimateDranchuk = -z + (a1 + a2 / Tpr + a3 / Tpr ^ 3 + a4 / Tpr ^ 4 + a5 / Tpr ^ 5) * rho_r + _
        (a6 + a7 / Tpr + a8 / Tpr ^ 2) * rho_r ^ 2 - a9 * (a7 / Tpr + a8 / Tpr ^ 2) * rho_r ^ 5 + _
        a10 * (1 + A11 * rho_r ^ 2) * rho_r ^ 2 / Tpr ^ 3 * Exp(-A11 * rho_r ^ 2) + 1#
 End Function
@@ -610,12 +644,12 @@ Private Function ZFactor(ByVal Tpr As Double, _
 ' rnt_warning 20150303 известно, что функци€ дает большую погрешность при расчете
 ' не рекомендуетс€ использовать
         
-    Dim A As Double, B As Double, C As Double, D As Double
+    Dim A As Double, B As Double, C As Double, d As Double
     A = 1.39 * (Tpr - 0.92) ^ 0.5 - 0.36 * Tpr - 0.101
     B = Ppr * (0.62 - 0.23 * Tpr) + Ppr ^ 2 * (0.006 / (Tpr - 0.86) - 0.037) + 0.32 * Ppr ^ 6 / Exp(20.723 * (Tpr - 1))
     C = 0.132 - 0.32 * log(Tpr) / log(10)
-    D = Exp(0.715 - 1.128 * Tpr + 0.42 * Tpr ^ 2)
-    ZFactor = A + (1 - A) * Exp(-B) + C * Ppr ^ D
+    d = Exp(0.715 - 1.128 * Tpr + 0.42 * Tpr ^ 2)
+    ZFactor = A + (1 - A) * Exp(-B) + C * Ppr ^ d
     
     
 '    ranges_good = ranges_good And CheckRanges(ZFactor, "ZFactor", const_Z_min, const_Z_max, _

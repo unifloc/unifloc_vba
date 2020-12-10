@@ -25,9 +25,9 @@
 Option Explicit
  Public log As New CLogger                      ' create new log list for each object
  Public gas_only As Boolean
- Public ksep_fr As Double
- Public p_ksep_atma As Double
- Public t_ksep_C As Double
+' Public ksep_fr As Double
+' Public p_ksep_atma As Double
+' Public t_ksep_C As Double
  
  
  Public zCorr As Z_CORRELATION
@@ -37,7 +37,7 @@ Option Explicit
  Public gamma_w As Double                        ' плотность воды удельная
  ' обводненность приватная чтобы гарантировать корректность диапазона
  Private fw_fr_ As Double                        ' объемная доля воды в флюиде
- Public qliq_sm3day As Double                  ' задаем для флюида также и дебиты, это упрощает дальнейшие расчеты расходов в разных условиях
+ Public q_liq_sm3day As Double                  ' задаем для флюида также и дебиты, это упрощает дальнейшие расчеты расходов в разных условиях
  Public q_gas_free_sm3day As Double              ' дебит газа, вернее добавка для значения Qgas, в исследовательских целях
  ' rsb и rs обладают сложным поведением при задании поэтому приватные
  Private rp_m3m3_ As Double                        ' газовый фактор добычной (приведенный к стандартным условиям)
@@ -57,7 +57,7 @@ Option Explicit
  Private bo_m3m3_ As Double                        ' объемный коэффициент нефти при рабочих условиях
  Private mu_oil_cP_ As Double                      ' вязкость нефти при рабочих условиях
  Private mu_deadoil_cP_ As Double                  ' вязкость дегазированной нефти
- Private copmressibility_o_1atm_ As Double         ' сжимаемость нефти
+ Private compressibility_o_1MPa_ As Double         ' сжимаемость нефти
  Private ST_oilgas_dyncm_ As Double                ' поверхностное натяжение нефть газ
  Private ST_watgas_dyncm_ As Double                ' поверхностное натяжение вода газ
  Private ST_liqgas_dyncm_ As Double
@@ -134,15 +134,15 @@ Option Explicit
  End Function
   
  Private Sub calc_wc()
-    If qliq_sm3day > 0 Then
-        fw_fr = q_wat_sm3day / qliq_sm3day
+    If q_liq_sm3day > 0 Then
+        fw_fr = q_wat_sm3day / q_liq_sm3day
     Else
         fw_fr = 0
     End If
  End Sub
  
  Public Function q_wat_sm3day() As Double
-   q_wat_sm3day = qliq_sm3day * fw_fr_
+   q_wat_sm3day = q_liq_sm3day * fw_fr_
  End Function
   
  Public Function q_gas_sm3day() As Double
@@ -169,7 +169,7 @@ Option Explicit
    If q_gas_rc_m3day < 0 Then q_gas_rc_m3day = 0
  End Function
  Public Function q_oil_sm3day() As Double
-   q_oil_sm3day = qliq_sm3day * (1 - fw_fr_)
+   q_oil_sm3day = q_liq_sm3day * (1 - fw_fr_)
  End Function
  Public Function q_oil_rc_m3day() As Double
    q_oil_rc_m3day = q_oil_sm3day * bo_m3m3_
@@ -196,8 +196,8 @@ Option Explicit
            
     t_K = PT_calc_.t_C + const_t_K_min
     p_MPa = PT_calc_.p_atma * const_convert_atma_MPa
-    compressibility_oil_1atm = unf_pvt_compressibility_oil_VB_1atm(rs_m3m3_, gamma_g, t_K, gamma_o, p_MPa)
-    
+   ' compressibility_oil_1atm = unf_pvt_compressibility_oil_VB_1MPa(rs_m3m3_, gamma_g, t_K, gamma_o, p_MPa) / const_convert_MPa_atma
+    compressibility_oil_1atm = compressibility_o_1MPa_ / const_convert_MPa_atma
  End Function
  
  Public Function compressibility_wat_1atm() As Double
@@ -577,7 +577,7 @@ End Function
         t_res_C = 90
         
         fw_perc = 0
-        qliq_sm3day = 100
+        q_liq_sm3day = 100
         q_gas_free_sm3day = 0
         ' для начала для простоты инициализируем теплоемкость флюидов как константы
         ' потом можно будет добавить расчет в зависимости от условий
@@ -592,20 +592,35 @@ End Function
         heat_capacity_ratio_oil_ = 1.05
         heat_capacity_ratio_water_ = 1
         
-        ksep_fr = 0
-        p_ksep_atma = 0
-        t_ksep_C = 0
+'        ksep_fr = 0
+'        p_ksep_atma = 0
+'        t_ksep_C = 0
     
         Call addLogMsg("CPVT object created ")
  End Sub
  
- Public Sub init_json(json As String)
-    Dim D As Dictionary
-    Set D = ParseJson(json)
-    Call init_dictionary(D)
+ Public Sub init_prop(json As String)
+    Dim d As Dictionary
+    Set d = ParseJson(json)
+    Call init_dictionary(d)
  End Sub
  
- Public Sub init_dictionary(dict As Dictionary)
+ Public Sub init_stream(json As String)
+    Dim d As Dictionary
+    
+    
+    Set d = ParseJson(json)
+    With d
+        q_liq_sm3day = .Item("q_liq_sm3day")
+        fw_perc = .Item("fw_perc")
+        If .Exists("rp_m3m3") Then rp_m3m3 = .Item("rp_m3m3")
+        If .Exists("q_gas_free_sm3day") Then q_gas_free_sm3day = .Item("q_gas_free_sm3day")
+        
+    End With
+        
+ End Sub
+ 
+ Private Sub init_dictionary(dict As Dictionary)
  ' expect that dictionary has all main properties with proper names
     Dim gamma_gas As Double
     Dim gamma_oil As Double
@@ -617,9 +632,9 @@ End Function
     Dim bob_m3m3 As Double
     Dim muob_cP As Double
     Dim PVTcorr As Integer
-    Dim ksep_fr As Double
-    Dim p_ksep_atma As Double
-    Dim t_ksep_C As Double
+'    Dim ksep_fr As Double
+'    Dim p_ksep_atma As Double
+'    Dim t_ksep_C As Double
     Dim gas_only As Boolean
     Dim errmsg As String
     Dim key As String
@@ -657,10 +672,10 @@ On Error Resume Next:
         If .Exists("t_res_C") Then t_res_C = .Item("t_res_C")
         If .Exists("bob_m3m3") Then bob_m3m3 = .Item("bob_m3m3")
         If .Exists("muob_cP") Then muob_cP = .Item("muob_cP")
-        If .Exists("PVTcorr") Then PVTcorr = .Item("PVTcorr")
-        If .Exists("ksep_fr") Then ksep_fr = .Item("ksep_fr")
-        If .Exists("p_ksep_atma") Then p_ksep_atma = .Item("p_ksep_atma")
-        If .Exists("t_ksep_C") Then t_ksep_C = .Item("t_ksep_C")
+        If .Exists("PVT_corr_set") Then PVTcorr = .Item("PVT_corr_set")
+'        If .Exists("ksep_fr") Then ksep_fr = .Item("ksep_fr")
+'        If .Exists("p_ksep_atma") Then p_ksep_atma = .Item("p_ksep_atma")
+'        If .Exists("t_ksep_C") Then t_ksep_C = .Item("t_ksep_C")
         If .Exists("gas_only") Then gas_only = .Item("gas_only")
         
     End With
@@ -668,14 +683,14 @@ On Error Resume Next:
 On Error GoTo er1:
     ' калибровочный параметр проверяем специально и не даем сохраниться значению по умолчанию
     ' если он неправильно указан (дублируется инициализацией в конструкторе, но все же)
-    Call init(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, t_res_C, rp_m3m3, muob_cP)
+    Call init(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, t_res_C, muob_cP)
     Me.gas_only = gas_only
-    Me.ksep_fr = ksep_fr
-    Me.p_ksep_atma = p_ksep_atma
-    Me.t_ksep_C = t_ksep_C
-    If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
-        Call mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, True)
-    End If
+'    Me.ksep_fr = ksep_fr
+'    Me.p_ksep_atma = p_ksep_atma
+'    Me.t_ksep_C = t_ksep_C
+'    If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
+'        Call mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, True)
+'    End If
     Exit Sub
 er1:
     errmsg = "CPVT.init_dictionary. error:" & Err.Description
@@ -693,12 +708,11 @@ er2:
                  Optional ByVal bob_m3m3 As Double = -1, _
                  Optional ByVal PVTcorr As PVT_correlation = 0, _
                  Optional ByVal t_res_C As Double = 90, _
-                 Optional ByVal rp_m3m3 As Double = -1, _
                  Optional ByVal muob_cP As Double = -1)
         gamma_g = gamma_gas
         gamma_o = gamma_oil
         gamma_w = gamma_wat
-        Me.set_rp_rsb rp_m3m3, rsb_m3m3
+        Me.set_rp_rsb rsb_m3m3, rsb_m3m3
         Me.pb_atma = pb_atma
         If t_res_C > 0 Then Me.t_res_C = t_res_C
         Me.bob_m3m3 = bob_m3m3
@@ -724,11 +738,27 @@ er2:
         muob_cP = fl.muob_cP
         t_res_C = fl.t_res_C
         fw_fr = fl.fw_fr
-        qliq_sm3day = fl.qliq_sm3day
+        q_liq_sm3day = fl.q_liq_sm3day
         q_gas_free_sm3day = fl.q_gas_free_sm3day
         gas_only = fl.gas_only
         
  End Sub
+ 
+ Public Function get_json()
+    Dim str1 As String, str2 As String
+    Dim str As String
+    
+    str1 = encode_PVT_prop(gamma_g, gamma_o, gamma_w, rsb_m3m3, pb_atma, t_res_C, bob_m3m3, muob_cP, PVT_correlation)
+    
+    
+    str2 = encode_PVT_stream(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
+    
+    str = Left(str1, Len(str1) - 1) & "," & Right(str2, Len(str2) - 1)
+    
+    get_json = str
+    'Set d = ParseJson(str)
+    
+ End Function
 Public Sub calc_PVT_PT(PT As PTtype)
         Call calc_PVT(PT.p_atma, PT.t_C)
 End Sub
@@ -746,8 +776,8 @@ Public Sub calc_PVT(ByVal p_atma As Double, ByVal t_C As Double)
     Dim p_offs As Double
     Dim b_fact As Double
     Dim mu_fact As Double
-    'Oil pressure in MPa
-    Dim p_MPa As Double
+    
+    Dim p_MPa As Double 'Oil pressure in MPa
     Dim Pb_calbr_MPa As Double
     Dim rsb_calbr_m3m3 As Double
     Dim Bo_calbr_m3m3 As Double
@@ -755,6 +785,9 @@ Public Sub calc_PVT(ByVal p_atma As Double, ByVal t_C As Double)
     Dim ranges_good As Boolean
     Dim mu_deadoil_cP As Double
     Dim Muo_saturated_cP As Double
+                Dim drs_dp As Double
+                Dim dbo_drs As Double
+                
 On Error GoTo err1:
     t_K = t_C + const_t_K_min
     PT_calc_.p_atma = p_atma
@@ -772,16 +805,15 @@ On Error GoTo err1:
     'calculate PVT properties
     'calculate water properties at current pressure and temperature
     bw_sc_m3m3_ = gamma_w
-    heat_capacity_ratio_gas_ = unf_pvt_gas_heat_capacity_ratio(gamma_g, t_K)
-    
     salinity_ppm_ = unf_pvt_Sal_BwSC_ppm(bw_sc_m3m3_)
-    bw_m3m3_ = unf_pvt_Bw_m3m3(p_MPa, t_K) '* bw_sc_m3m3_
+    bw_m3m3_ = unf_pvt_Bw_m3m3(p_MPa, t_K)
     mu_wat_cP_ = unf_pvt_viscosity_wat_cP(p_MPa, t_K, salinity_ppm_)
-    'if no calibration gas-oil ratio specified, then set it to some very large value and
-    'switch of calibration for bubblepoint and oil formation volume factor
+    ' gas properties
+    heat_capacity_ratio_gas_ = unf_pvt_gas_heat_capacity_ratio(gamma_g, t_K)
     z_ = unf_pvt_Zgas_d(t_K, p_MPa, gamma_g, zCorr)
     bg_m3m3_ = unf_pvt_Bg_z_m3m3(t_K, p_MPa, z_)
     mu_gas_cP_ = unf_pvt_viscosity_gas_cP(t_K, p_MPa, z_, gamma_g)
+    
     If PVT_correlation = Standing_based Then
             mu_deadoil_cP = unf_pvt_viscosity_dead_oil_Beggs_Robinson_cP(t_K, gamma_o) 'dead oil viscosity
             Muo_saturated_cP = unf_pvt_viscosity_saturated_oil_Beggs_Robinson_cP(rsb_calbr_m3m3, mu_deadoil_cP) 'saturated oil viscosity Beggs & Robinson
@@ -809,16 +841,18 @@ On Error GoTo err1:
             If p_MPa > p_bi Then 'apply correction to undersaturated oil 'undersaturated oil
                  r_si = rsb_calbr_m3m3   ' результат такое будет
                  bob_m3m3_sat = b_fact * (unf_pvt_FVF_Saturated_Oil_Standing_m3m3(rsb_calbr_m3m3, gamma_g, t_K, gamma_o) - 1) + 1 ' it is assumed that at pressure 1 atma bo=1
-                 copmressibility_o_1atm_ = unf_pvt_compressibility_oil_VB_1atm(rsb_calbr_m3m3, gamma_g, t_K, gamma_o, p_MPa) 'calculate compressibility at bubble point pressure
-                 bo_m3m3_ = bob_m3m3_sat * Exp(copmressibility_o_1atm_ * (p_bi - p_MPa))
+                 compressibility_o_1MPa_ = unf_pvt_compressibility_oil_VB_1MPa(rsb_calbr_m3m3, gamma_g, t_K, gamma_o, p_MPa) 'calculate compressibility at given pressure
+                 bo_m3m3_ = bob_m3m3_sat * Exp(compressibility_o_1MPa_ * (p_bi - p_MPa))
                  mu_oil_cP_ = mu_fact * unf_pvt_viscosity_oil_Vasquez_Beggs_cP(Muo_saturated_cP, p_MPa, p_bi)  'Vesquez&Beggs
             Else 'apply correction to saturated oil
-                r_si = unf_pvt_GOR_Standing_m3m3(p_MPa, gamma_g, t_K, gamma_o)
+                r_si = unf_pvt_rs_Standing_m3m3(p_MPa, gamma_g, t_K, gamma_o, drs_dp)
                 bo_m3m3_ = b_fact * (unf_pvt_FVF_Saturated_Oil_Standing_m3m3(r_si, gamma_g, t_K, gamma_o) - 1) + 1 ''Standing. it is assumed that at pressure 1 atma bo=1
+                dbo_drs = b_fact * unf_pvt_dBo_drs_Saturated_Oil_Standing(r_si, gamma_g, t_K, gamma_o)
+                compressibility_o_1MPa_ = -1 / bo_m3m3_ * (dbo_drs * drs_dp - bg_m3m3_ * drs_dp)
+            '    compressibility_o_1MPa_ = unf_pvt_compressibility_oil_saturated_McCain_1MPa(rsb_calbr_m3m3, gamma_o, t_K, p_MPa, p_bi)
                 mu_oil_cP_ = mu_fact * unf_pvt_viscosity_saturated_oil_Beggs_Robinson_cP(r_si, mu_deadoil_cP)  'Beggs & Robinson
             End If
-    End If
-    If PVT_correlation = McCain_based Then
+    ElseIf PVT_correlation = McCain_based Then
             ranges_good = True
             ranges_good = ranges_good And CheckRanges(t_K, "t_K", const_tMcCain_K_min, const_t_K_max, "температура потока вне диапазона для корреляции маккейна", "calc_PVT (McCain)", True)
             mu_deadoil_cP = unf_pvt_viscosity_dead_oil_Standing_cP(t_K, gamma_o)  'dead oil viscosity
@@ -831,25 +865,26 @@ On Error GoTo err1:
                 p_fact = 1
             End If
             p_MPa = p_MPa * p_fact
-            copmressibility_o_1atm_ = unf_pvt_compressibility_oil_VB_1atm(rsb_calbr_m3m3, gamma_g, t_res_K, gamma_o, p_bi) 'calculate compressibility at bubble point pressure
+            compressibility_o_1MPa_ = unf_pvt_compressibility_oil_VB_1MPa(rsb_calbr_m3m3, gamma_g, t_res_K, gamma_o, p_bi) 'calculate compressibility at bubble point pressure
             If (Bo_calbr_m3m3 > 0) Then 'Calculate oil formation volume factor correction factor
-                  rho_o_sat = unf_pvt_density_McCain_kgm3(p_bi, gamma_g, t_res_K, gamma_o, rsb_calbr_m3m3, p_bi, copmressibility_o_1atm_)    ' тут формально есть зависимость от сжимаемости но реально она не влияет (так как расчет идет при давлении насыщения)
+                  rho_o_sat = unf_pvt_density_McCain_kgm3(p_bi, gamma_g, t_res_K, gamma_o, rsb_calbr_m3m3, p_bi, compressibility_o_1MPa_)    ' тут формально есть зависимость от сжимаемости но реально она не влияет (так как расчет идет при давлении насыщения)
                   bob_m3m3_sat = unf_pvt_FVF_McCain_m3m3(rsb_calbr_m3m3, gamma_g, gamma_o * const_rho_ref, rho_o_sat)
                   b_fact = (Bo_calbr_m3m3 - 1) / (bob_m3m3_sat - 1)
             Else ' not specified, use from correlations
                   b_fact = 1
             End If
             p_bi = unf_pvt_pb_Valko_McCain_MPa(rsb_calbr_m3m3, gamma_g, t_K, gamma_o)
-            r_si = unf_pvt_GOR_Velarde_m3m3(p_MPa, p_bi, gamma_g, t_K, gamma_o, rsb_calbr_m3m3)
+            r_si = unf_pvt_rs_Velarde_m3m3(p_MPa, p_bi, gamma_g, t_K, gamma_o, rsb_calbr_m3m3)
             If p_MPa > p_bi Then 'apply correction to undersaturated oil
-                  copmressibility_o_1atm_ = unf_pvt_compressibility_oil_VB_1atm(rsb_calbr_m3m3, gamma_g, t_K, gamma_o, p_MPa)  'calculate compressibility at bubble point pressure
-                  rho_o_sat = unf_pvt_density_McCain_kgm3(p_bi, gamma_g, t_K, gamma_o, rsb_calbr_m3m3, p_bi, copmressibility_o_1atm_)
+                  compressibility_o_1MPa_ = unf_pvt_compressibility_oil_VB_1MPa(rsb_calbr_m3m3, gamma_g, t_K, gamma_o, p_MPa)  'calculate compressibility at given pressure
+                  rho_o_sat = unf_pvt_density_McCain_kgm3(p_bi, gamma_g, t_K, gamma_o, rsb_calbr_m3m3, p_bi, compressibility_o_1MPa_)
                   bob_m3m3_sat = unf_pvt_FVF_McCain_m3m3(rsb_calbr_m3m3, gamma_g, gamma_o * const_rho_ref, rho_o_sat)
                   bob_m3m3_sat = b_fact * (bob_m3m3_sat - 1) + 1 ' it is assumed that at pressure 1 atma bo=1
-                  bo_m3m3_ = bob_m3m3_sat * Exp(copmressibility_o_1atm_ * (p_bi - p_MPa))
+                  bo_m3m3_ = bob_m3m3_sat * Exp(compressibility_o_1MPa_ * (p_bi - p_MPa))
             Else 'apply correction to saturated oil
-                  rho_o = unf_pvt_density_McCain_kgm3(p_MPa, gamma_g, t_K, gamma_o, r_si, p_bi, copmressibility_o_1atm_)
+                  rho_o = unf_pvt_density_McCain_kgm3(p_MPa, gamma_g, t_K, gamma_o, r_si, p_bi, compressibility_o_1MPa_)
                   bo_m3m3_ = b_fact * (unf_pvt_FVF_McCain_m3m3(r_si, gamma_g, gamma_o * const_rho_ref, rho_o) - 1) + 1 ' it is assumed that at pressure 1 atma bo=1
+                  compressibility_o_1MPa_ = unf_pvt_compressibility_oil_saturated_McCain_1MPa(rsb_calbr_m3m3, gamma_o, t_K, p_MPa, p_bi)
             End If
             If muo_calibr_cP > 0 Then           ' рассчитаем калибровочный коэффициент для вязкости при давлении насыщения
                   If (rsb_calbr_m3m3 < 350) Then
@@ -870,8 +905,7 @@ On Error GoTo err1:
                  mu_oil_cP_ = mu_fact * unf_pvt_viscosity_saturated_oil_Beggs_Robinson_cP(r_si, mu_deadoil_cP)
                End If
             End If
-    End If
-    If PVT_correlation = 2 Then  'Debug mode. Linear Rs and bo vs P, Pb_calbr_atma should be specified.
+    ElseIf PVT_correlation = 2 Then  'Debug mode. Linear Rs and bo vs P, Pb_calbr_atma should be specified.
          'gas properties
          z_ = 0.95 'ideal gas
          bg_m3m3_ = unf_pvt_Bg_z_m3m3(t_K, p_MPa, z_)
@@ -906,22 +940,23 @@ On Error GoTo err1:
             addLogMsg ("warning:CPVT.calc_PVT, PVT correlation = 2 without Muob input")
             mu_oil_cP_ = 1
          End If
+    Else
+        Err.Raise kErrPVTcalc, "CPVT.calc_PVT", "PVT correlation not good. PVT_correlation = " & CStr(PVT_correlation)
     End If
     'Assign output variables
     pb_calc_atma_ = p_bi / p_fact / const_convert_atma_MPa
-   ' pb_atma_ = pb_calc_atma_   ' corrected by issue #34
     rs_m3m3_ = r_si
     mu_deadoil_cP_ = mu_deadoil_cP
-    q_oil_rc_m3day_ = qliq_sm3day * (1 - fw_fr_) * bo_m3m3_   ' для ускорения расчетов потом все что можно подсчитаем тут
-    q_wat_rc_m3day_ = qliq_sm3day * fw_fr_ * bw_m3m3_
-    q_gas_rc_m3day_ = (qliq_sm3day * (1 - fw_fr_) * rp_m3m3_ + q_gas_free_sm3day - rs_m3m3_ * qliq_sm3day * (1 - fw_fr_)) * bg_m3m3_
+    q_oil_rc_m3day_ = q_liq_sm3day * (1 - fw_fr_) * bo_m3m3_   ' для ускорения расчетов потом все что можно подсчитаем тут
+    q_wat_rc_m3day_ = q_liq_sm3day * fw_fr_ * bw_m3m3_
+    q_gas_rc_m3day_ = (q_liq_sm3day * (1 - fw_fr_) * rp_m3m3_ + q_gas_free_sm3day - rs_m3m3_ * q_liq_sm3day * (1 - fw_fr_)) * bg_m3m3_
     qliq_rc_m3day_ = q_wat_rc_m3day_ + q_oil_rc_m3day_
     If (q_wat_rc_m3day_ + q_oil_rc_m3day_ + q_gas_rc_m3day_) > 0 Then
         gas_fraction_d_ = q_gas_rc_m3day_ / (q_wat_rc_m3day_ + q_oil_rc_m3day_ + q_gas_rc_m3day_)
         If qliq_rc_m3day_ > 0 Then
             mu_mix_cP_ = (mu_oil_cP_ * q_oil_rc_m3day_ / qliq_rc_m3day_ + _
                       mu_wat_cP_ * q_wat_rc_m3day_ / qliq_rc_m3day_) * (1 - gas_fraction_d_) + _
-                      mu_gas_cP_ * (1 - gas_fraction_d_)
+                      mu_gas_cP_ * gas_fraction_d_
         Else
             mu_mix_cP_ = mu_gas_cP_
         End If
@@ -954,9 +989,9 @@ On Error GoTo err1:
     Dim TST As Double, Tstw As Double
     Dim STo As Double, STw As Double, ST As Double
     Dim t_F As Double
-    Dim P_psia As Double, p_MPa As Double
+    Dim p_psia As Double, p_MPa As Double
         t_F = t_C * 1.8 + 32
-        P_psia = p_atma / 0.068046
+        p_psia = p_atma / 0.068046
         p_MPa = p_atma / 10
         ST68 = 39 - 0.2571 * oil_API
         ST100 = 37.5 - 0.2571 * oil_API
@@ -965,13 +1000,13 @@ On Error GoTo err1:
         Else
             TST = t_F
             If t_F > 100 Then TST = 100
-            STo = (68 - (((TST - 68) * (ST68 - ST100)) / 32)) * Exp(-0.00086306 * P_psia)
+            STo = (68 - (((TST - 68) * (ST68 - ST100)) / 32)) * Exp(-0.00086306 * p_psia)
             ' https://petrowiki.org/Interfacial_tension
             'If STo < 0 Then STo = ST68
         End If
         'Расчет коэффициента поверхностного натяжения газ-вода  (два способа)
-        STw74 = (75 - (1.108 * (P_psia) ^ 0.349))
-        STw280 = (53 - (0.1048 * (P_psia) ^ 0.637))
+        STw74 = (75 - (1.108 * (p_psia) ^ 0.349))
+        STw280 = (53 - (0.1048 * (p_psia) ^ 0.637))
         If t_F < 74 Then
             STw = STw74
         Else
@@ -1099,16 +1134,16 @@ err1:
 End Function
 Public Function get_clone_mod_after_separation(p_atma As Double, _
                                                t_C As Double, Ksep As Double, _
-                                Optional ByVal GasGoesIntoSolution As Boolean = False) As CPVT
+                                Optional ByVal gas_goes_into_solution As Boolean = False) As CPVT
     Dim newfluid As CPVT
     Set newfluid = Me.clone
-    Call newfluid.mod_after_separation(p_atma, t_C, Ksep, GasGoesIntoSolution)
+    Call newfluid.mod_after_separation(p_atma, t_C, Ksep, gas_goes_into_solution)
     Set get_clone_mod_after_separation = newfluid
 End Function
 Public Sub mod_after_separation(ByVal p_atma As Double, _
                                 ByVal t_C As Double, _
                                 ByVal Ksep As Double, _
-                       Optional ByVal GasGoesIntoSolution As Boolean = False, _
+                       Optional ByVal gas_goes_into_solution As Double = 1, _
                        Optional ByVal ksep_liq As Double = 0, _
                        Optional ByVal ksep_water As Double = 0)
                        
@@ -1117,64 +1152,67 @@ Public Sub mod_after_separation(ByVal p_atma As Double, _
 ' на входе условия при которых проходила сепарация
 ' ksep_liq доля жидкости выкинутая из потока
 ' ksep_water доля воды выкинутая из потока
-    Dim Rs As Double
+    Dim rs As Double
     Dim Bo As Double
+    Dim muo As Double
     Dim Pb_Rs_curve As New CInterpolation ' хранилище кривой зависимости газосодержания от давления насыщения
     Dim Bo_Rs_curve As New CInterpolation
-    Dim pb_atma_tab As Double, rsb_m3m3_tab As Double, Bo_m3m3_tab As Double
+    Dim Muo_rs_curve As New CInterpolation
+    Dim pb_atma_tab As Double
     Dim Delta As Double
     Dim i As Integer
     Const N = 10
     Dim Rpnew_with_Ksep As Double   ' новый ГФ с учетом сепарации газа
-    Dim Rpnew_Ksep_1 As Double      ' новый ГФ без учета сепарации
     Dim Rpnew As Double
         ' найдем сколько газа осталось в растворе при условиях сепарации
 On Error GoTo err1:
         
-    With Me
-        Rs = .calc_rs_m3m3(p_atma, t_C)
-        Bo = .calc_bo_m3m3(p_atma, t_C)
+        If Ksep < 0 Or Ksep > 1 Then
+            addLogMsg "Warning: CPVT.mod_after_separation: wrong k_sep value = " & Ksep & "  ignored"
+            Exit Sub
+        End If
+        If gas_goes_into_solution < 0 Or gas_goes_into_solution > 1 Then
+            addLogMsg "Warning: CPVT.mod_after_separation: wrong gas_goes_into_solution value = " & gas_goes_into_solution & "  set = 1"
+            gas_goes_into_solution = 1
+        End If
+        Call calc_PVT(p_atma, t_C)
+        rs = rs_m3m3_
+        Bo = bo_m3m3_
+        muo = mu_oil_cP_
         
         ' оценим как изменится газовый фактор за счет ухода части газа из потока
-        ' оцениваем двумя способами - буду влиять на работу опции растворения газа (фазовой неравновесности)
+        ' оцениваем двумя способами - будут влиять на работу опции растворения газа (фазовой неравновесности)
         '   - с учетом сепарации (показывает новый ГФ если газ может потом растворяться)
         '   - без учета сепарации (Ksep = 1 показывает ГФ если газ может только сжиматься)
         
-        Rpnew_with_Ksep = .rp_m3m3 - (.rp_m3m3 - Rs) * Ksep
-        Rpnew_Ksep_1 = .rp_m3m3 - (.rp_m3m3 - Rs)
+        Rpnew_with_Ksep = rp_m3m3 - (rp_m3m3 - rs) * Ksep
+        Rpnew = rs + (rp_m3m3 - rs) * (1 - Ksep) * gas_goes_into_solution
         q_gas_free_sm3day = q_gas_free_sm3day * (1 - Ksep)
         
-        
-        Delta = (.pb_calc_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
-        ' запишем зависимость газосодержания от давления насыщения на память
-        For i = 0 To N
-            pb_atma_tab = 1 + Delta * i
-            rsb_m3m3_tab = .calc_rs_m3m3(pb_atma_tab, .t_res_C)
-            Pb_Rs_curve.AddPoint rsb_m3m3_tab, pb_atma_tab
-            Bo_m3m3_tab = .calc_bo_m3m3(pb_atma_tab, .t_res_C)
-            Bo_Rs_curve.AddPoint rsb_m3m3_tab, Bo_m3m3_tab
-        Next i
-        ' найдем сколько всего газа осталось в потоке
-        
-        If GasGoesIntoSolution Then   ' тогда газ успеет растворится
-            Rpnew = Rpnew_with_Ksep
-        Else                                   ' газ не растворяется, то же самое, что Ксеп = 1
-            Rpnew = Rpnew_Ksep_1
-        End If
-        
-        If Rpnew < .rsb_m3m3 Then
+            ' найдем сколько всего газа осталось в потоке
+                
+        If Rpnew < rsb_m3m3_ Then
+            Delta = (pb_calc_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
+            ' запишем зависимость газосодержания от давления насыщения на память
+            For i = 0 To N
+                pb_atma_tab = 1 + Delta * i
+                Call calc_PVT(pb_atma_tab, t_res_C)
+                Pb_Rs_curve.AddPoint rs_m3m3_, pb_atma_tab
+                Bo_Rs_curve.AddPoint rs_m3m3_, bo_m3m3_
+                Muo_rs_curve.AddPoint rs_m3m3_, mu_oil_cP_
+            Next i
             ' Если газовый фактор становится меньше газосодержания, тогда надо скорректировать газосодержание и давление насыщения,
             ' которое будет от него зависеть
-            .pb_atma = Pb_Rs_curve.getPoint(Rpnew)
-            .bob_m3m3 = Bo_Rs_curve.getPoint(Rpnew)
-            .rsb_m3m3 = Rpnew
+            pb_atma = Pb_Rs_curve.getPoint(Rpnew)
+            bob_m3m3 = Bo_Rs_curve.getPoint(Rpnew)
+            muob_cP = Muo_rs_curve.getPoint(Rpnew)
+            rsb_m3m3 = Rpnew
             ' иначе газа из раствора не сепарировался - свойства не менялись ничего делать не надо
         End If
         ' итоговый газовый фактор всегда с учетом сепараци
-        .rp_m3m3 = Rpnew_with_Ksep
-    End With
+        rp_m3m3 = Rpnew_with_Ksep
     
-    qliq_sm3day = qliq_sm3day * (1 - ksep_liq)
+    q_liq_sm3day = q_liq_sm3day * (1 - ksep_liq)
     
     Exit Sub
 err1:
@@ -1191,21 +1229,21 @@ Public Function divide_flux(psep_atma As Double, _
                             ksep_wat As Double, _
                             Optional tubing As Boolean = True) As CPVT
     Dim fl As CPVT
-    Dim Rs As Double
+    Dim rs As Double
     Dim Bo As Double
     Dim pb As Double
     Dim muo As Double
     Dim qgf As Double
      
     Call calc_PVT(psep_atma, tsep_C)
-    Rs = rs_m3m3
+    rs = rs_m3m3
     Bo = bo_m3m3
     muo = mu_oil_cP
     qgf = q_gas_free_sm3day
-    pb = calc_pb_atma(Rs, tsep_C)
+    pb = calc_pb_atma(rs, tsep_C)
     
     Set fl = clone
-    fl.rsb_m3m3 = Rs
+    fl.rsb_m3m3 = rs
     fl.bob_m3m3 = Bo
     fl.pb_atma = pb
     fl.muob_cP = muo
@@ -1216,8 +1254,8 @@ Public Function divide_flux(psep_atma As Double, _
         ksep_wat = 1 - ksep_wat
     End If
     
-    fl.qliq_sm3day = qliq_sm3day * fw_fr * ksep_wat + qliq_sm3day * (1 - fw_fr) * ksep_oil
-    fl.fw_fr = qliq_sm3day * fw_fr * ksep_oil / (qliq_sm3day * fw_fr * ksep_wat + qliq_sm3day * (1 - fw_fr) * ksep_oil)
+    fl.q_liq_sm3day = q_liq_sm3day * fw_fr * ksep_wat + q_liq_sm3day * (1 - fw_fr) * ksep_oil
+    fl.fw_fr = q_liq_sm3day * fw_fr * ksep_oil / (q_liq_sm3day * fw_fr * ksep_wat + q_liq_sm3day * (1 - fw_fr) * ksep_oil)
     fl.rp_m3m3 = fl.rsb_m3m3 + (qgf * ksep_gas) / fl.q_oil_sm3day
     
     Set divide_flux = fl

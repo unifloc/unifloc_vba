@@ -11,6 +11,13 @@ Public Const esp_db_name = "\ESP_json.db"
 ' only database as global variable here
 ' in order to reduce db file read
 Public ESP_base_dictionary As Dictionary
+Public Const prm_gas_goes_into_solution     As String = "gas_goes_into_solution"
+Public Const prm_PVT_correlation            As String = "PVT_correlation"
+Public Const prm_show_log                   As String = "show_log"
+Public Const prm_show_info                  As String = "show_info"
+Public Const prm_num_value                  As String = "num_value"
+Public Const prm_calc_along_flow            As String = "calc_along_flow"
+Public Const prm_choke_calibr               As String = "choke_calibr"
 Public Const const_name_qliq_m3day       As String = "qliq_m3day"
 Public Const const_name_fw_perc          As String = "fw_perc"
 Public Const const_name_p_cas_atma        As String = "p_cas_atma"
@@ -191,6 +198,7 @@ Public Const const_convert_lbmft3_kgm3 = 16.01846
 Public Const const_convert_kgm3_lbmft3 = 1 / const_convert_lbmft3_kgm3
 Public Const const_convert_psift_atmm = 1 / const_convert_atma_psi / const_convert_ft_m ' pressure gradient conversion factor
 Public Const const_convert_MPa_atma = 1000000 / const_convert_atma_Pa  ' 9.8692
+Public Const const_convert_MPa_psia = const_convert_MPa_atma * const_convert_atma_psi
 Public Const const_convert_atma_MPa = 1 / const_convert_MPa_atma ' 0.101325' константа для конверсии единиц давления из Мпа в atma
 Public Const const_p_atma_min = const_P_MPa_min * const_convert_MPa_atma
 Public Const const_p_atma_max = const_P_MPa_max * const_convert_MPa_atma
@@ -230,4 +238,922 @@ Public Const kErrBisection = 713 + vbObjectError
 Public Const sDELIM As String = vbNewLine
 Public Const MinCountPoints_calc_pwf_pcas_hdyn_atma = 5
 Public Const root3 = 3 ^ 0.5
+' hydraulic correlations types
+Public Enum H_CORRELATION
+    BeggsBrill = 0
+    Ansari = 1
+    Unified = 2
+    Gray = 3
+    HagedornBrown = 4
+    SakharovMokhov = 5
+    gas = 10
+    Water = 11
+End Enum
+' PVT correlations set to be used
+Public Enum PVT_correlation
+    Standing_based = 0 '
+    McCain_based = 1 '
+    straigth_line = 2
+End Enum
+' z factor (gas compressibility) options
+Public Enum Z_CORRELATION
+    z_BB = 0
+    z_Dranchuk = 1
+    z_Kareem = 2
+End Enum
+' type determines the method of temperature calculation in well
+Public Enum TEMP_CALC_METHOD
+    StartEndTemp = 0
+    GeoGradTemp = 1
+    AmbientTemp = 2
+End Enum
+' gas separation in well at pump intake. calculation method
+Public Enum SEPAR_CALC_METHOD
+    fullyManual = 3
+    valueManual = 2
+    pressureManual = 1
+    byCorrealation = 0
+End Enum
+' standard port sizes for whetherford r1 glv
+Public Enum GLV_R1_PORT_SIZE
+    R1_port_1_8 = 3.18
+    R1_port_5_32 = 3.97
+    R1_port_3_16 = 4.76
+    R1_port_1_4 = 6.35
+    R1_port_5_16 = 7.94
+End Enum
+' multiphase flow in pipe and well calculation method
+Public Type PARAMCALC
+     correlation As H_CORRELATION         ' multiphase hydraulic correlation
+     CalcAlongCoord As Boolean            ' calculation direction flag
+                                          ' if True - pressure at lowest coordinate is given
+                                          '           pressure at higher coordinate calculated
+                                          '           for well (0 coord at top, hmes at bottom)
+                                          '           equal to calc from top to bottom
+                                          '    False - otherwise
+     FlowAlongCoord As Boolean            ' flow direction flag
+     temp_method As TEMP_CALC_METHOD      ' temperature caclulation method
+     length_gas_m As Double               ' length in pipe where correlation changes.
+                                          ' for points with cooed less then  length_gas_m
+                                          ' gas correlation applied,
+                                          ' other points - multiphase correlation applied
+                                          ' allows to model easily static level in well
+    start_length_gas_m As Double
+End Type
+' type to describe thermobaric conditions (for calculations)
+Public Type PTtype
+    p_atma As Double
+    t_C As Double
+End Type
+' type for storing data about dynamic level
+Public Type PCAS_HDYN_type
+    p_cas_atma As Double
+    hdyn_m As Double
+    self_flow_condition As Boolean
+    pump_off_condition As Boolean
+    correct As Boolean
+End Type
+' Type for describing the operation of an electric motor
+Public Type MOTOR_DATA
+    U_lin_V As Double       ' voltage linear (between phases)
+    I_lin_A As Double       ' Linear current (in line)
+    U_phase_V As Double     ' phase voltage (between phase and zero)
+    I_phase_A As Double     ' phase current (in winding)
+    f_Hz As Double          ' frequency synchronous (field rotation)
+    eff_d As Double         ' Efficiency
+    cosphi As Double        ' power factor
+    s_d As Double           ' slippage
+    Pshaft_kW As Double     ' mechanical power on the shaft
+    Pelectr_kW As Double    ' power supply electric
+    Mshaft_Nm As Double     ' torque on the shaft - mechanical
+    load_d As Double        ' motor load
+End Type
+' ESP description to be loaded from DB
+' combined in type to decrease a mess in CESPpump
+Public Type ESP_PARAMS
+     ID As String                    ' ID from database
+     source As String
+     manufacturer As String
+     name As String
+     stages_max As Integer           ' максимальной количество ступеней в насосе (из базы)
+     rate_max_sm3day As Double       ' максимальный дебит насос (из базы) - хорошо бы для надежности определять параметр из характеристики
+     rate_nom_sm3day As Double
+     rate_opt_min_sm3day As Double   ' границы оптимального диапазона для насоса - минимум
+     rate_opt_max_sm3day As Double   ' границы оптимального диапазона  - максимум
+     freq_Hz As Double               ' частота насоса для номинальной характеристики в базе
+     
+     ' характеристика заданные по точкам
+     head_points() As Double
+     rate_points() As Double
+     power_points() As Double
+     eff_points() As Double
+     
+     height_stage_m As Double        ' примерная высота ступени
+     d_od_m As Double                ' внешний диаметр ЭЦН
+     d_motor_od_m As Double         ' внешний диаметр ПЭД
+     d_cas_min_m As Double           ' минимальный диаметр обсадной колонны, заданный производителем оборудования
+     d_shaft_m As Double             ' диаметр вала для насоса
+     area_shaft_m2 As Double         ' площадь поперечного сечения вала   (дублирует диаметр, но задается производителем)
+     
+     power_limit_shaft_kW As Double ' максимальная мощность передаваемая валом на номинальной частоте
+     power_limit_shaft_high_kW As Double
+     power_limit_shaft_max_kW As Double ' максимальная мощность передаваемая валом на номинальной частоте для высокопрочного вала
+     pressure_limit_housing_atma As Double ' максимальное давление на корпус
+     slip_nom_rpm As Double
+     eff_max As Double
+End Type
+' type of extended description of multiphase flow parameters at a point
+Public Type PIPE_FLOW_PARAMS
+  md_m As Double         ' pipe measured depth (from start - top)
+  vd_m As Double         ' pipe vertical depth from start - top
+  diam_mm As Double      ' pipe diam
+  p_atma As Double       ' pipe pressure at measured depth
+  t_C As Double          ' pipe temp at measured depth
+  
+  dp_dl As Double
+  dt_dl As Double
+  
+  dpdl_g_atmm As Double  ' gravity gradient at measured depth
+  dpdl_f_atmm As Double  ' friction gradient at measured depth
+  dpdl_a_atmm As Double  ' acceleration gradient at measured depth
+  v_sl_msec As Double    ' superficial liquid velosity
+  v_sg_msec As Double    ' superficial gas velosity
+  h_l_d As Double        ' liquid hold up
+  fpat As Double         ' flow pattern code
+  thete_deg As Double
+  roughness_m As Double
+  
+  rs_m3m3 As Double     ' dissolved gas in oil in the stream
+  gasfrac As Double     ' gas flow rate
+  
+  mu_oil_cP As Double   ' oil viscosity in flow
+  mu_wat_cP As Double   ' water viscosity in the flow
+  mu_gas_cP As Double   ' gas viscosity in flow
+  mu_mix_cP As Double   ' viscosity of the mixture in the flow
+  
+  Rhoo_kgm3 As Double   ' oil Density
+  Rhow_kgm3 As Double   ' water Density
+  rhol_kgm3 As Double   ' liquid density
+  Rhog_kgm3 As Double   ' gas Density
+  rhomix_kgm3 As Double ' density of the mixture in the thread
+  
+  q_oil_m3day As Double ' oil consumption in working conditions
+  qw_m3day As Double    ' water consumption in working conditions
+  Qg_m3day As Double    ' gas flow rate under operating conditions
+  
+  mo_kgsec As Double    ' mass flow rate of oil in working conditions
+  mw_kgsec As Double    ' mass flow rate in working conditions
+  mg_kgsec As Double    ' mass flow rate of gas under operating conditions
+  
+  vl_msec As Double     ' fluid velocity is real
+  vg_msec As Double     ' real gas velocity
+End Type
+' type of description of free gas behavior when increasing the pressure
+' relevant for ESPs where pressure rises
+' The free gas can either dissolve into the stream or simply compress
+'Public Enum GAS_INTO_SOLUTION
+'    gas_goes_into_solution = 1
+'    GasnotGoesIntoSolution = 0
+'End Enum
+' type showing the way of saving the extended calculation results
+' determines which set of calculated distribution curves will be saved
+Public Enum CALC_RESULTS
+    nocurves = 0
+    maincurves = 1
+    allCurves = 2
+End Enum
+'=========================================================================================
+'types support functions
+'=========================================================================================
+' flow parameter setting function in the pipe or well
+Public Function set_calc_flow_param( _
+                Optional ByVal calc_along_coord As Boolean = False, _
+                Optional ByVal flow_along_coord As Boolean = False, _
+                Optional ByVal hcor As H_CORRELATION = Ansari, _
+                Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+                Optional ByVal length_gas_m As Double = 0, _
+                Optional ByVal start_length_gas_m As Double = 0) As PARAMCALC
+' calc_along_coord - calculation direction flag
+' flow_along_coord - flow direction relative to coordinate
+' hcor             - hydraulic correlation selector
+' temp_method      - temperature method selector
+' length_gas_m     - boundary of gas correlation application in flow
+    Dim prm As PARAMCALC
+    prm.CalcAlongCoord = calc_along_coord
+    prm.FlowAlongCoord = flow_along_coord
+    prm.correlation = hcor
+    prm.temp_method = temp_method
+    prm.length_gas_m = length_gas_m
+    prm.start_length_gas_m = start_length_gas_m
+    set_calc_flow_param = prm
+End Function
+Public Function sum_PT(PT1 As PTtype, PT2 As PTtype) As PTtype
+    sum_PT.p_atma = PT1.p_atma + PT2.p_atma
+    sum_PT.t_C = PT1.t_C + PT2.t_C
+End Function
+Public Function subtract_PT(PT1 As PTtype, PT2 As PTtype) As PTtype
+    subtract_PT.p_atma = PT1.p_atma - PT2.p_atma
+    subtract_PT.t_C = PT1.t_C - PT2.t_C
+End Function
+Public Function set_PT(ByVal p As Double, ByVal T As Double) As PTtype
+    set_PT.p_atma = p
+    set_PT.t_C = T
+End Function
+Public Function PT_to_array(PT As PTtype)
+    PT_to_array = Array(PT.p_atma, PT.t_C)
+End Function
+'=======================================================================================
+'simple math function (additional to alglib)
+Public Function cosd(ang) As Double
+ cosd = Cos(ang / 180 * const_Pi)
+End Function
+Public Function sind(ang) As Double
+ sind = Sin(ang / 180 * const_Pi)
+End Function
+Public Function isEqual(A As Double, B As Double) As Double
+    Const Eps = const_P_difference
+    isEqual = False
+    If Abs(A - B) < Eps Then isEqual = True
+End Function
+Public Function isGreater(A As Double, B As Double) As Double
+    Const Eps = const_P_difference
+    isGreater = False
+    If (A - B) > Eps Then isGreater = True
+End Function
+Public Function isBetween(A As Double, a0 As Double, a1 As Double)
+    isBetween = False
+    If ((A <= a0) And (A >= a1)) Or ((A >= a0) And (A <= a1)) Then isBetween = True
+End Function
+' функция решения ОДУ методом Кэш Карпа (Cash-Karp adaptive ODE solver)
+' Решается ОДУ вида  Y'=f(Y,x)  с начальными устьвиями Y(xs)=Ys
+' Y или одна переменная или вектор размерности N.
+Public Function solve_ode(ByVal func_name As String, _
+                          y0() As Double, _
+                          XA() As Double, _
+                          CoeffA As Variant, _
+                 Optional Eps As Double = 0.000001, _
+                 Optional Step As Double = 10, _
+                 Optional MaxIts As Long = 1000)
+' func_name         - имя функции  f(x)
+' Y0                - начальное значение для расчета
+' XA                - значения аргумента для которых ищем решение
+' CoeffA            - дополнительные параметры функции градиента
+' Eps
+' Step
+' MaxIts
+    Dim M As Long, N As Long, State As ODESolverState, _
+    YA() As Double, i As Long, _
+    Rtn As Boolean, Rep As ODESolverReport
+    Dim R() As Double
+  
+    N = UBound(y0) + 1
+    M = UBound(XA) + 1
+    'Set up any required output arrays
+    ReDim YA(0 To M - 1, 0 To N - 1)
+    
+    'Call the appropriate AlgLib routine to initialise the State object
+    Call ODESolverRKCK(y0(), N, XA, M, Eps, Step, State)
+    
+    ' Loop through the AlgLib solver routine and the external ODE
+    ' evaluation routine until the solver routine returns "False",
+    ' which indicates that it has finished.
+    ' The VBA function named in "func_name" is called using
+    ' the Application.Run method.
+    Rtn = True
+    i = 0
+    Do While Rtn = True And i < MaxIts
+        Rtn = ODESolverIteration(State)
+        R = Application.Run(func_name, State.X, State.y, CoeffA(0))
+        State.DY(0) = R(0)
+        i = i + 1
+    Loop
+    
+     ' Extract the desired results from the State
+     ' object using the appropriate AlgLib routine
+     Call ODESolverResults(State, M, XA, YA, Rep)
+    
+    ' If necessary convert the AlgLib output array(s) to
+    ' a form suitable for Excel.  In this case YA2 is
+    ' a 2D base 0 array, which may be assigned to the
+    ' function return value without further processing.
+    
+    ' Assign the output array to the function return value
+     solve_ode = YA
+End Function
+' функция ищет корни уравнения вида
+' f(x) = 0 на отрезке [x1..x2]
+Public Function solve_equation_bisection(func_name As String, _
+                                         ByVal X1 As Double, _
+                                         ByVal X2 As Double, _
+                                         CoeffA, _
+                                         prm As CSolveParam) As Boolean
+' func_name             - название функции для которой ищем решение
+' x1                    - левая граница аргумента для поиска решения
+' x2                    - правая граница аргумента для поиска решения
+' coeffA                - параметры функции для которой ищем решение
+' prm                   - объект с настройками поиска решения
+'                         через этот же объект возвращаются решение и его параметры
+    Dim Y1 As Double
+    Dim Y2 As Double
+    Dim y_temp As Double
+    Dim x_temp As Double
+    Dim i As Long
+    Dim err_msg As String
+    i = 0
+On Error GoTo err1:
+    ' определим значения параметров на границе
+    Y1 = Application.Run(func_name, X1, CoeffA)
+    Y2 = Application.Run(func_name, X2, CoeffA)
+    With prm
+        If Y1 * Y2 > 0 Then
+            ' если значения на границе одного знака - то метод поиска решения не работает
+            ' возможно решения нет и найти его не получится
+            .iterations = 0
+            .found_solution = False
+            .msg = "solve_equation_bisection: values at segment's ends must have a different sign"
+            solve_equation_bisection = False
+            Exit Function
+        End If
+        ' начинаем цикл поиска решений (итерации)
+        Do
+            i = i + 1
+            ' делим отрезок пополам
+            x_temp = (X1 + X2) / 2
+            y_temp = Application.Run(func_name, x_temp, CoeffA)
+            If Abs(y_temp) < .y_tolerance Then
+                solve_equation_bisection = True
+                .x_solution = x_temp
+                .y_solution = y_temp
+                .iterations = i
+                .found_solution = True
+                .msg = "solve_equation_bisection: done by  " + CStr(i) + " iterations, tolerance " + CStr(.y_tolerance)
+                Exit Function
+            Else
+                If y_temp * Y1 > 0 Then
+                    X1 = x_temp
+                    Y1 = y_temp
+                Else
+                    X2 = x_temp
+                    Y2 = y_temp
+                End If
+            End If
+        Loop Until i >= 100
+        
+        solve_equation_bisection = False
+        .x_solution = x_temp
+        .y_solution = y_temp
+        .iterations = i
+        .found_solution = False
+        .msg = "solve_equation_bisection: too many iterations " + CStr(i)
+    End With
+    Exit Function
+err1:
+    On Error GoTo 0
+    With prm
+        .iterations = i
+        .found_solution = False
+        .msg = "solve_equation_bisection error " & Err.Description
+    End With
+    solve_equation_bisection = False
+End Function
+' Non-linear least squares fit for function evaluated by VBA routine
+' нелинейная регрессия МНК для VBA функции
+Function AL_NLFit(Func As String, _
+                  Y_Range As Variant, _
+                  X_Range As Variant, _
+                  CoeffA As Variant, _
+         Optional TolA As Variant, _
+         Optional WeightA As Variant, _
+         Optional CheapFG As Boolean = False, _
+         Optional UseHess As Boolean = False) As Variant
+' func      - имя функции VBA для которой делается мачинг
+' Y_Range   - значение функции под который надо делать подстройку
+' X_Range   - значения аргументов от которых зависит функция
+' CoeffA    - параметры VBA функции
+' TolA
+                  
+    Dim C() As Double, N As Long, M As Long, K As Long, State As LSFitState, WeightAD() As Double, UseWeights As Boolean
+    Dim Slopea As Variant, RtnState As Boolean, ResA() As Double, NumWeights As Long, NumWCols As Long
+    Dim XAD() As Double, YAD() As Double, CAD() As Double, Rtn As Long, NLoops As Long
+    Dim i As Long, Info As Long, Rep As LSFitReport
+    Dim EpsF As Double, EpsX As Double, MaxIts As Long
+    If IsMissing(TolA) = False Then
+        GetArray TolA
+        EpsF = TolA(1, 1)
+        EpsX = TolA(2, 1)
+        MaxIts = TolA(3, 1)
+    Else
+        EpsF = 0
+        EpsX = 0.000000001
+        MaxIts = 1000
+    End If
+    Rtn = GetNLFitData(X_Range, Y_Range, CoeffA, XAD, YAD, CAD, N, M, K)
+    ReDim ResA(1 To K + 4)
+    If IsMissing(WeightA) = False Then
+        GetArray WeightA
+        NumWeights = UBound(WeightA)
+        NumWCols = UBound(WeightA, 2)
+        ReDim WeightAD(0 To NumWeights - 1)
+        Call Array120D(WeightA, WeightAD, NumWeights, NumWCols)
+        UseWeights = True
+    End If
+    If UseWeights = True Then
+        If UseHess = True Then
+            Call LSFitNonlinearWFGH(XAD, YAD, WeightAD, CAD, N, M, K, State)
+        Else
+            Call LSFitNonlinearWFG(XAD, YAD, WeightAD, CAD, N, M, K, CheapFG, State)
+        End If
+    Else
+        If UseHess = True Then
+            Call LSFitNonlinearFGH(XAD, YAD, CAD, N, M, K, State)
+        Else
+            Call LSFitNonlinearFG(XAD, YAD, CAD, N, M, K, CheapFG, State)
+        End If
+    End If
+    Call LSFitNonlinearSetCond(State, EpsF, EpsX, MaxIts)
+    Do While LSFitNonlinearIteration(State) = True
+        NLoops = NLoops + 1
+        State.F = Application.Run(Func, State.X, State.C, 1)
+        If State.NeedFG = True Then
+            State.G = Application.Run(Func, State.X, State.C, 2)
+        End If
+        If State.NeedFGH = True Then
+            State.H = Application.Run(Func, State.X, State.C, 3)
+        End If
+    Loop
+    Call LSFitNonlinearResults(State, Info, C, Rep)
+    For i = 1 To K
+        ResA(i) = C(i - 1)
+    Next i
+    ResA(K + 1) = Rep.RMSError
+    ResA(K + 2) = Rep.MaxError
+    ResA(K + 3) = NLoops
+    ResA(K + 4) = Info
+    AL_NLFit = ResA
+End Function
+' подготовка данных для нелинейное регрессии
+Private Function GetNLFitData(XA As Variant, _
+                              YA As Variant, _
+                              CA As Variant, _
+                              XAD() As Double, _
+                              YAD() As Double, _
+                              CAD() As Double, _
+                              N As Long, _
+                              M As Long, _
+                              K As Long, _
+                              Optional CAT As Variant) As Variant
+' XA input vector for arguments (N x M)
+'    N is a number of points,
+'    M is a dimension of a space points belong to,
+'    K is a dimension of a space of parameters being fitted,
+    Dim NumYRows As Long, i As Long, j As Long, CATD As Variant
+    ' если на входе range - переводим их в массивы
+    If TypeName(XA) = "Range" Then XA = XA.Value2
+    If TypeName(YA) = "Range" Then YA = YA.Value2
+    If TypeName(CA) = "Range" Then CA = CA.Value2
+    N = UBound(XA)
+    M = UBound(XA, 2)
+    K = UBound(CA)
+    If UBound(CA, 2) = 2 Then
+        K = K - M
+        ReDim CAT(0 To K + M - 1)
+    End If
+    ReDim XAD(0 To N - 1, 0 To M - 1)
+    ReDim YAD(0 To N - 1)
+    ReDim CAD(0 To K - 1)
+    For i = 1 To N
+        YAD(i - 1) = YA(i, 1)
+    Next i
+    For i = 1 To N
+        For j = 1 To M
+            XAD(i - 1, j - 1) = XA(i, j)
+        Next j
+    Next i
+    If UBound(CA, 2) = 1 Then
+        For i = 1 To K
+            CAD(i - 1) = CA(i, 1)
+        Next i
+    Else
+        For i = 1 To K
+            CAT(i - 1) = CA(i, 1)
+            CAD(i - 1) = CA(i, 2)
+        Next i
+        For i = K + 1 To K + M
+            CAT(i - 1) = CA(i, 1)
+        Next i
+    End If
+End Function
+Function GradientA(Func As Variant, Pvaluea0() As Double, _
+                   XvalueA0() As Double, NumP As Long, NumX As Long, Optional DP As Double = 0.000001) As Variant
+    Dim Eform As String, Eform2 As String, i As Long, j As Long, K As Long, ResA() As Double
+    Dim res1 As Double, res2 As Double
+    ' Evaluate the gradient vector (vector of partial first differentials, wrt each parameter)
+    ' for the function specified in Func, using finite difference method.
+    ReDim ResA(0 To NumP - 1)
+    For i = 0 To NumP - 1
+        Pvaluea0(i) = Pvaluea0(i) + DP
+        res1 = Application.Run(Func, XvalueA0, Pvaluea0, 1)
+        Pvaluea0(i) = Pvaluea0(i) - DP * 2
+        res2 = Application.Run(Func, XvalueA0, Pvaluea0, 1)
+        ResA(i) = (res1 - res2) / (DP * 2)
+        Pvaluea0(i) = Pvaluea0(i) + DP
+    Next i
+    GradientA = ResA
+End Function
+Public Sub GetArray(arrayname)
+    Dim temp As Variant
+    If TypeName(arrayname) = "Range" Then
+        If arrayname.Rows.Count = 1 Then
+            If arrayname.Columns.Count = 1 Then
+                arrayname = Array(arrayname.Value2)
+                temp = arrayname(0)
+                ReDim arrayname(1 To 1, 1 To 1)
+                arrayname(1, 1) = temp
+            Else
+                arrayname = Array(arrayname.Value2)
+                arrayname = WorksheetFunction.transpose(arrayname)
+            End If
+        Else
+            arrayname = arrayname.Value2
+        End If
+    ElseIf Not IsArray(arrayname) Then
+        arrayname = Array(arrayname)
+        arrayname = WorksheetFunction.transpose(arrayname)
+    Else
+        On Error Resume Next
+        arrayname = WorksheetFunction.transpose(arrayname)
+    End If
+End Sub
+Public Sub Array120D(arrayname As Variant, DA() As Double, NumRows As Long, NumCols As Long)
+    Dim i As Long, j As Long, Off As Long
+    ' Convert base 1 variant array  to base 0 array double array
+    ' Convert 2B arrays with 1 row or 1 colum to 1D
+    Off = LBound(arrayname)
+    If NumCols = 1 Then
+        For i = 1 To NumRows
+            DA(i - Off) = arrayname(i, 1)
+        Next i
+    ElseIf NumRows = 1 Then
+        For i = 1 To NumCols
+            DA(i - Off) = arrayname(1, i)
+        Next i
+    Else
+        For i = 1 To NumRows
+            For j = 1 To NumCols
+                DA(i - Off, j - Off) = arrayname(i, j)
+            Next j
+        Next i
+    End If
+End Sub
+Public Function SplitTrim(ByVal S As String, ByVal SEP As String) As String()
+    Dim SPrev As String
+    S = Trim(S)
+    Do
+        SPrev = S
+        S = Replace(S, "  ", " ")
+    Loop Until S = SPrev
+    SplitTrim = Split(S, SEP)
+End Function
+Function VertArrayFromRange(rng As range)
+     Dim arr_out() As Double
+     Dim i As Integer
+     Dim NumVal As Integer
+     NumVal = rng.Rows.Count
+     ReDim arr_out(NumVal - 1)
+     For i = 1 To NumVal
+        arr_out(i - 1) = rng.Value2(i, 1)
+     Next i
+     VertArrayFromRange = arr_out
+End Function
+Public Function S(val As Double) As String
+    S = Format(val, "0##.########")
+End Function
+Public Function Cdbl_(str_ As Variant) As Double
+On Error GoTo er11:
+    Dim dec_sep As String
+    Dim s_ As String
+    dec_sep = Application.International(xlDecimalSeparator)
+    If dec_sep = "." Then
+        s_ = Replace(str_, ",", ".")
+    ElseIf dec_sep = "," Then
+        s_ = Replace(str_, ".", ",")
+    End If
+    Cdbl_ = CDbl(s_)
+    Exit Function
+On Error GoTo erl2:
+er11: ' Исключение возникает при ошибки типа Cdbl_
+        If dec_sep = "." Then
+            s_ = Replace(str_, ".", ",")
+        ElseIf dec_sep = "," Then
+            s_ = Replace(str_, ",", ".")
+        End If
+        Cdbl_ = CDbl(s_)
+        Exit Function
+erl2: ' Добавлено исключение
+    Dim errmsg As String
+    errmsg = "Cdbl_ string number conversion: str =" & str_ & ":" & Err.Description
+    addLogMsg errmsg
+    Err.Raise kStrConversion, Err.source, errmsg
+End Function
+Public Function CDbl_safe(str_ As Variant)
+On Error GoTo err1:
+    CDbl_safe = Cdbl_(str_)
+Exit Function
+err1:
+    CDbl_safe = str_
+End Function
+Public Function array_from_range(var_input)
+' return array from range or from array or from number
+    Dim ar() As Variant
+    Dim rng As range
+    Dim col As Collection
+    Dim d As Long
+    Dim i As Integer, j As Integer
+    Dim done As Boolean
+On Error GoTo err1:
+    done = False
+    If (TypeOf var_input Is range) Then
+        Set rng = var_input
+        If rng.Cells.Count = 1 Then
+            Dim ST As String
+            ST = CStr(rng.Value2)
+            If Mid(ST, 1, 1) = "[" Then
+                Dim cl As Collection
+                Set cl = ParseJson(ST)
+                Set var_input = cl.Item(1)
+            Else
+                ReDim ar(1 To 1, 1 To 1)
+                ar(1, 1) = rng.Value
+                done = True
+            End If
+        Else
+            ar = rng.Value2
+            done = True
+        End If
+    End If
+    
+    If Not done Then
+        If (TypeOf var_input Is Collection) Then
+            Set col = var_input
+            ar = CollectionToArray2D(col)
+        ElseIf IsArray(var_input) Then
+            d = getDimension(var_input)
+            If d = 2 Then
+                ReDim ar(1 To UBound(var_input, 1) - LBound(var_input, 1) + 1, 1 To UBound(var_input, 2) - LBound(var_input, 2) + 1)
+                For i = 1 To UBound(var_input, 1) - LBound(var_input, 1) + 1
+                    For j = 1 To UBound(var_input, 2) - LBound(var_input, 2) + 1
+                        ar(i, j) = var_input(i + LBound(var_input, 1) - 1, j + LBound(var_input, 2) - 1)
+                    Next
+                Next
+            ElseIf d = 1 Then
+                
+                ReDim ar(1 To UBound(var_input, 1) - LBound(var_input, 1) + 1, 1 To 1)
+                For i = 1 To UBound(var_input, 1) - LBound(var_input, 1) + 1
+                    ar(i, 1) = var_input(i + LBound(var_input, 1) - 1)
+                Next
+            Else
+                GoTo err1:
+            End If
+        Else
+            ReDim ar(1 To 1, 1 To 1)
+            ar(1, 1) = var_input
+        End If
+    End If
+    array_from_range = ar
+    Exit Function
+err1:
+    Dim errmsg As String
+    errmsg = "Error:array_from_range:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kreadRangeError, "array_from_range", errmsg
+End Function
+Function getDimension(var As Variant) As Long
+    On Error GoTo Err
+    Dim i As Long
+    Dim Tmp As Long
+    i = 0
+    Do While True
+        i = i + 1
+        Tmp = UBound(var, i)
+    Loop
+Err:
+    getDimension = i - 1
+End Function
+Public Function array_num_from_range(var_input, _
+                            Optional remove_zeros As Boolean = False, _
+                            Optional remove_only_rows As Boolean = False)
+    Dim ar() As Variant
+    Dim ard() As Double
+    Dim ard2() As Double
+    Dim val As Double
+    Dim i As Integer, j As Integer
+    
+    ar = array_from_range(var_input)
+    
+On Error GoTo err1:
+    ReDim ard(1 To (UBound(ar, 1) - LBound(ar, 1) + 1), 1 To (UBound(ar, 2) - LBound(ar, 2) + 1))
+    For i = LBound(ar, 1) To UBound(ar, 1)
+        For j = LBound(ar, 2) To UBound(ar, 2)
+            val = Cdbl_(CStr(ar(i, j)))
+            ard(i, j) = val
+        Next
+    Next
+    Dim M As Double
+    If remove_zeros Then
+On Error GoTo err2:
+        ' transpose to delete zeros rows
+        ReDim ard2(1 To UBound(ard, 2), 1 To UBound(ard, 1))
+        For i = UBound(ard, 1) To LBound(ard, 1) Step -1
+            For j = UBound(ard, 2) To LBound(ard, 2) Step -1
+                ard2(j, i) = ard(i, j)
+            Next
+        Next
+        ' delete zero rows
+        For i = UBound(ard2, 2) To LBound(ard2, 2) Step -1
+            M = 0
+            For j = UBound(ard2, 1) To LBound(ard2, 1) Step -1
+                M = M + Abs(ard2(j, i))
+            Next
+            If M = 0 Then
+                ReDim Preserve ard2(1 To UBound(ard2, 1), 1 To i - 1)
+            Else
+                Exit For
+            End If
+        Next
+        ' transpose back
+        
+        ReDim ard(1 To UBound(ard2, 2), 1 To UBound(ard2, 1))
+        For i = UBound(ard2, 1) To LBound(ard2, 1) Step -1
+            For j = UBound(ard2, 2) To LBound(ard2, 2) Step -1
+                ard(j, i) = ard2(i, j)
+            Next
+        Next
+        If remove_only_rows Then
+        ' when array used for pipe trajectory
+        ' zeros in columns can have meaning
+        ' delete zero cols
+            For i = UBound(ard, 2) To LBound(ard, 2) Step -1
+                M = 0
+                For j = UBound(ard, 1) To LBound(ard, 1) Step -1
+                    M = M + Abs(ard(j, i))
+                Next
+                If M = 0 Then
+                    ReDim Preserve ard(1 To UBound(ard, 1), 1 To i - 1)
+                Else
+                    Exit For
+                End If
+            Next
+        End If
+        
+    End If
+    
+    
+    array_num_from_range = ard
+        
+    Exit Function
+err1:
+    val = 0
+    Resume Next
+err2:
+    
+End Function
+Public Function array1d_from_range(var_input, _
+                        Optional ByVal num_only As Boolean = False, _
+                        Optional ByVal no_zero As Boolean = False)
+' return 1 d array from range or from array or from number
+    Dim ar
+    Dim arout() As Variant
+    Dim rng As range
+    Dim i As Integer
+    Dim j As Integer
+    Dim K As Integer
+    Dim num As Integer
+On Error GoTo err1:
+    If num_only And no_zero Then
+        ar = array_num_from_range(var_input, remove_zeros:=True)
+    ElseIf num_only Then
+        ar = array_num_from_range(var_input, remove_zeros:=False)
+    Else
+        ar = array_from_range(var_input)
+    End If
+    num = (UBound(ar, 1) - LBound(ar, 1) + 1) * (UBound(ar, 2) - LBound(ar, 2) + 1)
+    ReDim arout(1 To num)
+    K = 1
+    For i = LBound(ar, 1) To UBound(ar, 1)
+        For j = LBound(ar, 2) To UBound(ar, 2)
+            arout(K) = ar(i, j)
+            K = K + 1
+        Next
+    Next
+    array1d_from_range = arout
+    Exit Function
+err1:
+    Dim errmsg As String
+    errmsg = "Error:array1d_from_range:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kreadRangeError, "array1d_from_range", errmsg
+End Function
+Public Function readRange(rr)
+    Dim ar() As Variant
+    Dim arout() As Variant
+        Dim i As Integer
+        Dim j As Integer
+On Error GoTo err1:
+    If (TypeOf rr Is range) Or IsArray(rr) Then
+        j = 0
+        If (TypeOf rr Is range) Then
+            If rr.Cells.Count = 1 Then
+                ReDim ar(1 To 1, 1 To 1)
+                ar(1, 1) = rr.Value
+            Else
+                ar = rr.Value
+            End If
+            For i = LBound(ar) To UBound(ar)
+                If Not IsEmpty(ar(i, 1)) Then
+                    j = j + 1
+                    ReDim Preserve arout(1 To j)
+                    arout(j) = ar(i, 1)
+                End If
+            Next i
+        Else
+            ReDim arout(LBound(rr) To UBound(rr))
+            For i = LBound(rr) To UBound(rr)
+                arout(i) = rr(i)
+                j = j + 1
+            Next i
+        End If
+        If j = 0 Then
+        ' не газлифтная скважина
+            ReDim arout(1 To 1)
+            arout(1) = 0
+        End If
+    Else
+        ReDim arout(1 To 1)
+        arout(1) = rr
+    End If
+    readRange = arout
+    Exit Function
+err1:
+    Dim errmsg As String
+    errmsg = "Error:readRange:" & Err.Description
+    addLogMsg (errmsg)
+    Err.Raise kreadRangeError, "readRange", errmsg
+End Function
+Public Function array_join(arr_in As Variant)
+' get one two dimensional array from array of arrays
+' needed to support array output to range from VBA
+    Dim arr_out As Variant
+    Dim num_rows As Integer
+    Dim num_cols As Integer
+    Dim L As Integer, U As Integer
+    Dim i As Integer, j As Integer
+    L = LBound(arr_in)
+    U = UBound(arr_in)
+    num_cols = UBound(arr_in(L)) - LBound(arr_in(L)) + 1
+    num_rows = UBound(arr_in) - LBound(arr_in) + 1
+    ReDim arr_out(1 To num_rows, 1 To num_cols)
+    For i = 1 To num_rows
+        For j = 1 To num_cols
+            arr_out(i, j) = arr_in(i - 1 + L)(j - 1 + L)
+        Next j
+    Next i
+    array_join = arr_out
+End Function
+Public Function CollectionToArray2D(myCol As Collection) As Variant
+' на входе должно быть двумерная коллекция - коллекция коллекций
+    Dim Result  As Variant
+    Dim cnt     As Long
+    Dim ncol As Integer
+    Dim nrow As Integer
+    Dim j As Long
+    
+    ncol = myCol.Count
+    If ncol >= 1 Then
+        nrow = myCol(1).Count
+    Else
+        Err.Raise kErrArraySize, , "CollectionToArray2D error - wrong dimension"
+    End If
+    
+    If ncol = 2 And nrow > 0 Then
+        ReDim Result(1 To nrow, 1 To ncol)
+        
+        For cnt = 1 To myCol.Count
+            For j = 1 To nrow
+                Result(j, cnt) = myCol(cnt)(j)
+                
+            Next j
+        Next cnt
+    ElseIf ncol > 0 And nrow = 2 Then
+        
+        ReDim Result(1 To ncol, 1 To nrow)
+        
+        For cnt = 1 To myCol.Count
+            For j = 1 To nrow
+                Result(cnt, j) = myCol(cnt)(j)
+                
+            Next j
+        Next cnt
+    End If
+    CollectionToArray2D = Result
+End Function
 

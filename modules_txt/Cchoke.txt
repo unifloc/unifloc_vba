@@ -14,6 +14,7 @@
 ' класс для расчета многофазного потока в локальном сопротивлении - штуцере
 Option Explicit
 Option Base 0
+ Public log As New CLogger                      ' create new log list for each object
 ' геометрические параметры штуцера
 Public d_up_m As Double
 Public d_down_m As Double
@@ -42,9 +43,12 @@ Private a_u As Double 'upstream area
 Private a_c As Double 'choke throat area
 Private a_r As Double 'area ratio
 Private P_r As Double  ' critical pressure for output
-Private v_s As Double  ' sonic velosity
+'Private v_s As Double  ' sonic velosity
 Private q_m As Double  ' mass rate
 Private p_dcr As Double ' recovered downstream pressure at critical pressure ratio
+Public Sub addLogMsg(msg As String)
+    Call log.AddMsg(msg)
+End Sub
 Private Sub Class_Initialize()
  K = 0.826 'K - Discharge coefficient (optional, default  is 0.826)
  F = 1.25
@@ -77,21 +81,21 @@ End Property
 Public Property Get fw_fr() As Double
     fw_fr = fluid.fw_fr ' fw_perc / 100
 End Property
-Public Property Get Qlmax_m3day()
-    Qlmax_m3day = q_liqmax_m3day_
+Public Property Get q_liq_max_sm3day()
+    q_liq_max_sm3day = q_liqmax_m3day_
 End Property
-Public Property Get TchokeThroat_C()
-    TchokeThroat_C = t_choke_throat_C_
+Public Property Get t_choke_throat_C()
+    t_choke_throat_C = t_choke_throat_C_
 End Property
-Public Property Get TchokeAv_C()
-    TchokeAv_C = t_choke_av_C_
+Public Property Get t_choke_av_C()
+    t_choke_av_C = t_choke_av_C_
 End Property
 Public Property Get PratioCrit()
     PratioCrit = P_r
 End Property
-Public Property Get VelSonic_msec()
-    VelSonic_msec = v_s
-End Property
+'Public Property Get vel_sonic_msec()
+'    vel_sonic_msec = v_s
+'End Property
 Public Property Get Qm_kgsec()
     Qm_kgsec = q_m
 End Property
@@ -113,8 +117,8 @@ Public Function calc_choke_calibration( _
     Dim qtest As Double
     t_choke_C = t_C
     If (p_intake_atma > p_out_atma) And d_choke_m > 0 Then
-        qtest = calc_choke_qliq_sm3day(p_intake_atma, p_out_atma, t_choke_C)
-        c_calibr_fr = fluid.qliq_sm3day / qtest
+        qtest = calc_choke_q_liq_sm3day(p_intake_atma, p_out_atma, t_choke_C)
+        c_calibr_fr = fluid.q_liq_sm3day / qtest
     Else
         c_calibr_fr = 1
     End If
@@ -130,7 +134,7 @@ Public Function calc_choke_p_buf(PTLine As PTtype) As PTtype
     Eps = 0.001
     eps_q = 0.1
 On Error GoTo ErrorHandler
-    If (d_choke_m > d_up_m - 2 * Eps) Or (d_choke_m < 0.001) Or (fluid.qliq_sm3day < eps_q) Then
+    If (d_choke_m > d_up_m - 2 * Eps) Or (d_choke_m < 0.001) Or (fluid.q_liq_sm3day < eps_q) Then
         calc_choke_p_buf = PTLine
         Exit Function
     End If
@@ -155,7 +159,7 @@ Public Function calc_choke_p_lin(PTbuf As PTtype) As PTtype
     Dim eps_q As Double
     Eps = 0.001
     eps_q = 0.1
-    If (d_choke_m > d_up_m - 2 * Eps) Or (d_choke_m < 0.001) Or (fluid.qliq_sm3day < eps_q) Then
+    If (d_choke_m > d_up_m - 2 * Eps) Or (d_choke_m < 0.001) Or (fluid.q_liq_sm3day < eps_q) Then
         calc_choke_p_lin = PTbuf
         Exit Function
     End If
@@ -173,7 +177,7 @@ Private Function wi_calc_(P_r As Double, _
                           t_av As Double, _
           Optional ByRef wi_deriv As Double)
       
-    Dim Alpha As Double
+    Dim alpha As Double
     Dim Lambda As Double
     Dim betta As Double
     Dim Gamma As Double
@@ -186,19 +190,19 @@ Private Function wi_calc_(P_r As Double, _
                 If P_r = 0 Then
                     P_r = 0.000001
                 End If
-                 Alpha = .rho_gas_rc_kgm3 * (.fm_oil_fr / .rho_oil_rc_kgm3 + .fm_wat_fr / .rho_wat_rc_kgm3)
+                 alpha = .rho_gas_rc_kgm3 * (.fm_oil_fr / .rho_oil_rc_kgm3 + .fm_wat_fr / .rho_wat_rc_kgm3)
                   'Calculate auxilary values
                 Lambda = (.fm_gas_fr + (.fm_gas_fr * .cv_gas_JkgC + .fm_oil_fr * .cv_oil_JkgC + .fm_wat_fr * .cv_wat_JkgC) / (.cv_gas_JkgC * (.heat_capacity_ratio_gas - 1)))
                 betta = .fm_gas_fr / .polytropic_exponent * P_r ^ (-1 - 1 / .polytropic_exponent)
-                Gamma = .fm_gas_fr + Alpha
-                Delta = .fm_gas_fr * P_r ^ (-1 / .polytropic_exponent) + Alpha
+                Gamma = .fm_gas_fr + alpha
+                Delta = .fm_gas_fr * P_r ^ (-1 / .polytropic_exponent) + alpha
                       
                 P_r = MinReal(P_r, 1)
-                wi_calc_ = 27500000# * a_c * (2 * p_u * .rho_gas_rc_kgm3 / Delta ^ 2 * (Lambda * (1 - P_r ^ (1 - 1 / .polytropic_exponent)) + Alpha * (1 - P_r)) _
+                wi_calc_ = 27500000# * a_c * (2 * p_u * .rho_gas_rc_kgm3 / Delta ^ 2 * (Lambda * (1 - P_r ^ (1 - 1 / .polytropic_exponent)) + alpha * (1 - P_r)) _
                            / (1 - (a_r * Gamma / Delta) ^ 2)) ^ (1 / 2)
                 'Calculate rate derivative
-                wi_deriv = (2 * Lambda * (1 - P_r ^ (1 - 1 / .polytropic_exponent)) + 2 * Alpha * (1 - P_r)) * betta - _
-                    Delta * (1 - (a_r * Gamma / Delta) ^ 2) * (Lambda * (1 - 1 / .polytropic_exponent) * P_r ^ (-1 / .polytropic_exponent) + Alpha)
+                wi_deriv = (2 * Lambda * (1 - P_r ^ (1 - 1 / .polytropic_exponent)) + 2 * alpha * (1 - P_r)) * betta - _
+                    Delta * (1 - (a_r * Gamma / Delta) ^ 2) * (Lambda * (1 - 1 / .polytropic_exponent) * P_r ^ (-1 / .polytropic_exponent) + alpha)
             End With
 End Function
 Private Function wi_calc(P_r As Double, _
@@ -237,7 +241,7 @@ Private Function wi_calc(P_r As Double, _
     End With
 End Function
 Private Function wi_calc_perkins_1993(P_r As Double, p_u As Double, t_u As Double, rho_gu As Double, f_o As Double, f_g As Double, f_w As Double, _
-                           Alpha As Double, Optional ByRef wi_deriv As Double, Optional ByRef N As Double)
+                           alpha As Double, Optional ByRef wi_deriv As Double, Optional ByRef N As Double)
     'Auxilary properties
     Dim t_C As Double
     Dim p_av As Double
@@ -282,15 +286,15 @@ Private Function wi_calc_perkins_1993(P_r As Double, p_u As Double, t_u As Doubl
     'Calculate auxilary values
     Lambda = (f_g + (f_g * c_vg + f_o * c_vo + f_w * c_vw) / (c_vg * (F - 1)))
     betta = f_g / N * P_r ^ (-1 - 1 / N)
-    Gamma = f_g + Alpha
-    Delta = f_g * P_r ^ (-1 / N) + Alpha
+    Gamma = f_g + alpha
+    Delta = f_g * P_r ^ (-1 / N) + alpha
     'Calculate isentropic mass flow rate (kg/day)
     P_r = MinReal(P_r, 1)
-    wi_calc_perkins_1993 = 27500000# * a_c * (2 * p_u * rho_gu / Delta ^ 2 * (Lambda * (1 - P_r ^ (1 - 1 / N)) + Alpha * (1 - P_r)) _
+    wi_calc_perkins_1993 = 27500000# * a_c * (2 * p_u * rho_gu / Delta ^ 2 * (Lambda * (1 - P_r ^ (1 - 1 / N)) + alpha * (1 - P_r)) _
                          / (1 - (a_r * Gamma / Delta) ^ 2)) ^ (1 / 2)
     'Calculate rate derivative
-    wi_deriv = (2 * Lambda * (1 - P_r ^ (1 - 1 / N)) + 2 * Alpha * (1 - P_r)) * betta - _
-        Delta * (1 - (a_r * Gamma / Delta) ^ 2) * (Lambda * (1 - 1 / N) * P_r ^ (-1 / N) + Alpha)
+    wi_deriv = (2 * Lambda * (1 - P_r ^ (1 - 1 / N)) + 2 * alpha * (1 - P_r)) * betta - _
+        Delta * (1 - (a_r * Gamma / Delta) ^ 2) * (Lambda * (1 - 1 / N) * P_r ^ (-1 / N) + alpha)
 End Function
 Public Function calc_choke_q_liqmax_m3day(ByVal p_sn As Double, _
                                ByVal t_u As Double, Optional calc_p_down As Integer = 0) As Double
@@ -301,9 +305,9 @@ Public Function calc_choke_q_liqmax_m3day(ByVal p_sn As Double, _
         i = -1
         Do
             i = i + 1
-        Loop Until (fluid.qliq_sm3day < 10 ^ i)
+        Loop Until (fluid.q_liq_sm3day < 10 ^ i)
         
-        If (fluid.qliq_sm3day < 0.5 * 10 ^ i) Then
+        If (fluid.q_liq_sm3day < 0.5 * 10 ^ i) Then
             Max_Ql = 0.5 * 10 ^ i
         Else
             Max_Ql = 10 ^ i
@@ -312,7 +316,7 @@ Public Function calc_choke_q_liqmax_m3day(ByVal p_sn As Double, _
         Max_Ql = MinReal(1500, Max_Ql)
     End If
     If (calc_p_down = 1) Then
-        Max_Ql = calc_choke_qliq_sm3day(p_sn, 0, t_u)
+        Max_Ql = calc_choke_q_liq_sm3day(p_sn, 0, t_u)
     End If
     calc_choke_q_liqmax_m3day = Max_Ql
 End Function
@@ -398,7 +402,7 @@ On Error GoTo err1:
     t_u = PT.t_C
     counter = 0
     
-    Eps = fluid.qliq_sm3day * 0.0001 'set precision equal to 0.01%
+    Eps = fluid.q_liq_sm3day * 0.0001 'set precision equal to 0.01%
     eps_p = const_pressure_tolerance
     
     If (calc_p_down = 0) Then 'Calculate upstream pressure given downstream
@@ -410,11 +414,11 @@ On Error GoTo err1:
             counter = counter + 1
             i = 2 * i
             P_en_max = p_sn * i
-            q_l = calc_choke_qliq_sm3day(P_en_max, p_sn, t_u)
-        Loop Until q_l > fluid.qliq_sm3day Or counter > max_iters
+            q_l = calc_choke_q_liq_sm3day(P_en_max, p_sn, t_u)
+        Loop Until q_l > fluid.q_liq_sm3day Or counter > max_iters
         
-        If q_l <= fluid.qliq_sm3day Then   ' значит поиск дебита не увенчался успехом
-             addLogMsg "calc_choke_P(calc_p_down = 0): no solution found for rate = " & Format(fluid.qliq_sm3day, "####0.00")
+        If q_l <= fluid.q_liq_sm3day Then   ' значит поиск дебита не увенчался успехом
+             addLogMsg "calc_choke_P(calc_p_down = 0): no solution found for rate = " & Format(fluid.q_liq_sm3day, "####0.00")
         End If
         
         ' определим нижнюю границу поиска давления
@@ -425,29 +429,29 @@ On Error GoTo err1:
             ' потенциально можно ускорить если не делить отрезок пополам а использовать линейное приближение (характеристика должна быть довольно гладкой)
             counter = counter + 1
             P_en = (P_en_min + P_en_max) / 2
-            q_l = calc_choke_qliq_sm3day(P_en, p_sn, t_u)
-            If q_l > fluid.qliq_sm3day Then
+            q_l = calc_choke_q_liq_sm3day(P_en, p_sn, t_u)
+            If q_l > fluid.q_liq_sm3day Then
                 P_en_max = P_en
             Else
                 P_en_min = P_en
             End If
-            q_good = Abs(fluid.qliq_sm3day - q_l) < Eps
+            q_good = Abs(fluid.q_liq_sm3day - q_l) < Eps
             p_good = Abs(P_en_min - P_en_max) < eps_p
         Loop Until (q_good And p_good) Or counter > max_iters
         
-        If (counter > max_iters) And (Abs(fluid.qliq_sm3day - q_l) > Eps * 100) Then ' значит поиск дебита не увенчался успехом
-            addLogMsg "calc_choke_P(calc_p_down = 0): number of iterations too much, no solution found for rate = " & Format(fluid.qliq_sm3day, "####0.00")
+        If (counter > max_iters) And (Abs(fluid.q_liq_sm3day - q_l) > Eps * 100) Then ' значит поиск дебита не увенчался успехом
+            addLogMsg "calc_choke_P(calc_p_down = 0): number of iterations too much, no solution found for rate = " & Format(fluid.q_liq_sm3day, "####0.00")
         End If
     End If
     Dim p_cr As Double
     If (calc_p_down = 1) Then 'Calculate downstream pressure given upstream
         'Solve for upstream pressure
         'Calculate critical oil rate
-        q_l = calc_choke_qliq_sm3day(p_sn, 0, t_u)
-        If isGreater(fluid.qliq_sm3day, q_l) Then 'Given oil rate can't be archieved
+        q_l = calc_choke_q_liq_sm3day(p_sn, 0, t_u)
+        If isGreater(fluid.q_liq_sm3day, q_l) Then 'Given oil rate can't be archieved
             P_en = -1
         Else
-            If isEqual(q_l, fluid.qliq_sm3day) Then
+            If isEqual(q_l, fluid.q_liq_sm3day) Then
                 calc_choke_p = set_PT(0, 0)
                 P_en = 0
             Else
@@ -456,26 +460,26 @@ On Error GoTo err1:
                 Do
                     i = 2 * i
                     P_en_min = p_sn / i
-                    q_l = calc_choke_qliq_sm3day(p_sn, P_en_min, t_u)
-                Loop Until q_l > fluid.qliq_sm3day Or counter > max_iters
+                    q_l = calc_choke_q_liq_sm3day(p_sn, P_en_min, t_u)
+                Loop Until q_l > fluid.q_liq_sm3day Or counter > max_iters
                 
-                If q_l <= fluid.qliq_sm3day Then   ' значит поиск дебита не увенчался успехом
-                    addLogMsg "calc_choke_P(calc_p_down = 1):no solution found for rate = " & Format(fluid.qliq_sm3day, "####0.00")
+                If q_l <= fluid.q_liq_sm3day Then   ' значит поиск дебита не увенчался успехом
+                    addLogMsg "calc_choke_P(calc_p_down = 1):no solution found for rate = " & Format(fluid.q_liq_sm3day, "####0.00")
                 End If
                 P_en_max = 2 * p_sn / i
                 counter = 0
                 Do
                     counter = counter + 1
                     P_en = (P_en_min + P_en_max) / 2
-                    q_l = calc_choke_qliq_sm3day(p_sn, P_en, t_u)
-                    If q_l > fluid.qliq_sm3day Then
+                    q_l = calc_choke_q_liq_sm3day(p_sn, P_en, t_u)
+                    If q_l > fluid.q_liq_sm3day Then
                         P_en_min = P_en
                     Else
                         P_en_max = P_en
                     End If
-                Loop Until Abs(fluid.qliq_sm3day - q_l) < Eps Or counter > max_iters
+                Loop Until Abs(fluid.q_liq_sm3day - q_l) < Eps Or counter > max_iters
                 If counter > max_iters Then   ' значит поиск дебита не увенчался успехом
-                   addLogMsg "calc_choke_P(calc_p_down = 1): number of iterations exeeded, no solution found for rate = " & Format(fluid.qliq_sm3day, "####0.00")
+                   addLogMsg "calc_choke_P(calc_p_down = 1): number of iterations exeeded, no solution found for rate = " & Format(fluid.q_liq_sm3day, "####0.00")
                 End If
             End If
         End If
@@ -495,7 +499,7 @@ Private Sub init_params()
     a_c = const_Pi * d_choke_m ^ 2 / 4   'choke throat area
     a_r = a_c / a_u                     'area ratio
 End Sub
-Public Function calc_choke_qliq_sm3day(ByVal p_u As Double, ByVal p_d As Double, ByVal t_u As Double) As Double
+Public Function calc_choke_q_liq_sm3day(ByVal p_u As Double, ByVal p_d As Double, ByVal t_u As Double) As Double
     'Function calculates oil flow rate through choke given downstream and upstream pressures using Perkins correlation
     'Return ((sm3/day))
     'Arguments
@@ -543,7 +547,7 @@ On Error GoTo err1:
                 counter = counter + 1
             Loop Until (Abs(wi_der1) < Eps) Or (counter > max_iters)
             If counter > max_iters Then
-               addLogMsg ("Cchoke.calc_choke_qliq_sm3day: iterations not converged. iterations number  = " & counter & "  error wi_der1 " & wi_der1 & " < " & Eps)
+               addLogMsg ("Cchoke.calc_choke_q_liq_sm3day: iterations not converged. iterations number  = " & counter & "  error wi_der1 " & wi_der1 & " < " & Eps)
             End If
         
             'Calculate sonic velocity of multiphase mixture (used for output)
@@ -571,18 +575,18 @@ On Error GoTo err1:
         ' calc PVT with upstream pressure and temperature
         Call fluid.calc_PVT(p_u, t_u)
         
-        calc_choke_qliq_sm3day = w * .fm_oil_fr / .rho_oil_sckgm3 + w * .fm_wat_fr / .rho_wat_sckgm3
+        calc_choke_q_liq_sm3day = w * .fm_oil_fr / .rho_oil_sckgm3 + w * .fm_wat_fr / .rho_wat_sckgm3
         'Asign mass flow rate
         q_m = w / 86400 '/ c_m(Units)
         'Assign output critical pressure ratio (recovered critical pressure ratio)
         P_r = p_dcr / p_u
         'convert sonic velocity
-        v_s = sonic_vel_msec '/ c_l(Units)
+'        v_s = sonic_vel_msec '/ c_l(Units)
         Exit Function
     End With
 err1:
     Dim strError As String
-    strError = "CChoke.calc_choke_qliq_sm3day: error"
+    strError = "CChoke.calc_choke_q_liq_sm3day: error"
     Call addLogMsg(strError)
     Err.Raise Err.Number, Err.source, strError & Err.Description
 End Function
@@ -609,7 +613,7 @@ Public Function calc_choke_qliq_perkins_sm3day(ByVal p_u As Double, ByVal p_d As
     Dim rho_wu As Double
     Dim rho_gu As Double
     'Dim v_gu As Double
-    Dim Alpha As Double
+    Dim alpha As Double
     Dim p_co As Double
     Dim min_p_d As Double
     Dim counter As Double
@@ -658,21 +662,21 @@ On Error GoTo err1:
     rho_wu = fluid.rho_wat_sckgm3 / b_wu
     rho_gu = fluid.rho_gas_sckgm3 / b_gu
     'v_gu = 1 / rho_gu
-    Alpha = rho_gu * (f_o / rho_ou + f_w / rho_wu)
+    alpha = rho_gu * (f_o / rho_ou + f_w / rho_wu)
     'Calculate trial output choke pressure
     p_co = p_u - (p_u - p_d) / (1 - (d_choke_m / d_down_m) ^ 1.85)
     'Solve for critical pressure ratio
     counter = 0
     If (f_g > 0.0000000000001) Then 'free gas present
         'Calculate specific value of error at p_ri = 0.99
-        w_i = wi_calc_perkins_1993(0.99, p_u, t_u, rho_gu, f_o, f_g, f_w, Alpha, Eps, N)
+        w_i = wi_calc_perkins_1993(0.99, p_u, t_u, rho_gu, f_o, f_g, f_w, alpha, Eps, N)
         Eps = Abs(Eps * 0.01)
         'Assume pressure ratio
         p_ri = 0.5
         Do
             'Evaluate derivative for two points to find second derivative for Newton-Raphson iteration
-            w_i = wi_calc_perkins_1993(p_ri, p_u, t_u, rho_gu, f_o, f_g, f_w, Alpha, wi_der1, N)
-            w_i = wi_calc_perkins_1993(p_ri + p_r_inc, p_u, t_u, rho_gu, f_o, f_g, f_w, Alpha, wi_der2, N)
+            w_i = wi_calc_perkins_1993(p_ri, p_u, t_u, rho_gu, f_o, f_g, f_w, alpha, wi_der1, N)
+            w_i = wi_calc_perkins_1993(p_ri + p_r_inc, p_u, t_u, rho_gu, f_o, f_g, f_w, alpha, wi_der2, N)
             wi_2_deriv = (wi_der2 - wi_der1) / p_r_inc
             d_pr = -wi_der1 / wi_2_deriv
             'limit p_ri increment to prevent crossing [0,1] boundary
@@ -681,7 +685,7 @@ On Error GoTo err1:
             counter = counter + 1
         Loop Until (Abs(wi_der1) < Eps) Or (counter > max_iters)
         If counter > max_iters Then
-           addLogMsg ("Cchoke.calc_choke_qliq_sm3day: iterations not converged. iterations number  = " & counter & "  error wi_der1 " & wi_der1 & " < " & Eps)
+           addLogMsg ("Cchoke.calc_choke_q_liq_sm3day: iterations not converged. iterations number  = " & counter & "  error wi_der1 " & wi_der1 & " < " & Eps)
         End If
     
         'Calculate sonic velocity of multiphase mixture (used for output)
@@ -703,7 +707,7 @@ On Error GoTo err1:
     'Auxilary properties
     p_c = p_ri * p_u
     p_ra = MaxReal(p_ri, p_co / p_u)
-    w_i = wi_calc_perkins_1993(p_ra, p_u, t_u, rho_gu, f_o, f_g, f_w, Alpha, wi_der1, N)
+    w_i = wi_calc_perkins_1993(p_ra, p_u, t_u, rho_gu, f_o, f_g, f_w, alpha, wi_der1, N)
     'Calculate isentropic mass flow rate
     w = K * w_i * c_calibr_fr
     ' calc PVT with upstream pressure and temperature
@@ -715,7 +719,7 @@ On Error GoTo err1:
     'Assign output critical pressure ratio (recovered critical pressure ratio)
     P_r = p_dcr / p_u
     'convert sonic velocity
-    v_s = v_si '/ c_l(Units)
+'    v_s = v_si '/ c_l(Units)
     Exit Function
 err1:
     Dim strError As String
@@ -755,7 +759,7 @@ Public Sub build_curves()
     p_pbuf_atma = 10
     kCal_temp = c_calibr_fr
     Ql_Min = 0
-    Ql_Max = MaxReal(fluid.qliq_sm3day * 2, 100)
+    Ql_Max = MaxReal(fluid.q_liq_sm3day * 2, 100)
     Rp_Min = 50
     Rp_Max = MaxReal(fluid.rp_m3m3 * 2, 1000)
     plin_Min = 1
@@ -766,32 +770,32 @@ Public Sub build_curves()
     Dim Pbuf1 As Double, pbuf_work As Double
     Dim p_lin1 As Double, plin_work As Double
     Dim Ql1 As Double, Ql_work As Double
-    Ql1 = fluid.qliq_sm3day
+    Ql1 = fluid.q_liq_sm3day
     Pbuf1 = p_pbuf_atma
     p_lin1 = p_plin_atma
     curve("pbuf_vs_Ql_curve").note = "условия: p_lin = " & p_lin1
     For i = 0 To num_points - 1
         ' первый график
-        fluid.qliq_sm3day = i * (Ql_Max - Ql_Min) / num_points + Ql_Min
+        fluid.q_liq_sm3day = i * (Ql_Max - Ql_Min) / num_points + Ql_Min
         If p_lin1 > 0 Then
             c_calibr_fr = 1
             pbuf_work = calc_choke_p_buf(set_PT(p_lin1, t_choke_C)).p_atma
-            curve("pbuf_vs_Ql_nominal_curve").AddPoint fluid.qliq_sm3day, pbuf_work
+            curve("pbuf_vs_Ql_nominal_curve").AddPoint fluid.q_liq_sm3day, pbuf_work
             c_calibr_fr = kCal_temp
             pbuf_work = calc_choke_p_buf(set_PT(p_lin1, t_choke_C)).p_atma
-            curve("pbuf_vs_Ql_curve").AddPoint fluid.qliq_sm3day, pbuf_work
+            curve("pbuf_vs_Ql_curve").AddPoint fluid.q_liq_sm3day, pbuf_work
         End If
         c_calibr_fr = 1
         plin_work = calc_choke_p_lin(set_PT(Pbuf1, t_choke_C)).p_atma
-        curve("plin_vs_Ql_nominal_curve").AddPoint fluid.qliq_sm3day, plin_work
+        curve("plin_vs_Ql_nominal_curve").AddPoint fluid.q_liq_sm3day, plin_work
         c_calibr_fr = kCal_temp
         plin_work = calc_choke_p_lin(set_PT(Pbuf1, t_choke_C)).p_atma
-        curve("plin_vs_Ql_curve").AddPoint fluid.qliq_sm3day, plin_work
+        curve("plin_vs_Ql_curve").AddPoint fluid.q_liq_sm3day, plin_work
     Next i
     Dim Rptemp As Double, Rsbtemp As Double
     Rptemp = fluid.rp_m3m3
     Rsbtemp = fluid.rsb_m3m3
-    fluid.qliq_sm3day = Ql1
+    fluid.q_liq_sm3day = Ql1
     For i = 0 To num_points - 1
         ' первый график
         fluid.rp_m3m3 = i * (Rp_Max - Rp_Min) / num_points + Rp_Min
@@ -817,9 +821,9 @@ Public Sub build_curves()
     ' для графика зависимости линейного давления от дебита есть четкий максимум по дебиту соответсвующий критическому потоку
     ' через штуцер. Чтобы график был красивый - добавим эти точки в явном виде
     ' eps  используется так как CInterpolation  может хранить только функции
-    curve("plin_vs_Ql_curve").AddPoint Qlmax_m3day - Eps, Pbuf1 * PratioCrit
-    curve("plin_vs_Ql_curve").AddPoint Qlmax_m3day, 0
-    fluid.qliq_sm3day = Ql1
+    curve("plin_vs_Ql_curve").AddPoint q_liq_max_sm3day - Eps, Pbuf1 * PratioCrit
+    curve("plin_vs_Ql_curve").AddPoint q_liq_max_sm3day, 0
+    fluid.q_liq_sm3day = Ql1
     For i = 0 To num_points - 1
         plin_work = i * (plin_Max - plin_Min) / num_points + plin_Min
         pbuf_work = calc_choke_p_buf(set_PT(plin_work, t_choke_C)).p_atma
