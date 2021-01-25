@@ -25,10 +25,6 @@
 Option Explicit
  Public log As New CLogger                      ' create new log list for each object
  Public gas_only As Boolean
-' Public ksep_fr As Double
-' Public p_ksep_atma As Double
-' Public t_ksep_C As Double
- 
  
  Public zCorr As Z_CORRELATION
  Public PVT_correlation As PVT_correlation       ' PVT correlation
@@ -152,16 +148,15 @@ Option Explicit
  ' расход газа в заданных термобарических условиях приведенный к стандартным условиям
    q_gas_insitu_sm3day = (q_gas_sm3day - rs_m3m3 * q_oil_sm3day)
    If q_gas_insitu_sm3day < 0 Then
-'
-'       If q_gas_insitu_sm3day < -1 Then
-'           ' сообщение генерируем только если большая разница
-'            addLogMsg "CPVT.q_gas_insitu_sm3day: warning: q_gas_insitu_sm3day  = " & S(q_gas_insitu_sm3day) & " < 0,  q_gas_sm3day = " & S(q_gas_sm3day) & _
-'                  ", rs_m3m3 = " & S(rs_m3m3) & _
-'                  ", rp_m3m3 = " & S(rp_m3m3) & _
-'                  ", q_oil_sm3day = " & S(q_oil_sm3day) & _
-'                  "  q_gas_insitu_sm3day set to 0"
-'        End If
-        q_gas_insitu_sm3day = 0
+       If q_gas_insitu_sm3day < -1 Then
+           ' сообщение генерируем только если большая разница
+            addLogMsg "CPVT.q_gas_insitu_sm3day: warning: q_gas_insitu_sm3day  = " & S(q_gas_insitu_sm3day) & " < 0,  q_gas_sm3day = " & S(q_gas_sm3day) & _
+                  ", rs_m3m3 = " & S(rs_m3m3) & _
+                  ", rp_m3m3 = " & S(rp_m3m3) & _
+                  ", q_oil_sm3day = " & S(q_oil_sm3day) & _
+                  "  q_gas_insitu_sm3day set to 0"
+       End If
+       q_gas_insitu_sm3day = 0
    End If
  End Function
  Public Function q_gas_rc_m3day() As Double
@@ -317,15 +312,6 @@ Option Explicit
  End Function
  
  
- 
- 
- 
- 
- 
- 
- 
- 
- 
  Public Function rho_gas_rc_kgm3() As Double
     Dim msg As String
     If bg_m3m3_ > 0 Then
@@ -399,7 +385,6 @@ Property Let rp_m3m3(val As Double)
     If (val >= 0) Then
         rp_m3m3_ = val
         If rp_m3m3_ < rsb_m3m3_ Then   ' проверим, что газовый фактор должен быть больше чем газосодержание
-            'addLogMsg "Газовый фактор при вводе больше газосодержания Rp = " & Format(rp_m3m3_, "####0.00") & " < rsb = " & Format(rsb_m3m3_, "#0.00") & ". Газосодержание исправлено"
             rsb_calc_m3m3_ = rp_m3m3_
         End If
     Else
@@ -421,7 +406,6 @@ Property Let rsb_m3m3(val As Double)
         rsb_m3m3_ = val
         rsb_calc_m3m3_ = val
         If rp_m3m3_ < rsb_m3m3_ Then   ' проверим, что газовый фактор должен быть больше чем газосодержание
-            'addLogMsg "газосодержания при вводе меньше газового фактора  Rp = " & Format(rp_m3m3_, "#0.00") & " < rsb = " & Format(rsb_m3m3_, "#0.00") & ". Газосодержание исправлено"
             rsb_calc_m3m3_ = rp_m3m3_
         End If
     Else
@@ -586,30 +570,20 @@ End Function
         zCorr = z_Kareem
         gas_only = False
         pb_calc_atma_ = 0
-        ' heat capacity ratios estimated from perticular multiflash calcs
+        ' heat capacity ratios estimated from particular multiflash calcs
         ' good idea to improove adding correlations
         heat_capacity_ratio_gas_ = 1.3
         heat_capacity_ratio_oil_ = 1.05
         heat_capacity_ratio_water_ = 1
-        
-'        ksep_fr = 0
-'        p_ksep_atma = 0
-'        t_ksep_C = 0
-    
+            
         Call addLogMsg("CPVT object created ")
  End Sub
  
- Public Sub init_prop(json As String)
+ Public Sub init_feed(json As String)
     Dim d As Dictionary
+    
     Set d = ParseJson(json)
     Call init_dictionary(d)
- End Sub
- 
- Public Sub init_stream(json As String)
-    Dim d As Dictionary
-    
-    
-    Set d = ParseJson(json)
     With d
         q_liq_sm3day = .Item("q_liq_sm3day")
         fw_perc = .Item("fw_perc")
@@ -645,6 +619,12 @@ On Error Resume Next:
         key = "gamma_oil"
         If .Exists(key) Then
             gamma_oil = .Item(key)
+            ' hard coded value check here - generate warning in log if outside range
+            If gamma_oil < 0.5 Then
+                Call addLogMsg("warning: gamma_oil < 0.5 probably too low: gamma_oil = " & gamma_oil)
+            ElseIf gamma_oil > 1.5 Then
+                Call addLogMsg("warning: gamma_oil > 1.5 probably too high: gamma_oil = " & gamma_oil)
+            End If
         Else
             errmsg = "CPVT.init_dictionary. error: " & key & " must be given"
             GoTo er2:
@@ -653,6 +633,12 @@ On Error Resume Next:
         key = "gamma_gas"
         If .Exists(key) Then
             gamma_gas = .Item(key)
+            ' hard coded value check here - generate warning in log if outside range
+            If gamma_gas < 0.55 Then
+                Call addLogMsg("warning: gamma_gas < 0.55 probably too low: gamma_gas = " & gamma_gas)
+            ElseIf gamma_gas > 2.5 Then
+                Call addLogMsg("warning: gamma_gas > 2.5 probably too high: gamma_gas = " & gamma_gas)
+            End If
         Else
             errmsg = "CPVT.init_dictionary. error: " & key & " must be given"
             GoTo er2:
@@ -661,21 +647,81 @@ On Error Resume Next:
         key = "rsb_m3m3"
         If .Exists(key) Then
             rsb_m3m3 = .Item(key)
+            ' hard coded value check here - generate warning in log if outside range
+            If rsb_m3m3 < 1 Then
+                Call addLogMsg("warning: rsb_m3m3 < 1 probably too low: rsb_m3m3 = " & rsb_m3m3)
+            ElseIf rsb_m3m3 > 500 Then
+                Call addLogMsg("warning: rsb_m3m3 > 500 probably too high: rsb_m3m3 = " & rsb_m3m3)
+            End If
         Else
             errmsg = "CPVT.init_dictionary. error: " & key & " must be given"
             GoTo er2:
         End If
         
-        If .Exists("gamma_wat") Then gamma_wat = .Item("gamma_wat")
-        If .Exists("rp_m3m3") Then rp_m3m3 = .Item("rp_m3m3")
-        If .Exists("pb_atma") Then pb_atma = .Item("pb_atma")
-        If .Exists("t_res_C") Then t_res_C = .Item("t_res_C")
-        If .Exists("bob_m3m3") Then bob_m3m3 = .Item("bob_m3m3")
-        If .Exists("muob_cP") Then muob_cP = .Item("muob_cP")
-        If .Exists("PVT_corr_set") Then PVTcorr = .Item("PVT_corr_set")
-'        If .Exists("ksep_fr") Then ksep_fr = .Item("ksep_fr")
-'        If .Exists("p_ksep_atma") Then p_ksep_atma = .Item("p_ksep_atma")
-'        If .Exists("t_ksep_C") Then t_ksep_C = .Item("t_ksep_C")
+        If .Exists("gamma_wat") Then
+            gamma_wat = .Item("gamma_wat")
+            ' hard coded value check here - generate warning in log if outside range
+            If gamma_wat < 1 Then
+                Call addLogMsg("warning: gamma_wat < 1 probably too low: gamma_wat = " & gamma_wat)
+            ElseIf gamma_wat > 1.5 Then
+                Call addLogMsg("warning: gamma_wat > 1.5 probably too high: gamma_wat = " & gamma_wat)
+            End If
+        End If
+        If .Exists("rp_m3m3") Then
+            rp_m3m3 = .Item("rp_m3m3")
+            ' hard coded value check here - generate warning in log if outside range
+            If rp_m3m3 < 1 Then
+                Call addLogMsg("warning: rp_m3m3 < 1 probably too low: rp_m3m3 = " & rp_m3m3)
+            ElseIf rp_m3m3 > 100000 Then
+                Call addLogMsg("warning: rp_m3m3 > 100000 probably too high (gas flow?): rp_m3m3 = " & rp_m3m3)
+            End If
+            If rp_m3m3 < rsb_m3m3 Then
+                Call addLogMsg("warning: rp_m3m3 < rsb_m3m3, rsb_m3m3 may be ignored : rp_m3m3 = " & rp_m3m3)
+            End If
+        End If
+        If .Exists("pb_atma") Then
+            pb_atma = .Item("pb_atma")
+            ' hard coded value check here - generate warning in log if outside range
+            If pb_atma < 1 Then
+                Call addLogMsg("warning: pb_atma < 1 probably too low: pb_atma = " & pb_atma)
+            ElseIf pb_atma > 300 Then
+                Call addLogMsg("warning: pb_atma > 300 probably too high: pb_atma = " & pb_atma)
+            End If
+        End If
+        If .Exists("t_res_C") Then
+            t_res_C = .Item("t_res_C")
+            ' hard coded value check here - generate warning in log if outside range
+            If t_res_C < 20 Then
+                Call addLogMsg("warning: t_res_C < 20 probably too low: t_res_C = " & t_res_C)
+            ElseIf t_res_C > 200 Then
+                Call addLogMsg("warning: t_res_C > 200 probably too high: t_res_C = " & t_res_C)
+            End If
+        End If
+        If .Exists("bob_m3m3") Then
+            bob_m3m3 = .Item("bob_m3m3")
+            ' hard coded value check here - generate warning in log if outside range
+            If bob_m3m3 < 1 Then
+                Call addLogMsg("warning: bob_m3m3 < 1 probably too low: bob_m3m3 = " & bob_m3m3)
+            ElseIf bob_m3m3 > 3 Then
+                Call addLogMsg("warning: bob_m3m3 > 3 probably too high: bob_m3m3 = " & bob_m3m3)
+            End If
+        End If
+        If .Exists("muob_cP") Then
+            muob_cP = .Item("muob_cP")
+            ' hard coded value check here - generate warning in log if outside range
+            If muob_cP < 0.1 Then
+                Call addLogMsg("warning: muob_cP < 0.1 probably too low: muob_cP = " & muob_cP)
+            ElseIf muob_cP > 1000 Then
+                Call addLogMsg("warning: muob_cP > 1000 probably too high: muob_cP = " & muob_cP)
+            End If
+        End If
+        If .Exists("PVT_corr_set") Then
+            PVTcorr = .Item("PVT_corr_set")
+            ' hard coded value check here - generate warning in log if outside range
+            If PVTcorr > 2 Then
+                Call addLogMsg("warning: PVTcorr >2 not implemented yet: PVTcorr = " & PVTcorr)
+            End If
+        End If
         If .Exists("gas_only") Then gas_only = .Item("gas_only")
         
     End With
@@ -685,12 +731,6 @@ On Error GoTo er1:
     ' если он неправильно указан (дублируется инициализацией в конструкторе, но все же)
     Call init(gamma_gas, gamma_oil, gamma_wat, rsb_m3m3, pb_atma, bob_m3m3, PVTcorr, t_res_C, muob_cP)
     Me.gas_only = gas_only
-'    Me.ksep_fr = ksep_fr
-'    Me.p_ksep_atma = p_ksep_atma
-'    Me.t_ksep_C = t_ksep_C
-'    If ksep_fr > 0 And ksep_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
-'        Call mod_after_separation(p_ksep_atma, t_ksep_C, ksep_fr, True)
-'    End If
     Exit Sub
 er1:
     errmsg = "CPVT.init_dictionary. error:" & Err.Description
@@ -748,10 +788,10 @@ er2:
     Dim str1 As String, str2 As String
     Dim str As String
     
-    str1 = encode_PVT_prop(gamma_g, gamma_o, gamma_w, rsb_m3m3, pb_atma, t_res_C, bob_m3m3, muob_cP, PVT_correlation)
+    str1 = encode_PVT(gamma_g, gamma_o, gamma_w, rsb_m3m3, pb_atma, t_res_C, bob_m3m3, muob_cP, PVT_correlation)
     
     
-    str2 = encode_PVT_stream(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
+    str2 = encode_feed(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     
     str = Left(str1, Len(str1) - 1) & "," & Right(str2, Len(str2) - 1)
     
@@ -1116,8 +1156,6 @@ On Error GoTo err1:
     For i = 1 To max_iter
         G = (G1 + g2) / 2
         Call set_rp_rsb(G, rsb_back)
-'        rsb_m3m3 = rsb_back
-'        rp_m3m3 = g
         Call calc_PVT(p_atma, t_C)
         p_gas = gas_fraction_d(Es)
         If Abs(p_gas - FreeGas) <= E Then Exit For
