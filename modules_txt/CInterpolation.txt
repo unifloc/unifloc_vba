@@ -20,7 +20,7 @@
 Option Explicit
 Private Type TDPoint    ' тип для хранения точек
     X As Double
-    y As Double
+    Y As Double
     stable As Boolean    ' специальный признак точки - показывает должна ли она сохраняться при преобразовании
 End Type
 ' Поиск решения x при известном y
@@ -88,13 +88,42 @@ Public Function getJson()
     
     For i = LBound(FPoints) To UBound(FPoints)
         CX.Add FPoints(i).X
-        cy.Add FPoints(i).y
+        cy.Add FPoints(i).Y
         CS.Add FPoints(i).stable
     Next i
     d.Add "x", CX
     d.Add "y", cy
     d.Add "stable", CS
     getJson = ConvertToJson(d)
+End Function
+Public Function getArray(Optional show_stable As Boolean = False, _
+                         Optional transpose As Boolean = False)
+  
+    Dim arr() As Double
+    Dim i As Integer
+    Dim num_col As Integer
+    
+    If show_stable Then
+        num_col = 3
+    Else
+        num_col = 2
+    End If
+    If transpose Then
+        ReDim arr(1 To num_col, LBound(FPoints) To UBound(FPoints))
+        For i = LBound(FPoints) To UBound(FPoints)
+            arr(1, i) = FPoints(i).X
+            arr(2, i) = FPoints(i).Y
+            If show_stable Then arr(3, i) = FPoints(i).stable
+        Next i
+    Else
+        ReDim arr(LBound(FPoints) To UBound(FPoints), 1 To num_col)
+        For i = LBound(FPoints) To UBound(FPoints)
+            arr(i, 1) = FPoints(i).X
+            arr(i, 2) = FPoints(i).Y
+            If show_stable Then arr(i, 3) = FPoints(i).stable
+        Next i
+    End If
+    getArray = arr
 End Function
 Public Function pointX(i As Integer) As Double
     If i > 0 And i <= FkPoint Then
@@ -105,7 +134,7 @@ Public Function pointX(i As Integer) As Double
 End Function
 Public Function PointY(i As Integer) As Double
     If i > 0 And i <= FkPoint Then
-        PointY = FPoints(i - 1).y
+        PointY = FPoints(i - 1).Y
     Else
         Err.Raise kErrCurvePointIndex, , "Неверный индекс при считывании точек Y кривой CInterpolation"
     End If
@@ -119,7 +148,7 @@ Public Function SolutionPointX(i As Integer) As Double
 End Function
 Public Function SolutionPointY(i As Integer) As Double
     If i > 0 And i <= FkSolPoints Then
-        SolutionPointY = FSolutionPoints(i - 1).y
+        SolutionPointY = FSolutionPoints(i - 1).Y
     Else
         Err.Raise kErrCurvePointIndex, , "Неверный индекс при считывании точек Y решений кривой CInterpolation"
     End If
@@ -140,11 +169,11 @@ Private Sub FindMinMaxY()
 'находит минимальное и максимальное значение функции
 Dim i As Integer
 If FkPoint > 1 Then
-    FMinY = FPoints(LBound(FPoints)).y
-    FMaxY = FPoints(LBound(FPoints)).y
+    FMinY = FPoints(LBound(FPoints)).Y
+    FMaxY = FPoints(LBound(FPoints)).Y
     For i = LBound(FPoints) To UBound(FPoints)
-        If FPoints(i).y > FMaxY Then FMaxY = FPoints(i).y
-        If FPoints(i).y < FMinY Then FMinY = FPoints(i).y
+        If FPoints(i).Y > FMaxY Then FMaxY = FPoints(i).Y
+        If FPoints(i).Y < FMinY Then FMinY = FPoints(i).Y
     Next i
 End If
 End Sub
@@ -185,27 +214,27 @@ On Error GoTo err1:
   ReDim Preserve FSolutionPoints(FkSolPoints) ' удаляем хранилище точек пересечений
   For i = LBound(FPoints) To UBound(FPoints)
     If i < UBound(FPoints) Then
-          If (FPoints(i).y <= Yvalue) And (FPoints(i + 1).y >= Yvalue) Or (FPoints(i).y >= Yvalue) And (FPoints(i + 1).y <= Yvalue) Then    ' must be solution here
-              If (FPoints(i).y = Yvalue) And (FPoints(i + 1).y = Yvalue) Then   ' infinite solutions of line segment
+          If (FPoints(i).Y <= Yvalue) And (FPoints(i + 1).Y >= Yvalue) Or (FPoints(i).Y >= Yvalue) And (FPoints(i + 1).Y <= Yvalue) Then    ' must be solution here
+              If (FPoints(i).Y = Yvalue) And (FPoints(i + 1).Y = Yvalue) Then   ' infinite solutions of line segment
                   If FkSolPoints = 0 Then
-                      AddPointToSolPoints FPoints(i).X, FPoints(i).y
+                      AddPointToSolPoints FPoints(i).X, FPoints(i).Y
                   ElseIf FSolutionPoints(FkSolPoints - 1).X <> FPoints(i).X Then ' особенности VBA, чтобы при FkSolPoints = 0 не падало
                       ' особенности VBA,
-                      AddPointToSolPoints FPoints(i).X, FPoints(i).y
+                      AddPointToSolPoints FPoints(i).X, FPoints(i).Y
                   End If
                   
               Else ' one solution
                    X1 = FPoints(i).X
                    X2 = FPoints(i + 1).X
-                   Y1 = FPoints(i).y
-                   Y2 = FPoints(i + 1).y
+                   Y1 = FPoints(i).Y
+                   Y2 = FPoints(i + 1).Y
                    X = (X2 - X1) / (Y2 - Y1) * (Yvalue - Y1) + X1
                    AddPointToSolPoints X, Yvalue
               End If
           End If
     Else
-        If FPoints(i).y = Yvalue Then
-            AddPointToSolPoints FPoints(i).X, FPoints(i).y
+        If FPoints(i).Y = Yvalue Then
+            AddPointToSolPoints FPoints(i).X, FPoints(i).Y
         End If
     End If
   Next i
@@ -213,8 +242,8 @@ On Error GoTo err1:
   If FkSolPoints = 0 And with_extrapolation = TS_EXTRPOLATION Then
         ' проверяем существование y на левом крае
         i = 0
-        Y1 = FPoints(i).y
-        Y2 = FPoints(i + 1).y
+        Y1 = FPoints(i).Y
+        Y2 = FPoints(i + 1).Y
         If ((Yvalue - Y1) * (Y1 - Y2) > 0) Then
              X1 = FPoints(i).X
              X2 = FPoints(i + 1).X
@@ -223,8 +252,8 @@ On Error GoTo err1:
         End If
         ' проверяем существование y на правом крае
         i = UBound(FPoints)
-        Y1 = FPoints(i).y
-        Y2 = FPoints(i - 1).y
+        Y1 = FPoints(i).Y
+        Y2 = FPoints(i - 1).Y
         If ((Yvalue - Y1) * (Y1 - Y2) > 0) Then
              X1 = FPoints(i).X
              X2 = FPoints(i - 1).X
@@ -277,13 +306,13 @@ Public Function FindMaxOneSolution(Yvalue As Double, Optional ByVal with_extrapo
         Err.Raise kErrArraySize, , "FindMaxOneSolution завершился неудачно, решений нет"
     End If
 End Function
-Private Sub AddPointToSolPoints(ByVal X As Double, ByVal y As Double)
+Private Sub AddPointToSolPoints(ByVal X As Double, ByVal Y As Double)
       Dim i As Integer
       If FkSolPoints > 0 Then
         For i = 0 To FkSolPoints - 1
           If FSolutionPoints(i).X = X Then
               ' если точка решения уже есть - перезапишем
-              FSolutionPoints(i).y = y
+              FSolutionPoints(i).Y = Y
               Exit Sub
           End If
         Next i
@@ -291,7 +320,7 @@ Private Sub AddPointToSolPoints(ByVal X As Double, ByVal y As Double)
       
       ReDim Preserve FSolutionPoints(FkSolPoints)
       FSolutionPoints(FkSolPoints).X = X
-      FSolutionPoints(FkSolPoints).y = y
+      FSolutionPoints(FkSolPoints).Y = Y
       FkSolPoints = FkSolPoints + 1
 End Sub
 Public Function getPoint(ByVal X As Double) As Double
@@ -314,11 +343,11 @@ Public Function getPoint(ByVal X As Double) As Double
      
      N = getFirstPointNo(X)
      X1 = FPoints(N).X
-     Y1 = FPoints(N).y
+     Y1 = FPoints(N).Y
      
      If FkPoint > 1 Then
         X2 = FPoints(N + 1).X
-        Y2 = FPoints(N + 1).y
+        Y2 = FPoints(N + 1).Y
      Else
         X2 = X1
         Y2 = Y1
@@ -369,7 +398,7 @@ Public Sub AddPointsCurve(ParamArray crv())
         Next i
     Next j
 End Sub
-Public Sub AddPoint(ByVal X As Double, ByVal y As Double, Optional isStable As Boolean = False)
+Public Sub AddPoint(ByVal X As Double, ByVal Y As Double, Optional isStable As Boolean = False)
     ' добавление точки с сортировкой и обеспечением возрастания аргументов
      Dim i, N As Integer
      Dim CheckMinMaxY As Boolean
@@ -380,14 +409,14 @@ On Error GoTo err1:
      N = TestPoint(X)
      If N >= 0 Then ' если аргумент уже есть в массиве
         FPoints(N).X = X
-        If (FPoints(N).y = FMinY) Or (FPoints(N).y = FMinY) Then
+        If (FPoints(N).Y = FMinY) Or (FPoints(N).Y = FMinY) Then
               CheckMinMaxY = True
         Else
               CheckMinMaxY = False
-              If y > FMaxY Then FMaxY = y
-              If y < FMinY Then FMinY = y
+              If Y > FMaxY Then FMaxY = Y
+              If Y < FMinY Then FMinY = Y
         End If
-        FPoints(N).y = y
+        FPoints(N).Y = Y
         FPoints(N).stable = isStable
         If CheckMinMaxY Then Call FindMinMaxY
         Exit Sub
@@ -396,12 +425,12 @@ On Error GoTo err1:
      ReDim Preserve FPoints(FkPoint)
      
      FPoints(FkPoint).X = X
-     FPoints(FkPoint).y = y
+     FPoints(FkPoint).Y = Y
      FPoints(FkPoint).stable = isStable
      
      ' дальше сортируем точки, чтобы получилось все хорошо
-     If (y > FMaxY) Or (FkPoint = LBound(FPoints)) Then FMaxY = y
-     If (y < FMinY) Or (FkPoint = LBound(FPoints)) Then FMinY = y
+     If (Y > FMaxY) Or (FkPoint = LBound(FPoints)) Then FMaxY = Y
+     If (Y < FMinY) Or (FkPoint = LBound(FPoints)) Then FMinY = Y
      FkPoint = FkPoint + 1
      If FkPoint > 1 Then
         i = FkPoint - 1
@@ -427,7 +456,7 @@ err1:
             ' унифицированная реакция на ошибочный ввод ключевых параметров класса
         Dim msg As String, fname As String
         fname = "AddPoint"
-        msg = class_name_ & "." & fname & ": add error, x = " & S(X) & ": , y = " & S(y)
+        msg = class_name_ & "." & fname & ": add error, x = " & S(X) & ": , y = " & S(Y)
         addLogMsg msg
         Err.Raise kErrPVTinput, class_name_ & "." & fname, msg
 End Sub
@@ -446,29 +475,6 @@ Private Sub UpdateStablePointsList()
         End If
     Next i
 End Sub
-'Public Sub PrintPoints()
-'    Dim i As Integer
-'    For i = 0 To FkPoint - 1
-'        'Debug.Print "i" = i; "x = "; FPoints(i).x; " "; "y = "; FPoints(i).y
-'        Debug.Print FPoints(i).x & " " & FPoints(i).y
-'    Next i
-'End Sub
-'
-'Public Sub PrintValXY(ByVal x As Double)
-'    Dim y As Double
-'
-'    y = getPoint(x)
-'    Debug.Print "F(" + CStr(x) + ") = " + CStr(y)
-'End Sub
-'
-'Public Sub PrintInterval(ByVal x As Double)
-'    Dim S  As String
-'    Dim n As Integer
-'
-'    n = getFirstPointNo(x)
-'    S = CStr(FPoints(n).x) + " (" + CStr(x) + ") " + CStr(FPoints(n + 1).x)
-'    Debug.Print S
-'End Sub
 ' метод который позволяет получить кривую с заданным количеством точек
 Public Function ClonePointsToNum(num_points As Integer) As CInterpolation
     Dim outCurve As New CInterpolation  ' определили новую кривую
@@ -573,7 +579,7 @@ Public Function transform(Optional ByVal multY As Double = 1, Optional ByVal sum
  Dim crv As New CInterpolation
  
  For i = 0 To FkPoint - 1
-    crv.AddPoint FPoints(i).X * multX + sumX, FPoints(i).y * multY + sumY
+    crv.AddPoint FPoints(i).X * multX + sumX, FPoints(i).Y * multY + sumY
     'FPoints(i).y = FPoints(i).y * multY + sumY
     'FPoints(i).x = FPoints(i).x * multX + sumX
  Next i
@@ -587,7 +593,7 @@ Public Sub loadFromVertRange(ByVal RangX As Variant, _
 '
     Dim i As Integer
     Dim NumVal As Integer
-    Dim X As Double, y As Double
+    Dim X As Double, Y As Double
     Dim data_in_1_col As Boolean
     Dim arrx, arry
     
@@ -610,15 +616,15 @@ On Error GoTo err1:
     For i = 1 To NumVal
         X = arrx(i, 1)
         If data_in_1_col Then
-            y = arrx(i, 2)
+            Y = arrx(i, 2)
         Else
-            y = arry(i, 1)
+            Y = arry(i, 1)
         End If
         If (i = 1) Or (X > 0) Then
             If isStepFunction Then
-                Me.AddPoint X, y, isStable:=True
+                Me.AddPoint X, Y, isStable:=True
             Else
-                Me.AddPoint X, y, isStable:=False
+                Me.AddPoint X, Y, isStable:=False
             End If
         End If
     Next i
@@ -638,29 +644,40 @@ Public Sub load_from_range(range As Variant)
 ' должна использоваться для чтения исходных данных с листа
     Dim i As Integer
     Dim NumVal As Integer
-    Dim X As Double, y As Double
-    Dim Arr
+    Dim X As Double, Y As Double
+    Dim arr
     Dim C2
     
     Call ClearPoints
     
-    Arr = array_num_from_range(range, True)
+    arr = array_num_from_range(range, True)
     
    ' If TypeName(range) = "Range" Then range = range.Value2
     
     ' читаем поэлементно, чтобы отсеять пустые ячейки по пути
     On Error Resume Next
-    C2 = UBound(Arr, 2)
+    C2 = UBound(arr, 2)
     If C2 > 2 Then C2 = 2
-    For i = LBound(Arr, 1) To UBound(Arr, 1)
-        X = Arr(i, 1)
-        y = Arr(i, C2)
-        If isStepFunction Then
-            Me.AddPoint X, y, isStable:=True
-        Else
-            Me.AddPoint X, y, isStable:=False
-        End If
-      
+    For i = LBound(arr, 1) To UBound(arr, 1)
+        X = arr(i, 1)
+        Y = arr(i, C2)
+        Me.AddPoint X, Y, isStable:=isStepFunction
+    Next i
+End Sub
+Public Sub load_from_collection(coll As Collection)
+' функция загрузки из коллекции содержащей двухмерный массив
+'
+    Dim i As Integer
+    Dim col_len As Integer
+    Dim X As Double, Y As Double
+    
+    Call ClearPoints
+    
+    col_len = coll(1).Count
+    For i = 1 To col_len
+        X = coll(1)(i)
+        Y = coll(2)(i)
+        Me.AddPoint X, Y, isStepFunction
     Next i
 End Sub
 ' cut curve by argument based on arg value
@@ -678,7 +695,7 @@ Public Function CutByValue(Optional cut_top_value As Double = 1E+20, _
                     If j = 1 And i > 1 And cut_bottom_value < FPoints(i - 1).X Then
                         ReDim Preserve FPts(j)
                         FPts(j - 1).X = cut_bottom_value
-                        FPts(j - 1).y = getPoint(cut_bottom_value)
+                        FPts(j - 1).Y = getPoint(cut_bottom_value)
                         FPts(j - 1).stable = False
                         j = j + 1
                     End If
@@ -693,7 +710,7 @@ Public Function CutByValue(Optional cut_top_value As Double = 1E+20, _
             If cut_top_value < FPoints(i - 2).X Then
                 ReDim Preserve FPts(j - 1)
                 FPts(j - 1).X = cut_top_value
-                FPts(j - 1).y = getPoint(cut_top_value)
+                FPts(j - 1).Y = getPoint(cut_top_value)
                 FPts(j - 1).stable = False
                 j = j + 1
             End If
@@ -753,48 +770,6 @@ Public Sub FillByTemplate(crv1 As CInterpolation, crv2 As CInterpolation, crv_co
         End If
     Next i
 End Sub
-Public Sub WriteToRange(RangX As range, Optional RangY As range, Optional ByVal numpt As Integer = 0)
-    If numpt > 0 And num_points > 1 Then
-        Me.ClonePointsToNum(numpt).WriteToRange RangX, RangY, -1
-    ElseIf numpt = -1 Then
-        WriteToVertRange RangX, RangY
-    Else
-        numpt = RangX.Rows.Count
-        Me.ClonePointsToNum(numpt).WriteToRange RangX, RangY, -1
-    End If
-End Sub
-Private Sub WriteToVertRange(RangX As range, RangY As range)
-' позволим кривой записывать себя за заранее данный диапазон ячеек (тут хорошо бы сообразить уместится ли запись или нет - может надо кривую масштабировать?)
-' функция записи кривой на лист excel
- On Error GoTo er1
-    Dim ValX As Double, ValY As Double
-    Dim NumStr As Integer
-    Dim i As Integer
-    
-    RangX.Clear
-    If Not RangY Is Nothing Then RangY.Clear
-    NumStr = MinReal(num_points, RangX.Rows.Count)   ' определяем количество элементов в списке. Оно равно числу значений по оси X
-    RangX.Cells(0, 1) = xName   ' XDescription
-    If RangY Is Nothing Then
-        RangX.Cells(0, 2) = yName  'YDescription
-    Else
-        RangY.Cells(0, 1) = yName
-    End If
-    For i = 1 To NumStr
-        ValX = pointX(i)
-        ValY = PointY(i)
-        RangX.Cells(i, 1) = ValX
-        If RangY Is Nothing Then
-            RangX.Cells(i, 2) = ValY
-        Else
-            RangY.Cells(i, 1) = ValY
-        End If
-    Next i
-    
-    Exit Sub
-er1:
-    Err.Raise kErrWriteDataFromWorksheet, "CInterpolation.WriteToVertRange", "Ошибка, при записи кривой. Точек " & NumStr & " в диапазон ."
-End Sub
 Public Function SubtractCurve(curv As CInterpolation) As CInterpolation
 ' находит разность двух кривых
     Dim i As Integer
@@ -834,7 +809,7 @@ On Error GoTo err1:
     
     For i = 0 To FkPoint - 1
         xval(i) = FPoints(i).X
-        yval(i) = FPoints(i).y
+        yval(i) = FPoints(i).Y
         dval(i) = 0 ' todo - need find a way to specify derivatives
     Next i
     

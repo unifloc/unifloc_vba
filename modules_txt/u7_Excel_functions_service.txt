@@ -27,7 +27,7 @@ Public Function decode_json(json, _
 ' результат - закодированная строка
 'description_end
     Dim d As Dictionary
-    Dim C As Collection
+    Dim c As Collection
     Dim p
     Dim i As Integer
     Dim outarr
@@ -120,25 +120,25 @@ Public Function decode_json(json, _
         End If
     Else  ' expect collection here
         
-        Set C = p
-        If C.Count = 1 Then
-            If TypeName(C.Item(1)) = "Collection" Then
-                outarr = CollectionToArray2D(C.Item(1))
+        Set c = p
+        If c.Count = 1 Then
+            If TypeName(c.Item(1)) = "Collection" Then
+                outarr = CollectionToArray2D(c.Item(1), Not transpose)
             Else
-                ReDim outarr(1 To 1, 1 To C.Count)
-                outarr(1, 1) = C.Item(1)
+                ReDim outarr(1 To 1, 1 To c.Count)
+                outarr(1, 1) = c.Item(1)
             End If
         Else
             i = 1
             If transpose Then
-                ReDim outarr(1 To 1, 1 To C.Count)
-                For Each V In C
+                ReDim outarr(1 To 1, 1 To c.Count)
+                For Each V In c
                     outarr(1, i) = V
                     i = i + 1
                 Next
             Else
-                ReDim outarr(1 To C.Count, 1 To 1)
-                For Each V In C
+                ReDim outarr(1 To c.Count, 1 To 1)
+                For Each V In c
                     outarr(i, 1) = V
                     i = i + 1
                 Next
@@ -706,23 +706,49 @@ Public Function encode_well_construction_string( _
 '    Set cl = d2.Item("h_list_m")
 '    a = CollectionToArray(cl)
 End Function
+''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'' функция кодирования диапазона ячеек в json строку
+'Public Function encode_json(rng)
+'' rng       - диапазон ячеек для кодирования
+'' результат - закодированная строка
+''description_end
+'    Dim d As New Dictionary
+'    Dim c As New Collection
+'
+'    Dim T As Variant
+'    Dim i As Integer
+'
+'    T = array_from_range(rng)
+'
+'    If UBound(T, 2) = 1 Then
+'        c.Add array_from_range(T)
+'        encode_json = ConvertToJson(c)
+'    Else
+'        For i = 1 To UBound(T)
+'            Call d.Add(T(i, 1), T(i, 2))
+'        Next i
+'        encode_json = ConvertToJson(d)
+'    End If
+'
+'End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования диапазона ячеек в json строку
-Public Function encode_json(rng)
+Public Function encode_json(rng, _
+        Optional always_collection As Boolean = False)
 ' rng       - диапазон ячеек для кодирования
 ' результат - закодированная строка
 'description_end
     Dim d As New Dictionary
-    Dim C As New Collection
+    Dim c As New Collection
     
     Dim T As Variant
     Dim i As Integer
     
     T = array_from_range(rng)
     
-    If UBound(T, 2) = 1 Then
-        C.Add array_from_range(T)
-        encode_json = ConvertToJson(C)
+    If UBound(T, 2) = 1 Or always_collection Then
+        c.Add array_from_range(rng, True)
+        encode_json = ConvertToJson(c)
     Else
         For i = 1 To UBound(T)
             Call d.Add(T(i, 1), T(i, 2))
@@ -735,4 +761,238 @@ End Function
     
    combine_json = Left(str1, Len(str1) - 1) & "," & Right(str2, Len(str2) - 1)
  End Function
+Public Function encode_pipe(Optional h_list_m As Variant = 1000, _
+                            Optional diam_list_mm As Variant = 62)
+' encodes pipe construction into json string
+' h_list_m - trajectory data
+'
+    
+    Dim dict As New Dictionary
+    Dim h_curve As New CInterpolation
+    Dim h_raw() As Double
+    Dim d_curve As New CInterpolation
+    Dim d_raw() As Double
+    
+    Dim i As Integer
+On Error GoTo er1:
+    h_raw = array_num_from_range(h_list_m, remove_zeros:=True)
+    
+    For i = LBound(h_raw, 1) To UBound(h_raw, 1)
+        If UBound(h_raw, 2) = 1 Then
+            h_curve.AddPoint h_raw(i, 1), h_raw(i, 1)
+        Else
+            h_curve.AddPoint h_raw(i, 1), h_raw(i, 2)
+        End If
+    Next i
+    If h_curve.num_points = 1 Then
+        h_curve.AddPoint 0, 0
+         If h_curve.num_points = 1 Then GoTo er2
+    End If
+    dict.Add const_name_h_list_m, h_curve.getArray(transpose:=True)
+    
+    
+    d_raw = array_num_from_range(diam_list_mm, remove_zeros:=True)
+    
+    If UBound(d_raw, 2) = 1 Then
+        d_curve.AddPoint 0, d_raw(1, 1)
+        d_curve.AddPoint h_raw(UBound(h_raw, 1), 1), d_raw(1, 1)
+    ElseIf UBound(d_raw, 2) > 1 Then
+        For i = LBound(d_raw, 1) To UBound(d_raw, 1)
+            If d_raw(i, 1) < h_raw(UBound(h_raw, 1), 1) Then
+                d_curve.AddPoint d_raw(i, 1), d_raw(i, 2)
+            End If
+        Next
+        d_curve.AddPoint h_raw(UBound(h_raw, 1), 1), d_raw(i - 1, 2)
+    End If
+    dict.Add const_name_diam_list_mm, d_curve.getArray(transpose:=True)
+    encode_pipe = ConvertToJson(dict)
+    
+    
+    Exit Function
+    
+    
+er1:
+    encode_pipe = "error encode_pipe " & Err.Description
+    Exit Function
+er2:
+    encode_pipe = "error encode_pipe. zero length"
+    Exit Function
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' кодирование параметров температурной модели трубы/скважины
+Public Function encode_t_model(Optional t_model As TEMP_CALC_METHOD = StartEndTemp, _
+                               Optional t_list_C As Variant = 50, _
+                               Optional t_start_C As Double = -100, _
+                               Optional t_end_C As Double = -100, _
+                               Optional param As String = "")
+' t_model   - номер температурной модели
+' t_list_C  - массив n*2 распределения температуры
+' t_start_C - температура в начале трубы
+' t_end_C   - температура в конце трубы
+' param     - параметры температурной модели
+'             список параметров в мануале
+'description_end
+' encodes temperature model for pipe and wells
+' describes ambient space params needed for temperature estimation
+    Dim dict As New Dictionary
+    Dim t_raw() As Double
+    Dim t_curve As New CInterpolation
+    Dim i As Integer
+    
+      Dim therm_cond_form_WmC As Double
+      Dim sp_heat_capacity_form_JkgC As Double
+      Dim therm_cond_cement_WmC As Double
+      Dim therm_cond_tubing_WmC As Double
+      Dim therm_cond_casing_WmC As Double
+      Dim heat_transfer_casing_liquid_Wm2C As Double
+      Dim heat_transfer_casing_gas_Wm2C As Double
+      Dim heat_transfer_fluid_convection_Wm2C As Double
+      Dim t_calc_hr As Double
+      
+' therm_cond_form_WmC - теплопроводность породы окружающей среды
+' sp_heat_capacity_form_JkgC - удельная теплоемкость породы окружающей среды
+' therm_cond_cement_WmC - теплопроводность цементного камня вокруг скважины
+' therm_cond_tubing_WmC - теплопроводность стенок НКТ
+' heat_transfer_casing_liquid_Wm2C - теплопередача через затруб с жидкостью
+' heat_transfer_casing_gas_Wm2C - теплопередача через затруб с газом
+' heat_transfer_fluid_convection_Wm2C - теплопередача в потоке
+'                               с жидкостью за счет конвекции
+' t_calc_hr - время на которое расчитывается распределение температуры
+On Error GoTo er1:
+    dict.Add prm_t_model, t_model
+    t_raw = array_num_from_range(t_list_C, remove_zeros:=True)
+    
+    For i = LBound(t_raw, 1) To UBound(t_raw, 1)
+        If UBound(t_raw, 2) = 1 Then
+            t_curve.AddPoint t_raw(i, 1), t_raw(i, 1)
+        Else
+            t_curve.AddPoint t_raw(i, 1), t_raw(i, 2)
+        End If
+    Next i
+    If t_curve.num_points = 1 Then
+        t_curve.AddPoint 0, 20
+         If t_curve.num_points = 1 Then GoTo er2
+    End If
+    
+    If t_start_C < 0 Then t_start_C = 20
+    If t_end_C < 0 Then t_end_C = 40
+    
+    
+    therm_cond_form_WmC = 2.4252
+    sp_heat_capacity_form_JkgC = 200
+    therm_cond_cement_WmC = 6.965
+    therm_cond_tubing_WmC = 32
+    therm_cond_casing_WmC = 32
+    heat_transfer_casing_liquid_Wm2C = 200
+    heat_transfer_casing_gas_Wm2C = 10
+    heat_transfer_fluid_convection_Wm2C = 200
+    t_calc_hr = 240
+    
+    
+    
+    If Len(param) > 0 Then
+        Dim pdict As Dictionary
+        Set pdict = ParseJson(param)
+        
+        If pdict.Exists(prm_t_start_C) Then t_start_C = pdict(prm_t_start_C)
+        If pdict.Exists(prm_t_end_C) Then t_end_C = pdict(prm_t_end_C)
+        
+        If t_model = AmbientTemp Then
+            If pdict.Exists(prm_thermal_conductivity_formation_WmC) Then therm_cond_form_WmC = pdict(prm_thermal_conductivity_formation_WmC)
+            If pdict.Exists(prm_specific_heat_capacity_formation_JkgC) Then sp_heat_capacity_form_JkgC = pdict(prm_specific_heat_capacity_formation_JkgC)
+            If pdict.Exists(prm_thermal_conductivity_cement_WmC) Then therm_cond_cement_WmC = pdict(prm_thermal_conductivity_cement_WmC)
+            If pdict.Exists(prm_thermal_conductivity_tubing_WmC) Then therm_cond_tubing_WmC = pdict(prm_thermal_conductivity_tubing_WmC)
+            If pdict.Exists(prm_thermal_conductivity_casing_WmC) Then therm_cond_casing_WmC = pdict(prm_thermal_conductivity_casing_WmC)
+            If pdict.Exists(prm_heat_transfer_casing_liquid_Wm2C) Then heat_transfer_casing_liquid_Wm2C = pdict(prm_heat_transfer_casing_liquid_Wm2C)
+            If pdict.Exists(prm_heat_transfer_casing_gas_Wm2C) Then heat_transfer_casing_gas_Wm2C = pdict(prm_heat_transfer_casing_gas_Wm2C)
+            If pdict.Exists(prm_heat_transfer_fluid_convection_Wm2C) Then heat_transfer_fluid_convection_Wm2C = pdict(prm_heat_transfer_fluid_convection_Wm2C)
+            If pdict.Exists(prm_time_calc_hr) Then t_calc_hr = pdict(prm_time_calc_hr)
+        End If
+        
+    End If
+    
+    Select Case t_model
+        Case AmbientTemp
+            dict.Add prm_thermal_conductivity_formation_WmC, therm_cond_form_WmC
+            dict.Add prm_specific_heat_capacity_formation_JkgC, sp_heat_capacity_form_JkgC
+            dict.Add prm_thermal_conductivity_cement_WmC, therm_cond_cement_WmC
+            dict.Add prm_thermal_conductivity_tubing_WmC, therm_cond_tubing_WmC
+            dict.Add prm_thermal_conductivity_casing_WmC, therm_cond_casing_WmC
+            dict.Add prm_heat_transfer_casing_liquid_Wm2C, heat_transfer_casing_liquid_Wm2C
+            dict.Add prm_heat_transfer_casing_gas_Wm2C, heat_transfer_casing_gas_Wm2C
+            dict.Add prm_heat_transfer_fluid_convection_Wm2C, heat_transfer_fluid_convection_Wm2C
+            dict.Add prm_time_calc_hr, t_calc_hr
+            dict.Add const_name_t_list_C, t_curve.getArray
+        Case StartEndTemp
+            Call dict.Add(prm_t_start_C, t_start_C)
+            Call dict.Add(prm_t_end_C, t_end_C)
+        Case GeoGradTemp, LengthTemp
+            dict.Add const_name_t_list_C, t_curve.getArray
+    End Select
+    
+    If t_model = AmbientTemp Then
+    End If
+    encode_t_model = ConvertToJson(dict)
+    Exit Function
+    
+    
+er1:
+    encode_t_model = "error encode_t_model " & Err.Description
+    Exit Function
+er2:
+    encode_t_model = "error encode_t_model. zero length"
+    Exit Function
+End Function
+' not checked
+Public Sub write_curve_to_range(crv As CInterpolation, _
+                                RangX As range, _
+                       Optional RangY As range, _
+                       Optional ByVal numpt As Integer = 0)
+    Dim crv1 As CInterpolation
+    If numpt > 0 And crv.num_points > 1 Then
+        Set crv1 = crv.ClonePointsToNum(numpt)
+        Call write_curve_to_range(crv1, RangX, RangY, -1)
+    ElseIf numpt = -1 Then
+        write_curve_vert_range crv, RangX, RangY
+    Else
+        numpt = RangX.Rows.Count
+        Set crv1 = crv.ClonePointsToNum(numpt)
+        Call write_curve_to_range(crv1, RangX, RangY, -1)
+        'crv.ClonePointsToNum(numpt).WriteToRange RangX, RangY, -1
+    End If
+End Sub
+Private Sub write_curve_vert_range(crv As CInterpolation, _
+                                   RangX As range, _
+                                   RangY As range)
+' позволим кривой записывать себя за заранее данный диапазон ячеек (тут хорошо бы сообразить уместится ли запись или нет - может надо кривую масштабировать?)
+' функция записи кривой на лист excel
+ On Error GoTo er1
+    Dim ValX As Double, ValY As Double
+    Dim NumStr As Integer
+    Dim i As Integer
+    
+    RangX.Clear
+    If Not RangY Is Nothing Then RangY.Clear
+    NumStr = MinReal(crv.num_points, RangX.Rows.Count)   ' определяем количество элементов в списке. Оно равно числу значений по оси X
+    RangX.Cells(0, 1) = crv.xName   ' XDescription
+    If RangY Is Nothing Then
+        RangX.Cells(0, 2) = crv.yName  'YDescription
+    Else
+        RangY.Cells(0, 1) = crv.yName
+    End If
+    For i = 1 To NumStr
+        ValX = crv.pointX(i)
+        ValY = crv.PointY(i)
+        RangX.Cells(i, 1) = ValX
+        If RangY Is Nothing Then
+            RangX.Cells(i, 2) = ValY
+        Else
+            RangY.Cells(i, 1) = ValY
+        End If
+    Next i
+    
+    Exit Sub
+er1:
+    Err.Raise kErrWriteDataFromWorksheet, "CInterpolation.WriteToVertRange", "Ошибка, при записи кривой. Точек " & NumStr & " в диапазон ."
+End Sub
 

@@ -24,6 +24,7 @@ Private Type WELL_POINT_FULL
     diam_out_m As Double        ' диаметр трубы, внешний
     roughness_m As Double       ' шероховатость
 End Type
+Public log As New CLogger                      ' create new log list for each object
 Private h_abs_init_m_ As New CInterpolation      ' исходный массив абсолютных глубин
 Private angle_init_deg_ As New CInterpolation    ' исходный массив углов
 Private diam_init_m_ As New CInterpolation       ' исходный массив значений диаметров НКТ
@@ -34,6 +35,9 @@ Private num_points_out_ As Integer               ' количество точек в выходном м
 Private length_between_points_m_ As Double       ' мин растояние между точками при генерации исходного массива
 Private construction_points_curve_ As New CInterpolation  ' точки которые должны быть добавлены (измеренная глубина - абсолютная глубина)
 Private h_points_curve_ As New CInterpolation    ' результирующие точки для заполнения массивов
+Public Sub addLogMsg(msg As String)
+    Call log.AddMsg(msg)
+End Sub
 Private Sub Class_Initialize()
     ' установка значений по умолчанию
     wall_thickness_mm_ = 10
@@ -127,6 +131,54 @@ Private Function calc_trajectory() As Boolean
     ' траекторию сформировали
     ' надо теперь подготовить массивы для класса скважина
 End Function
+' функция для подготовки траектории с данных json
+' ожидаем, что на входе json строка с необходимымы данными
+Public Sub init_from_json(ByRef json As String, _
+                       Optional ByRef diam_data_mm As Variant, _
+                       Optional ByVal h_limit_top_m As Double = 1E+20, _
+                       Optional ByVal h_limit_bottom_m As Double = -1E+20)
+' h_data_m - инклинометрия - range или двухмерный массив или число
+'            зависимость значений вертикальной глубины от измеренной,
+'            первый столбец - измеренная глубина, м
+'            второй столбец - вертикальная глубина, м
+'            если передано одно число - то будет задана вертикальная траектория заданной глубины
+' diam_data_mm - значения диаметров от измеренной глубины - range или двухмерный массив или число
+'            первый столбец - измеренная глубина, м
+'            второй столбец - диаметр трубы, мм - применяется от текущего значения глубины и до следующего
+'            если передано одно число - то будет задан постоянный диаметр
+    Dim dict As Dictionary
+    Dim i As Integer
+    Dim habs_curve_m As New CInterpolation
+    Dim diam_curve_mm As New CInterpolation
+    Dim c As Collection
+    
+    Set dict = ParseJson(json)
+    If dict.Exists(const_name_h_list_m) Then
+        Set c = dict(const_name_h_list_m)
+        Call habs_curve_m.load_from_collection(c)
+    Else
+        GoTo er1
+    End If
+    
+    If dict.Exists(const_name_diam_list_mm) Then
+        Set c = dict(const_name_diam_list_mm)
+        diam_curve_mm.isStepFunction = True
+        Call diam_curve_mm.load_from_collection(c)
+    Else
+        GoTo er1
+    End If
+    
+    Call init_from_curves(habs_curve_m, diam_curve_mm)
+    
+    Exit Sub
+    
+er1:
+    Dim msg As String
+    msg = "error on CPipeTrajectory.init_from_json. key " & const_name_h_list_m & " not found"
+    addLogMsg msg
+    Err.Raise kreadJsonError, , msg
+    Exit Sub
+End Sub
 ' функция для подготовки траектории с данных листа
 ' должна использоваться для чтения исходных данных с листа
 ' ожидаем, что на входе либо range - тогда их конвертируем в массивы

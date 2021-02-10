@@ -60,24 +60,92 @@ Public Function new_pipeline(ByVal tr As CPipeTrajectory, _
         Set new_pipeline.ambient_formation = amb
     End If
 End Function
+'' функция генерация трубы из стандартного набора данных
+'' включает и параметры потока в трубе
+'' нужна для упрощения пользовательских функций
+'Public Function new_pipeline_with_stream( _
+'                 ByVal q_liq_sm3day As Double, _
+'                 ByVal fw_perc As Double, _
+'                 ByVal h_list_m As Variant, _
+'                 ByVal t_calc_from_C As Double, _
+'                 ByVal calc_flow_direction As Integer, _
+'        Optional ByVal str_PVT As String = PVT_DEFAULT, _
+'        Optional ByVal diam_list_mm As Variant, _
+'        Optional ByVal hydr_corr As H_CORRELATION = 0, _
+'        Optional ByVal t_val As Variant, _
+'        Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+'        Optional ByVal c_calibr = 1, _
+'        Optional ByVal roughness_m As Double = 0.0001, _
+'        Optional ByVal q_gas_sm3day As Double = 0, _
+'        Optional ByVal znlf As Boolean = False) As CPipe
+'
+'    Dim pipe As New CPipe
+'    Dim PVT As New CPVT
+'    Dim PTcalc As PTtype
+'    Dim TM As TEMP_CALC_METHOD
+'    Dim angle As Double
+'    Dim tr As New CPipeTrajectory
+'    Dim amb As New CAmbientFormation
+'    Dim temp_crv As New CInterpolation
+'    Dim prm As PARAMCALC
+'    Dim c_calibr_grav As Double
+'    Dim c_calibr_fric As Double
+'    Dim clbr
+'
+'
+'On Error GoTo err1:
+'
+'
+'    Call tr.init_from_vert_range(h_list_m, diam_list_mm)
+'
+'    Call pipe.init_pipe_constr_by_trajectory(tr)
+'
+'    Call PVT.init_feed(str_PVT)  ' initialize PVT properties
+'
+'    PVT.q_liq_sm3day = q_liq_sm3day ' set liquid rate and watercut
+'    PVT.fw_perc = fw_perc
+'    PVT.q_gas_free_sm3day = q_gas_sm3day
+'    Set pipe.fluid = PVT
+'
+'    pipe.param = set_calc_flow_param(calc_along_coord:=calc_flow_direction \ 10 = 1, _
+'                                     flow_along_coord:=calc_flow_direction Mod 10 = 1, _
+'                                     hcor:=hydr_corr, _
+'                                     temp_method:=StartEndTemp)
+'    If znlf Then
+'        Call pipe.set_ZNLF
+'    End If
+'
+''    Call pipe.init_t_model( t_calc_from_C, t_val, calc_flow_direction, temp_method)
+'
+'
+'    ' set calibration properties
+'    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+'    c_calibr_grav = clbr(1)
+'    If UBound(clbr) >= 2 Then
+'        c_calibr_fric = clbr(2)
+'    Else
+'        c_calibr_fric = 1
+'    End If
+'    pipe.c_calibr_grav = c_calibr_grav
+'    pipe.c_calibr_fric = c_calibr_fric
+'
+'    Set new_pipeline_with_stream = pipe
+'
+'    Exit Function
+'err1:
+'    new_pipeline_with_stream = Array(-1, "error")
+'    addLogMsg "Error:new_pipeline_with_stream:" & Err.Description
+'
+'End Function
 ' функция генерация трубы из стандартного набора данных
 ' включает и параметры потока в трубе
 ' нужна для упрощения пользовательских функций
-Public Function new_pipeline_with_stream( _
-                 ByVal q_liq_sm3day As Double, _
-                 ByVal fw_perc As Double, _
-                 ByVal h_list_m As Variant, _
+Public Function new_pipeline_with_feed( _
+                 ByVal feed As String, _
+                 ByVal construction As String, _
                  ByVal t_calc_from_C As Double, _
-                 ByVal calc_flow_direction As Integer, _
-        Optional ByVal str_PVT As String = PVT_DEFAULT, _
-        Optional ByVal diam_list_mm As Variant, _
-        Optional ByVal hydr_corr As H_CORRELATION = 0, _
-        Optional ByVal t_val As Variant, _
-        Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
-        Optional ByVal c_calibr = 1, _
-        Optional ByVal roughness_m As Double = 0.0001, _
-        Optional ByVal q_gas_sm3day As Double = 0, _
-        Optional ByVal znlf As Boolean = False) As CPipe
+        Optional ByVal t_model As String, _
+        Optional ByVal param As String) As CPipe
         
     Dim pipe As New CPipe
     Dim PVT As New CPVT
@@ -91,47 +159,89 @@ Public Function new_pipeline_with_stream( _
     Dim c_calibr_grav As Double
     Dim c_calibr_fric As Double
     Dim clbr
+    Dim znlf As Boolean
+    Dim roughness_m As Double
+    Dim temp_method As TEMP_CALC_METHOD
+    Dim hydr_corr As H_CORRELATION
+    
+    Dim calc_along_coord As Boolean
+    Dim flow_along_coord As Boolean
 On Error GoTo err1:
+    ' read param
+    Dim prmd As Dictionary
+    If Len(param) > 1 Then
+        Set prmd = ParseJson(param)
+    Else
+        Set prmd = New Dictionary
+    End If
+    If prmd Is Nothing Then
+        pipe.addLogMsg "info: no param found, default settings applied" 'todo obsolete
+    End If
+        
+    hydr_corr = prmd(prm_hydr_corr)
     
+    roughness_m = prmd(prm_roughness_m)
+    If roughness_m = 0 Then roughness_m = 0.0001
     
-    Call tr.init_from_vert_range(h_list_m, diam_list_mm)
+    c_calibr_grav = 1
+    If prmd.Exists(prm_pipe_calibr_grav) Then
+        c_calibr_grav = prmd(prm_pipe_calibr_grav)
+    End If
+    
+    c_calibr_fric = 1
+    If prmd.Exists(prm_pipe_calibr_fric) Then
+        c_calibr_fric = prmd(prm_pipe_calibr_fric)
+    End If
+    
+    temp_method = prmd(prm_pipe_temp_method)
+    
+    calc_along_coord = True
+    If prmd.Exists(prm_pipe_calc_along_coord) Then
+        calc_along_coord = prmd(prm_pipe_calc_along_coord)
+    End If
+    
+    flow_along_coord = True
+    If prmd.Exists(prm_pipe_flow_along_coord) Then
+        flow_along_coord = prmd(prm_pipe_flow_along_coord)
+    End If
+    
+    znlf = prmd(prm_pipe_znlf)
+        
+    Call tr.init_from_json(construction)
     
     Call pipe.init_pipe_constr_by_trajectory(tr)
        
-    Call PVT.init_feed(str_PVT)  ' initialize PVT properties
+    Call PVT.init_feed(feed)  ' initialize PVT properties
     
-    PVT.q_liq_sm3day = q_liq_sm3day ' set liquid rate and watercut
-    PVT.fw_perc = fw_perc
-    PVT.q_gas_free_sm3day = q_gas_sm3day
     Set pipe.fluid = PVT
     
-    pipe.param = set_calc_flow_param(calc_along_coord:=calc_flow_direction \ 10 = 1, _
-                                     flow_along_coord:=calc_flow_direction Mod 10 = 1, _
+    pipe.param = set_calc_flow_param(calc_along_coord:=calc_along_coord, _
+                                     flow_along_coord:=flow_along_coord, _
                                      hcor:=hydr_corr, _
                                      temp_method:=StartEndTemp)
     If znlf Then
         Call pipe.set_ZNLF
     End If
                                      
-    Call pipe.InitT(t_calc_from_C, t_val, calc_flow_direction, temp_method)
+    Call pipe.init_t_model(t_model, t_calc_from_C)      'InitT(t_calc_from_C, t_val, calc_flow_direction, temp_method)
                                      
     
-    ' set calibration properties
-    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
-    c_calibr_grav = clbr(1)
-    If UBound(clbr) >= 2 Then
-        c_calibr_fric = clbr(2)
-    Else
-        c_calibr_fric = 1
-    End If
+'    ' set calibration properties
+'    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
+'    c_calibr_grav = clbr(1)
+'    If UBound(clbr) >= 2 Then
+'        c_calibr_fric = clbr(2)
+'    Else
+'        c_calibr_fric = 1
+'    End If
     pipe.c_calibr_grav = c_calibr_grav
     pipe.c_calibr_fric = c_calibr_fric
     
-    Set new_pipeline_with_stream = pipe
+    Set new_pipeline_with_feed = pipe
     
     Exit Function
 err1:
-    new_pipeline_with_stream = Array(-1, "error")
+    new_pipeline_with_feed = Array(-1, "error")
     addLogMsg "Error:new_pipeline_with_stream:" & Err.Description
                          
 End Function
@@ -191,7 +301,7 @@ Public Function new_pipe_with_stream( _
     ' temperature initialisation depend on calc direction because initialisation procedure depends on coord direction
     ' check flow direction
     
-    pipe.InitTlinearSmart t_calc_from_C, t_calc_to_C, calc_flow_direction
+  '  pipe.InitTlinearSmart t_calc_from_C, t_calc_to_C, calc_flow_direction
     
     ' set calibration properties
     clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
