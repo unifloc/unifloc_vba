@@ -41,7 +41,9 @@ Public Function decode_json(json, _
     
     
     JsonConverter.JsonOptions.UseDoubleForLargeNumbers = True
-    
+    If TypeName(json) = "Variant()" Then
+        json = json(1, 1)
+    End If
     Set p = ParseJson(json)
     If TypeName(p) = "Dictionary" Then
     
@@ -109,6 +111,12 @@ Public Function decode_json(json, _
                     Else
                         outarr(i, 2) = ConvertToJson(V)
                     End If
+                ElseIf TypeName(V) = "Dictionary" Then
+                    If only_values Then
+                        outarr(i, 1) = ConvertToJson(V)
+                    Else
+                        outarr(i, 2) = ConvertToJson(V)
+                    End If
                 Else
                     If only_values Then
                         outarr(i, 1) = V
@@ -123,7 +131,7 @@ Public Function decode_json(json, _
         Set c = p
         If c.Count = 1 Then
             If TypeName(c.Item(1)) = "Collection" Then
-                outarr = CollectionToArray2D(c.Item(1), Not transpose)
+                outarr = collection_to_array_2d(c.Item(1), Not transpose)
             Else
                 ReDim outarr(1 To 1, 1 To c.Count)
                 outarr(1, 1) = c.Item(1)
@@ -218,7 +226,7 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 'Функция кодирования параметров потока флюидов в строку,
 Public Function encode_feed( _
-                   ByVal q_liq_sm3day As Double, _
+          Optional ByVal q_liq_sm3day As Double = 10, _
           Optional ByVal fw_perc As Double = -1, _
           Optional ByVal rp_m3m3 As Double = -1, _
           Optional ByVal q_gas_free_sm3day As Double = -1, _
@@ -241,12 +249,9 @@ Public Function encode_feed( _
     dict("q_liq_sm3day") = q_liq_sm3day
     If fw_perc >= 0 Then dict("fw_perc") = fw_perc
     If rp_m3m3 > 0 Then dict("rp_m3m3") = rp_m3m3
-    
     If q_gas_free_sm3day > 0 Then dict("q_gas_free_sm3day") = q_gas_free_sm3day
     
     encode_feed = ConvertToJson(dict)
-'    encode_feed = combine_json(encode_feed, fluid)
-    
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы УЭЦН в строку
@@ -786,10 +791,12 @@ On Error GoTo er1:
     Next i
     If h_curve.num_points = 1 Then
         h_curve.AddPoint 0, 0
-         If h_curve.num_points = 1 Then GoTo er2
+        If h_curve.num_points = 1 Then GoTo er2
     End If
-    dict.Add const_name_h_list_m, h_curve.getArray(transpose:=True)
-    
+    h_curve.xName = const_name_hmes_m
+    h_curve.yName = const_name_hvert_m
+    dict.Add const_name_h_list_m, h_curve.getDict
+    'dict.Add const_name_h_list_m, h_curve.getArray(transpose:=True)
     
     d_raw = array_num_from_range(diam_list_mm, remove_zeros:=True)
     
@@ -804,9 +811,12 @@ On Error GoTo er1:
         Next
         d_curve.AddPoint h_raw(UBound(h_raw, 1), 1), d_raw(i - 1, 2)
     End If
-    dict.Add const_name_diam_list_mm, d_curve.getArray(transpose:=True)
-    encode_pipe = ConvertToJson(dict)
+    d_curve.xName = const_name_hmes_m
+    d_curve.yName = const_name_diam_int_mm
+    dict.Add const_name_diam_list_mm, d_curve.getDict
+    'dict.Add const_name_diam_list_mm, d_curve.getArray(transpose:=True)
     
+    encode_pipe = ConvertToJson(dict)
     
     Exit Function
     
@@ -839,25 +849,16 @@ Public Function encode_t_model(Optional t_model As TEMP_CALC_METHOD = StartEndTe
     Dim t_curve As New CInterpolation
     Dim i As Integer
     
-      Dim therm_cond_form_WmC As Double
-      Dim sp_heat_capacity_form_JkgC As Double
-      Dim therm_cond_cement_WmC As Double
-      Dim therm_cond_tubing_WmC As Double
-      Dim therm_cond_casing_WmC As Double
-      Dim heat_transfer_casing_liquid_Wm2C As Double
-      Dim heat_transfer_casing_gas_Wm2C As Double
-      Dim heat_transfer_fluid_convection_Wm2C As Double
-      Dim t_calc_hr As Double
+    Dim therm_cond_form_WmC As Double                 ' therm_cond_form_WmC - теплопроводность породы окружающей среды
+    Dim sp_heat_capacity_form_JkgC As Double          ' sp_heat_capacity_form_JkgC - удельная теплоемкость породы окружающей среды
+    Dim therm_cond_cement_WmC As Double               ' therm_cond_cement_WmC - теплопроводность цементного камня вокруг скважины
+    Dim therm_cond_tubing_WmC As Double               ' therm_cond_tubing_WmC - теплопроводность стенок НКТ
+    Dim therm_cond_casing_WmC As Double
+    Dim heat_transfer_casing_liquid_Wm2C As Double    ' heat_transfer_casing_liquid_Wm2C - теплопередача через затруб с жидкостью
+    Dim heat_transfer_casing_gas_Wm2C As Double       ' heat_transfer_casing_gas_Wm2C - теплопередача через затруб с газом
+    Dim heat_transfer_fluid_convection_Wm2C As Double ' heat_transfer_fluid_convection_Wm2C - теплопередача в потоке с жидкостью за счет конвекции
+    Dim t_calc_hr As Double                           ' t_calc_hr - время на которое расчитывается распределение температуры
       
-' therm_cond_form_WmC - теплопроводность породы окружающей среды
-' sp_heat_capacity_form_JkgC - удельная теплоемкость породы окружающей среды
-' therm_cond_cement_WmC - теплопроводность цементного камня вокруг скважины
-' therm_cond_tubing_WmC - теплопроводность стенок НКТ
-' heat_transfer_casing_liquid_Wm2C - теплопередача через затруб с жидкостью
-' heat_transfer_casing_gas_Wm2C - теплопередача через затруб с газом
-' heat_transfer_fluid_convection_Wm2C - теплопередача в потоке
-'                               с жидкостью за счет конвекции
-' t_calc_hr - время на которое расчитывается распределение температуры
 On Error GoTo er1:
     dict.Add prm_t_model, t_model
     t_raw = array_num_from_range(t_list_C, remove_zeros:=True)
@@ -877,7 +878,6 @@ On Error GoTo er1:
     If t_start_C < 0 Then t_start_C = 20
     If t_end_C < 0 Then t_end_C = 40
     
-    
     therm_cond_form_WmC = 2.4252
     sp_heat_capacity_form_JkgC = 200
     therm_cond_cement_WmC = 6.965
@@ -887,8 +887,6 @@ On Error GoTo er1:
     heat_transfer_casing_gas_Wm2C = 10
     heat_transfer_fluid_convection_Wm2C = 200
     t_calc_hr = 240
-    
-    
     
     If Len(param) > 0 Then
         Dim pdict As Dictionary
@@ -926,15 +924,18 @@ On Error GoTo er1:
         Case StartEndTemp
             Call dict.Add(prm_t_start_C, t_start_C)
             Call dict.Add(prm_t_end_C, t_end_C)
-        Case GeoGradTemp, LengthTemp
-            dict.Add const_name_t_list_C, t_curve.getArray
+        Case GeoGradTemp
+            t_curve.xName = const_name_hvert_m
+            t_curve.yName = const_name_t_C
+            dict.Add const_name_t_list_C, t_curve.getDict
+        Case LengthTemp
+            t_curve.xName = const_name_hmes_m   ' here we change vector name
+            t_curve.yName = const_name_t_C
+            dict.Add const_name_t_list_C, t_curve.getDict
     End Select
-    
-    If t_model = AmbientTemp Then
-    End If
     encode_t_model = ConvertToJson(dict)
-    Exit Function
     
+    Exit Function
     
 er1:
     encode_t_model = "error encode_t_model " & Err.Description

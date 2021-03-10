@@ -141,10 +141,11 @@ End Function
 ' включает и параметры потока в трубе
 ' нужна для упрощения пользовательских функций
 Public Function new_pipeline_with_feed( _
-                 ByVal feed As String, _
-                 ByVal construction As String, _
-                 ByVal t_calc_from_C As Double, _
-        Optional ByVal t_model As String, _
+        Optional ByVal construction As String = "", _
+        Optional ByVal feed As String = "", _
+        Optional ByVal t_model As String = "", _
+        Optional ByVal calc_along_coord As Boolean = True, _
+        Optional ByVal flow_along_coord As Boolean = True, _
         Optional ByVal param As String) As CPipe
         
     Dim pipe As New CPipe
@@ -164,9 +165,12 @@ Public Function new_pipeline_with_feed( _
     Dim temp_method As TEMP_CALC_METHOD
     Dim hydr_corr As H_CORRELATION
     
-    Dim calc_along_coord As Boolean
-    Dim flow_along_coord As Boolean
 On Error GoTo err1:
+    ' check default values for some props
+    If Len(t_model) < 2 Then t_model = encode_t_model()
+    If Len(feed) < 2 Then feed = encode_feed()
+    If Len(construction) < 2 Then construction = encode_pipe()
+    
     ' read param
     Dim prmd As Dictionary
     If Len(param) > 1 Then
@@ -195,12 +199,12 @@ On Error GoTo err1:
     
     temp_method = prmd(prm_pipe_temp_method)
     
-    calc_along_coord = True
+    'calc_along_coord = True
     If prmd.Exists(prm_pipe_calc_along_coord) Then
         calc_along_coord = prmd(prm_pipe_calc_along_coord)
     End If
     
-    flow_along_coord = True
+    'flow_along_coord = True
     If prmd.Exists(prm_pipe_flow_along_coord) Then
         flow_along_coord = prmd(prm_pipe_flow_along_coord)
     End If
@@ -223,17 +227,8 @@ On Error GoTo err1:
         Call pipe.set_ZNLF
     End If
                                      
-    Call pipe.init_t_model(t_model, t_calc_from_C)      'InitT(t_calc_from_C, t_val, calc_flow_direction, temp_method)
+    Call pipe.init_t_model(t_model)
                                      
-    
-'    ' set calibration properties
-'    clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
-'    c_calibr_grav = clbr(1)
-'    If UBound(clbr) >= 2 Then
-'        c_calibr_fric = clbr(2)
-'    Else
-'        c_calibr_fric = 1
-'    End If
     pipe.c_calibr_grav = c_calibr_grav
     pipe.c_calibr_fric = c_calibr_fric
     
@@ -574,56 +569,58 @@ err1:
    Err.Raise kErrInitCalc, Err.source, errmsg
     
 End Function
-' функция генерации нового объекта описывающего параметры газлифтной системы
-Public Function new_GLV_set( _
-                    Optional ByVal q_gas_inj_sm3day As Double = 0, _
-                    Optional ByVal p_gas_inj_atma As Double = 0, _
-                    Optional ByVal d_gas_inj_mm As Double = 0, _
-                    Optional h_glv_m = 0, _
-                    Optional d_glv_mm = 0, _
-                    Optional p_glv_atma = 0) As CGLValveSet
-' q_gas_inj_sm3day  - расход газа закачки
-' p_gas_inj_atma    - давление газа закачки на поверхности
-' d_gas_inj_mm      - диаметр штуцера регулировки закачки газа на поверхности
-' H_glv_m           - измеренные глубины установки газлифтных клапанов
-' d_glv_mm          - диаметры порта установленных газлифтных клапанов
-' p_glv_atma        - давления зарядки газлифтных клапанов
-' результат         - объект с параметрами клапано
-                    
-Dim glv_set As New CGLValveSet
-Dim harr() As Double
-Dim darr() As Double
-Dim parr() As Double
-Dim i As Integer
-Dim errmsg As String
-On Error GoTo err1:
-        If IsNumeric(h_glv_m) Then
-            ReDim harr(1)
-            ReDim darr(1)
-            ReDim parr(1)
-            harr(0) = h_glv_m
-            darr(0) = d_glv_mm
-            parr(0) = p_glv_atma
-        ElseIf IsArray(h_glv_m) Then
-            ReDim harr(0 To UBound(h_glv_m) - LBound(h_glv_m))
-            For i = LBound(h_glv_m) To UBound(h_glv_m)
-                harr(i - LBound(h_glv_m)) = h_glv_m(i)
-                darr(i - LBound(h_glv_m)) = d_glv_mm(i)
-                parr(i - LBound(h_glv_m)) = p_glv_atma(i)
-            Next i
-        End If
-        
-        Call glv_set.loadFromArray(harr, darr, parr)
-        glv_set.q_gas_inj_sm3day = q_gas_inj_sm3day
-        glv_set.p_gas_inj_atma = p_gas_inj_atma
-        glv_set.d_gas_inj_mm = d_gas_inj_mm
-        
-        Set new_GLV_set = glv_set
-err1:
-   errmsg = "new_GLV_set: Ошибка инициализации набора клапанов " & sDELIM & Err.Description
-   Err.Raise kErrInitCalc, Err.source, errmsg
-    
-End Function
+'' функция генерации нового объекта описывающего параметры газлифтной системы
+'Public Function new_GLV_set( _
+'                    Optional ByVal q_gas_inj_sm3day As Double = 0, _
+'                    Optional ByVal p_gas_inj_atma As Double = 0, _
+'                    Optional ByVal d_gas_inj_mm As Double = 0, _
+'                    Optional h_glv_m = 0, _
+'                    Optional d_glv_mm = 0, _
+'                    Optional p_glv_atma = 0) As CGLValveSet
+'' q_gas_inj_sm3day  - расход газа закачки
+'' p_gas_inj_atma    - давление газа закачки на поверхности
+'' d_gas_inj_mm      - диаметр штуцера регулировки закачки газа на поверхности
+'' H_glv_m           - измеренные глубины установки газлифтных клапанов
+'' d_glv_mm          - диаметры порта установленных газлифтных клапанов
+'' p_glv_atma        - давления зарядки газлифтных клапанов
+'' результат         - объект с параметрами клапано
+'
+'Dim glv_set As New CGLValveSet
+'Dim harr() As Double
+'Dim darr() As Double
+'Dim parr() As Double
+'Dim i As Integer
+'Dim errmsg As String
+'
+'On Error GoTo err1:
+'
+'        If IsNumeric(h_glv_m) Then
+'            ReDim harr(1)
+'            ReDim darr(1)
+'            ReDim parr(1)
+'            harr(0) = h_glv_m
+'            darr(0) = d_glv_mm
+'            parr(0) = p_glv_atma
+'        ElseIf IsArray(h_glv_m) Then
+'            ReDim harr(0 To UBound(h_glv_m) - LBound(h_glv_m))
+'            For i = LBound(h_glv_m) To UBound(h_glv_m)
+'                harr(i - LBound(h_glv_m)) = h_glv_m(i)
+'                darr(i - LBound(h_glv_m)) = d_glv_mm(i)
+'                parr(i - LBound(h_glv_m)) = p_glv_atma(i)
+'            Next i
+'        End If
+'
+'        Call glv_set.loadFromArray(harr, darr, parr)
+'        glv_set.q_gas_inj_sm3day = q_gas_inj_sm3day
+'        glv_set.p_gas_inj_atma = p_gas_inj_atma
+'        glv_set.d_gas_inj_mm = d_gas_inj_mm
+'
+'        Set new_GLV_set = glv_set
+'err1:
+'   errmsg = "new_GLV_set: Ошибка инициализации набора клапанов " & sDELIM & Err.Description
+'   Err.Raise kErrInitCalc, Err.source, errmsg
+'
+'End Function
 ' ==================================================
 ' empty objects factory functions
 ' ==================================================
