@@ -102,7 +102,7 @@ On Error GoTo er1:
     Exit Function
 er1:
     MF_dpdl_atmm = -1
-    addLogMsg "Error:MF_dpdl_atmm:" & Err.Description
+    add_log_msg "Error:MF_dpdl_atmm:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет корректирующего фактора (множителя) модели штуцера под замеры
@@ -134,40 +134,33 @@ Public Function MF_choke_calibr( _
 '             4 - подбор дебита жидкости
 '             5 - подбор дебита газа свободного
 On Error GoTo err1:
-    Dim choke As New Cchoke
-    Dim PT As PTtype
- '   Dim PVT As CPVT
-    Dim out, out_desc
+    Dim choke As Cchoke
     Dim CoeffA(0 To 2)
     Dim Func As String
-    Dim cal_type_string As String
     Dim val_min As Double, val_max As Double
     Dim prm As New CSolveParam
-    
     Dim show_log As Boolean
-    Dim name_value As String
     Dim calibr As Double
     Dim calibr_type As Integer
-    Dim log_str As String
+    Dim cal_type_string As String
+    Dim prmd As Dictionary
     
-    show_log = True
-    name_value = ""
+    Dim resd As New Dictionary
+    Dim res(0 To 1, 0 To 3) As String
+    
     calibr = 1
     
-    Call read_choke_param(choke, param, calibr, show_log, name_value, calibr_type)
-    
-    Call choke.fluid.init_feed(feed)
+    Set choke = get_choke(d_choke_mm, feed, d_pipe_mm, calibr, param)
     
     If choke.fluid.gas_only Then
         MF_choke_calibr = "not implemented yet"
         Exit Function
     End If
     
-'    Set choke.fluid = PVT
-    choke.d_down_m = d_pipe_mm / 1000
-    choke.d_up_m = d_pipe_mm / 1000
-    choke.d_choke_m = d_choke_mm / 1000
-    choke.t_choke_C = t_choke_C
+    ' читаем параметры чтобы настроить правильный вывод
+    Set prmd = param_to_dict(param)
+    calibr_type = prmd(prm_choke_calibr_type)
+    show_log = prmd(prm_show_log)
     
      ' prepare solution function
     Set CoeffA(0) = choke
@@ -188,7 +181,7 @@ On Error GoTo err1:
         Case 2
             Func = "calc_choke_dp_error_rp_atm"
             cal_type_string = "rp"
-            val_min = 20 'pipe.fluid.rp_m3m3 * 0.5
+            val_min = 20
             val_max = choke.fluid.rp_m3m3 * 2
             ' Расширить диапазон поиска по газовому фактору может быть опасно
             ' так как возможна неоднозначность решения
@@ -221,46 +214,28 @@ On Error GoTo err1:
    
     prm.y_tolerance = const_pressure_tolerance
     If solve_equation_bisection(Func, val_min, val_max, CoeffA, prm) Then
-    
-        out = Array(prm.x_solution, _
-                    cal_type_string, _
-                    prm.y_solution, _
-                    prm.iterations, _
-                    prm.msg)
+        resd("x_solution") = prm.x_solution
+        resd("y_solution") = prm.y_solution
     Else
-        out = Array("no solution", _
-                    cal_type_string, _
-                    prm.y_solution, _
-                    prm.iterations, _
-                    prm.msg)
+        resd("x_solution") = "no solution"
+        resd("y_solution") = "no solution"
     End If
-        
-    out_desc = Array("solution", _
-                     "cal_type", _
-                     "y_solution", _
-                     "iterations", _
-                     "description")
-                     
-    If show_log Then
-            log_str = choke.log.get_str
-            If Len(log_str) > 32000 Then
-                log_str = "log too long"
-            End If
-    Else
-        log_str = ""
-    End If
-    MF_choke_calibr = array_join(Array(out, out_desc, Array(log_str, "", "", "", "")))
     
- 
+    resd.Add "cal_type", cal_type_string
+    resd.Add "iterations", prm.iterations
+    resd.Add "description", prm.msg
+    
+    res(0, 0) = ConvertToJson(resd): res(1, 0) = "result"
+    res(0, 1) = ConvertToJson(choke.get_result_dict): res(1, 1) = "last calc"
+    res(0, 2) = choke.fluid.get_json: res(1, 2) = "feed"
+    res(0, 3) = choke.log.get_str_safe(show_log): res(1, 3) = "log"
+    
+    MF_choke_calibr = res
     
     Exit Function
 err1:
     On Error Resume Next
-    addLogMsg "Error:MF_choke_calibr:" & Err.Description
-    log_str = choke.log.get_str
-    MF_choke_calibr = array_join(Array(Array(-1, "", "", "", ""), _
-                                       Array("", "", "", "", ""), _
-                                       Array(log_str, "", "", "", "")))
+    MF_choke_calibr = "Error:MF_choke_calibr:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 '  расчет распределения давления и температуры в трубопроводе
@@ -323,33 +298,318 @@ On Error GoTo err1:
     Exit Function
 err1:
     MF_pipe_p_atma = pipe.array_out()  ' Array(-1, "error")
-    addLogMsg "Error:MF_pipe_p_atma:" & Err.Description
+    add_log_msg "Error:MF_pipe_p_atma:" & Err.Description
 End Function
 ' ==============  функции для расчета штуцера ==========================
 ' =====================================================================
+'Private Function make_choke_output_array()
+'
+'End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет давления в штуцере
+Public Function MF_choke_q_sm3day( _
+                     ByVal feed As String, _
+                     ByVal d_choke_mm As Double, _
+                     ByVal p_in_atma As Double, _
+                     ByVal p_out_atma As Double, _
+            Optional ByVal t_choke_C = 20, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal calibr As Double = 1, _
+            Optional ByVal param As String = "")
+' feed         - закодированная строка с параметрами потока.
+' d_choke_mm   - диаметр штуцера (эффективный)
+' p_in_atma    - давление на входе в штуцер, атм.
+'                высокая сторона
+' p_out_atma   - давление на выходе из штуцера, атм.
+'                низкая сторона
+' t_choke_C    - температура потока, С.
+' d_pipe_mm    - диаметр трубы до и после штуцера
+' param        - параметры расчета json строка
+' результат    - число - массив значений с параметрами штуцера
+'                и давление на штуцере на расчетной стороне.
+'description_end
+On Error GoTo err1:
+    Dim choke As Cchoke
+    Dim num_value As Integer, nv As Integer
+    Dim show_array As Boolean
+    Dim show_log As Boolean
+    ' auxiliary variables
+    Dim i As Integer
+    Dim pres As Double
+    Dim q As Double
+    Dim prmd As Dictionary
+    
+    num_value = 3
+    Set choke = get_choke(d_choke_mm, feed, d_pipe_mm, calibr, param)
+    q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
+    choke.fluid.q_liq_sm3day = q
+'    feed_out = choke.fluid.feed
+    ' читаем параметры чтобы настроить правильный вывод
+    Set prmd = param_to_dict(param)
+    show_array = prmd(prm_choke_show_array)
+    If prmd.Exists(prm_num_value) Then
+        nv = prmd(prm_num_value)
+        If nv > 0 And nv < 10 Then num_value = nv
+    End If
+    If show_array Then
+        show_log = prmd(prm_show_log)
+        MF_choke_q_sm3day = choke.get_result_array(num_value, show_log)
+    Else
+        MF_choke_q_sm3day = q
+    End If
+    Exit Function
+err1:
+    MF_choke_q_sm3day = "error:MF_choke_q_sm3day:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет штуцера (дросселя) с выводом всех параметров расчета
+' тип расчета зависит от исходных данных
+Public Function MF_choke_calc( _
+                     ByVal d_choke_mm As Double, _
+                     ByVal feed As String, _
+            Optional ByVal p_in_atma As Double = -1, _
+            Optional ByVal p_out_atma As Double = -1, _
+            Optional ByVal t_choke_C As Double = 20, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal calibr As Double = 1, _
+            Optional ByVal param As String = "")
+' d_choke_mm      - диаметр штуцера (эффективный)
+' feed            - закодированная строка с параметрами потока.
+' p_in_atma       - давление на входе в штуцер, атм
+'                   если задано, то используется в расчете
+' p_out_atma      - давление на выходе из штуцера, атм
+'                   если задано, то используется в расчете
+' t_choke_C       - температура потока, С.
+' d_pipe_mm       - диаметр трубы до и после штуцера
+' calibr          - базовая калибровка штуцера (на расход)
+' param           - параметры расчета json строка
+' результат       - число или массив значений с параметрами штуцера
+'                   и давление на штуцере на расчетной стороне.
+'description_end
+Const nv = 3  ' output array dimension (number of columns)
+On Error GoTo err1:
+    Dim choke As Cchoke
+    Dim resd As Dictionary
+    Dim res(1 To 2, 1 To nv) As String
+    Dim q As Double
+    
+    Set choke = get_choke(d_choke_mm, feed, d_pipe_mm, calibr, param)
+    ' запускаем расчет в зависимости от опции направления расчета
+    If p_in_atma > 0 And p_out_atma < 0 Then
+        Call choke.calc_choke_p_lin(set_PT(p_in_atma, t_choke_C))
+    ElseIf p_in_atma < 0 And p_out_atma > 0 Then
+        Call choke.calc_choke_p_buf(set_PT(p_out_atma, t_choke_C))
+    ElseIf p_in_atma > 0 And p_out_atma > 0 Then
+        q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
+        choke.fluid.q_liq_sm3day = q
+    End If
+    
+    res(1, 1) = ConvertToJson(choke.get_result_dict()): res(2, 1) = "results"
+    res(1, 2) = choke.fluid.get_json: res(2, 2) = "feed"
+    res(1, 3) = choke.log.get_str_safe(True): res(2, 3) = "log"
+   
+    
+    MF_choke_calc = res
+    
+    Exit Function
+err1:
+    MF_choke_calc = "error:MF_choke_calc:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет давления в штуцере (дросселе)
+Public Function MF_choke_p_atma( _
+                     ByVal d_choke_mm As Double, _
+                     ByVal feed As String, _
+                     ByVal p_calc_from_atma As Double, _
+            Optional ByVal t_choke_C As Double = 20, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal calc_along_flow As Boolean = True, _
+            Optional ByVal calibr As Double = 1, _
+            Optional ByVal param As String = "")
+' d_choke_mm      - диаметр штуцера (эффективный)
+' feed            - закодированная строка с параметрами потока.
+' p_calc_from_atma - давление с которого начинается расчет, атм
+'                  граничное значение для проведения расчета
+'                  либо давление на входе, либо на выходе
+' t_choke_C       - температура потока, С.
+' d_pipe_mm       - диаметр трубы до и после штуцера
+' calc_along_flow - флаг направления расчета относительно потока
+' param           - параметры расчета json строка
+' результат       - число или массив значений с параметрами штуцера
+'                   и давление на штуцере на расчетной стороне.
+'description_end
+'Const nv = 9  ' output array dimension (number of columns)
+On Error GoTo err1:
+    Dim choke As Cchoke
+    Dim num_value As Integer, nv As Integer
+    Dim p_out As Double
+    Dim show_array As Boolean
+    Dim show_log As Boolean
+    Dim prmd As Dictionary
+    
+    Set choke = get_choke(d_choke_mm, feed, d_pipe_mm, calibr, param)
+    ' запускаем расчет в зависимости от опции направления расчета
+    If calc_along_flow Then
+        Call choke.calc_choke_p_lin(set_PT(p_calc_from_atma, t_choke_C))
+        p_out = choke.p_out_atma
+        num_value = 1
+    Else
+        Call choke.calc_choke_p_buf(set_PT(p_calc_from_atma, t_choke_C))
+        p_out = choke.p_in_atma
+        num_value = 2
+    End If
+    ' читаем параметры чтобы настроить правильный вывод
+    Set prmd = param_to_dict(param)
+    show_array = prmd(prm_choke_show_array)
+    If prmd.Exists(prm_num_value) Then
+        nv = prmd(prm_num_value)
+        If nv > 0 And nv < 10 Then num_value = nv
+    End If
+    If show_array Then
+        show_log = prmd(prm_show_log)
+        MF_choke_p_atma = choke.get_result_array(num_value, show_log)
+    Else
+        MF_choke_p_atma = p_out
+    End If
+    Exit Function
+err1:
+    MF_choke_p_atma = "error:MF_p_choke_atma:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет корректирующего фактора (множителя) модели штуцера под замеры
+' быстрый расчет - калибровка вычисляется
+Public Function MF_choke_calibr_fast( _
+            ByVal feed As String, _
+            ByVal d_choke_mm As Double, _
+            Optional ByVal p_in_atma As Double = -1, _
+            Optional ByVal p_out_atma As Double = -1, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal t_choke_C As Double = 20, _
+            Optional ByVal param As String = "")
+' feed         - закодированная строка с параметрами потока.
+' d_choke_mm    - диаметр штуцера (эффективный), мм
+' p_in_atma     - давление на входе (высокой стороне)
+' p_out_atma    - давление на выходе (низкой стороне)
+' d_pipe_mm     - диаметр трубы до и после штуцера, мм
+' t_choke_C     - температура, С.
+' param        - параметры расчета json строка
+' результат     - число - калибровочный коэффициент для модели.
+'                 штуцера  - множитель на дебит через штуцер
+'description_end
+On Error GoTo err1:
+    Dim choke As New Cchoke
+    Dim arr_out
+    Dim out As String, out_desc As String
+    Dim show_log As Boolean
+    Dim show_array As Boolean
+    Dim prmd As Dictionary
+    
+    Set choke = get_choke(d_choke_mm, feed, d_pipe_mm, 1, param)
+    
+    If choke.fluid.gas_only Then
+        MF_choke_calibr_fast = "not implemented yet"
+        Exit Function
+    End If
+    
+    If p_in_atma > p_out_atma And p_out_atma >= 1 Then
+        Call choke.calc_choke_calibration(p_in_atma, p_out_atma, t_choke_C)
+        out = choke.c_calibr_fr
+        out_desc = "c_calibr_fr"
+    End If
+    
+    
+    ' читаем параметры чтобы настроить правильный вывод
+    Set prmd = param_to_dict(param)
+    show_array = prmd(prm_choke_show_array)
+    show_log = prmd(prm_show_log)
+    If show_array Then
+        arr_out = Array(Array(out, p_in_atma, p_out_atma, t_choke_C, choke.c_calibr_fr, choke.log.get_str_safe(show_log)), _
+                        Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr", "log")) ' на выходе выдаем массив
+        MF_choke_calibr_fast = array_join(arr_out)
+    Else
+        MF_choke_calibr_fast = out
+    End If
+    
+    Exit Function
+err1:
+    choke.add_log_msg "Error:MF_choke_calibr_fast:" & Err.Description
+    arr_out = Array(Array(-1, "", "", "", ""), _
+                    Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"), _
+                    Array(choke.log.get_str_safe, "", "", "", "")) ' на выходе выдаем массив
+    MF_choke_calibr_fast = array_join(arr_out)
+End Function
+' инициализация штуцера по исходным данным
+' чтобы не повторять код несколько раз для разных функций работы со штуцером
+Private Function get_choke( _
+                     ByVal d_choke_mm As Double, _
+                     ByVal feed As String, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal calibr As Double = 1, _
+            Optional ByVal param As String = "") As Cchoke
+' d_choke_mm      - диаметр штуцера (эффективный)
+' feed            - закодированная строка с параметрами потока.
+' p_calc_from_atma - давление с которого начинается расчет, атм
+'                  граничное значение для проведения расчета
+'                  либо давление на входе, либо на выходе
+' t_choke_C       - температура потока, С.
+' d_pipe_mm       - диаметр трубы до и после штуцера
+' param           - параметры расчета json строка
+' результат       - число - массив значений с параметрами штуцера
+'                   и давление на штуцере на расчетной стороне.
+    Dim choke As New Cchoke
+    
+    With choke
+        Call read_choke_param(choke, param, calibr)
+        Call .fluid.init_feed(feed)
+        .d_down_m = d_pipe_mm / 1000
+        .d_up_m = d_pipe_mm / 1000
+        .d_choke_m = d_choke_mm / 1000
+        .c_calibr_fr = calibr
+        
+    End With
+    
+    Set get_choke = choke
+End Function
+Private Function param_to_dict(param As String) As Dictionary
+        
+    Dim prmd As Dictionary ' param dictionary and settings variables with default values
+On Error GoTo err1:
+    If Len(param) > 1 Then
+        Set prmd = ParseJson(param)
+    Else
+        Set prmd = New Dictionary
+    End If
+    
+    If prmd Is Nothing Then
+        Set prmd = New Dictionary
+    End If
+    Set param_to_dict = prmd
+    Exit Function
+err1:
+    Set prmd = New Dictionary
+    Set param_to_dict = prmd
+End Function
 Private Sub read_choke_param(choke As Cchoke, _
                             param As String, _
                             ByRef calibr As Double, _
-                            ByRef show_log As Boolean, _
-                            ByRef name_value As String, _
+                          Optional ByRef show_log As Boolean = True, _
                           Optional ByRef calibr_type As Integer = 0)
+                          
     Dim prmd As Dictionary ' param dictionary and settings variables with default values
     
     On Error Resume Next
         ' decode param here
         Set prmd = ParseJson(param)
         If prmd Is Nothing Then
-            choke.addLogMsg "info: no param found, default settings applied"
+            choke.add_log_msg "info: no param found, default settings applied"
         End If
         ' for references to parameter names we use constants to make it easier to manage later.
         ' by default the variables will be set to zero or empty (if no key is found)
     
         show_log = prmd(prm_show_log)
         
-        name_value = prmd(prm_name_value)
-       ' If name_value = 0 Or num_value > nv Then num_value = 0
-        
-        calibr = prmd(prm_choke_calibr)
+        Dim cal As Double
+'        cal = prmd(prm_choke_calibr)
         
         calibr_type = 0 ' default value
         ' here expect calibr type in param
@@ -380,212 +640,31 @@ Private Sub read_choke_param(choke As Cchoke, _
         '            End Select
         '
         calibr_type = prmd(prm_choke_calibr_type)
-        If calibr_type < 0 Or calibr_type > 5 Then calibr = 0
+        If calibr_type < 0 Or calibr_type > 5 Then cal = 0
         Select Case calibr_type
              Case 0
-                If calibr < 0.00001 Then calibr = 1
-                Call choke.addLogMsg("info: calibr_type = 0, standard calibration, choke_calibr = " & calibr)
+                If cal < 0.00001 Then cal = 1
+                Call choke.add_log_msg("info: calibr_type = 0, standard calibration, choke_calibr = " & cal)
              Case 1
                 If calibr < 1 Then calibr = 1
-                Call choke.addLogMsg("info: calibr_type = 1, diam calibration, choke_calibr = " & calibr)
+                Call choke.add_log_msg("info: calibr_type = 1, diam calibration, choke_calibr = " & calibr)
              Case 2
                 If calibr < 1 Then calibr = 1
-                Call choke.addLogMsg("info: calibr_type = 2, rp calibration, choke_calibr = " & calibr)
+                Call choke.add_log_msg("info: calibr_type = 2, rp calibration, choke_calibr = " & calibr)
              Case 3
                 If calibr < 0 Then
                     calibr = 0
                 ElseIf calibr > 100 Then
                     calibr = 100
                 End If
-                Call choke.addLogMsg("info: calibr_type = 3, fw calibration, choke_calibr = " & calibr)
+                Call choke.add_log_msg("info: calibr_type = 3, fw calibration, choke_calibr = " & calibr)
              Case 4
                 If calibr < 1 Then calibr = 1
-                Call choke.addLogMsg("info: calibr_type = 4, qliq calibration, choke_calibr = " & calibr)
+                Call choke.add_log_msg("info: calibr_type = 4, qliq calibration, choke_calibr = " & calibr)
              Case 5
                 If calibr < 1 Then calibr = 1
-                Call choke.addLogMsg("info: calibr_type = 5, qgas_free calibration, choke_calibr = " & calibr)
+                Call choke.add_log_msg("info: calibr_type = 5, qgas_free calibration, choke_calibr = " & calibr)
         End Select
         
 End Sub
-Private Function make_choke_output_array()
-    
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' расчет давления в штуцере
-Public Function MF_choke_q_sm3day( _
-                     ByVal feed As String, _
-                     ByVal d_choke_mm As Double, _
-                     ByVal p_in_atma As Double, _
-                     ByVal p_out_atma As Double, _
-            Optional ByVal t_choke_C = 20, _
-            Optional ByVal d_pipe_mm As Double = 70, _
-            Optional ByVal param As String = "")
-' feed         - закодированная строка с параметрами потока.
-' d_choke_mm   - диаметр штуцера (эффективный)
-' p_in_atma    - давление на входе в штуцер, атм.
-'                высокая сторона
-' p_out_atma   - давление на выходе из штуцера, атм.
-'                низкая сторона
-' t_choke_C    - температура потока, С.
-' d_pipe_mm    - диаметр трубы до и после штуцера
-' param        - параметры расчета json строка
-' результат    - число - массив значений с параметрами штуцера
-'                и давление на штуцере на расчетной стороне.
-'description_end
-On Error GoTo err1:
-    Dim choke As New Cchoke
-   ' Dim res(0 To 2, 0 To nv) As Variant
-        
-    
-    Dim show_log As Boolean
-    show_log = 1
-    Dim name_value As String
-    name_value = 0
-    Dim calibr As Double
-    calibr = 1
-    ' auxiliary variables
-    Dim log_str As String
-    Dim i As Integer
-    Dim PT As PTtype
-    Dim pres As Double
-    Dim out, out_desc
-    Dim q As Double
-    Dim feed_out As String
-    With choke
-        Call read_choke_param(choke, param, calibr, show_log, name_value, 10)
-        If name_value = "" Then name_value = "q_liq_sm3day"
-    On Error GoTo err1:
-        
-        Call .fluid.init_feed(feed)
-        .d_down_m = d_pipe_mm / 1000
-        .d_up_m = d_pipe_mm / 1000
-        .d_choke_m = d_choke_mm / 1000
-        .c_calibr_fr = calibr
-        
-        q = .calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
-        .fluid.q_liq_sm3day = q
-        feed_out = .fluid.feed
-err1done:
-        On Error Resume Next
-        MF_choke_q_sm3day = .array_out(name_value, show_log)
-    End With
-    Exit Function
-err1:
-    MF_choke_q_sm3day = -1
-    choke.addLogMsg "error:MF_choke_q_sm3day:" & Err.Description
-    Resume err1done:
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' расчет давления в штуцере (дросселе)
-Public Function MF_choke_p_atma( _
-                     ByVal d_choke_mm As Double, _
-                     ByVal feed As String, _
-                     ByVal p_calc_from_atma As Double, _
-            Optional ByVal t_choke_C As Double = 20, _
-            Optional ByVal d_pipe_mm As Double = 70, _
-            Optional ByVal calc_along_flow As Boolean = True, _
-            Optional ByVal param As String = "")
-' d_choke_mm      - диаметр штуцера (эффективный)
-' feed            - закодированная строка с параметрами потока.
-' p_calc_from_atma - давление с которого начинается расчет, атм
-'                  граничное значение для проведения расчета
-'                  либо давление на входе, либо на выходе
-' t_choke_C       - температура потока, С.
-' d_pipe_mm       - диаметр трубы до и после штуцера
-' calc_along_flow - флаг направления расчета относительно потока
-' param           - параметры расчета json строка
-' результат       - число - массив значений с параметрами штуцера
-'                   и давление на штуцере на расчетной стороне.
-'description_end
-'Const nv = 9  ' output array dimension (number of columns)
-On Error GoTo err1:
-    Dim choke As New Cchoke
-    
-'    Dim prmd As Dictionary ' param dictionary and settings variables with default values
-    Dim show_log As Boolean
-    Dim name_value As String
-    Dim calibr As Double
-    
-    show_log = True
-   ' num_value = 0
-    calibr = 1
-    With choke
-        Call read_choke_param(choke, param, calibr, show_log, name_value)
-        Call .fluid.init_feed(feed)
-        .d_down_m = d_pipe_mm / 1000
-        .d_up_m = d_pipe_mm / 1000
-        .d_choke_m = d_choke_mm / 1000
-        .c_calibr_fr = calibr
-        
-        If calc_along_flow Then
-            Call .calc_choke_p_lin(set_PT(p_calc_from_atma, t_choke_C))
-            If name_value = "" Then name_value = "p_out_atma"
-        Else
-            Call .calc_choke_p_buf(set_PT(p_calc_from_atma, t_choke_C))
-            If name_value = "" Then name_value = "p_intake_atma"
-        End If
-err1done:
-    On Error Resume Next
-        MF_choke_p_atma = .array_out(name_value, show_log)
-    End With
-    Exit Function
-err1:
-    MF_choke_p_atma = -1
-    choke.addLogMsg "error:MF_p_choke_atma:" & Err.Description
-    Resume err1done:
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' расчет корректирующего фактора (множителя) модели штуцера под замеры
-' быстрый расчет - калибровка вычисляется
-Public Function MF_choke_calibr_fast( _
-            ByVal feed As String, _
-            ByVal d_choke_mm As Double, _
-            Optional ByVal p_in_atma As Double = -1, _
-            Optional ByVal p_out_atma As Double = -1, _
-            Optional ByVal d_pipe_mm As Double = 70, _
-            Optional ByVal t_choke_C As Double = 20, _
-            Optional ByVal param As String = "")
-' feed         - закодированная строка с параметрами потока.
-' d_choke_mm    - диаметр штуцера (эффективный), мм
-' p_in_atma     - давление на входе (высокой стороне)
-' p_out_atma    - давление на выходе (низкой стороне)
-' d_pipe_mm     - диаметр трубы до и после штуцера, мм
-' t_choke_C     - температура, С.
-' param        - параметры расчета json строка
-' результат     - число - калибровочный коэффициент для модели.
-'                 штуцера  - множитель на дебит через штуцер
-'description_end
-On Error GoTo err1:
-    Dim choke As New Cchoke
-    Dim arr_out
-    Dim out As String, out_desc As String
-    
-    Call choke.fluid.init_feed(feed)
-    
-    If choke.fluid.gas_only Then
-        MF_choke_calibr_fast = "not implemented yet"
-        Exit Function
-    End If
-    
-    choke.d_down_m = d_pipe_mm / 1000
-    choke.d_up_m = d_pipe_mm / 1000
-    choke.d_choke_m = d_choke_mm / 1000
-    
-    If p_in_atma > p_out_atma And p_out_atma >= 1 Then
-        Call choke.calc_choke_calibration(p_in_atma, p_out_atma, t_choke_C)
-        out = choke.c_calibr_fr
-        out_desc = "c_calibr_fr"
-    End If
-    arr_out = Array(Array(out, p_in_atma, p_out_atma, t_choke_C, choke.c_calibr_fr), _
-                    Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"), _
-                    Array(choke.log.get_str, "", "", "", "")) ' на выходе выдаем массив
-    MF_choke_calibr_fast = array_join(arr_out)
-    Exit Function
-err1:
-    choke.addLogMsg "Error:MF_choke_calibr_fast:" & Err.Description
-    arr_out = Array(Array(-1, "", "", "", ""), _
-                    Array(out_desc, "p_intake_atma", "p_out_atma", "t_choke_C", "c_calibr_fr"), _
-                    Array(choke.log.get_str, "", "", "", "")) ' на выходе выдаем массив
-    MF_choke_calibr_fast = array_join(arr_out)
-End Function
 
