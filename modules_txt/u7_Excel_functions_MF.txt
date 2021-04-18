@@ -239,7 +239,7 @@ err1:
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 '  расчет распределения давления и температуры в трубопроводе
-'  с использованием многофазных корреляций
+'  выводит результат в виде таблицы значений
 Public Function MF_pipe_p_atma( _
                  ByVal p_calc_from_atma As Double, _
                  ByVal t_calc_from_C As Double, _
@@ -249,6 +249,8 @@ Public Function MF_pipe_p_atma( _
         Optional ByVal calc_along_coord As Boolean = True, _
         Optional ByVal flow_along_coord As Boolean = True, _
         Optional ByVal flow_correlation As Integer = 0, _
+        Optional ByVal calibr_grav As Double = 1, _
+        Optional ByVal calibr_fric As Double = 1, _
         Optional ByVal param As String)
 ' p_calc_from_atma  - давление с которого начинается расчет, атм
 '           граничное значение для проведения расчета
@@ -261,7 +263,87 @@ Public Function MF_pipe_p_atma( _
 '           Используйте функцию encode_feed() для генерации
 ' calc_along_coord - направление расчета относительно координат.
 ' flow_along_coord - направление потока относительно координат.
-' flow_correlation - гидравлическая корреляция, номер
+' flow_correl ation - гидравлическая корреляция, номер
+' calibr_grav  - калибровка на гравитационную составляющую
+'                градиента давления
+' calibr_fric  - калибровка на составляющую трения
+'                градиента давления
+' param     - дополнительные параметры расчета потока
+' результат - число - давление на другом конце трубы atma.
+'           и распределение параметров по трубе
+'description_end
+    Dim pipe As New CPipe
+    Dim prmd As Dictionary
+    Dim res, res1
+    Dim out_curves As Integer
+    Dim num_value As Integer
+    Dim out_curves_num_points As Integer
+    
+    Dim show_log As Boolean
+    
+    out_curves_num_points = 20
+On Error GoTo err1:
+    
+    Set pipe = new_pipeline_with_feed(construction, _
+                                      feed, _
+                                      t_model, _
+                                      calc_along_coord, _
+                                      flow_along_coord, _
+                                      flow_correlation, _
+                                      calibr_grav, _
+                                      calibr_fric)
+    Set prmd = param_to_dict(param)
+    show_log = prmd(prm_show_log)
+    
+    ' calc pressure distribution
+    res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, allCurves))
+    
+    If out_curves = 2 Then
+        res = pipe.array_out_new(out_curves_num_points, all_curves_out:=True)
+    Else
+        res = pipe.get_result_array(out_curves_num_points)
+    End If
+    res(0, 0) = res1(0)
+    
+    res(0, 0) = res(0, num_value)
+    res(1, 0) = res(1, num_value)
+    MF_pipe_p_atma = res
+    Exit Function
+err1:
+    MF_pipe_p_atma = pipe.get_result_array()  ' Array(-1, "error")
+    add_log_msg "Error:MF_pipe_p_atma:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'  расчет распределения давления и температуры в трубопроводе
+'  выводит полный набор результатов в виде массива json параметров
+Public Function MF_pipe_calc( _
+                 ByVal p_calc_from_atma As Double, _
+                 ByVal t_calc_from_C As Double, _
+        Optional ByVal construction As String = "", _
+        Optional ByVal feed As String = "", _
+        Optional ByVal t_model As String = "", _
+        Optional ByVal calc_along_coord As Boolean = True, _
+        Optional ByVal flow_along_coord As Boolean = True, _
+        Optional ByVal flow_correlation As Integer = 0, _
+        Optional ByVal calibr_grav As Double = 1, _
+        Optional ByVal calibr_fric As Double = 1, _
+        Optional ByVal param As String)
+' p_calc_from_atma  - давление с которого начинается расчет, атм
+'           граничное значение для проведения расчета
+' t_calc_from_C - температура в точке где задано давление расчета
+' feed      - параметры потока флюидов json строка. Используйте
+'           функцию encode_feed() для генерации
+' construction - параметры конструкции json строка. Используйте
+'           функцию encode_pipe() для генерации
+' t_model   - параметры температурной модели json строка.
+'           Используйте функцию encode_feed() для генерации
+' calc_along_coord - направление расчета относительно координат.
+' flow_along_coord - направление потока относительно координат.
+' flow_correl ation - гидравлическая корреляция, номер
+' calibr_grav  - калибровка на гравитационную составляющую
+'                градиента давления
+' calibr_fric  - калибровка на составляющую трения
+'                градиента давления
 ' param     - дополнительные параметры расчета потока
 ' результат - число - давление на другом конце трубы atma.
 '           и распределение параметров по трубе
@@ -294,11 +376,11 @@ On Error GoTo err1:
     
     res(0, 0) = res(0, num_value)
     res(1, 0) = res(1, num_value)
-    MF_pipe_p_atma = res
+    MF_pipe_calc = res
     Exit Function
 err1:
-    MF_pipe_p_atma = pipe.array_out()  ' Array(-1, "error")
-    add_log_msg "Error:MF_pipe_p_atma:" & Err.Description
+    MF_pipe_calc = pipe.array_out_new()  ' Array(-1, "error")
+    add_log_msg "Error:MF_pipe_calc:" & Err.Description
 End Function
 ' ==============  функции для расчета штуцера ==========================
 ' =====================================================================
@@ -559,7 +641,7 @@ Private Function get_choke( _
     Dim choke As New Cchoke
     
     With choke
-        Call read_choke_param(choke, param, calibr)
+        'Call read_choke_param(choke, param, calibr)
         Call .fluid.init_feed(feed)
         .d_down_m = d_pipe_mm / 1000
         .d_up_m = d_pipe_mm / 1000
@@ -570,101 +652,83 @@ Private Function get_choke( _
     
     Set get_choke = choke
 End Function
-Private Function param_to_dict(param As String) As Dictionary
-        
-    Dim prmd As Dictionary ' param dictionary and settings variables with default values
-On Error GoTo err1:
-    If Len(param) > 1 Then
-        Set prmd = ParseJson(param)
-    Else
-        Set prmd = New Dictionary
-    End If
-    
-    If prmd Is Nothing Then
-        Set prmd = New Dictionary
-    End If
-    Set param_to_dict = prmd
-    Exit Function
-err1:
-    Set prmd = New Dictionary
-    Set param_to_dict = prmd
-End Function
-Private Sub read_choke_param(choke As Cchoke, _
-                            param As String, _
-                            ByRef calibr As Double, _
-                          Optional ByRef show_log As Boolean = True, _
-                          Optional ByRef calibr_type As Integer = 0)
-                          
-    Dim prmd As Dictionary ' param dictionary and settings variables with default values
-    
-    On Error Resume Next
-        ' decode param here
-        Set prmd = ParseJson(param)
-        If prmd Is Nothing Then
-            choke.add_log_msg "info: no param found, default settings applied"
-        End If
-        ' for references to parameter names we use constants to make it easier to manage later.
-        ' by default the variables will be set to zero or empty (if no key is found)
-    
-        show_log = prmd(prm_show_log)
-        
-        Dim cal As Double
-'        cal = prmd(prm_choke_calibr)
-        
-        calibr_type = 0 ' default value
-        ' here expect calibr type in param
-        ' MF_choke_calibr for details
-        '       Select Case calibr_type
-        '                Case 0
-        '                    Func = "calc_choke_dp_error_calibr_grav_atm"
-        '                    cal_type_string = "calibr"
-        '                Case 1
-        '                    Func = "calc_choke_dp_error_diam_atm"
-        '                    cal_type_string = "diam_choke"
-        '                Case 2
-        '                    Func = "calc_choke_dp_error_rp_atm"
-        '                    cal_type_string = "rp"
-        '                Case 3
-        '                    Func = "calc_choke_dp_error_fw_atm"
-        '                    cal_type_string = "fw"
-        '                Case 4
-        '                    Func = "calc_choke_dp_error_qliq_atm"
-        '                    cal_type_string = "qliq"
-        '                Case 5
-        '                    Func = "calc_choke_dp_error_qgas_atm"
-        '                    cal_type_string = "qgas_free"
-        '               Case Else
-        '                    ' solve_equation_bisection without initialasing func crashes excel
-        '                    MF_choke_calibr = "not implemented"
-        '                    Exit Function
-        '            End Select
-        '
-        calibr_type = prmd(prm_choke_calibr_type)
-        If calibr_type < 0 Or calibr_type > 5 Then cal = 0
-        Select Case calibr_type
-             Case 0
-                If cal < 0.00001 Then cal = 1
-                Call choke.add_log_msg("info: calibr_type = 0, standard calibration, choke_calibr = " & cal)
-             Case 1
-                If calibr < 1 Then calibr = 1
-                Call choke.add_log_msg("info: calibr_type = 1, diam calibration, choke_calibr = " & calibr)
-             Case 2
-                If calibr < 1 Then calibr = 1
-                Call choke.add_log_msg("info: calibr_type = 2, rp calibration, choke_calibr = " & calibr)
-             Case 3
-                If calibr < 0 Then
-                    calibr = 0
-                ElseIf calibr > 100 Then
-                    calibr = 100
-                End If
-                Call choke.add_log_msg("info: calibr_type = 3, fw calibration, choke_calibr = " & calibr)
-             Case 4
-                If calibr < 1 Then calibr = 1
-                Call choke.add_log_msg("info: calibr_type = 4, qliq calibration, choke_calibr = " & calibr)
-             Case 5
-                If calibr < 1 Then calibr = 1
-                Call choke.add_log_msg("info: calibr_type = 5, qgas_free calibration, choke_calibr = " & calibr)
-        End Select
-        
-End Sub
+'Private Sub read_choke_param(choke As Cchoke, _
+'                            param As String, _
+'                            ByRef calibr As Double, _
+'                          Optional ByRef show_log As Boolean = True, _
+'                          Optional ByRef calibr_type As Integer = 0)
+'
+'    Dim prmd As Dictionary ' param dictionary and settings variables with default values
+'
+'    On Error Resume Next
+'        ' decode param here
+'        Set prmd = ParseJson(param)
+'        If prmd Is Nothing Then
+'            choke.add_log_msg "info: no param found, default settings applied"
+'        End If
+'        ' for references to parameter names we use constants to make it easier to manage later.
+'        ' by default the variables will be set to zero or empty (if no key is found)
+'
+'        show_log = prmd(prm_show_log)
+'
+'        Dim cal As Double
+''        cal = prmd(prm_choke_calibr)
+'
+'        calibr_type = 0 ' default value
+'        ' here expect calibr type in param
+'        ' MF_choke_calibr for details
+'        '       Select Case calibr_type
+'        '                Case 0
+'        '                    Func = "calc_choke_dp_error_calibr_grav_atm"
+'        '                    cal_type_string = "calibr"
+'        '                Case 1
+'        '                    Func = "calc_choke_dp_error_diam_atm"
+'        '                    cal_type_string = "diam_choke"
+'        '                Case 2
+'        '                    Func = "calc_choke_dp_error_rp_atm"
+'        '                    cal_type_string = "rp"
+'        '                Case 3
+'        '                    Func = "calc_choke_dp_error_fw_atm"
+'        '                    cal_type_string = "fw"
+'        '                Case 4
+'        '                    Func = "calc_choke_dp_error_qliq_atm"
+'        '                    cal_type_string = "qliq"
+'        '                Case 5
+'        '                    Func = "calc_choke_dp_error_qgas_atm"
+'        '                    cal_type_string = "qgas_free"
+'        '               Case Else
+'        '                    ' solve_equation_bisection without initialasing func crashes excel
+'        '                    MF_choke_calibr = "not implemented"
+'        '                    Exit Function
+'        '            End Select
+'        '
+'        calibr_type = prmd(prm_choke_calibr_type)
+'        If calibr_type < 0 Or calibr_type > 5 Then cal = 0
+'        Select Case calibr_type
+'             Case 0
+'                If cal < 0.00001 Then cal = 1
+'                Call choke.add_log_msg("info: calibr_type = 0, standard calibration, choke_calibr = " & cal)
+'             Case 1
+'                If calibr < 1 Then calibr = 1
+'                Call choke.add_log_msg("info: calibr_type = 1, diam calibration, choke_calibr = " & calibr)
+'             Case 2
+'                If calibr < 1 Then calibr = 1
+'                Call choke.add_log_msg("info: calibr_type = 2, rp calibration, choke_calibr = " & calibr)
+'             Case 3
+'                If calibr < 0 Then
+'                    calibr = 0
+'                ElseIf calibr > 100 Then
+'                    calibr = 100
+'                End If
+'                Call choke.add_log_msg("info: calibr_type = 3, fw calibration, choke_calibr = " & calibr)
+'             Case 4
+'                If calibr < 1 Then calibr = 1
+'                Call choke.add_log_msg("info: calibr_type = 4, qliq calibration, choke_calibr = " & calibr)
+'             Case 5
+'                If calibr < 1 Then calibr = 1
+'                Call choke.add_log_msg("info: calibr_type = 5, qgas_free calibration, choke_calibr = " & calibr)
+'        End Select
+'
+'
+'End Sub
 
