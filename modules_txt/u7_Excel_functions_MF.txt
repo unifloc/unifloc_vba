@@ -275,11 +275,12 @@ Public Function MF_pipe_p_atma( _
     Dim pipe As New CPipe
     Dim prmd As Dictionary
     Dim res, res1
-    Dim out_curves As Integer
     Dim num_value As Integer
     Dim out_curves_num_points As Integer
     
     Dim show_log As Boolean
+    Dim show_array As Boolean
+    
     
     out_curves_num_points = 20
 On Error GoTo err1:
@@ -293,24 +294,30 @@ On Error GoTo err1:
                                       calibr_grav, _
                                       calibr_fric)
     Set prmd = param_to_dict(param)
+    
     show_log = prmd(prm_show_log)
+    num_value = prmd(prm_num_value)
+    show_array = prmd(prm_show_array)
     
-    ' calc pressure distribution
-    res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, allCurves))
+    If prmd.Exists(prm_out_curves_num_points) Then out_curves_num_points = prmd(prm_out_curves_num_points)
     
-    If out_curves = 2 Then
-        res = pipe.array_out_new(out_curves_num_points, all_curves_out:=True)
-    Else
+    
+    If show_array Then
+        res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, mainCurves))
         res = pipe.get_result_array(out_curves_num_points)
-    End If
-    res(0, 0) = res1(0)
     
-    res(0, 0) = res(0, num_value)
-    res(1, 0) = res(1, num_value)
+        res(0, 0) = res1(0)
+        
+        res(0, 0) = res(0, num_value)
+        res(1, 0) = res(1, num_value)
+    Else
+        res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, noCurves))  ' noCurves a bit faster - not save crv at all
+        res = res1(0)
+    End If
     MF_pipe_p_atma = res
     Exit Function
 err1:
-    MF_pipe_p_atma = pipe.get_result_array()  ' Array(-1, "error")
+    MF_pipe_p_atma = pipe.get_result_array()
     add_log_msg "Error:MF_pipe_p_atma:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
@@ -349,12 +356,22 @@ Public Function MF_pipe_calc( _
 '           и распределение параметров по трубе
 'description_end
     Dim pipe As New CPipe
-    Dim res, res1
-    Dim out_curves As Integer
+    'Dim res() As String
+'    Dim res1
+'    Dim out_curves As Integer
     Dim num_value As Integer
     Dim out_curves_num_points As Integer
+    Dim out_curves As CALC_RESULTS
+    Dim prmd As Dictionary
+    
+    Dim show_log As Boolean
+'    Dim show_array As Boolean
+    Dim show_all As Boolean
     
     out_curves_num_points = 20
+Const nv = 4  ' output array dimension (number of columns)
+    Dim res(0 To 1, 0 To nv) As String
+    
 On Error GoTo err1:
     
     Set pipe = new_pipeline_with_feed(construction, _
@@ -363,23 +380,32 @@ On Error GoTo err1:
                                       calc_along_coord, _
                                       flow_along_coord, _
                                       flow_correlation, _
-                                      param)
+                                      calibr_grav, _
+                                      calibr_fric)
     
-    ' calc pressure distribution
-    res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, allCurves))
-    If out_curves = 2 Then
-        res = pipe.array_out_new(out_curves_num_points, all_curves_out:=True)
+    Set prmd = param_to_dict(param)
+    
+    show_log = prmd(prm_show_log)
+    num_value = prmd(prm_num_value)
+'    show_array = prmd(prm_show_array)
+    show_all = prmd(prm_show_all)
+    If show_all Then
+        out_curves = allCurves
     Else
-        res = pipe.array_out_new()
+        out_curves = mainCurves
     End If
-    res(0, 0) = res1(0)
+    If prmd.Exists(prm_out_curves_num_points) Then out_curves_num_points = prmd(prm_out_curves_num_points)
+    ' calc pressure distribution
+    Call PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, out_curves))
     
-    res(0, 0) = res(0, num_value)
-    res(1, 0) = res(1, num_value)
+    res(0, 0) = ConvertToJson(pipe.get_result_dict(out_curves_num_points))
+    res(1, 0) = "results"
+    res(0, 1) = ConvertToJson(pipe.get_result_dict_crv_main(out_curves_num_points))
+    res(1, 1) = "curves"
     MF_pipe_calc = res
     Exit Function
 err1:
-    MF_pipe_calc = pipe.array_out_new()  ' Array(-1, "error")
+    MF_pipe_calc = "error"
     add_log_msg "Error:MF_pipe_calc:" & Err.Description
 End Function
 ' ==============  функции для расчета штуцера ==========================

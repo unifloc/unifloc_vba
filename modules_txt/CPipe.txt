@@ -553,7 +553,7 @@ Public Sub set_ZNLF()
 End Sub
 Public Function calc_dPipe(ByVal p_atma As Double, _
                   Optional ByVal t_C As Double, _
-                  Optional ByVal saveCurve As CALC_RESULTS = nocurves) As PTtype
+                  Optional ByVal saveCurve As CALC_RESULTS = noCurves) As PTtype
 ' здесь выбираем метод расчета
 ' если не надо рассчитывать эмисию тепла - то можно расчет делать только по давлению - это быстрее
 ' если температуру рассчитываем то решаем систему и по давлению и по температуре - медленнее
@@ -582,7 +582,7 @@ Public Function calc_dPipe(ByVal p_atma As Double, _
     t_result_C = PTres.t_C
     calc_dPipe = PTres
 End Function
-Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCurve As CALC_RESULTS = nocurves) As PTtype
+Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
 ' новая версия расчета перепада давления в трубе, сразу с учетом инклинометрии
 ' основан на применении ODEsolver
 ' PT   - термобарические условия в точке задания условия по давлению
@@ -600,6 +600,8 @@ Dim i As Integer
 Dim pfp As PIPE_FLOW_PARAMS
 Dim Rep As ODESolverReport
 Dim stPt As Boolean
+Dim crv_hl As CInterpolation
+Dim crv_fpat As CInterpolation
 'ReDim Y0(1)
 On Error GoTo err1:
     Eps = const_pressure_tolerance '0.01
@@ -637,11 +639,21 @@ On Error GoTo err1:
     ' the Application.Run method.
     Rtn = True
     i = 0
+    
+    If saveCurve > 0 Then
+        Set crv_hl = New CInterpolation
+        Set crv_fpat = New CInterpolation
+    End If
+    
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
         pfp = calc_grad(State.x, State.y(0), State.y(1))    ' Application.Run(FuncName, State.X, State.Y, CoeffA)
         State.DY(0) = pfp.dp_dl
         State.DY(1) = pfp.dt_dl
+        If saveCurve > 0 Then
+            Call crv_hl.AddPoint(pfp.md_m, pfp.h_l_d)
+            Call crv_fpat.AddPoint(pfp.md_m, pfp.fpat)
+        End If
         i = i + 1
     Loop
      ' Extract the desired results from the State
@@ -675,6 +687,8 @@ On Error GoTo err1:
         curve("c_P").special = True
         curve("c_T").special = True
         curve("c_Tamb").special = True
+        Set curve("c_Hl") = crv_hl
+        Set curve("c_fpat") = crv_fpat
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -684,12 +698,12 @@ err1:
     add_log_msg ("CPipe.calc_dPipe_2d: ошибка какая то")
     Err.Raise Err.Number, Err.source, Err.Description
 End Function
-Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESULTS = nocurves) As PTtype
+Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESULTS = noCurves) As PTtype
 ' новая версия расчета перепада давления в трубе, сразу с учетом инклинометрии
 ' основан на применении ODEsolver
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim y0(0) As Double   ' начальные значения для проведения расчета
-Dim N, M As Long
+Dim N As Long, M As Long
 Dim x() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim Eps As Double
 Dim Step As Double
@@ -699,6 +713,8 @@ Dim i As Integer
 Dim pfp As PIPE_FLOW_PARAMS
 Dim Rep As ODESolverReport
 Dim stPt As Boolean
+Dim crv_hl As CInterpolation
+Dim crv_fpat As CInterpolation
 On Error GoTo err1:
     Eps = const_pressure_tolerance  '0.001
     Step = 10
@@ -732,6 +748,12 @@ On Error GoTo err1:
     ' the Application.Run method.
     Rtn = True
     i = 0
+    
+    If saveCurve > 0 Then
+        Set crv_hl = New CInterpolation
+        Set crv_fpat = New CInterpolation
+    End If
+    
     Do While Rtn = True And i < 10000
         Rtn = ODESolverIteration(State)
         If State.y(0) < const_minPpipe_atma Then
@@ -744,6 +766,10 @@ On Error GoTo err1:
         End If
         pfp = calc_grad(State.x, State.y(0), t_init_C(State.x), calc_dtdl:=False)
         State.DY(0) = pfp.dp_dl
+        If saveCurve > 0 Then
+            Call crv_hl.AddPoint(pfp.md_m, pfp.h_l_d)
+            Call crv_fpat.AddPoint(pfp.md_m, pfp.fpat)
+        End If
         i = i + 1
     Loop
      ' Extract the desired results from the State
@@ -759,6 +785,7 @@ On Error GoTo err1:
     ' подговим выходные результаты функции
     calc_dPipe_1d.p_atma = y(M - 1, 0)
     calc_dPipe_1d.t_C = t_init_C(x(M - 1))
+    
     If saveCurve > 0 Then
     ' сохраним результаты расчета для отображения на графиках
         curve("c_P").ClearPoints
@@ -778,6 +805,10 @@ On Error GoTo err1:
         curve("c_P").special = True
         curve("c_T").special = True
         curve("c_Tamb").special = True
+        
+        Set curve("c_Hl") = crv_hl
+        Set curve("c_fpat") = crv_fpat
+        
         If saveCurve > 1 Then
             Call FillDetailedCurve
         End If
@@ -797,8 +828,8 @@ Private Sub FillDetailedCurve()
     Call curve.ClearPoints_unprotected
     For i = 1 To M
         FlowParams_out = calc_grad(curve("c_P").pointX(i), _
-                                    curve("c_P").PointY(i), _
-                                    curve("c_T").PointY(i))
+                                   curve("c_P").PointY(i), _
+                                   curve("c_T").PointY(i))
         With FlowParams_out
             curve("c_udl_m").AddPoint .md_m, .md_m - .vd_m
             curve("c_dpdl_g").AddPoint .md_m, .dpdl_g_atmm
@@ -806,8 +837,8 @@ Private Sub FillDetailedCurve()
             curve("c_dpdl_a").AddPoint .md_m, .dpdl_a_atmm
             curve("c_vsl").AddPoint .md_m, .v_sl_msec
             curve("c_vsg").AddPoint .md_m, .v_sg_msec
-            curve("c_Hl").AddPoint .md_m, .h_l_d
-            curve("c_fpat").AddPoint .md_m, .fpat
+'            curve("c_Hl").AddPoint .md_m, .h_l_d
+'            curve("c_fpat").AddPoint .md_m, .fpat
             'curve("c_Theta").AddPoint .md_m, .thete_deg
             'curve("c_Roughness").AddPoint .md_m, .roughness_m
             curve("c_Rs").AddPoint .md_m, .rs_m3m3
@@ -907,6 +938,66 @@ Const nv = 4  ' output array dimension (number of columns)
             res(2, i) = ""
         Next i
         array_out_new = res
+End Function
+Public Function get_result_dict(Optional ByVal num_points As Integer = 20)
+' подготовка массива для вывода в Excel
+' num_points - количество точек в выходных массивах для вывода
+    Dim resd As New Dictionary
+    Dim M As Integer
+    On Error Resume Next
+    
+            ' prepare dict for result output
+        Dim crv_P As CInterpolation
+        Dim crv_T As CInterpolation
+        
+        ' rearrange output curves one time here - will be used later
+        Set crv_P = curve("c_P").ClonePointsToNum(num_points)
+        Set crv_T = curve("c_T").ClonePointsToNum(num_points)
+        M = crv_P.num_points
+    
+        resd.Add "p_result_atma", p_result_atma
+        resd.Add "t_result_C", t_result_C
+        resd.Add "p_1, atma", crv_P.PointY(1)
+        resd.Add "t_1, C", crv_T.PointY(1)
+        resd.Add "p_2, atma", crv_P.PointY(M)
+        resd.Add "t_2, C", crv_T.PointY(M)
+        resd.Add "c_calibr_grav", c_calibr_grav_
+        resd.Add "c_calibr_fric", c_calibr_fric_
+        resd.Add "q_gas_sm3day", fluid.q_gas_sm3day
+        
+        Set get_result_dict = resd
+End Function
+Public Function get_result_dict_crv_main(Optional ByVal num_points As Integer = 20)
+' подготовка массива для вывода в Excel
+' num_points - количество точек в выходных массивах для вывода
+    Dim resd_crv1 As New Dictionary
+    
+    On Error Resume Next
+    
+            ' prepare dict for result output
+        Dim crv_P As CInterpolation
+        
+        ' rearrange output curves one time here - will be used later
+        Set crv_P = curve("c_P").ClonePointsToNum(num_points)
+        
+        resd_crv1.Add "crv_P", crv_P.ClonePointsToNum(num_points).getDict
+        resd_crv1.Add "crv_Н", curve("c_Hvert").ClonePointsToNum(num_points).getDict
+        resd_crv1.Add "c_T", curve("c_T").ClonePointsToNum(num_points).getDict
+        resd_crv1.Add "c_Hl", curve("c_Hl").ClonePointsToNum(num_points).getDict
+        resd_crv1.Add "c_fpat", curve("c_fpat").ClonePointsToNum(num_points).getDict
+        resd_crv1.Add "c_Tamb", curve("c_Tamb").ClonePointsToNum(num_points).getDict
+        resd_crv1.Add "c_Diam", curve("c_Diam").ClonePointsToNum(num_points).getDict
+        Set get_result_dict_crv_main = resd_crv1
+End Function
+Public Function get_result_dict_crv_add(Optional ByVal num_points As Integer = 20)
+' подготовка массива для вывода в Excel
+' num_points - количество точек в выходных массивах для вывода
+    Dim resd_crv2 As New Dictionary
+    
+    On Error Resume Next
+        resd_crv2.Add "c_Roughness", curve("c_Roughness").getDict
+        
+        Set get_result_dict_crv_add = resd_crv2
 End Function
 Public Function get_result_array(Optional ByVal num_points As Integer = 20, _
                                  Optional show_log As Boolean = False)

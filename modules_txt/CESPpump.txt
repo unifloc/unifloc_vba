@@ -916,7 +916,7 @@ Const nv = 4  ' output array dimension (number of columns)
 '        resd.Add "c_calibr_fric", c_calibr_fric_
 '        resd.Add "q_gas_sm3day", fluid.q_gas_sm3day
 End Function
-Public Function array_out(Optional ByVal num_points As Integer = 20, _
+Public Function get_result_dict(Optional ByVal num_points As Integer = 20, _
                           Optional ByVal show_log As Boolean = True)
 ' подготовка массива для вывода в Excel
 ' num_points - количество точек в выходных массивах для вывода
@@ -1118,7 +1118,210 @@ On Error Resume Next
         arr(2, i) = ""
     Next i
     
-    array_out = arr
+    get_result_dict = arr
+End Function
+Public Function get_results_array(Optional ByVal num_points As Integer = 20)
+' подготовка массива для вывода в Excel
+' num_points - количество точек в выходных массивах для вывода
+'
+    Dim arr()
+    Dim M As Integer
+   ' Dim FlowParams_out As PIPE_FLOW_PARAMS
+    Dim offset As Integer
+    Dim i As Integer
+    Dim hh As Double
+    Dim dict_pressure As New Dictionary
+    Dim dict_power As New Dictionary
+    Dim dict_ESP As New Dictionary
+    Dim dict_curves As New Dictionary
+    Dim dict_geometry As New Dictionary
+    
+    offset = 2
+On Error Resume Next
+    Dim crv_P As CInterpolation
+    Dim crv_T As CInterpolation
+    
+    ' rearrange output curves one time here - will be used later
+    Set crv_P = curves.Item("PressureInPump").ClonePointsToNum(num_points)
+    Set crv_T = curves.Item("TempInPump").ClonePointsToNum(num_points)
+    
+    M = crv_P.num_points
+    ReDim arr(M + offset, 10)
+    
+    ' в первом ряду параметров выведем результаты расчета
+    ' которые могут пригодится в явном виде при массовых расчетах
+    arr(0, 0) = 0
+    arr(1, 0) = "0"
+    
+    arr(0, 1) = head_m
+    arr(1, 1) = "head_m"
+    
+    arr(0, 2) = M_Nm
+    arr(1, 2) = "m_Nm"
+    
+    With dict_geometry
+        .Add "length_pump_m", length_m
+        .Add "angle", angle_deg
+        .Add "d_od_m", db.d_od_m
+        .Add "d_cas_min_m", db.d_cas_min_m
+        .Add "d_motor_od_m", db.d_motor_od_m
+    End With
+    
+   ' arr(0, 3) = ConvertToJson(dict_geometry)
+   ' arr(1, 3) = "geometry"
+    
+    arr(0, 4) = gas_frac_intake_
+    arr(1, 4) = "gas_frac_intake"
+    
+    arr(0, 5) = eff_ESP_d
+    arr(1, 5) = "eff_ESP_d"
+    
+    With dict_pressure
+        .Add "p_int_atma", p_int_atma
+        .Add "t_int_C", t_int_C
+        .Add "p_dis_atma", p_dis_atma
+        .Add "t_dis_C", t_dis_C
+    End With
+    arr(0, 6) = ConvertToJson(dict_pressure)
+    arr(1, 6) = "dict_pressure"
+    
+    With dict_power
+        .Add "power_fluid_W", power_fluid_W
+        .Add "power_ESP_W", power_ESP_W
+        .Add "p_dis_atma", p_dis_atma
+        .Add "eff_ESP_d", eff_ESP_d
+    End With
+    arr(0, 7) = ConvertToJson(dict_power)
+    arr(1, 7) = "dict_power"
+    
+   ' arr(0, 8) = db_json_string
+   ' arr(1, 8) = "db_json_string"
+    
+    
+    With dict_ESP
+        .Add "calc_from_dis", calc_from_dis_
+        .Add "stage_num", stage_num
+        .Add "freq_Hz", freq_Hz
+        .Add "w_obmin", w_obmin
+        .Add "rate_nom_sm3day", rate_nom_sm3day
+        .Add "rate_max_sm3day", rate_max_sm3day(-1)
+        .Add "c_calibr_head", c_calibr_head
+        .Add "c_calibr_rate", c_calibr_rate
+        .Add "c_calibr_power", c_calibr_power
+        .Add "gas_correct", gas_correct
+        .Add "gas_corr_", gas_corr_
+        .Add "turb_head_factor", turb_head_factor
+        .Add "turb_rate_factor", turb_rate_factor
+    End With
+ '   arr(0, 9) = ConvertToJson(dict_ESP)
+ '   arr(1, 9) = "dict_ESP"
+    
+    With dict_curves
+        .Add "gas_corr_", curves.Item("gas_corr_").getJson
+        .Add "corr_visc_eff_", curves.Item("corr_visc_eff_").getJson
+        .Add "corr_visc_pow_", curves.Item("corr_visc_pow_").getJson
+        .Add "corr_visc_q_", curves.Item("corr_visc_q_").getJson
+        .Add "corr_visc_h_", curves.Item("corr_visc_h_").getJson
+        .Add "mu_stage_cP", curves.Item("mu_stage_cP").getJson
+        .Add "EffESPInPump", curves.Item("EffESPInPump").getJson
+        .Add "PowerESPInPump", curves.Item("PowerESPInPump").getJson
+        .Add "PowerfluidInPump", curves.Item("PowerfluidInPump").getJson
+        .Add "q_mix_InPump", curves.Item("q_mix_InPump").getJson
+        .Add "gas_fractionInPump", curves.Item("gas_fractionInPump").getJson
+        .Add "TempInPump", curves.Item("TempInPump").getJson
+        .Add "PressureInPump", curves.Item("PressureInPump").getJson
+    End With
+  '  arr(0, 9) = ConvertToJson(dict_curves)
+  '  arr(1, 9) = "dict_curves"
+    
+    Dim j As Integer
+    
+    For i = 0 To M
+      
+        j = 0
+        hh = crv_P.pointX(i)   ' fractional stage number :)
+        If i = 0 Then
+            arr(offset + i, j) = "i"
+        Else
+            arr(offset + i, 0) = i
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset + i, j) = "n_stage"
+        Else
+            arr(offset + i, j) = hh
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset, j) = "length_m"
+        Else
+            arr(offset + i, j) = HmesStage_m(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset + i, j) = "p_atma"
+        Else
+            arr(offset + i, j) = curves.Item("PressureInPump").getPoint(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset + i, j) = "t_C"
+        Else
+            arr(offset + i, j) = curves.Item("TempInPump").getPoint(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset + i, j) = "gas_fraction"
+        Else
+            arr(offset + i, j) = curves.Item("gas_fractionInPump").getPoint(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset + i, j) = "qmix_rm3day"
+        Else
+            arr(offset + i, j) = curves.Item("q_mix_InPump").getPoint(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset, j) = "Power_fluid_W"
+        Else
+            arr(offset + i, j) = curves.Item("PowerfluidInPump").getPoint(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset, j) = "Power_ESP_W"
+        Else
+            arr(offset + i, j) = curves.Item("PowerESPInPump").getPoint(hh)
+        End If
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset, j) = "eff fluid"
+        Else
+            arr(offset + i, j) = curves.Item("EffESPInPump").getPoint(hh)
+        End If
+        
+        
+        j = j + 1
+        If i = 0 Then
+            arr(offset, j) = "mu_stage_cP"
+        Else
+            arr(offset + i, j) = curves.Item("mu_stage_cP").getPoint(hh)
+        End If
+        
+        
+    Next i
+    
+    
+    get_results_array = arr
 End Function
 Private Sub read_json_to_dict()
     ' read ESP database in json format
