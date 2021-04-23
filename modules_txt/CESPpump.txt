@@ -1,5 +1,5 @@
   '=======================================================================================
-'Unifloc 7.27 primavera                                          khabibullin.ra@gubkin.ru
+'Unifloc 7.27a primavera                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -323,6 +323,11 @@ Private Sub ESP_dPIntegration(ByVal p_atma, _
 On Error GoTo err1:
     calc_from_dis_ = calc_from_dis  ' save state to object
     
+    Dim tstart As Single
+    tstart = Timer
+    log.add_msg "CESPpump start:"
+    log.add_msg "{""gas_correct"" :" & CStr(gas_correct) & ", ""dnum_stages_integrate"" : " & CStr(dnum_stages_integrate) & _
+            ", ""calc_from_dis"": " & IIf(calc_from_dis, 1, 0) & "}"
     ' rearrange variables to calc direction
     If calc_from_dis Then
         If t_dis_C < 0 Then t_dis_C = t_intake_C
@@ -567,6 +572,8 @@ On Error GoTo err1:
     End With
     power_ESP_Wt_ = PowESPTot_Wt + gassep_M_Nm * w_radsec
     power_fluid_Wt_ = PowfluidTot_Wt
+    
+    log.add_msg "ESP_dPIntegration calc done in " & CStr((Timer - tstart) * 1000) & " ms"
     
     If calc_from_dis Then
         p_int_atma_ = Pst_atma
@@ -1120,7 +1127,8 @@ On Error Resume Next
     
     get_result_dict = arr
 End Function
-Public Function get_results_array(Optional ByVal num_points As Integer = 20)
+Public Function get_results_array(Optional ByVal num_points As Integer = 20, _
+                                  Optional ByVal show_log As Boolean = False)
 ' подготовка массива для вывода в Excel
 ' num_points - количество точек в выходных массивах для вывода
 '
@@ -1146,93 +1154,95 @@ On Error Resume Next
     Set crv_T = curves.Item("TempInPump").ClonePointsToNum(num_points)
     
     M = crv_P.num_points
-    ReDim arr(M + offset, 10)
+    ReDim arr(M + offset, 9)
     
     ' в первом ряду параметров выведем результаты расчета
     ' которые могут пригодится в явном виде при массовых расчетах
     arr(0, 0) = 0
     arr(1, 0) = "0"
     
-    arr(0, 1) = head_m
-    arr(1, 1) = "head_m"
+    arr(0, 1) = p_int_atma:                     arr(1, 1) = "p_int_atma"
+    arr(0, 2) = t_int_C:                        arr(1, 2) = "t_int_C"
+    arr(0, 3) = p_dis_atma:                     arr(1, 3) = "p_dis_atma"
+    arr(0, 4) = t_dis_C:                        arr(1, 4) = "t_dis_C"
+       
+    arr(0, 5) = head_m:                         arr(1, 5) = "head_m"
+    arr(0, 6) = eff_ESP_d * 100:                arr(1, 6) = "eff_ESP_d, %"
+    arr(0, 7) = power_fluid_W:                  arr(1, 7) = "power_fluid_W"
+    arr(0, 8) = power_ESP_W:                    arr(1, 8) = "power_ESP_W"
+    arr(0, 9) = log.get_str_safe(show_log):     arr(1, 9) = "log"
     
-    arr(0, 2) = M_Nm
-    arr(1, 2) = "m_Nm"
     
-    With dict_geometry
-        .Add "length_pump_m", length_m
-        .Add "angle", angle_deg
-        .Add "d_od_m", db.d_od_m
-        .Add "d_cas_min_m", db.d_cas_min_m
-        .Add "d_motor_od_m", db.d_motor_od_m
-    End With
+    
+'    With dict_geometry
+'        .Add "length_pump_m", length_m
+'        .Add "angle", angle_deg
+'        .Add "d_od_m", db.d_od_m
+'        .Add "d_cas_min_m", db.d_cas_min_m
+'        .Add "d_motor_od_m", db.d_motor_od_m
+'    End With
     
    ' arr(0, 3) = ConvertToJson(dict_geometry)
    ' arr(1, 3) = "geometry"
     
-    arr(0, 4) = gas_frac_intake_
-    arr(1, 4) = "gas_frac_intake"
+'    With dict_pressure
+'        .Add "p_int_atma", p_int_atma
+'        .Add "t_int_C", t_int_C
+'        .Add "p_dis_atma", p_dis_atma
+'        .Add "t_dis_C", t_dis_C
+'    End With
+'    arr(0, 6) = ConvertToJson(dict_pressure)
+'    arr(1, 6) = "dict_pressure"
     
-    arr(0, 5) = eff_ESP_d
-    arr(1, 5) = "eff_ESP_d"
-    
-    With dict_pressure
-        .Add "p_int_atma", p_int_atma
-        .Add "t_int_C", t_int_C
-        .Add "p_dis_atma", p_dis_atma
-        .Add "t_dis_C", t_dis_C
-    End With
-    arr(0, 6) = ConvertToJson(dict_pressure)
-    arr(1, 6) = "dict_pressure"
-    
-    With dict_power
-        .Add "power_fluid_W", power_fluid_W
-        .Add "power_ESP_W", power_ESP_W
-        .Add "p_dis_atma", p_dis_atma
-        .Add "eff_ESP_d", eff_ESP_d
-    End With
-    arr(0, 7) = ConvertToJson(dict_power)
-    arr(1, 7) = "dict_power"
+'    With dict_power
+'        .Add "power_fluid_W", power_fluid_W
+'        .Add "power_ESP_W", power_ESP_W
+'        .Add "p_dis_atma", p_dis_atma
+'        .Add "eff_ESP_d", eff_ESP_d
+'    End With
+'    arr(0, 7) = ConvertToJson(dict_power)
+'    arr(1, 7) = "dict_power"
     
    ' arr(0, 8) = db_json_string
    ' arr(1, 8) = "db_json_string"
     
     
-    With dict_ESP
-        .Add "calc_from_dis", calc_from_dis_
-        .Add "stage_num", stage_num
-        .Add "freq_Hz", freq_Hz
-        .Add "w_obmin", w_obmin
-        .Add "rate_nom_sm3day", rate_nom_sm3day
-        .Add "rate_max_sm3day", rate_max_sm3day(-1)
-        .Add "c_calibr_head", c_calibr_head
-        .Add "c_calibr_rate", c_calibr_rate
-        .Add "c_calibr_power", c_calibr_power
-        .Add "gas_correct", gas_correct
-        .Add "gas_corr_", gas_corr_
-        .Add "turb_head_factor", turb_head_factor
-        .Add "turb_rate_factor", turb_rate_factor
-    End With
- '   arr(0, 9) = ConvertToJson(dict_ESP)
- '   arr(1, 9) = "dict_ESP"
-    
-    With dict_curves
-        .Add "gas_corr_", curves.Item("gas_corr_").getJson
-        .Add "corr_visc_eff_", curves.Item("corr_visc_eff_").getJson
-        .Add "corr_visc_pow_", curves.Item("corr_visc_pow_").getJson
-        .Add "corr_visc_q_", curves.Item("corr_visc_q_").getJson
-        .Add "corr_visc_h_", curves.Item("corr_visc_h_").getJson
-        .Add "mu_stage_cP", curves.Item("mu_stage_cP").getJson
-        .Add "EffESPInPump", curves.Item("EffESPInPump").getJson
-        .Add "PowerESPInPump", curves.Item("PowerESPInPump").getJson
-        .Add "PowerfluidInPump", curves.Item("PowerfluidInPump").getJson
-        .Add "q_mix_InPump", curves.Item("q_mix_InPump").getJson
-        .Add "gas_fractionInPump", curves.Item("gas_fractionInPump").getJson
-        .Add "TempInPump", curves.Item("TempInPump").getJson
-        .Add "PressureInPump", curves.Item("PressureInPump").getJson
-    End With
-  '  arr(0, 9) = ConvertToJson(dict_curves)
-  '  arr(1, 9) = "dict_curves"
+'    With dict_ESP
+'        .Add "calc_from_dis", calc_from_dis_
+'        .Add "stage_num", stage_num
+'        .Add "freq_Hz", freq_Hz
+'        .Add "w_obmin", w_obmin
+'        .Add "rate_nom_sm3day", rate_nom_sm3day
+'        .Add "rate_max_sm3day", rate_max_sm3day(-1)
+'        .Add "c_calibr_head", c_calibr_head
+'        .Add "c_calibr_rate", c_calibr_rate
+'        .Add "c_calibr_power", c_calibr_power
+'        .Add "gas_correct", gas_correct
+'        .Add "gas_corr_", gas_corr_
+'        .Add "turb_head_factor", turb_head_factor
+'        .Add "turb_rate_factor", turb_rate_factor
+'    End With
+'
+' '   arr(0, 9) = ConvertToJson(dict_ESP)
+' '   arr(1, 9) = "dict_ESP"
+'
+'    With dict_curves
+'        .Add "gas_corr_", curves.Item("gas_corr_").getJson
+'        .Add "corr_visc_eff_", curves.Item("corr_visc_eff_").getJson
+'        .Add "corr_visc_pow_", curves.Item("corr_visc_pow_").getJson
+'        .Add "corr_visc_q_", curves.Item("corr_visc_q_").getJson
+'        .Add "corr_visc_h_", curves.Item("corr_visc_h_").getJson
+'        .Add "mu_stage_cP", curves.Item("mu_stage_cP").getJson
+'        .Add "EffESPInPump", curves.Item("EffESPInPump").getJson
+'        .Add "PowerESPInPump", curves.Item("PowerESPInPump").getJson
+'        .Add "PowerfluidInPump", curves.Item("PowerfluidInPump").getJson
+'        .Add "q_mix_InPump", curves.Item("q_mix_InPump").getJson
+'        .Add "gas_fractionInPump", curves.Item("gas_fractionInPump").getJson
+'        .Add "TempInPump", curves.Item("TempInPump").getJson
+'        .Add "PressureInPump", curves.Item("PressureInPump").getJson
+'    End With
+'  '  arr(0, 9) = ConvertToJson(dict_curves)
+'  '  arr(1, 9) = "dict_curves"
     
     Dim j As Integer
     
@@ -1240,13 +1250,13 @@ On Error Resume Next
       
         j = 0
         hh = crv_P.pointX(i)   ' fractional stage number :)
-        If i = 0 Then
-            arr(offset + i, j) = "i"
-        Else
-            arr(offset + i, 0) = i
-        End If
-        
-        j = j + 1
+'        If i = 0 Then
+'            arr(offset + i, j) = "i"
+'        Else
+'            arr(offset + i, 0) = i
+'        End If
+'
+'        j = j + 1
         If i = 0 Then
             arr(offset + i, j) = "n_stage"
         Else
@@ -1276,9 +1286,9 @@ On Error Resume Next
         
         j = j + 1
         If i = 0 Then
-            arr(offset + i, j) = "gas_fraction"
+            arr(offset + i, j) = "gas_fraction, %"
         Else
-            arr(offset + i, j) = curves.Item("gas_fractionInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("gas_fractionInPump").getPoint(hh) * 100
         End If
         
         j = j + 1
@@ -1304,9 +1314,9 @@ On Error Resume Next
         
         j = j + 1
         If i = 0 Then
-            arr(offset, j) = "eff fluid"
+            arr(offset, j) = "eff fluid, %"
         Else
-            arr(offset + i, j) = curves.Item("EffESPInPump").getPoint(hh)
+            arr(offset + i, j) = curves.Item("EffESPInPump").getPoint(hh) * 100
         End If
         
         

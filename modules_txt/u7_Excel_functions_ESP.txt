@@ -1,5 +1,5 @@
 ''=======================================================================================
-''Unifloc 7.27 primavera                                          khabibullin.ra@gubkin.ru
+''Unifloc 7.27a primavera                                          khabibullinra@gmail.com
 ''Petroleum engineering calculations modules (macroses)
 ''2000 - 2021
 ''
@@ -354,7 +354,7 @@ Public Function ESP_p_atma( _
         Optional ByVal num_stages As Integer = 1, _
         Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal t_dis_C As Double = 50, _
-        Optional ByVal calc_along_flow As Boolean = 1, _
+        Optional ByVal calc_along_flow As Boolean = True, _
         Optional ByVal param As String)
 ' p_calc_atma       - давление для которого делается расчет
 '                     либо давление на приеме насоса
@@ -397,9 +397,13 @@ Public Function ESP_p_atma( _
     Dim esp As New CESPpump
     Dim out_curves_num_points As Integer
     
+    Dim show_log As Boolean
+    Dim show_array As Boolean
+    Dim num_value As Integer
+    
 On Error GoTo er1:
-    ' get ESP from database
-    Call esp.set_ID(pump_id)
+    
+    Call esp.set_ID(pump_id)    ' get ESP from database
     
     If esp Is Nothing Then
         ESP_p_atma = "no ESP"
@@ -410,15 +414,12 @@ On Error GoTo er1:
     
     ' read param
     Dim prmd As Dictionary
-    If Len(param) > 1 Then
-        Set prmd = ParseJson(param)
-    Else
-        Set prmd = New Dictionary
-    End If
-    If prmd Is Nothing Then
-        esp.add_log_msg "info: no param found, default settings applied" 'todo obsolete
-    End If
     
+    Set prmd = param_to_dict(param)
+         
+    show_log = prmd(prm_show_log)
+    num_value = prmd(prm_num_value)
+    show_array = prmd(prm_show_array)
     
     With esp
         Call .fluid.init_feed(feed)  ' initialize PVT properties
@@ -462,7 +463,7 @@ On Error GoTo er1:
             out_curves_num_points = 20
         End If
          
-        arr = .get_results_array(out_curves_num_points)
+        arr = .get_results_array(out_curves_num_points, show_log)
         
         If calc_along_flow Then
             arr(0, 0) = .p_dis_atma
@@ -471,16 +472,21 @@ On Error GoTo er1:
             arr(0, 0) = .p_int_atma
             arr(1, 0) = "p_intake_atma"
         End If
+        arr(0, 0) = arr(0, num_value)
+        arr(1, 0) = arr(1, num_value)
+            
+        If show_array Then
+            ' здесь есть потенциал для оптимизации скорости, можно не готовить данные, если не надо их выводить
+            ESP_p_atma = arr
+        Else
+            ESP_p_atma = arr(0, 0)
+        End If
     End With
     
-    arr(0, 0) = arr(0, 0)
-    arr(1, 0) = arr(1, 0)
     
-    ESP_p_atma = arr
     Exit Function
 er1:
-    ESP_p_atma = "error"
-    add_log_msg "Error:ESP_dp_atm:" & Err.Description
+    ESP_p_atma = "error" & Err.Description
     
 End Function
 
