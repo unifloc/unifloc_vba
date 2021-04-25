@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.27a primavera                                          khabibullinra@gmail.com
+'Unifloc 7.27b primavera                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -19,18 +19,22 @@ End Function
 Public Function decode_json(json, _
                           Optional transpose As Boolean = False, _
                           Optional keys_filter, _
-                          Optional only_values As Boolean = False)
+                          Optional only_values As Boolean = False, _
+                          Optional safe_out As Boolean = False)
 ' json   - строка содержащая результаты расчета
 ' transpose - выбор вывода в строки или в столбцы
 ' keys_filter - строка с ключами, которые надо вывести
 ' only_values - если = 1 подписи выводиться не будут
+' safe_out - флаг заставляет выводить массив сторок,
+'            что может работать лучше в офисе 2016 и ранее
 ' результат - закодированная строка
 'description_end
     Dim d As Dictionary
     Dim c As Collection
     Dim p
-    Dim i As Integer
-    Dim outarr() As String
+    Dim i As Integer, j As Integer
+    Dim outarr() ' As String
+    Dim outarr_safe()  As String
     Dim V
     Dim K
     
@@ -155,7 +159,18 @@ Public Function decode_json(json, _
             End If
         End If
     End If
-    decode_json = outarr
+    If safe_out Then
+        ReDim outarr_safe(LBound(outarr, 1) To UBound(outarr, 1), LBound(outarr, 2) To UBound(outarr, 2))
+        For i = LBound(outarr, 1) To UBound(outarr, 1)
+            For j = LBound(outarr, 2) To UBound(outarr, 2)
+                outarr_safe(i, j) = CStr(outarr(i, j))
+            Next j
+        Next i
+        'outarr_safe = outarr
+        decode_json = outarr_safe
+    Else
+        decode_json = outarr
+    End If
     Exit Function
 err1:
     decode_json = "error"
@@ -309,7 +324,7 @@ Public Function encode_ESP_pump_string( _
             Optional ByVal num_stages As Integer = 0, _
             Optional ByVal freq_Hz As Double = 50, _
             Optional ByVal gas_correct, _
-            Optional ByVal c_calibr, _
+            Optional ByVal calibr, _
             Optional ByVal dnum_stages_integrate = 1)
 ' esp_ID         - идентификатор насоса
 ' head_nom_m     - номинальный напор системы УЭЦН
@@ -330,20 +345,20 @@ Public Function encode_ESP_pump_string( _
 '         Предел по доле газа на входе в насос после сепарации
 '         на основе статьи SPE 117414 (с корректировкой)
 '         поправка дополнительная к деградации (суммируется).
-' c_calibr    - коэффициент поправки на напор.
+' calibr    - коэффициент поправки на напор.
 '     если массив то второе значение - поправыка на подачу (множитель)
 '     третье на мощность (множитель)
 ' dnum_stages_integrate - шаг интегрирования для расчета
 ' результат         - строка с параметрами УЭЦН
 'description_end
-    Dim c_calibr_head As Double
-    Dim c_calibr_rate As Double
-    Dim c_calibr_power As Double
+    Dim calibr_head As Double
+    Dim calibr_rate As Double
+    Dim calibr_power As Double
     Dim dict As New Dictionary
         
-    c_calibr_head = 1
-    c_calibr_rate = 1
-    c_calibr_power = 1
+    calibr_head = 1
+    calibr_rate = 1
+    calibr_power = 1
     
     
     dict.Add "ESP_ID", ESP_ID
@@ -356,23 +371,23 @@ Public Function encode_ESP_pump_string( _
   '  If Not IsMissing(ksep_total) Then dict.Add "ksep_total", ksep_total
         
     Dim clbr
-    If Not IsMissing(c_calibr) Then
+    If Not IsMissing(calibr) Then
         ' set calibration properties
-        clbr = array1d_from_range(c_calibr, num_only:=True, no_zero:=False)
-        c_calibr_head = clbr(1)
-        dict.Add "c_calibr_head", c_calibr_head
+        clbr = array1d_from_range(calibr, num_only:=True, no_zero:=False)
+        calibr_head = clbr(1)
+        dict.Add "calibr_head", calibr_head
         If UBound(clbr) >= 2 Then
-            c_calibr_rate = clbr(2)
-            dict.Add "c_calibr_rate", c_calibr_rate
+            calibr_rate = clbr(2)
+            dict.Add "calibr_rate", calibr_rate
         Else
-            c_calibr_rate = 1
+            calibr_rate = 1
         End If
         
         If UBound(clbr) >= 3 Then
-            c_calibr_power = clbr(3)
-            dict.Add "c_calibr_power", c_calibr_power
+            calibr_power = clbr(3)
+            dict.Add "calibr_power", calibr_power
         Else
-            c_calibr_power = 1
+            calibr_power = 1
         End If
     End If
     
