@@ -11,7 +11,7 @@
 '
 Option Explicit
 Option Base 0
-Public log As New CLogger                      ' create new log list for each object
+Public log_ As New CLogger                      ' create new log list for each object
 ' геометрические параметры насоса
 Public h_mes_top_m As Double           ' глубина установки ЭЦН (по верхней части)
 Public angle_deg As Double             ' угол установки УЭЦН (предполагается, что по глубине угол не меняется) ' not used for 7.24
@@ -21,8 +21,8 @@ Public calibr_head As Double         ' деградация характеристики УЭЦН по напору
 Public calibr_rate As Double         ' деградация характеристики УЭЦН по дебиту
 Public calibr_power As Double        ' деградация по мощности (она же по КПД системы)
 ' набор параметром для задания поведения в зоне турбинного вращения (когда дебит больше максимального)
-Public turb_head_factor As Double
-Public turb_rate_factor As Double
+'Public turb_head_factor As Double
+'Public turb_rate_factor As Double
 Public dnum_stages_integrate As Integer
 Public freq_Hz As Double               ' частота вращения вала насоса (используется для расчета)
 Public curves As New CCurves           ' все кривые планируется прятать тут
@@ -68,7 +68,7 @@ Private t_curve_ As New CInterpolation  ' кривая распределения температуры флюид
 Private calc_from_dis_ As Boolean
 Public gassep_M_Nm As Double
 'Public Sub add_log_msg(msg As String)
-'    Call log.add_msg(msg)
+'    Call log_.add_msg(msg)
 'End Sub
 Public Property Get db() As ESP_PARAMS
     db = db_
@@ -206,13 +206,12 @@ Public Function get_ESP_head_m(ByVal q_m3day As Double, Optional ByVal stage_num
     
     q_calc_m3day = q_m3day / corr_visc_q_    ' делаем коррекцию по вязкости для дебита
     maxQ = db_.rate_max_sm3day * freq_Hz / db_.freq_Hz                   ' здесь коррекция на вязкость тоже уже учтена
+    
     If q_calc_m3day < maxQ Then
         get_ESP_head_m = calc_ESP_head_nominal_m(q_calc_m3day, stage_num_to_calc)
-    ElseIf maxQ - turb_rate_factor * (q_calc_m3day - maxQ) > 0 Then
-        ' apply correction for far rigth interval
-        get_ESP_head_m = -turb_head_factor * calc_ESP_head_nominal_m(maxQ - turb_rate_factor * (q_calc_m3day - maxQ), stage_num_to_calc)
     Else
-        get_ESP_head_m = -turb_head_factor * calc_ESP_head_nominal_m(0, stage_num_to_calc)
+        ' here we assume that head will drop linearly in negative area with same slope as in zero head proximity with positive head
+        get_ESP_head_m = -calc_ESP_head_nominal_m(maxQ * 0.95, stage_num_to_calc) * ((q_calc_m3day - maxQ) / (maxQ * 0.05))
     End If
     get_ESP_head_m = get_ESP_head_m * corr_visc_h_
 End Function
@@ -321,6 +320,7 @@ Private Sub calc_integration(ByVal p_atma, _
     Dim dPav As Double   ' поправки на давление и температуру при интегрировании
     Dim dTav As Double
    
+            Dim q_rel As Double
     dNst = dnum_stages_integrate ' для начала пытаемся интегрировать такими шагами
              ' если тут поставить 10 будет быстрее считать за счет снижение числа шагов
              ' при этом может копиться ошибка, особенно если мало ступеней
@@ -333,8 +333,8 @@ On Error GoTo err1:
     
     Dim tstart As Single
     tstart = Timer
-    log.add_msg "CESPpump start:"
-    log.add_msg "{""gas_correct_model"" :" & CStr(gas_correct_model) & _
+    log_.add_msg "CESPpump start:"
+    log_.add_msg "{""gas_correct_model"" :" & CStr(gas_correct_model) & _
             ", ""gas_correct_stage_by_stage"" : " & IIf(gas_correct_stage_by_stage, 1, 0) & _
             ", ""dnum_stages_integrate"" : " & CStr(dnum_stages_integrate) & _
             ", ""calc_from_dis"": " & IIf(calc_from_dis, 1, 0) & "}"
@@ -396,10 +396,12 @@ On Error GoTo err1:
             ' calc PVT for intake conditions
             Call .calc_PVT(Pst_atma, Tst_C)    ' calc properties for inteke conditions
             gas_frac_intake_ = .gas_fraction_d
-            
-            gas_corr_ = calc_gas_correction(gas_frac_intake_) ' reinit gas correction
-            log.add_msg "{""gas_correct_intake"" :" & Format(gas_corr_, "0.000") & _
-                        ", ""gas_frac_intake"" :" & Format(gas_frac_intake_, "0.000") & "}"
+            q_rel = .q_mix_rc_m3day / rate_max_sm3day(1)
+            gas_corr_ = calc_gas_correction(gas_frac_intake_, q_rel)   ' reinit gas correction
+            log_.add_msg "{""gas_correct_intake"" :" & Format(gas_corr_, "0.000") & _
+                        ", ""gas_frac_intake"" :" & Format(gas_frac_intake_, "0.000") & _
+                        ", ""q_rel"" :" & Format(q_rel, "0.000") & _
+                        "}"
             If saveCurve Then
                 curves.Item("gas_fractionInPump").AddPoint N, .f_g
                 curves.Item("PressureInPump").AddPoint N, Pst_atma
@@ -462,15 +464,30 @@ On Error GoTo err1:
                 End If
             End If
             
+            If Pst_atma + dPav < 1 Then
+                Pst_atma = 0.9
+                Exit Do
+            End If
             Call .calc_PVT(Pst_atma + dPav, Tst_C + dTav)  ' делаем поправку на давление и температуру
             
             ' re init gas correction for each stage mode if applicable
             If gas_correct_stage_by_stage Then
-                gas_corr_ = calc_gas_correction(.gas_fraction_d)
+                q_rel = .q_mix_rc_m3day / rate_max_sm3day(1)
+                gas_corr_ = calc_gas_correction(.gas_fraction_d, q_rel)
             End If
             q_mix_ = .q_mix_rc_m3day
             q_mix__degr = q_mix_ * calibr_rate
-            head_mix = get_ESP_head_m(q_mix__degr, Nst, .mu_mix_cSt) * calibr_head * gas_corr_
+            head_mix = get_ESP_head_m(q_mix__degr, Nst, .mu_mix_cSt) * calibr_head
+            If gas_corr_ > 0 Then
+                ' похоже, что с текущей реализацией функции корректировки на содержание газа
+                ' что то более менее корректно работает только если коэффициент корректировки положительный
+                head_mix = head_mix * gas_corr_
+            Else
+                ' поэтому для отрицательного коэффициента корректировки ставим пока заглушку
+                ' которая используется вместо фактического напора примерно максимальный напор ступени - 5 м
+                ' это дает более менее понятные графики в итого, но вообще говоря это надо бы поменять
+                head_mix = 20 * gas_corr_
+            End If
             head_real_m_ = head_real_m_ + head_mix
             dPStage = .rho_mix_rc_kgm3 * head_mix * const_g * const_convert_Pa_atma ' тут когда то надо сделать коррекцию характеристики на плотность
             Pst_atma = Pst_atma + sign_int * dPStage
@@ -587,7 +604,7 @@ On Error GoTo err1:
     power_ESP_Wt_ = PowESPTot_Wt + gassep_M_Nm * w_radsec
     power_fluid_Wt_ = PowfluidTot_Wt
     
-    log.add_msg "calc_integration calc done in " & CStr((Timer - tstart) * 1000) & " ms"
+    log_.add_msg "calc_integration calc done in " & CStr((Timer - tstart) * 1000) & " ms"
     
     If calc_from_dis Then
         p_int_atma_ = Pst_atma
@@ -649,8 +666,8 @@ Private Sub Class_Initialize()
     
     gas_correct_model = 0
     gas_correct_stage_by_stage = False
-    turb_head_factor = 1 ' 2 ' 0.5
-    turb_rate_factor = 1 ' 1.1 '0.9
+'    turb_head_factor = 1 ' 2 ' 0.5
+'    turb_rate_factor = 1 ' 1.1 '0.9
     dnum_stages_integrate = 1
     
     h_mes_top_m = 1000
@@ -725,8 +742,8 @@ Public Sub copy(pump As CESPpump)
        
        h_mes_top_m = .h_mes_top_m
        angle_deg = .angle_deg
-       turb_head_factor = .turb_head_factor
-       turb_rate_factor = .turb_rate_factor
+'       turb_head_factor = .turb_head_factor
+'       turb_rate_factor = .turb_rate_factor
        dnum_stages_integrate = .dnum_stages_integrate
        
     End With
@@ -830,7 +847,7 @@ On Error GoTo err1:
 err1:
     Dim msg As String
     msg = "CESPpump.calc_correct_visc_PetrInst error with params q_mix_ = " & CStr(q_mix_) & " nu_cSt = " & CStr(nu_cSt)
-    
+    log_.add_msg msg & " : " & Err.Description
 End Sub
 ' метод для доступа к кривой давления в насосе относительно измеренных глубин
 Public Property Get p_curve() As CInterpolation
@@ -858,7 +875,7 @@ End Function
 Public Property Get M_Nm() As Double
     M_Nm = power_ESP_Wt_ / w_radsec
 End Property
-Private Function calc_gas_correction(gas_fraction_in As Double)
+Private Function calc_gas_correction(gas_fraction_in As Double, Optional qrel As Double = 1)
             ' gas_correct_model       - тип насоса по работе с газом
             '      gas_correct_model = 0 нет коррекции
             '      gas_correct_model = 1 стандартный ЭЦН (предел 25%)
@@ -881,6 +898,8 @@ Private Function calc_gas_correction(gas_fraction_in As Double)
             calc_gas_correction = -1.4 * B ^ 2 + 0.15 * B + 1    ' SPE 117414
         Case 4
             calc_gas_correction = -4 * B ^ 2 + 0.2 * B + 1    ' SPE 117414   corrected rnt
+        Case 5
+            calc_gas_correction = gas_corr(B * 100, qrel * 100)
         Case Else
             calc_gas_correction = 1
     End Select
@@ -1050,8 +1069,8 @@ On Error Resume Next
         .Add "calibr_power", calibr_power
         .Add "gas_correct_model", gas_correct_model
         .Add "gas_corr_", gas_corr_
-        .Add "turb_head_factor", turb_head_factor
-        .Add "turb_rate_factor", turb_rate_factor
+'        .Add "turb_head_factor", turb_head_factor
+'        .Add "turb_rate_factor", turb_rate_factor
     End With
     arr(0, 4) = ConvertToJson(dict_ESP)
     arr(1, 4) = "dict_ESP"
@@ -1162,7 +1181,7 @@ On Error Resume Next
     
     Dim log_str As String
     If show_log Then
-        log_str = log.get_str_safe
+        log_str = log_.get_str_safe
     Else
         log_str = "[""set show_log=1 in param to show calc log""]"
     End If
@@ -1217,7 +1236,7 @@ On Error Resume Next
     arr(0, 7) = power_fluid_W:                  arr(1, 7) = "power_fluid_W"
     arr(0, 8) = power_ESP_W:                    arr(1, 8) = "power_ESP_W"
     arr(0, 9) = gas_corr_:                      arr(1, 9) = "gas_correction"
-    arr(0, 10) = log.get_str_safe(show_log):    arr(1, 10) = "log"
+    arr(0, 10) = log_.get_str_safe(show_log):    arr(1, 10) = "log"
     
     
     
