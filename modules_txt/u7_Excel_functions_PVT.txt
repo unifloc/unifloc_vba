@@ -31,6 +31,7 @@ On Error GoTo err1:
     ' param dictionary and settings variables with default values
     Dim prmd As Dictionary
     Dim show_log As Boolean
+    Dim show_array As Boolean
     
     show_log = True
     
@@ -41,17 +42,10 @@ On Error GoTo err1:
     Call fluid.init_feed(PVT_prop)
     
 On Error GoTo err2:
+    Set prmd = param_to_dict(param)
+    show_log = prmd(prm_show_log)
+    show_array = prmd(prm_show_array)
     
-    If Len(param) > 1 Then
-        Set prmd = ParseJson(param)
-        ' for references to parameter names we use constants to make it easier to manage later.
-        ' by default the variables will be set to zero or empty (if no key is found)
-        
-        show_log = prmd(prm_show_log)
-        
-    Else
-        Call fluid.add_log_msg("info: no param found. default Standing model set")
-    End If
 ' param read done start calc
 On Error GoTo err1:
     
@@ -89,8 +83,11 @@ err1done:
     
     res(0, 1) = fluid.log_.get_str_safe(show_log)
     res(1, 1) = "log"
-    
-    PVT_calc = res
+    If show_array Then
+        PVT_calc = res
+    Else
+        PVT_calc = res(0, 0)
+    End If
     Exit Function
     
 err1:
@@ -706,22 +703,16 @@ On Error GoTo err1:
     Dim resd As New Dictionary
     Dim prmd As Dictionary
     Dim show_log As Boolean
+    Dim show_array As Boolean
     Dim i As Integer
     
     show_log = True
     With fluid_stream
         Call .init_feed(feed)
         On Error GoTo err2:
-            If Len(param) > 1 Then
-                Set prmd = ParseJson(param)
-                ' for references to parameter names we use constants to make it easier to manage later.
-                ' by default the variables will be set to zero or empty (if no key is found)
-                
-                show_log = prmd(prm_show_log)
-                
-            Else
-                Call .add_log_msg("info: no param found. default Standing model set")
-            End If
+            Set prmd = param_to_dict(param)
+            show_log = prmd(prm_show_log)
+            show_array = prmd(prm_show_array)
         
         ' param read done start calc
         On Error GoTo err1:
@@ -743,11 +734,16 @@ On Error GoTo err1:
             resd.Add "cmix_JkgC", .cmix_JkgC
             resd.Add "cJT_Katm", .cJT_Katm
             
+                        
             res(0, 0) = ConvertToJson(resd): res(1, 0) = "json"
 err1done:
             res(0, 1) = .log_.get_str_safe(show_log)
             res(1, 1) = "log"
-            feed_calc = res
+            If show_array Then
+                feed_calc = res
+            Else
+                feed_calc = res(0, 0)
+            End If
             Exit Function
 err1:
             For i = 0 To nv
@@ -946,10 +942,15 @@ Public Function feed_mod_separate_gas( _
     Dim res(0 To 1, 0 To nv) As Variant
     ' param dictionary and settings variables with default values
     Dim prmd As Dictionary
-    Dim show_log As Boolean
     Dim gas_goes_into_solution As Double
     
-    show_log = True
+    Dim show_log As Boolean
+    Dim show_array As Boolean
+    
+    Set prmd = param_to_dict(param)
+    show_log = prmd(prm_show_log)
+    show_array = prmd(prm_show_array)
+    gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
     
     ' auxiliary variables
     Dim log_str As String
@@ -957,33 +958,19 @@ Public Function feed_mod_separate_gas( _
     With fluid_stream
         Call .init_feed(feed)
         
-'On Error GoTo err2:
-    
-        If Len(param) > 1 Then
-            Set prmd = ParseJson(param)
-            ' for references to parameter names we use constants to make it easier to manage later.
-            ' by default the variables will be set to zero or empty (if no key is found)
-            
-            show_log = prmd(prm_show_log)
-            gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
-            
-        Else
-            Call .add_log_msg("info: no param found. default Standing model set")
-        End If
-' param read done start calc
-'On Error GoTo err1:
-        
-       ' Dim fl As CPVT
-        
         Call fluid_stream.mod_after_separation(p_atma, t_C, k_sep, gas_goes_into_solution)
         
-        res(0, 0) = fluid_stream.get_json
-        res(1, 0) = "fluid after separation"
-        res(0, 1) = fluid_stream.log_.get_str_safe
-        res(1, 1) = "log"
+        If show_array Then
+            res(0, 0) = fluid_stream.get_json
+            res(1, 0) = "fluid after separation"
+            res(0, 1) = fluid_stream.log_.get_str_safe(show_log)
+            res(1, 1) = "log"
+            feed_mod_separate_gas = res
+        Else
+            feed_mod_separate_gas = fluid_stream.get_json
+        End If
     End With
     
-    feed_mod_separate_gas = res
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)

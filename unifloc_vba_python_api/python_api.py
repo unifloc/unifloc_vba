@@ -67,7 +67,7 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
-    def MF_choke_calibr(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,param=""):
+    def MF_choke_calibr(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,calibr_type=0,d_pipe_mm=70,t_choke_C=20,param=""):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  медленный расчет - калибровка подбирается 
@@ -82,6 +82,8 @@ class API():
 
      p_out_atma - давление на выходе (низкой стороне)    
 
+   calibr_type   
+
      d_pipe_mm - диаметр трубы до и после штуцера, мм    
 
      t_choke_c - температура, с.    
@@ -91,7 +93,7 @@ class API():
         """
 
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
-        return self.f_MF_choke_calibr(feed,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,param)
+        return self.f_MF_choke_calibr(feed,d_choke_mm,p_in_atma,p_out_atma,calibr_type,d_pipe_mm,t_choke_C,param)
 
     def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param):
         """
@@ -164,7 +166,7 @@ class API():
     def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param=""):
         """
  ========== description ============== 
- расчет давления в штуцере 
+ расчет расхода жидкости через штуцер по давлениям 
         
  ==========  arguments  ============== 
 
