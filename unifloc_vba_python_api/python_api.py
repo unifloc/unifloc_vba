@@ -110,7 +110,7 @@ class API():
 
      feed - параметры потока флюидов json строка. используйте  функцию encode_feed() для генерации  construction - параметры конструкции json строка. используйте  функцию encode_pi..см.мануал   
 
-     t_model - параметры температурной модели json строка.  используйте функцию encode_feed() для генерации    
+     t_model - параметры температурной модели json строка.  используйте функцию encode_t_model() для генерации    
 
      calc_along_coord - направление расчета относительно координат.    
 
@@ -1600,6 +1600,24 @@ class API():
 
         self.f_encode_table_json = self.book.macro("encode_table_json")
         return self.f_encode_table_json(keyrange,val_namerange,valrange)
+
+    def encode_pipe(self, h_list_m=1000,diam_list_mm=62,roughness_m=0):
+        """
+ ========== description ============== 
+ задание параметров траектории трубы в json строке 
+        
+ ==========  arguments  ============== 
+
+     h_list_m - число - длина вертикальной трубы или массив или range  содержащий зависимость вертикальной глубины от измеренной    
+
+     diam_list_mm - число-внутренний диаметр трубы или массив или range  содержащий зависимость внутреннего от измеренной глубины    
+
+     roughness_m - число - шероховатость, одна для всей трубы   
+
+        """
+
+        self.f_encode_pipe = self.book.macro("encode_pipe")
+        return self.f_encode_pipe(h_list_m,diam_list_mm,roughness_m)
 
     def encode_t_model(self, t_model=StartEndTemp,t_list_C=50,t_start_C=-100,t_end_C=-100,param=""):
         """
