@@ -1,5 +1,5 @@
 ''=======================================================================================
-''Unifloc 7.28 primavera                                          khabibullinra@gmail.com
+''Unifloc 7.29 primavera                                          khabibullinra@gmail.com
 ''Petroleum engineering calculations modules (macroses)
 ''2000 - 2021
 ''
@@ -283,25 +283,6 @@ Public Function ESP_p_atma( _
 ' param     - дополнительные параметры расчета потока
 ' результат   - массив значений включающий
 'description_end
-' ESP_gas_correct  - деградация по газу:
-'      0 - 2 задает значение вручную;
-'      10 стандартный ЭЦН (предел 25%);
-'      20 ЭЦН с газостабилизирующим модулем (предел 50%);
-'      30 ЭЦН с осевым модулем (предел 75%);
-'      40 ЭЦН с модифицированным ступенями (предел 40%).
-'      110+, тогда модель n-100 применяется ко всем ступеням отдельно
-'         Предел по доле газа на входе в насос после сепарации
-'         на основе статьи SPE 117414 (с корректировкой)
-'         поправка дополнительная к деградации (суммируется).
-' calibr  - коэффициент поправки на напор.
-'       если массив то второе значение - поправыка на подачу (множитель)
-'       третье на мощность (множитель)
-' dnum_stages_integrate - шаг интегрирования ЭЦН
-'           если >1 будет быстрее но менее точно
-' out_points - количество точек для вывода значений
-'                   по ступеням
-' num_value       - значение которое будет выводиться первым
-' q_gas_sm3day    - свободный газ в потоке
     Dim arr
     Dim esp As New CESPpump
     Dim out_points As Integer
@@ -309,6 +290,7 @@ Public Function ESP_p_atma( _
     Dim show_log As Boolean
     Dim show_array As Boolean
     Dim num_value As Integer
+    Dim prmd As Dictionary
     
 On Error GoTo er1:
     
@@ -322,7 +304,6 @@ On Error GoTo er1:
     If Len(feed) < 2 Then feed = encode_feed()
     
     ' read param
-    Dim prmd As Dictionary
     
     Set prmd = param_to_dict(param)
          
@@ -384,6 +365,93 @@ er1:
     ESP_p_atma = "error" & Err.Description
     
 End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'функция расчета давления на выходе/входе ЭЦН в рабочих условиях
+'параметры насоса задаются, как json строка
+Public Function ESP_calc( _
+                 ByVal p_calc_atma As Double, _
+        Optional ByVal t_intake_C As Double = 50, _
+        Optional ByVal t_dis_C As Double = 50, _
+        Optional ByVal feed As String = "", _
+        Optional ByVal pump_json As String = "", _
+        Optional ByVal calc_along_flow As Boolean = True, _
+        Optional ByVal param As String)
+' p_calc_atma      - давление для которого делается расчет
+'                    либо давление на приеме насоса
+'                    либо давление на выкиде насоса
+'                    определяется параметром calc_along_flow
+' t_intake_C       - температура на приеме насоcа
+' t_dis_C          - температура на выкиде насоса.
+'             если = 0 и calc_along_flow = 1 то рассчитывается
+' feed     - параметры потока флюидов json строка. Используйте
+'            функцию encode_feed() для генерации
+' pump_json        - строка с параметрами насоса
+' calc_along_flow  - режим расчета снизу вверх или сверху вниз
+'          calc_along_flow = True => p_atma давление на приеме
+'          calc_along_flow = False => p_atma давление на выкиде
+' param     - дополнительные параметры расчета потока
+' результат   - массив значений включающий
+'description_end
+    Dim arr(0 To 1, 0 To 2) As String
+    Dim esp As New CESPpump
+    Dim out_points As Integer
+    
+    Dim show_log As Boolean
+    Dim show_array As Boolean
+    Dim num_value As Integer
+    
+On Error GoTo er1:
+    
+    Call esp.init_json(pump_json)    ' get ESP from database
+    
+    If esp Is Nothing Then
+        ESP_calc = "no ESP"
+        Exit Function
+    End If
+    
+    If Len(feed) < 2 Then feed = encode_feed()
+    
+    ' read param
+    Dim prmd As Dictionary
+    
+    Set prmd = param_to_dict(param)
+         
+    show_log = prmd(prm_show_log)
+    num_value = prmd(prm_num_value)
+    show_array = prmd(prm_show_array)
+    
+    With esp
+        Call .fluid.init_feed(feed)  ' initialize PVT properties
+                        
+        If prmd.Exists(prm_out_points) Then
+            out_points = prmd(prm_out_points)
+        Else
+            out_points = 20
+        End If
+                 
+        If show_array Then
+            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
+                    
+            arr(0, 0) = ConvertToJson(.get_result_dict)
+            arr(1, 0) = "result_json"
+            arr(0, 1) = ConvertToJson(.get_result_dict_crv(out_points))
+            arr(1, 1) = "result_json_crv"
+            arr(0, 2) = .log_.get_str_safe(show_log)
+            arr(1, 2) = "log"
+            
+            ESP_calc = arr
+        Else
+            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=False)
+            ESP_calc = ConvertToJson(.get_result_dict)
+        End If
+    End With
+    
+    
+    Exit Function
+er1:
+    ESP_calc = "error" & Err.Description
+    
+End Function
 ' корректировка напора развиваемого ЭЦН из влияния газа
 ' на основе стендовых испытаний Горидько К в 2020 - 2021 году 26.04.2021
 Public Function gas_corr(Optional gf As Double = 1, Optional q As Double = 50)
@@ -439,5 +507,300 @@ Public Function gas_corr(Optional gf As Double = 1, Optional q As Double = 50)
     arg(1, 1) = q
     arg(1, 2) = gf
     gas_corr = crv_interpolation_2D(y, x, arr, arg)(1, 1)
+End Function
+'======================================================================
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция расчета параметров двигателя по заданному моменту на валу
+Public Function ESP_motor_calc_mom(ByVal mom_Nm As Double, _
+                          Optional ByVal freq_Hz As Double = 50, _
+                          Optional ByVal U_V As Double = -1, _
+                          Optional ByVal motor_json As String = "", _
+                          Optional ByVal cable_json As String = "", _
+                          Optional ByVal param As String)
+                          
+' mom_Nm      - момент развиваемый двигателем на валу, Нм
+' freq_Hz     - частота вращения внешнего поля
+' U_V         - напряжение рабочее, на поверхности, линейное, В
+'               если задана кабельная линия, то учитывается
+' motor_json  - строка с закодированными данными ПЭД
+' cable_json  - строка с закодированными параметрами кабеля
+' param       - строка с закодированными параметрами
+'description_end
+On Error GoTo er1:
+    Dim arr, arr_name
+    Dim prmd As Dictionary
+    Dim resd As Dictionary
+    
+    Dim motor As New CESPMotor
+    Dim show_log As Boolean
+    Dim show_array As Boolean
+     
+    Call motor.init_json(motor_json, cable_json)
+    
+    Set prmd = param_to_dict(param)
+         
+    show_log = prmd(prm_show_log)
+    show_array = prmd(prm_show_array)
+    
+    Call motor.calc_motor_mom_surf_Nm(mom_Nm, freq_Hz, U_V)
+    
+    With motor.data
+        If show_array Then
+            arr = Array(.I_lin_A, .cosphi, .eff_full_d, .s_d, .Mshaft_Nm, .Pshaft_kW, motor.log_.get_str_safe(show_log))
+            arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
+            ESP_motor_calc_mom = array_join(Array(arr, arr_name))
+        Else
+            Set resd = New Dictionary
+            resd("I_lin_A") = .I_lin_A
+            resd("CosPhi_d") = .cosphi
+            resd("eff_d") = .eff_d
+            resd("s_d") = .s_d
+            resd("M_Nm") = .Mshaft_Nm
+            resd("Pshaft_kW") = .Pshaft_kW
+            resd("cable_dU_V") = .cable_dU_V
+            resd("U_motor_V") = .U_lin_V
+            resd("U_trans_high_V") = .U_trans_high_V
+            resd("eff_full_fr") = .eff_full_d
+            resd("load_d") = .load_d
+            If show_log Then
+                ReDim arr(1 To 2, 1 To 2)
+                arr(1, 1) = ConvertToJson(resd)
+                arr(2, 1) = "result"
+                arr(1, 2) = motor.log_.get_str_safe(show_log)
+                arr(2, 1) = "log"
+                ESP_motor_calc_mom = arr
+            Else
+                ESP_motor_calc_mom = ConvertToJson(resd)
+                
+            End If
+        End If
+    End With
+    Exit Function
+er1:
+On Error GoTo er2:
+    'ESP_motor_calc_mom = -1
+    motor.add_log_msg "Error:ESP_motor_calc_mom: exit function "
+    If show_array Then
+        arr = Array(-1, -1, -1, -1, -1, -1, motor.log_.get_str_safe(show_log))
+        arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
+        ESP_motor_calc_mom = array_join(Array(arr, arr_name))
+    Else
+        ReDim arr(1 To 2, 1 To 2)
+        arr(1, 1) = "error"
+        arr(2, 1) = "result"
+        arr(1, 2) = motor.log_.get_str_safe(show_log)
+        arr(2, 1) = "log"
+        ESP_motor_calc_mom = arr
+    End If
+    Exit Function
+er2:
+    ESP_motor_calc_mom = "error"
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' функция выдает номинальные параметры ПЭД, корректированные на частоту
+Public Function ESP_motor_nameplate( _
+                          Optional ByVal motor_json As String = "", _
+                          Optional ByVal cable_json As String = "", _
+                          Optional ByVal freq_Hz As Double = 50, _
+                          Optional ByVal param As String)
+' опциональные параметры
+' motor_json  - строка с закодированными данными ПЭД
+' cable_json  - строка с закодированными параметрами кабеля
+' freq_Hz     - частота тока, Гц
+' param       - строка с закодированными параметрами
+'   результат   - формальное название ПЭД
+'description_end
+On Error GoTo er1:
+    Dim arr, arr_name
+    Dim prmd As Dictionary
+    Dim resd As Dictionary
+    
+    Dim motor As New CESPMotor
+    Dim show_log As Boolean
+     
+    Call motor.init_json(motor_json, cable_json)
+    
+    Set prmd = param_to_dict(param)
+         
+    show_log = prmd(prm_show_log)
+    
+    With motor.nom_data
+        Set resd = New Dictionary
+        resd("Pnom_kW") = .Pshaft_kW * freq_Hz / .f_Hz
+        resd("Unom_lin_V") = .U_lin_V * (freq_Hz / .f_Hz) ^ motor.U_F_ratio_power
+        resd("Inom_lin_A") = .I_lin_A
+        resd("Snom_d") = .s_d
+        resd("Mnom_Nm") = .Mshaft_Nm
+        resd("CosPhinom_d") = .cosphi
+        resd("Fnom_Hz") = .f_Hz
+        resd("F_Hz") = freq_Hz
+        resd("length_m") = motor.length_m
+        resd("d_od_mm") = motor.d_od_mm
+        If show_log Then
+            ReDim arr(1 To 2, 1 To 2)
+            arr(1, 1) = ConvertToJson(resd)
+            arr(2, 1) = "result"
+            arr(1, 2) = motor.log_.get_str_safe(show_log)
+            arr(2, 1) = "log"
+            ESP_motor_nameplate = arr
+        Else
+            ESP_motor_nameplate = ConvertToJson(resd)
+        End If
+    End With
+    Exit Function
+er1:
+On Error GoTo er2:
+    'ESP_motor_calc_mom = -1
+    motor.add_log_msg "Error:ESP_motor_calc_mom: exit function "
+    
+    ReDim arr(1 To 2, 1 To 2)
+    arr(1, 1) = "error"
+    arr(2, 1) = "result"
+    arr(1, 2) = motor.log_.get_str_safe(show_log)
+    arr(2, 1) = "log"
+    ESP_motor_nameplate = arr
+    
+    Exit Function
+er2:
+    ESP_motor_nameplate = "error"
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет полной характеристики двигателя от проскальзования
+' по заданной величине скольжения (на основе схемы замещения)
+Public Function ESP_motor_calc_slip(ByVal s As Double, _
+                          Optional ByVal freq_Hz As Double = 50, _
+                          Optional ByVal U_V As Double = -1, _
+                          Optional ByVal motor_json As String = "", _
+                          Optional ByVal cable_json As String = "", _
+                          Optional ByVal param As String)
+                          
+' s           - проскальзывание,
+' freq_Hz     - частота вращения внешнего поля
+' U_V         - напряжение рабочее, на поверхности, линейное, В
+'               если задана кабельная линия, то учитывается
+' motor_json  - строка с закодированными данными ПЭД
+' cable_json  - строка с закодированными параметрами кабеля
+' param       - строка с закодированными параметрами
+'description_end
+On Error GoTo er1:
+    Dim arr, arr_name
+    Dim prmd As Dictionary
+    Dim resd As Dictionary
+    
+    Dim motor As New CESPMotor
+    Dim show_log As Boolean
+    Dim show_array As Boolean
+     
+    Dim sk
+    Call motor.init_json(motor_json, cable_json)
+    
+    Set prmd = param_to_dict(param)
+         
+    show_log = prmd(prm_show_log)
+    show_array = prmd(prm_show_array)
+    
+    sk = motor.calc_s_M_krit(U_V, freq_Hz)
+    motor.calc_motor_slip s, freq_Hz, U_V
+'    Call motor.calc_motor_mom_surf_Nm(mom_Nm, freq_Hz, U_V)
+    
+    With motor.data
+        If show_array Then
+            arr = Array(.I_lin_A, .cosphi, .eff_full_d, .s_d, .Mshaft_Nm, .Pshaft_kW, motor.log_.get_str_safe(show_log))
+            arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
+            ESP_motor_calc_slip = array_join(Array(arr, arr_name))
+        Else
+            Set resd = New Dictionary
+            resd("I_lin_A") = .I_lin_A
+            resd("CosPhi_d") = .cosphi
+            resd("eff_d") = .eff_d
+            resd("s_d") = .s_d
+            resd("M_Nm") = .Mshaft_Nm
+            resd("Pshaft_kW") = .Pshaft_kW
+            resd("cable_dU_V") = .cable_dU_V
+            resd("U_motor_V") = .U_lin_V
+            resd("U_trans_high_V") = .U_trans_high_V
+            resd("eff_full_fr") = .eff_full_d
+            resd("load_d") = .load_d
+            If show_log Then
+                ReDim arr(1 To 2, 1 To 2)
+                arr(1, 1) = ConvertToJson(resd)
+                arr(2, 1) = "result"
+                arr(1, 2) = motor.log_.get_str_safe(show_log)
+                arr(2, 1) = "log"
+                ESP_motor_calc_slip = arr
+            Else
+                ESP_motor_calc_slip = ConvertToJson(resd)
+                
+            End If
+        End If
+    End With
+    Exit Function
+er1:
+On Error GoTo er2:
+    'ESP_motor_calc_mom = -1
+    motor.add_log_msg "Error:ESP_motor_calc_mom: exit function "
+    If show_array Then
+        arr = Array(-1, -1, -1, -1, -1, -1, motor.log_.get_str_safe(show_log))
+        arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
+        ESP_motor_calc_slip = array_join(Array(arr, arr_name))
+    Else
+        ReDim arr(1 To 2, 1 To 2)
+        arr(1, 1) = "error"
+        arr(2, 1) = "result"
+        arr(1, 2) = motor.log_.get_str_safe(show_log)
+        arr(2, 1) = "log"
+        ESP_motor_calc_slip = arr
+    End If
+    Exit Function
+er2:
+    ESP_motor_calc_slip = "error"
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет коэффициента сепарации газосепаратора
+' по результатам стендовых испытаний РГУ нефти и газа
+Public Function ESP_gassep_ksep_d( _
+                ByVal gsep_type_TYPE As Integer, _
+                ByVal gas_frac_d As Double, _
+                ByVal qliq_sm3day As Double, _
+       Optional ByVal freq_Hz As Double = 50) As Double
+' MY_SEPFACTOR - Вычисление коэффициента сепрации в точке
+'   gsep_type_TYPE    - тип сепаратора (номер от 1 до 29)
+'    1  - 'GDNK5'
+'    2  - 'VGSA (VORTEX)'
+'    3  - 'GDNK5A'
+'    4  - 'GSA5-1'
+'    5  - 'GSA5-3'
+'    6  - 'GSA5-4'
+'    7  - 'GSAN-5A'
+'    8  - 'GSD-5A'
+'    9  - 'GSD5'
+'    10 - '3MNGB5'
+'    11 - '3MNGB5A'
+'    12 - '3MNGDB5'
+'    13 - '3MNGDB5A'
+'    14 - 'MNGSL5A-M'
+'    15 - 'MNGSL5A-TM'
+'    16 - 'MNGSL5-M'
+'    17 - 'MNGSL5-TM'
+'    18 - 'MNGSLM 5'
+'    19 - 'MNGD 5'
+'    20 - 'GSIK 5A'
+'    21 - '338DSR'
+'    22 - '400GSR'
+'    23 - '400GSV'
+'    24 - '400GSVHV'
+'    25 - '538 GSR'
+'    26 - '538 GSVHV'
+'    27 - '400FSR(OLD)'
+'    28 - '513GRS(OLD)'
+'    29 - '675HRS'
+'
+'   gas_frac_d       - газосодержание на входе в газосепаратор
+'   qliq_sm3day      - дебит жидкости в стандартных условиях
+'   freq_Hz          - частота врашения, Гц
+'description_end
+    Dim GS As New CESPGasSep
+    ESP_gassep_ksep_d = GS.my_sepfactor(gsep_type_TYPE, gas_frac_d * 100, qliq_sm3day, freq_Hz * 60) / 100
+    
 End Function
 

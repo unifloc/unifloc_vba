@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.28 primavera                                          khabibullinra@gmail.com
+'Unifloc 7.29 primavera                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -318,13 +318,16 @@ Public Function encode_feed( _
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы УЭЦН в строку
-Public Function encode_ESP_pump_string( _
+Public Function encode_ESP_pump( _
             Optional ByVal ESP_ID As Long = "1005", _
             Optional ByVal head_nom_m As Double = 2000, _
             Optional ByVal num_stages As Integer = 0, _
             Optional ByVal freq_Hz As Double = 50, _
-            Optional ByVal gas_correct, _
-            Optional ByVal calibr, _
+            Optional ByVal calibr_head As Double = 1, _
+            Optional ByVal calibr_rate As Double = 1, _
+            Optional ByVal calibr_power As Double = 1, _
+            Optional ByVal gas_correct_model As Integer = 0, _
+            Optional ByVal gas_correct_stage_by_stage As Integer = 0, _
             Optional ByVal dnum_stages_integrate = 1)
 ' esp_ID         - идентификатор насоса
 ' head_nom_m     - номинальный напор системы УЭЦН
@@ -332,115 +335,87 @@ Public Function encode_ESP_pump_string( _
 ' num_stages     - количество ступеней, если задано
 '                  перекрывает значение напора
 ' freq_Hz        - частота, Гц
-' t_intake_C     - температура на приеме насоа
-' t_dis_C        - температура на выкиде насоса.
-'                  если = 0 и calc_along_flow = 1 то рассчитывается
-' gas_correct    - деградация по газу:
-'      0 - 2 задает значение вручную;
-'      10 стандартный ЭЦН (предел 25%);
-'      20 ЭЦН с газостабилизирующим модулем (предел 50%);
-'      30 ЭЦН с осевым модулем (предел 75%);
-'      40 ЭЦН с модифицированным ступенями (предел 40%).
-'      110+, тогда модель n-100 применяется ко всем ступеням отдельно
-'         Предел по доле газа на входе в насос после сепарации
-'         на основе статьи SPE 117414 (с корректировкой)
-'         поправка дополнительная к деградации (суммируется).
-' calibr    - коэффициент поправки на напор.
-'     если массив то второе значение - поправыка на подачу (множитель)
-'     третье на мощность (множитель)
+' calibr_head    - калибровка по напору
+' calibr_rate    - калибровка по подаче
+' calibr_power   - калибровка по мощности
+' gas_correct_model - модель калибровки по газу
+' gas_correct_stage_by_stage - флаг метода применения калибровки по газу
 ' dnum_stages_integrate - шаг интегрирования для расчета
 ' результат         - строка с параметрами УЭЦН
 'description_end
-    Dim calibr_head As Double
-    Dim calibr_rate As Double
-    Dim calibr_power As Double
+'    Dim calibr_head As Double
+'    Dim calibr_rate As Double
+'    Dim calibr_power As Double
     Dim dict As New Dictionary
-        
-    calibr_head = 1
-    calibr_rate = 1
-    calibr_power = 1
     
     
     dict.Add "ESP_ID", ESP_ID
     dict.Add "head_nom_m", head_nom_m
     If num_stages > 0 Then dict.Add "num_stages", num_stages
     dict.Add "freq_Hz", freq_Hz
-'    If Not IsMissing(t_intake_C) Then dict.Add "t_intake_C", t_intake_C
-'    If Not IsMissing(t_dis_C) Then dict.Add "t_dis_C", t_dis_C
-    If Not IsMissing(gas_correct) Then dict.Add "gas_correct", gas_correct
-  '  If Not IsMissing(ksep_total) Then dict.Add "ksep_total", ksep_total
-        
-    Dim clbr
-    If Not IsMissing(calibr) Then
-        ' set calibration properties
-        clbr = array1d_from_range(calibr, num_only:=True, no_zero:=False)
-        calibr_head = clbr(1)
-        dict.Add "calibr_head", calibr_head
-        If UBound(clbr) >= 2 Then
-            calibr_rate = clbr(2)
-            dict.Add "calibr_rate", calibr_rate
-        Else
-            calibr_rate = 1
-        End If
-        
-        If UBound(clbr) >= 3 Then
-            calibr_power = clbr(3)
-            dict.Add "calibr_power", calibr_power
-        Else
-            calibr_power = 1
-        End If
-    End If
+    dict.Add "gas_correct_model", gas_correct_model
+    dict.Add "gas_correct_stage_by_stage", gas_correct_stage_by_stage
+    dict.Add "calibr_head", calibr_head
+    dict.Add "calibr_power", calibr_power
+    dict.Add "calibr_rate", calibr_rate
+    dict.Add "dnum_stages_integrate", dnum_stages_integrate
+  
     
-    If Not IsMissing(dnum_stages_integrate) Then dict.Add "dnum_stages_integrate", dnum_stages_integrate
-    encode_ESP_pump_string = ConvertToJson(dict)
+    encode_ESP_pump = ConvertToJson(dict)
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров ПЭД в строку
-Public Function encode_ESP_motor_string( _
+Public Function encode_ESP_motor( _
             Optional ByVal motor_ID As Long = 0, _
-            Optional ByVal U_surf_high_lin_V As Double, _
-            Optional ByVal f_surf_Hz As Double, _
-            Optional ByVal power_fact_kW As Double, _
-            Optional ByVal U_nom_lin_V As Double, _
-            Optional ByVal P_nom_kW As Double, _
-            Optional ByVal f_nom_Hz As Double, _
-            Optional ByVal eff_nom_fr As Double, _
-            Optional ByVal cosphi_nom_fr As Double, _
-            Optional ByVal slip_nom_fr As Double, _
+            Optional ByVal P_nom_kW As Double = 30, _
+            Optional ByVal U_nom_lin_V As Double = 1000, _
+            Optional ByVal f_nom_Hz As Double = 50, _
+            Optional ByVal eff_nom_fr As Double = 0.82, _
+            Optional ByVal cosphi_nom_fr As Double = 0.88, _
+            Optional ByVal slip_nom_fr As Double = 0.053, _
             Optional ByVal d_od_mm As Double, _
-            Optional ByVal Lambda As Double, _
+            Optional ByVal lambda As Double, _
             Optional ByVal alpha0 As Double, _
             Optional ByVal xi0 As Double, _
             Optional ByVal Ixcf As Double)
 'motor_ID - тип 0 - постоянные значения,
 '               1 - задается по каталожным кривым, ассинхронный
 '               2 - задается по схеме замещения, ассинхронный
-'U_surf_high_lin_V - напряжение на поверхности
-'                    на высокой стороне трансформатора
-'f_surf_Hz  - частота питающего напряжения
-'U_nom_lin_V - номинальное напряжение двигателя, линейное, В
-'P_nom_kW - номинальная мощность двигателя кВт
-'f_nom_Hz - номинальная частота тока, Гц
-'eff_nom_fr - КПД при номинальном режиме работы
-'cosphi_nom_fr - коэффициент мощности при номинальном режиме работы
-'slip_nom_fr - скольжение при номинальном режиме работы
-'d_od_mm - внешний диаметр - габарит ПЭД
+'P_nom_kW       - номинальная мощность двигателя кВт
+'U_nom_lin_V    - номинальное напряжение двигателя, линейное, В
+'f_nom_Hz       - номинальная частота тока, Гц
+'eff_nom_fr     - КПД при номинальном режиме работы
+'cosphi_nom_fr  - коэффициент мощности при номинальный
+'slip_nom_fr    - скольжение при номинальном режиме работы
+'d_od_mm            - внешний диаметр - габарит ПЭД
 'lambda - для motorID = 2 перегрузочный коэффициент
 '         отношение макс момента к номинальному
 'alpha0 - параметр. влияет на положение макс КПД.для motorID = 2
-'xi0 - параметр. определяет потери момента при холостом ходе.
-'      для motorID = 2
-'Ixcf - поправка на поправку тока холостого хода
-'       при изменении напряжения и частоты от минимальной.
+'xi0    - параметр. определяет потери момента при холостом ходе.
+'         для motorID = 2
+'Ixcf   - поправка на поправку тока холостого хода
+'         при изменении напряжения и частоты от минимальной.
 'description_end
+    
+    
+' ранее эти данные передавались, но наверное они лишние
+    
+'            Optional ByVal U_surf_high_lin_V As Double, _
+'            Optional ByVal f_surf_Hz As Double, _
+'            Optional ByVal power_fact_kW As Double, _
+''U_surf_high_lin_V  - напряжение на поверхности
+'                     на высокой стороне трансформатора
+'                     для motorID = 2
+'f_surf_Hz          - частота питающего напряжения
+'power_fact_kW      - фактическая мощность потребляемая
     
     Dim dict As New Dictionary
     
     dict.Add "motor_ID", motor_ID
-   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
-   If f_surf_Hz > 0 Then dict.Add "f_surf_Hz", f_surf_Hz
-   If power_fact_kW > 0 Then dict.Add "power_fact_kW", power_fact_kW
+'   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
+'   If f_surf_Hz > 0 Then dict.Add "f_surf_Hz", f_surf_Hz
+'   If power_fact_kW > 0 Then dict.Add "power_fact_kW", power_fact_kW
    If U_nom_lin_V > 0 Then dict.Add "U_nom_lin_V", U_nom_lin_V
    If P_nom_kW > 0 Then dict.Add "P_nom_kW", P_nom_kW
    If f_nom_Hz > 0 Then dict.Add "F_nom_Hz", f_nom_Hz
@@ -449,24 +424,24 @@ Public Function encode_ESP_motor_string( _
    If slip_nom_fr > 0 Then dict.Add "slip_nom_fr", slip_nom_fr
    If d_od_mm > 0 Then dict.Add "d_od_mm", d_od_mm
     
-   If Lambda > 0 Then dict.Add "lambda", Lambda
+   If lambda > 0 Then dict.Add "lambda", lambda
    If alpha0 > 0 Then dict.Add "alpha0", alpha0
    If xi0 > 0 Then dict.Add "xi0", xi0
    If Ixcf > 0 Then dict.Add "Ixcf", Ixcf
-   encode_ESP_motor_string = ConvertToJson(dict)
+   encode_ESP_motor = ConvertToJson(dict)
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров
 ' кабельной линии ПЭД в строку
-Public Function encode_ESP_cable_string( _
-            Optional ByVal cable_R_Omkm As Double, _
-            Optional ByVal cable_X_Omkm As Double, _
-            Optional ByVal cable_t_max_C As Double, _
-            Optional ByVal manufacturer As String = "no", _
-            Optional ByVal name As String = "no", _
-            Optional ByVal d_mm As Double, _
-            Optional ByVal length_m As Double)
+Public Function encode_ESP_cable( _
+            Optional ByVal cable_R_Omkm As Double = 1.18, _
+            Optional ByVal cable_X_Omkm As Double = 0.01, _
+            Optional ByVal cable_t_max_C As Double = 120, _
+            Optional ByVal manufacturer As String = "default", _
+            Optional ByVal name As String = "КПпАпБП-120 3x16", _
+            Optional ByVal d_mm As Double = 16, _
+            Optional ByVal length_m As Double = 1000)
 ' cable_R_Omkm - удельное активное сопротивление
 ' cable_X_Omkm - удельное реактивное сопротивление
 ' cable_t_max_C - максимально допустимая температура
@@ -485,12 +460,12 @@ Public Function encode_ESP_cable_string( _
     If d_mm > 0 Then dict.Add "d_mm", d_mm
     If length_m > 0 Then dict.Add "length_m", length_m
     
-    encode_ESP_cable_string = ConvertToJson(dict)
+    encode_ESP_cable = ConvertToJson(dict)
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования газосепаратора
-Public Function encode_ESP_separation_string( _
+Public Function encode_ESP_separation( _
             Optional ByVal separation_mode As String, _
             Optional ByVal gassep_type As Long, _
             Optional ByVal natsep_type As Long = 0, _
@@ -546,7 +521,7 @@ Public Function encode_ESP_separation_string( _
     If name <> "no" Then dict.Add "name", name
     If length_m > 0 Then dict.Add "length_m", length_m
     
-    encode_ESP_separation_string = ConvertToJson(dict)
+    encode_ESP_separation = ConvertToJson(dict)
     
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)

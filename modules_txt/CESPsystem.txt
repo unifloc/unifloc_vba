@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.28 primavera                                          khabibullinra@gmail.com
+'Unifloc 7.29 primavera                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -62,7 +62,7 @@ Public Property Get f_shaft_Hz() As Double
         If motor Is Nothing Then
             f_shaft_Hz = pump_.freq_Hz
         Else
-            f_shaft_Hz = motor.f_Hz * (1 - motor.s_d)
+            f_shaft_Hz = motor.data.f_Hz * (1 - motor.data.s_d)
         End If
     
 End Property
@@ -70,19 +70,19 @@ Public Property Get slip_fr() As Double
     If motor Is Nothing Then
         slip_fr = 0
     Else
-        slip_fr = motor.s_d    ' если задан двигатель, то берем проскальзывание из его характеристик
+        slip_fr = motor.data.s_d    ' если задан двигатель, то берем проскальзывание из его характеристик
     End If
 End Property
 Public Property Get U_surf_V() As Double
     If motor Is Nothing Then
         U_surf_V = 0
     Else
-        U_surf_V = motor.U_trans_high_V     ' если задан двигатель, то берем проскальзывание из его характеристик
+        U_surf_V = motor.data.U_trans_high_V     ' если задан двигатель, то берем проскальзывание из его характеристик
     End If
 End Property
 Public Property Get energy_fact_Whday() As Double
     If Not motor Is Nothing Then
-       energy_fact_Whday = motor.power_fact_kW
+       energy_fact_Whday = motor.data.power_fact_kW
     Else
        energy_fact_Whday = 0
     End If
@@ -229,8 +229,8 @@ Public Function calc_ESPsys(ByVal p_atma As Double, _
     i = 0
     ' 1. если есть мотор - зададим для него номинальные параметры работы
     If Not motor Is Nothing Then
-        Call motor.calc_motor_mom_from_surf(motor.Mnom_Nm)
-        sl1 = motor.s_d
+        Call motor.calc_motor_mom_surf_Nm(motor.nom_data.Mshaft_Nm)
+        sl1 = motor.data.s_d
     End If
     
     ' 2. найдем параметры работы насоса и двигателя согласованные по скольжению
@@ -247,7 +247,7 @@ Public Function calc_ESPsys(ByVal p_atma As Double, _
         Call pump_.calc_ESP(p_atma, t_int_C, t_dis_C, calc_along_flow, saveCurve, f_shaft_Hz)
         '2.2  если есть мотор, найдем скольжение и другие параметры
         If Not motor Is Nothing Then
-            Call motor.calc_motor_mom_from_surf(pump_.M_Nm + separ.M_Nm)
+            Call motor.calc_motor_mom_surf_Nm(pump_.M_Nm + separ.M_Nm)
         End If
     Loop Until (Abs(slip_fr - sl1) < 0.001) Or (i >= 10)
     
@@ -255,16 +255,16 @@ Public Function calc_ESPsys(ByVal p_atma As Double, _
     p_int_atma = pump_.p_int_atma
     'power_shaft_W =
     If Not motor Is Nothing Then
-        power_shaft_W = motor.Pshaft_kW * 1000
-        If motor.power_CS_teor_calc_W > 0 And power_CS_fact_W > 0 Then
-            pump_.calibr_power = power_CS_fact_W / motor.power_CS_teor_calc_W
+        power_shaft_W = motor.data.Pshaft_kW * 1000
+        If motor.data.power_CS_teor_calc_W > 0 And power_CS_fact_W > 0 Then
+            pump_.calibr_power = power_CS_fact_W / motor.data.power_CS_teor_calc_W
         End If
         
-        If motor.power_CS_teor_calc_W > 0 Then
-            eff_d = pump_.power_fluid_W / motor.power_CS_teor_calc_W
-            If motor.power_fact_kW > 0 Then
-                eff_fact_d = pump_.power_fluid_W / 1000 / motor.power_fact_kW
-                dp_unknown_kW = motor.power_fact_kW - motor.power_CS_teor_calc_W / 1000
+        If motor.data.power_CS_teor_calc_W > 0 Then
+            eff_d = pump_.power_fluid_W / motor.data.power_CS_teor_calc_W
+            If motor.data.power_fact_kW > 0 Then
+                eff_fact_d = pump_.power_fluid_W / 1000 / motor.data.power_fact_kW
+                dp_unknown_kW = motor.data.power_fact_kW - motor.data.power_CS_teor_calc_W / 1000
             End If
             
         Else
@@ -377,7 +377,7 @@ On Error Resume Next
     arr(1, 0) = "dP_atm"
     
     
-    arr(0, 2) = motor.M_Nm
+    arr(0, 2) = motor.data.Mshaft_Nm
     arr(1, 2) = "M_Nm"
     
     With dict_geometry
@@ -396,30 +396,30 @@ On Error Resume Next
     
     i = 9
     With dict_electric_params
-        Call .Add("Pow_freq_Hz", motor.f_Hz)
+        Call .Add("Pow_freq_Hz", motor.data.f_Hz)
         Call .Add("ESP_freq_Hz", ESP_pump.freq_Hz)
-        Call .Add("I_A", motor.I_lin_A)
-        Call .Add("load_%", motor.load_d)
-        Call .Add("power_CS_kW", motor.power_CS_calc_W / 1000)
-        Call .Add("power_motor_kW", motor.power_motor_W / 1000)
+        Call .Add("I_A", motor.data.I_lin_A)
+        Call .Add("load_%", motor.data.load_d)
+        Call .Add("power_CS_kW", motor.data.power_CS_calc_W / 1000)
+        Call .Add("power_motor_kW", motor.data.Pelectr_kW)
         Call .Add("power_shaft_kW", power_shaft_W / 1000)
         Call .Add("power_ESP_kW", ESP_pump.power_ESP_W / 1000)
         Call .Add("power_fluid_kW", ESP_pump.power_fluid_W / 1000)
-        Call .Add("U_trans_high_V", motor.U_trans_high_V)
-        Call .Add("U_motor_V", motor.U_lin_V)
+        Call .Add("U_trans_high_V", motor.data.U_trans_high_V)
+        Call .Add("U_motor_V", motor.data.U_lin_V)
         Call .Add("eff_total_d", eff_d)
         Call .Add("eff_ESP_d", ESP_pump.eff_ESP_d)
         Call .Add("eff_fact_d", eff_fact_d)
         Call .Add("dp_unknown_kW", dp_unknown_kW)
-        Call .Add("Pmotor_nom_kW", motor.Pnom_kW)
+        Call .Add("Pmotor_nom_kW", motor.data.Pshaft_kW)
         Call .Add("power_CS_fact_kW", power_CS_fact_W / 1000)
-        Call .Add("motor_eff_fr", motor.eff_d)
-        Call .Add("cable_R_Omkm", motor.cable_R_Omkm)
+        Call .Add("motor_eff_fr", motor.data.eff_d)
+        Call .Add("cable_R_Omkm", motor.cable.R_Omkm)
         Call .Add("dPower_protector_kW", motor.dPower_protector_W / 1000)
         Call .Add("dPower_GasSep_kW", separ.dPower_GasSep_W / 1000)
         Call .Add("dPower_CS_kW", motor.dPower_CS_W / 1000)
         Call .Add("dPower_transform_kW", motor.dPower_transform_W / 1000)
-        Call .Add("cos_phi", motor.CosPhi_d)
+        Call .Add("cos_phi", motor.data.cosphi)
     End With
     i = i + 1
     arr(0, 7) = ConvertToJson(dict_electric_params)

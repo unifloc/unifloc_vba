@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.28 primavera                                          khabibullinra@gmail.com
+'Unifloc 7.29 primavera                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -8,9 +8,9 @@
 Option Explicit
 '  класс для описания параметров сепарации газа на приеме ЭЦН, включая сепарацию роторным газосепаратором
 '
+Public log_ As New CLogger                      ' create new log list for each object
 ' описание газосепаратора
 Public isGasSep As Boolean   ' флаг того, что ГС работает
-'Public ksep_total_manual_fr As Double     '
 Public ksep_gassep_fr As Double           ' коэффициент сепарации газосепаратора, расчетный
 Public ksep_nat_fr As Double              ' коэффициент естественной сепарации, расчетный
 Public ksep_liquid_d As Double
@@ -43,26 +43,27 @@ Public angle_deg As Double                 ' угол установки УЭЦН (предполагается
 Public d_cas_m As Double                   ' диаметр эксплуатационной колонны в месте установки сепаратора
 ' общие параметры
 Private fluid_ As CPVT                     ' флюид исходный
-Private fluid_gs_ As CPVT                     ' флюид исходный
+Private fluid_gs_ As CPVT                  ' флюид в газосепараторе, после естественной сепарации
 Private fluid_tub_ As CPVT                 ' флюид после сепарации
 Private fluid_cas_ As CPVT                 ' флюид после сепарации - то что идет в затруб
-'Private is_ksep_manual_ As Boolean         ' флаг для ручного учета газосепаратора
 '  параметры для задания упрощенной модели сепаратора
 Private ksep_gassep_max_d_  As Double
-Private ksep_q_max_m3day_    As Double                    ' максимальный дебит для газосепаратора для упрощенной характеристики
-'Private q_mix_gassep_rc_m3day_ As Double
+Private ksep_q_max_m3day_    As Double     ' максимальный дебит для газосепаратора для упрощенной характеристики
 Private m_Nm_ As Double                    ' момент потребляемый
 Public freq_Hz As Double
  
  
+Public Sub add_log_msg(msg As String)
+    Call log_.add_msg(msg)
+End Sub
 Public Property Get ksep_total_fr() As Double
 ' общая сепарация УЭЦН параметр только для чтения
 ' для задания вручную надо задать естественную сепарацию и сепарацию газосепаратора
     ksep_total_fr = ksep_nat_fr + (1 - ksep_nat_fr) * ksep_gassep_fr
 End Property
  
-' свойство для выдачи момента
 Public Property Get M_Nm() As Double
+' свойство для выдачи момента
     If isGasSep Then
         M_Nm = m_Nm_
     Else
@@ -76,64 +77,57 @@ Private Sub Class_Initialize()
                           d_cas_mm:=0, _
                           length_m:=3, _
                           angle_deg:=90)
-'    is_ksep_manual_ = False
-    
-    
-    'dPower_GasSep_W = 500
     isGasSep = True
     separation_mode = byCorrealation
     ksep_nat_fr = 0.5
     ksep_gassep_fr = 0.5
-    
-    'ksep_total_manual_fr = -1
     m_Nm_ = 1
     ksep_gassep_max_d_ = 0.9
     ksep_q_max_m3day_ = 500
 End Sub
- Public Sub set_ksep_total(calc_method As SEPAR_CALC_METHOD, _
-                                  ksep_nat_fr As Double, _
-                         Optional ksep_GS_fr As Double = 0, _
-                         Optional p_ksep_atma As Double = -1, _
-                         Optional t_ksep_C As Double = -1)
- ' устанавливает значение сепарации для уэцн вручную
- ' сначала установим значение газосепаратора - оно всегда одинаково для всех вариантов
-    
-    If ksep_GS_fr > 0 And ksep_GS_fr <= 1 Then
-        isGasSep = True
+Public Sub set_ksep_total(calc_method As SEPAR_CALC_METHOD, _
+                                 ksep_nat_fr As Double, _
+                        Optional ksep_GS_fr As Double = 0, _
+                        Optional p_ksep_atma As Double = -1, _
+                        Optional t_ksep_C As Double = -1)
+' устанавливает значение сепарации для уэцн вручную
+' сначала установим значение газосепаратора - оно всегда одинаково для всех вариантов
+   If ksep_GS_fr > 0 And ksep_GS_fr <= 1 Then
+       isGasSep = True
+   Else
+      isGasSep = False
+   End If
+   
+   ksep_gassep_man_d = ksep_GS_fr
+   psep_man_atma = p_ksep_atma
+   tsep_man_C = t_ksep_C
+   ksep_nat_man_d = ksep_nat_fr
+   
+   ' установим метод расчета
+   ' но так чтобы он не противоречил введенным данным
+    If ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
+       ' если ввели хорошие параметры то можно применить любой метод расчета
+        separation_mode = calc_method
+    ElseIf ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma <= 0 Then
+       ' плохое значение давления не позволяет полностью ручной метод
+       If calc_method <> fullyManual Then
+           separation_mode = calc_method
+       Else
+           separation_mode = valueManual
+       End If
+    ElseIf (ksep_nat_fr < 0 Or ksep_nat_fr > 1) And (p_ksep_atma > 0 And t_ksep_C > 0) Then
+       ' плохая сепарация, но хорошие давления
+        If calc_method = byCorrealation Or calc_method = pressureManual Then
+           separation_mode = calc_method
+        Else
+           separation_mode = pressureManual
+       End If
     Else
-       isGasSep = False
+        ' плохая сепарация не позволяет ручной расчет
+        separation_mode = byCorrealation
     End If
     
-    ksep_gassep_man_d = ksep_GS_fr
-    psep_man_atma = p_ksep_atma
-    tsep_man_C = t_ksep_C
-    ksep_nat_man_d = ksep_nat_fr
-    
-    ' установим метод расчета
-    ' но так чтобы он не противоречил введенным данным
-     If ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma > 0 And t_ksep_C > 0 Then
-        ' если ввели хорошие параметры то можно применить любой метод расчета
-         separation_mode = calc_method
-     ElseIf ksep_nat_fr >= 0 And ksep_nat_fr <= 1 And p_ksep_atma <= 0 Then
-        ' плохое значение давления не позволяет полностью ручной метод
-        If calc_method <> fullyManual Then
-            separation_mode = calc_method
-        Else
-            separation_mode = valueManual
-        End If
-     ElseIf (ksep_nat_fr < 0 Or ksep_nat_fr > 1) And (p_ksep_atma > 0 And t_ksep_C > 0) Then
-        ' плохая сепарация, но хорошие давления
-         If calc_method = byCorrealation Or calc_method = pressureManual Then
-            separation_mode = calc_method
-         Else
-            separation_mode = pressureManual
-        End If
-     Else
-         ' плохая сепарация не позволяет ручной расчет
-         separation_mode = byCorrealation
-     End If
-     
- End Sub
+End Sub
 Public Function calc_separation(p_atma As Double, t_C As Double, f_Hz As Double)
 ' расчет сепарации и соответствующих параметров флюидов
 ' должен вызываться незавимо от расчета УЭЦН, так как при расчете сверху вниз
@@ -229,56 +223,45 @@ Public Sub set_gassep_param(Optional OD_mm As Double = 125, _
     h_mes_top_ = h_mes_top_m
     length_m_ = length_m
     ksep_q_max_m3day_ = Qnom_m3day * 2
-    
 End Sub
 Public Sub init_json(json As String)
     Dim d As Dictionary
-    
     Set d = ParseJson(json)
-    
     Call init_dictionary(d)
- End Sub
+End Sub
  
- Private Sub init_dictionary(dict As Dictionary)
- 
- Dim ESP_ID As Long
- Dim head_nom_m As Double
- Dim msg As String
+Private Sub init_dictionary(dict As Dictionary)
+Dim ESP_ID As Long
+Dim head_nom_m As Double
+Dim msg As String
 On Error GoTo err1:
-    With dict
-        If .Exists("separation_mode") Then separation_mode = .Item("separation_mode")
-        If .Exists("gassep_type") Then gassep_type = .Item("gassep_type")
-        If .Exists("natsep_type") Then natsep_type = .Item("natsep_type")
-        If .Exists("psep_man_atma") Then psep_man_atma = .Item("psep_man_atma")
-        If .Exists("tsep_man_C") Then tsep_man_C = .Item("tsep_man_C")
-        If .Exists("ksep_gassep_man_d") Then ksep_gassep_man_d = .Item("ksep_gassep_man_d")
-        If .Exists("ksep_nat_man_d") Then ksep_nat_man_d = .Item("ksep_nat_man_d")
-        If .Exists("ksep_liquid_man_d") Then ksep_liquid_man_d = .Item("ksep_liquid_man_d")
-        If .Exists("M_Nm") Then m_Nm_ = .Item("M_Nm")
-        
-        If .Exists("manufacturer") Then manufacturer = .Item("manufacturer")
-        If .Exists("name") Then name = .Item("name")
-        If .Exists("length_m") Then length_m = .Item("length_m")
-    End With
-    
-    Exit Sub
+   With dict
+       If .Exists("separation_mode") Then separation_mode = .Item("separation_mode")
+       If .Exists("gassep_type") Then gassep_type = .Item("gassep_type")
+       If .Exists("natsep_type") Then natsep_type = .Item("natsep_type")
+       If .Exists("psep_man_atma") Then psep_man_atma = .Item("psep_man_atma")
+       If .Exists("tsep_man_C") Then tsep_man_C = .Item("tsep_man_C")
+       If .Exists("ksep_gassep_man_d") Then ksep_gassep_man_d = .Item("ksep_gassep_man_d")
+       If .Exists("ksep_nat_man_d") Then ksep_nat_man_d = .Item("ksep_nat_man_d")
+       If .Exists("ksep_liquid_man_d") Then ksep_liquid_man_d = .Item("ksep_liquid_man_d")
+       If .Exists("M_Nm") Then m_Nm_ = .Item("M_Nm")
+       
+       If .Exists("manufacturer") Then manufacturer = .Item("manufacturer")
+       If .Exists("name") Then name = .Item("name")
+       If .Exists("length_m") Then length_m = .Item("length_m")
+   End With
+   Exit Sub
 err1:
-    Dim errmsg As String
-    errmsg = "Error:CESPGasSep.init_dictionary: init error " & sDELIM & Err.Description
-    add_log_msg errmsg
-    Err.Raise kErrESPcalc, Err.source, errmsg
- End Sub
+   Dim errmsg As String
+   errmsg = "Error:CESPGasSep.init_dictionary: init error " & sDELIM & Err.Description
+   add_log_msg errmsg
+   Err.Raise kErrESPcalc, Err.source, errmsg
+End Sub
 ' =======================  геометрия
-'Public Property Get length_m() As Double
-'    length_m = length_m_
-'End Property
 ' глубина установки  (верхняя точка)
 Public Property Get h_mes_top_m() As Double
    h_mes_top_m = h_mes_top_
 End Property
-'Public Property Let h_mes_top_m(val As Double)
-'   h_mes_top_ = val
-'End Property
 ' глубина нижней точки установки
 Public Property Get h_mes_down_m() As Double
    h_mes_down_m = h_mes_top_m + length_m
@@ -286,9 +269,9 @@ End Property
 Public Property Get d_od_m() As Double
    d_od_m = d_od_mm_ / 1000
 End Property
+Public Property Get angle_vert_deg() As Double
 ' угол к горизонтали под которым установлена установка
 ' угол задается извне системой скважиной при установке системы в скважину
-Public Property Get angle_vert_deg() As Double
    angle_vert_deg = angle_vert_deg - 90
 End Property
 Public Property Get fluid() As CPVT
@@ -305,13 +288,6 @@ Public Property Set fluid(val As CPVT)
   Set fluid_tub_ = val
   Set fluid_cas_ = val
 End Property
-'Public Property Get is_ksep_manual() As Boolean
-'   is_ksep_manual = is_ksep_manual_
-'End Property
-'
-'Public Property Let is_ksep_manual(val As Boolean)
-'   is_ksep_manual_ = val
-'End Property
 Private Sub Separatefluids()
 ' метод для принудительного разделения свойст флюида
    ' создаем новые экзампляры
@@ -333,9 +309,7 @@ Private Function estimate_GS_separation_d(p_atma As Double, t_C As Double, f_Hz 
     Call fluid_gs_.calc_PVT(p_atma, t_C)
     Select Case gassep_type
         Case -1
-            
             estimate_GS_separation_d = ksep_gassep_man_d
-            
         Case 0
             q_mix_ = fluid_gs_.q_mix_rc_m3day
             qmax = ksep_q_max_m3day_
@@ -357,72 +331,17 @@ Private Function estimate_nat_separation_d(p_atma As Double, t_C As Double) As D
         Select Case natsep_type
             Case 0
                 estimate_nat_separation_d = unf_natural_separation(d_od_m, d_cas_m, _
-                                                        .q_liq_sm3day, .q_gas_insitu_sm3day, .bo_m3m3, .bg_m3m3, .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
+                                                        .q_liq_sm3day, .q_gas_insitu_sm3day, .bo_m3m3, .bg_m3m3, _
+                                                        .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, _
+                                                        .rho_gas_sckgm3, .fw_perc)
             Case Else
                  estimate_nat_separation_d = unf_natural_separation(d_od_m, d_cas_m, _
-                                                        .q_liq_sm3day, .q_gas_insitu_sm3day, .bo_m3m3, .bg_m3m3, .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
+                                                        .q_liq_sm3day, .q_gas_insitu_sm3day, .bo_m3m3, .bg_m3m3, _
+                                                        .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, _
+                                                        .rho_gas_sckgm3, .fw_perc)
          End Select
     End With
 End Function
-'
-'' метод построения кривой зависимости коэффициента сепарации от дебита
-'Public Function Build_SeparCurve()
-'
-''    Dim i As Integer
-''    Dim qtest As Double, Rptest As Double
-''    Dim qinit As Double, Rpinit As Double, Rsbinit As Double
-''    Dim qmin As Double, Qmax As Double
-''    Dim Ks As Double
-''    Dim numPoint As Integer
-''
-''    curve(str_ksep_natQl_curve).ClearPoints
-''    curve(str_ksep_gassepQl_curve).ClearPoints
-''    curve(str_ksep_totalQl_curve).ClearPoints
-''
-''    curve(str_ksep_natRp_curve).ClearPoints
-''    curve(str_ksep_gassepRp_curve).ClearPoints
-''    curve(str_ksep_totalRp_curve).ClearPoints
-''
-''    numPoint = 20
-''
-''    qmin = 0: Qmax = 500
-''
-''    'одолжим ненадолго дебит по скважине
-''    qinit = q_liq_sm3day
-''    Rpinit = fluid.rp_m3m3
-''    Rsbinit = fluid.rsb_m3m3
-''
-''    For i = 0 To numPoint
-''        qtest = (Qmax - qmin) / numPoint * i + qmin
-''        q_liq_sm3day = qtest
-''        Ks = calc_SeparationAtIntake_d(p_int_atma_, t_int_C_)
-''
-''        curve(str_ksep_natQl_curve).AddPoint qtest, ksep_natural_d_
-''        curve(str_ksep_gassepQl_curve).AddPoint qtest, ksep_gassep_d_
-''        curve(str_ksep_totalQl_curve).AddPoint qtest, ksep_total_d_
-''    Next i
-''
-''    ' вернем дебит по скважине назад
-''    q_liq_sm3day = qinit
-''
-''    ' далее построим кривые по сепарации изменяя газовый фактор на скважине
-''    Rptest = max(fluid.rsb_m3m3 - 100, 50)
-''
-''    For i = 0 To numPoint
-''        Rptest = Rptest + 10
-''        fluid.rp_m3m3 = Rptest
-''
-''        Ks = calc_SeparationAtIntake_d(p_int_atma_, t_int_C_)
-''
-''        curve(str_ksep_natRp_curve).AddPoint qtest, ksep_natural_d_
-''        curve(str_ksep_gassepRp_curve).AddPoint qtest, ksep_gassep_d_
-''        curve(str_ksep_totalRp_curve).AddPoint qtest, ksep_total_d_
-''    Next i
-''    fluid.rp_m3m3 = Rpinit
-''    fluid.rsb_m3m3 = Rsbinit
-'
-'End Function
-'
 ''
 ''  МОДУЛЬ РАСЧЕТА КОЭФФИЦИЕНТА СЕПАРАЦИИ
 ''
