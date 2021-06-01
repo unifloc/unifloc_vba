@@ -142,11 +142,11 @@ Public Property Get Ix_A() As Double
     UUn_fnf = data_.U_phase_V / nom_data_.U_phase_V * nom_data_.f_Hz / data_.f_Hz
     Kn = 1.2786 * UUn_fnf - 0.2689   ' поправка по Гридину для учета намагничивающего тока
     Kn = 1.2786 * UUn_fnf - 0.2786   ' поправка по Гридину для учета намагничивающего тока
-    Dim a#, B#, G#
+    Dim a#, b#, g#
     a = 0.229
-    B = 0.988
-    G = 0.242
-    Kn = (B - (B ^ 2 - 4 * a * (UUn_fnf - G)) ^ 0.5) / 2 / a
+    b = 0.988
+    g = 0.242
+    Kn = (b - (b ^ 2 - 4 * a * (UUn_fnf - g)) ^ 0.5) / 2 / a
     Dim CR As Double
     If Kn < 1 Then   ' после экспериемнтов осталось деление на два участка, если потребуется можно использовать
         CR = Ix_cf
@@ -233,9 +233,9 @@ Private Sub set_motor_Gridin( _
 ' инициализация двигателя на основе схемы замещения по Гридину
      Dim Inomlin_A As Double
      Dim a As Double
-     Dim B As Double
+     Dim b As Double
      Dim Rm As Double
-     Dim G As Double
+     Dim g As Double
      Dim P1n_W As Double  ' потребляемая мощность двигателя
      Dim I1n_A As Double  ' фазный ток
      Dim I2n__A As Double
@@ -256,10 +256,10 @@ On Error GoTo er1:
                 ' расчитываем показатели схемы замещения. Сначала вспомогательные переменные
                 a = alpha0 / xi_ * (1 - .eff_d) / .eff_d * (1 - .s_d) / .s_d - 1
                 Rm = 3 * .U_phase_V ^ 2 * (1 - .s_d) / (2 * .Pshaft_kW * 1000 * (lambda_d_ + xi_ - 1))
-                G = 1 / .s_d ^ 2 + 2 * a / .s_d + a ^ 2
-                B = (lambda_d_ + xi_ - 1) / xi_
+                g = 1 / .s_d ^ 2 + 2 * a / .s_d + a ^ 2
+                b = (lambda_d_ + xi_ - 1) / xi_
                 ' далее считаем сопротивления статора и ротора и индуктивность
-                R2__ = Rm / G * (B / .s_d + a + ((B / .s_d + a) ^ 2 - G) ^ 0.5)
+                R2__ = Rm / g * (b / .s_d + a + ((b / .s_d + a) ^ 2 - g) ^ 0.5)
                 R2s_ = R2__ / .s_d
                 R1_ = a * R2__
                 xk_ = (Rm ^ 2 - 2 * Rm * R1_) ^ 0.5
@@ -488,7 +488,7 @@ End Sub
 Private Function set_motor_data_mom_( _
                                  ByVal mom_Nm As Double, _
                                  ByVal U As Double, _
-                                 ByVal F As Double) As MOTOR_DATA
+                                 ByVal f As Double) As MOTOR_DATA
     
     
         ' для расчета всех параметров дефолтного насоса можно использовать характеристики насоса
@@ -504,14 +504,14 @@ Private Function set_motor_data_mom_( _
         Dim msg As String
             ' оценим загрузку для заданной частоты
         load = mom_Nm / nom_data_.Mshaft_Nm * 100
-        FF = F / nom_data_.f_Hz
+        FF = f / nom_data_.f_Hz
         Uf = U / nom_data_.U_lin_V * 100
         If Uf < 50 Then
             msg = "CESPMotor.set_motor_data_mom_: voltage too low, Ulin = " + CStr(data_.U_phase_V) + " Unom = " + CStr(nom_data_.U_lin_V)
             log_.add_msg msg
             Err.Raise kErrESPcalc, , msg
         End If
-        d.f_Hz = F
+        d.f_Hz = f
         d.U_lin_V = U
         d.U_phase_V = d.U_lin_V / root3
         ' напряжение оценили - возможно надо сделать поправку на напряжение
@@ -532,7 +532,7 @@ Private Function set_motor_data_mom_( _
         
         d.eff_d = motor_eff_default_d(load) * Eff_cf
         d.I_phase_A = motor_current_default_d(load) * I_cf * nom_data_.I_lin_A
-        d.s_d = (1 - motor_rot_speed_default_rmp(load, F) / (d.f_Hz * 60)) / S_cf
+        d.s_d = (1 - motor_rot_speed_default_rmp(load, f) / (d.f_Hz * 60)) / S_cf
         If d.s_d < 0 Then d.s_d = 0
         If d.s_d >= 1 Then
             msg = "CESPMotor.set_motor_data_mom_: slip too high " + CStr(d.s_d) + ", probably voltage too low, Uphase = " + CStr(data_.U_phase_V)
@@ -552,7 +552,7 @@ End Function
 Private Function set_motor_data_simple_(ByVal nom As Boolean, _
                                         ByVal pow_mech_kW As Double, _
                                         ByVal U As Double, _
-                                        ByVal F As Double, _
+                                        ByVal f As Double, _
                                         ByVal eff As Double, _
                                         ByVal slip As Double, _
                                         ByVal cosphi As Double) As MOTOR_DATA
@@ -566,7 +566,7 @@ Private Function set_motor_data_simple_(ByVal nom As Boolean, _
     
     Dim d As MOTOR_DATA
     
-    d.f_Hz = F
+    d.f_Hz = f
     d.U_lin_V = U
     d.U_phase_V = d.U_lin_V / root3
     
@@ -591,7 +591,7 @@ Private Function set_motor_data_simple_(ByVal nom As Boolean, _
     If nom Then
         d.load_d = 1
     Else
-        d.load_d = pow_mech_kW / nom_data_.Pshaft_kW * F / nom_data_.f_Hz * 100
+        d.load_d = pow_mech_kW / nom_data_.Pshaft_kW * f / nom_data_.f_Hz * 100
     End If
     
     set_motor_data_simple_ = d
