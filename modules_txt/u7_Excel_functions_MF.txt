@@ -258,7 +258,9 @@ Public Function MF_pipe_p_atma( _
         Optional ByVal flow_correlation As Integer = 0, _
         Optional ByVal calibr_grav As Double = 1, _
         Optional ByVal calibr_fric As Double = 1, _
-        Optional ByVal param As String)
+        Optional ByVal param As String, _
+        Optional ByVal h_start_m As Double = -10000000000#, _
+        Optional ByVal h_end_m As Double = 10000000000#)
 ' p_calc_from_atma  - давление с которого начинается расчет, атм
 '           граничное значение для проведения расчета
 ' t_calc_from_C - температура в точке где задано давление расчета
@@ -276,6 +278,8 @@ Public Function MF_pipe_p_atma( _
 ' calibr_fric  - калибровка на составляющую трения
 '                градиента давления
 ' param     - дополнительные параметры расчета потока
+' h_start_m - начало расчета по трубе, м
+' h_end_m   - конечная точка расчета по трубе, м
 ' результат - число - давление на другом конце трубы atma.
 '           и распределение параметров по трубе
 'description_end
@@ -298,7 +302,8 @@ On Error GoTo err1:
                                       flow_along_coord, _
                                       flow_correlation, _
                                       calibr_grav, _
-                                      calibr_fric)
+                                      calibr_fric, _
+                                      h_start_m, h_end_m)
     Set prmd = param_to_dict(param)
     
     show_log = prmd(prm_show_log)
@@ -583,11 +588,11 @@ On Error GoTo err1:
     If calc_along_flow Then
         Call choke.calc_choke_p_lin(set_PT(p_calc_from_atma, t_choke_C))
         p_out = choke.p_out_atma
-        num_value = 1
+        num_value = 2
     Else
         Call choke.calc_choke_p_buf(set_PT(p_calc_from_atma, t_choke_C))
         p_out = choke.p_in_atma
-        num_value = 2
+        num_value = 1
     End If
     ' читаем параметры чтобы настроить правильный вывод
     Set prmd = param_to_dict(param)
@@ -709,5 +714,99 @@ Private Function get_choke( _
     End With
     
     Set get_choke = choke
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет кривой - характеристики штуцера
+Public Function MF_choke_crv_json( _
+                     ByVal d_choke_mm As Double, _
+                     ByVal feed As String, _
+                     ByVal p_calc_from_atma As Double, _
+            Optional ByVal t_choke_C As Double = 20, _
+            Optional ByVal d_pipe_mm As Double = 70, _
+            Optional ByVal calc_along_flow As Boolean = True, _
+            Optional ByVal calibr As Double = 1, _
+            Optional ByVal param As String = "")
+' d_choke_mm      - диаметр штуцера (эффективный)
+' feed            - закодированная строка с параметрами потока.
+' p_calc_from_atma - давление с которого начинается расчет, атм
+'                  граничное значение для проведения расчета
+'                  либо давление на входе, либо на выходе
+' t_choke_C       - температура потока, С.
+' d_pipe_mm       - диаметр трубы до и после штуцера
+' calc_along_flow - флаг направления расчета относительно потока
+' param           - параметры расчета json строка
+' результат       - число или массив значений с параметрами штуцера
+'                   и давление на штуцере на расчетной стороне.
+'description_end
+'Const nv = 9  ' output array dimension (number of columns)
+On Error GoTo err1:
+    Dim i As Integer
+    Dim num As Integer
+    Dim crv_choke As New CInterpolation
+    Dim p_i As Double
+    Dim q_i As Double
+    Dim p_cr As Double
+    
+    Dim choke As Cchoke
+    'Dim num_value As Integer, nv As Integer
+'    Dim p_out As Double
+'    Dim show_array As Boolean
+    Dim p_max As Double
+    Dim show_log As Boolean
+    Dim prmd As Dictionary
+    
+    Set prmd = param_to_dict(param)
+    num = prmd(prm_num_value) - 1
+    If num <= 1 Then
+        num = 19
+    End If
+    
+    Set choke = get_choke(d_choke_mm, feed, d_pipe_mm, calibr)
+    ' расчет штуцера всегда будет как зависимость дебита от давления -
+    ' это надо для того, чтобы всегда было однозначное значение итоговой кривой
+    
+    ' запускаем расчет в зависимости от опции направления расчета
+    If calc_along_flow Then
+        p_i = 1
+        q_i = choke.calc_choke_q_liq_sm3day(p_calc_from_atma, p_i, t_choke_C)
+        crv_choke.AddPoint p_i, q_i
+       
+        p_cr = choke.p_ratio_crit * p_calc_from_atma
+        For i = 0 To num - 1
+            p_i = p_cr + (p_calc_from_atma - p_cr) / (num - 1) * i
+            q_i = choke.calc_choke_q_liq_sm3day(p_calc_from_atma, p_i, t_choke_C)
+            crv_choke.AddPoint p_i, q_i
+            
+        Next i
+        crv_choke.xName = "p_out_atma"
+        crv_choke.yName = "q_liq_sm3day"
+    Else
+        p_max = p_calc_from_atma * 2
+        For i = 0 To num
+            p_i = p_calc_from_atma + 0.06 * Exp(i * 0.25) * i '+ (p_max - 1) / num * i
+            If p_i > 300 Or i = num Then p_i = 300
+            q_i = choke.calc_choke_q_liq_sm3day(p_i, p_calc_from_atma, t_choke_C)
+            crv_choke.AddPoint p_i, q_i
+            
+        Next i
+        crv_choke.xName = "p_in_atma"
+        crv_choke.yName = "q_liq_sm3day"
+    End If
+    ' читаем параметры чтобы настроить правильный вывод
+'    show_array = prmd(prm_show_array)
+'    If prmd.Exists(prm_num_value) Then
+'        nv = prmd(prm_num_value)
+'        If nv > 0 And nv < 10 Then num_value = nv
+'    End If
+'    If show_array Then
+'        show_log = prmd(prm_show_log)
+'        MF_choke_crv_json = choke.get_result_array(num_value, show_log)
+'    Else
+'         p_out
+'    End If
+    MF_choke_crv_json = ConvertToJson(crv_choke.getDict)
+    Exit Function
+err1:
+    MF_choke_crv_json = "error:MF_choke_crv_json:" & Err.Description
 End Function
 

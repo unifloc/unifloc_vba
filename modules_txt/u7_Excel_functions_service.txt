@@ -49,6 +49,12 @@ Public Function decode_json(json, _
     If TypeName(json) = "Variant()" Then
         json = json(1, 1)
     End If
+    If VarType(json) = vbDouble Then
+        ' если прилетело одно число то вернем его не раскодиру€
+        decode_json = json
+        Exit Function
+    End If
+    ' далее пытаемс€ раскодировать
     Set p = ParseJson(json)
     If TypeName(p) = "Dictionary" Then
     
@@ -188,7 +194,7 @@ Public Function decode_json_crv(json, _
     Dim cx As Collection
     Dim cy As Collection
     
-    Dim out_arr() As String
+    Dim out_arr() ' As String
     Dim i As Integer
     
     On Error GoTo err1:
@@ -374,6 +380,9 @@ Public Function encode_ESP_motor( _
             Optional ByVal eff_nom_fr As Double = 0.82, _
             Optional ByVal cosphi_nom_fr As Double = 0.88, _
             Optional ByVal slip_nom_fr As Double = 0.053, _
+            Optional ByVal U_surf_high_lin_V As Double = 1000, _
+            Optional ByVal f_surf_Hz As Double = 50, _
+            Optional ByVal power_fact_kW As Double = 30, _
             Optional ByVal d_od_mm As Double, _
             Optional ByVal lambda As Double, _
             Optional ByVal alpha0 As Double, _
@@ -388,6 +397,9 @@ Public Function encode_ESP_motor( _
 'eff_nom_fr     -  ѕƒ при номинальном режиме работы
 'cosphi_nom_fr  - коэффициент мощности при номинальный
 'slip_nom_fr    - скольжение при номинальном режиме работы
+'U_surf_high_lin_V - напр€жение на поверхности
+'f_surf_Hz - частота тока на поверхности
+'power_fact_kW - фактическа€ потребл€ема€ мощность
 'd_od_mm            - внешний диаметр - габарит ѕЁƒ
 'lambda - дл€ motorID = 2 перегрузочный коэффициент
 '         отношение макс момента к номинальному
@@ -413,9 +425,9 @@ Public Function encode_ESP_motor( _
     Dim dict As New Dictionary
     
     dict.Add "motor_ID", motor_ID
-'   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
-'   If f_surf_Hz > 0 Then dict.Add "f_surf_Hz", f_surf_Hz
-'   If power_fact_kW > 0 Then dict.Add "power_fact_kW", power_fact_kW
+   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
+   If f_surf_Hz > 0 Then dict.Add "f_surf_Hz", f_surf_Hz
+   If power_fact_kW > 0 Then dict.Add "power_fact_kW", power_fact_kW
    If U_nom_lin_V > 0 Then dict.Add "U_nom_lin_V", U_nom_lin_V
    If P_nom_kW > 0 Then dict.Add "P_nom_kW", P_nom_kW
    If f_nom_Hz > 0 Then dict.Add "F_nom_Hz", f_nom_Hz
@@ -435,20 +447,20 @@ End Function
 ' функци€ кодировани€ параметров
 ' кабельной линии ѕЁƒ в строку
 Public Function encode_ESP_cable( _
+            Optional ByVal length_m As Double = 1000, _
             Optional ByVal cable_R_Omkm As Double = 1.18, _
             Optional ByVal cable_X_Omkm As Double = 0.01, _
             Optional ByVal cable_t_max_C As Double = 120, _
             Optional ByVal manufacturer As String = "default", _
-            Optional ByVal name As String = " ѕпјпЅѕ-120 3x16", _
-            Optional ByVal d_mm As Double = 16, _
-            Optional ByVal length_m As Double = 1000)
+            Optional ByVal name As String = "default_name", _
+            Optional ByVal d_mm As Double = 16)
+' length_m - длина кабельной линии, м
 ' cable_R_Omkm - удельное активное сопротивление
 ' cable_X_Omkm - удельное реактивное сопротивление
 ' cable_t_max_C - максимально допустима€ температура
 ' manufacturer - производитель, дл€ справки
 ' name  - название кабел€, дл€ справки
 ' d_mm - диаметр жилы
-' length_m - длина кабельной линии, м
 'description_end
     Dim dict As New Dictionary
     
@@ -754,6 +766,10 @@ End Function
 Public Function encode_json(rng, _
         Optional always_collection As Boolean = False)
 ' rng       - диапазон €чеек дл€ кодировани€
+'           один столбец кодируетс€ в коллекцию
+'           два столбца кодируютс€ в словарь
+' always_collection - флаг принудительного кодировани€
+'           в коллекцию
 ' результат - закодированна€ строка
 'description_end
     Dim d As New Dictionary
@@ -765,8 +781,15 @@ Public Function encode_json(rng, _
     t = array_from_range(rng)
     
     If UBound(t, 2) = 1 Or always_collection Then
-        c.Add array_from_range(rng, True)
-        encode_json = ConvertToJson(c)
+        If UBound(t, 2) = 1 Then
+            For i = 1 To UBound(t)
+                c.Add t(i, 1)
+            Next i
+            encode_json = ConvertToJson(c)
+        Else
+            ' далее range преобразуетс€ в массив, который сразу кодируетс€ в json
+            encode_json = ConvertToJson(array_from_range(rng, True))
+        End If
     Else
         For i = 1 To UBound(t)
             d(t(i, 1)) = t(i, 2)

@@ -559,7 +559,7 @@ On Error GoTo er1:
             resd("Pshaft_kW") = .Pshaft_kW
             resd("cable_dU_V") = .cable_dU_V
             resd("U_motor_V") = .U_lin_V
-            resd("U_trans_high_V") = .U_trans_high_V
+            'resd("U_trans_high_V") = .U_trans_high_V
             resd("eff_full_fr") = .eff_full_d
             resd("load_d") = .load_d
             If show_log Then
@@ -718,7 +718,7 @@ On Error GoTo er1:
             resd("Pshaft_kW") = .Pshaft_kW
             resd("cable_dU_V") = .cable_dU_V
             resd("U_motor_V") = .U_lin_V
-            resd("U_trans_high_V") = .U_trans_high_V
+            'resd("U_trans_high_V") = .U_trans_high_V
             resd("eff_full_fr") = .eff_full_d
             resd("load_d") = .load_d
             If show_log Then
@@ -801,6 +801,82 @@ Public Function ESP_gassep_ksep_d( _
 'description_end
     Dim GS As New CESPGasSep
     ESP_gassep_ksep_d = GS.my_sepfactor(gsep_type_TYPE, gas_frac_d * 100, qliq_sm3day, freq_Hz * 60) / 100
+    
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет производительности системы УЭЦН
+' считает перепад давления, электрические параметры и деградацию КПД
+Public Function ESP_system_calc( _
+                 ByVal p_calc_atma As Double, _
+        Optional ByVal U_surf_high_lin_V As Double, _
+        Optional ByVal f_surf_Hz As Double, _
+        Optional ByVal power_fact_kW As Double, _
+        Optional ByVal t_intake_C As Double = 50, _
+        Optional ByVal t_dis_C As Double = 50, _
+        Optional ByVal feed As String = "", _
+        Optional ByVal pump_json As String, _
+        Optional ByVal motor_json As String, _
+        Optional ByVal cable_json As String, _
+        Optional ByVal gassep_json As String, _
+        Optional ByVal calc_along_flow As Boolean = True, _
+        Optional ByVal param As String)
+' p_calc_atma        - давление для которого делается расчет
+'                     либо давление на приеме насоса
+'                     либо давление на выкиде насоса
+'                     определяется параметром calc_along_flow
+' U_surf_high_lin_V - напряжение питания
+' f_surf_Hz         - фактическая частота
+' power_fact_kW     - фактическое потребление энергии
+' t_intake_C       - температура на приеме насоcа
+' t_dis_C          - температура на выкиде насоса.
+'             если = 0 и calc_along_flow = 1 то рассчитывается
+' feed     - параметры потока флюидов json строка. Используйте
+'            функцию encode_feed() для генерации
+' pump_json - строка с параметрами насоса
+' motor_json - строка с параметрами ПЭД
+' cable_json - строка с параметрами кабеля ПЭД
+' gassep_json - строка с параметрами сепарации флюида на приеме
+' calc_along_flow  - режим расчета снизу вверх или сверху вниз
+'          calc_along_flow = True => p_atma давление на приеме
+'          calc_along_flow = False => p_atma давление на выкиде
+' param     - дополнительные параметры расчета потока
+' результат   - массив значений включающий
+'            перепад давления
+'            перепад температур
+'            мощность потребляемая с вала, Вт
+'            мощность гидравлическая по перекачке жидкости, Вт
+'            КПД ЭЦН
+'            список неполон
+'description_end
+    Dim arr
+    Dim i As Integer
+    Dim nrows As Integer
+    Dim fr_Hz As Double
+On Error GoTo er1:
+    Dim ESPsys As New CESPsystem
+    
+    With ESPsys
+        Call .fluid.init_feed(feed)  ' initialize PVT properties
+        Call .init_json(pump_json, motor_json, cable_json, gassep_json)
+        
+        Call .calc_ESPsys(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
+        
+    End With
+    
+    
+    
+'    Call ESPsys.calc_ESPsys(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
+'
+    arr = ESPsys.array_out(20)
+'
+'
+'    arr(0, 0) = arr(0, num_value)
+'    arr(1, 0) = arr(1, num_value)
+'
+    ESP_system_calc = arr
+    Exit Function
+er1:
+    ESP_system_calc = "error:" & Err.Description
     
 End Function
 

@@ -1,4 +1,4 @@
-'=======================================================================================
+  '=======================================================================================
 'Unifloc 7.30 primavera                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
@@ -9,6 +9,7 @@
 ' класс описывает систему Ё÷Ќ в простом варианте - один Ё÷Ќ+ѕЁƒ+кабель
 ' класс отвечатает и за расчет сепарации и свойств флюидов
 Option Explicit
+Public log_ As New CLogger                      ' create new log list for each object
 Private pump_ As CESPpump  ' сам насос
 Public separ As CESPGasSep
 Public motor As CESPMotor
@@ -33,7 +34,7 @@ Private angle_deg_ As Double
 'Private PKV_work_min_ As Double     ' врем€ работы в ѕ ¬ режиме
 'Private PKV_stop_min_ As Double     ' врем€ ожидани€ в ѕ ¬ режиме
 ' флюиды которые работают в системе ”Ё÷Ќ
-Private fluid_ As CPVT    ' флюид перед входом в насос
+Private fluid_ As New CPVT    ' флюид перед входом в насос
 Public fluid_tub As CPVT    ' флюид в Ќ “ выше насоса
 Public fluid_cas As CPVT    ' флюид в затрубном пространстве
 Public fluidGasSep As CPVT ' флюид в газосепараторе
@@ -58,6 +59,9 @@ Public fluidGasSep As CPVT ' флюид в газосепараторе
 '   - тепературный режим регулируетс€ параметрами класса
 '           t_int_C - температура на приеме насоса
 '           t_dis_C - температура на выкиде насоса. если =-1 то рассчитываетс€ при calc_along_flow = True
+Public Sub add_log_msg(msg As String)
+    Call log_.add_msg(msg)
+End Sub
 Public Property Get f_shaft_Hz() As Double
         If motor Is Nothing Then
             f_shaft_Hz = pump_.freq_Hz
@@ -77,7 +81,7 @@ Public Property Get U_surf_V() As Double
     If motor Is Nothing Then
         U_surf_V = 0
     Else
-        U_surf_V = motor.data.U_trans_high_V     ' если задан двигатель, то берем проскальзывание из его характеристик
+      '  U_surf_V = motor.data.U_trans_high_V     ' если задан двигатель, то берем проскальзывание из его характеристик
     End If
 End Property
 Public Property Get energy_fact_Whday() As Double
@@ -170,8 +174,7 @@ End Sub
 Public Sub init_json(pump_json As String, _
             Optional motor_json As String, _
             Optional cable_json As String, _
-            Optional gassep_json As String, _
-            Optional fluid As CPVT)
+            Optional gassep_json As String)
     Dim edb As ESP_PARAMS
     
             
@@ -179,9 +182,7 @@ Public Sub init_json(pump_json As String, _
     Call pump_.init_json(pump_json)
     
     Set separ = New CESPGasSep
-    If Len(gassep_json) > 3 Then
-        Call separ.init_json(gassep_json)
-    End If
+    Call separ.init_json(gassep_json)
     
     If Not IsMissing(motor_json) Then
         If Len(motor_json) > 3 Then
@@ -195,27 +196,33 @@ Public Sub init_json(pump_json As String, _
         End If
     End If
     
-    If fluid Is Nothing Then
-        Call fluid.init_feed(PVT_DEFAULT)
-    End If
-    Set Me.fluid = fluid
-    
+    Set fluid = fluid
 End Sub
 Public Function calc_ESPsys(ByVal p_atma As Double, _
                             ByVal t_int_C As Double, _
                             ByVal t_dis_C As Double, _
+        Optional ByVal U_surf_high_lin_V As Double, _
+        Optional ByVal f_surf_Hz As Double, _
+        Optional ByVal power_fact_kW As Double, _
                             Optional ByVal calc_along_flow As Boolean = True, _
                             Optional ByVal calc_temperature = False, _
                             Optional saveCurve As Boolean = False) As PTtype
 ' функци€ расчета параметров работы ”Ё÷Ќ
 '
 ' p_atma - давление начала расчета (давление на приеме если calc_along_flow = True)
+' t_int_C - температура флюида на входе в насос
+' t_dis_C - температура флюида на выходе из насоса
+' U_surf_high_lin_V - напр€жение на поверхности
+' f_surf_Hz - частота тока
+' power_fact_kW - измеренный расход энергии
 ' calc_along_flow - флаг показывает ведетс€ ли расчет от давлени€ на приеме или от выкида
 '                  при расчете сверху вниз температура должна быть задана с двух сторон
 '                  и сепараци€ будет учитыватьс€ в соответствии с параметрами заданными вручную
-' calc_cfPower - флаг режима расчета корректировочного фактора дл€ потреблени€ энергии
 ' calc_temperature - флаг режима расчета перепада температуры в Ё÷Ќ
+' saveCurve
     
+    Dim sl1 As Double
+    Dim i As Integer
     ' подготовим режима расчета температуры дл€ Ё÷Ќ
     If calc_temperature Then
         t_dis_C = -1
@@ -223,8 +230,10 @@ Public Function calc_ESPsys(ByVal p_atma As Double, _
         t_dis_C = t_int_C
     End If
     
-    Dim sl1 As Double
-    Dim i As Integer
+    If U_surf_high_lin_V > 0 Then
+        'U_surf_V = U_surf_high_lin_V
+    Else
+    End If
     
     i = 0
     ' 1. если есть мотор - зададим дл€ него номинальные параметры работы
@@ -360,7 +369,7 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     Dim offset As Integer
     Dim i As Integer
     Dim hh As Double
-    Dim NRows As Integer
+    Dim nrows As Integer
     Dim dict_electric_params As New Dictionary
     Dim dict_geometry As New Dictionary
     Dim dict_separ As New Dictionary
@@ -368,11 +377,11 @@ Public Function array_out(Optional ByVal num_points As Integer = 20)
     offset = 2
 On Error Resume Next
     'arr = pump_.array_out(num_points)
-    NRows = UBound(arr, 1)
+    nrows = UBound(arr, 1)
     
-    offset = NRows - 3
+    offset = nrows - 3
     
-    ReDim Preserve arr(NRows, 12)
+    ReDim Preserve arr(nrows, 12)
     arr(0, 0) = p_dis_atma - p_int_atma
     arr(1, 0) = "dP_atm"
     
@@ -405,7 +414,7 @@ On Error Resume Next
         Call .Add("power_shaft_kW", power_shaft_W / 1000)
         Call .Add("power_ESP_kW", ESP_pump.power_ESP_W / 1000)
         Call .Add("power_fluid_kW", ESP_pump.power_fluid_W / 1000)
-        Call .Add("U_trans_high_V", motor.data.U_trans_high_V)
+      '  Call .Add("U_trans_high_V", motor.data.U_trans_high_V)
         Call .Add("U_motor_V", motor.data.U_lin_V)
         Call .Add("eff_total_d", eff_d)
         Call .Add("eff_ESP_d", ESP_pump.eff_ESP_d)

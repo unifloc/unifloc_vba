@@ -8,30 +8,86 @@
 Option Explicit
 ' ==============  функции для расчета пласта ==========================
 ' =====================================================================
+''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'' расчет дебита по давлению и продуктивности
+'Public Function IPR_q_liq_sm3day( _
+'                 ByVal pi_sm3dayatm As Double, _
+'                 ByVal p_res_atma As Double, _
+'                 ByVal p_wf_atma As Double, _
+'        Optional ByVal fw_perc As Double = 0, _
+'        Optional ByVal pb_atma As Double = -1)
+'' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
+'' p_res_atma      - пластовое давление, абс. атм
+'' p_wf_atma       - забойное давление, абс. атм
+'' fw_perc        - обводненность, %
+'' pb_atma        - давление насыщения, абс. атм
+'' результат      - значение дебита жидкости, ст.м3/сут
+''description_end
+'
+'On Error GoTo err1:
+'
+'    Dim res As New CReservoirVogel
+'    If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
+'    res.InitProp p_res_atma, pb_atma, fw_perc
+'    res.pi_sm3dayatm = pi_sm3dayatm
+'
+'    IPR_q_liq_sm3day = res.calc_q_liq_sm3day(p_wf_atma)
+'    Set res = Nothing
+'
+'
+'    Exit Function
+'err1:
+'    IPR_q_liq_sm3day = -1
+'    add_log_msg "Error:IPR_q_liq_sm3day:" & Err.Description
+'
+'End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет дебита по давлению и продуктивности
 Public Function IPR_q_liq_sm3day( _
                  ByVal pi_sm3dayatm As Double, _
                  ByVal p_res_atma As Double, _
-                 ByVal p_wf_atma As Double, _
+                 ByVal p_wf_atma, _
         Optional ByVal fw_perc As Double = 0, _
         Optional ByVal pb_atma As Double = -1)
 ' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
-' p_res_atma      - пластовое давление, абс. атм
-' p_wf_atma       - забойное давление, абс. атм
+' p_res_atma     - пластовое давление, абс. атм
+' p_wf_atma      - забойное давление, абс. атм.
+'                  можно задать список [],
+'                  тогда результат будет в виде списка
 ' fw_perc        - обводненность, %
 ' pb_atma        - давление насыщения, абс. атм
 ' результат      - значение дебита жидкости, ст.м3/сут
+'                  или список значений
 'description_end
 On Error GoTo err1:
+    Dim cl As Collection
+    Dim cl_out As New Collection
+    Dim pwf
     Dim res As New CReservoirVogel
     If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
     res.InitProp p_res_atma, pb_atma, fw_perc
     res.pi_sm3dayatm = pi_sm3dayatm
     
-    IPR_q_liq_sm3day = res.calc_q_liq_sm3day(p_wf_atma)
-    Set res = Nothing
+    ' разберемся со значением забойного давления
     
+    Select Case VBA.VarType(p_wf_atma)
+        Case vbDouble
+             IPR_q_liq_sm3day = res.calc_q_liq_sm3day(p_wf_atma)
+        Case vbString
+            Select Case VBA.Mid$(p_wf_atma, 1, 1)
+                Case "["
+                    Set cl = ParseJson(p_wf_atma)
+                    For Each pwf In cl
+                        cl_out.Add res.calc_q_liq_sm3day(pwf)
+                    Next
+                    IPR_q_liq_sm3day = ConvertToJson(cl_out)
+                Case Else
+                    pwf = Cdbl_(p_wf_atma)
+                    IPR_q_liq_sm3day = res.calc_q_liq_sm3day(pwf)
+            End Select
+    End Select
+        
+    Set res = Nothing
     
     Exit Function
 err1:
@@ -43,7 +99,7 @@ End Function
 Public Function IPR_p_wf_atma( _
                  ByVal pi_sm3dayatm As Double, _
                  ByVal p_res_atma As Double, _
-                 ByVal q_liq_sm3day As Double, _
+                 ByVal q_liq_sm3day, _
         Optional ByVal fw_perc As Double = 0, _
         Optional ByVal pb_atma As Double = -1)
 ' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
@@ -54,11 +110,35 @@ Public Function IPR_p_wf_atma( _
 ' результат      - значение забойного давления, абс. атм
 'description_end
 On Error GoTo err1:
+    Dim cl As Collection
+    Dim cl_out As New Collection
+    Dim ql
     Dim res As New CReservoirVogel
     If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид подсчитает по корреляции значение
     res.InitProp p_res_atma, pb_atma, fw_perc
     res.pi_sm3dayatm = pi_sm3dayatm
-    IPR_p_wf_atma = res.calc_p_wf_atma(q_liq_sm3day)
+    
+    
+    ' разберемся со значением дебита
+    
+    Select Case VBA.VarType(q_liq_sm3day)
+        Case vbDouble
+             IPR_p_wf_atma = res.calc_p_wf_atma(q_liq_sm3day)
+        Case vbString
+            Select Case VBA.Mid$(q_liq_sm3day, 1, 1)
+                Case "["
+                    Set cl = ParseJson(q_liq_sm3day)
+                    For Each ql In cl
+                        cl_out.Add res.calc_p_wf_atma(ql)
+                    Next
+                    IPR_p_wf_atma = ConvertToJson(cl_out)
+                Case Else
+                    ql = Cdbl_(q_liq_sm3day)
+                    IPR_p_wf_atma = res.calc_p_wf_atma(ql)
+            End Select
+    End Select
+    
+   ' IPR_p_wf_atma = res.calc_p_wf_atma(q_liq_sm3day)
     Set res = Nothing
     
     Exit Function
@@ -93,5 +173,56 @@ On Error GoTo err1:
 err1:
     IPR_pi_sm3dayatm = -1
     add_log_msg "error in function :IPR_pi_sm3dayatm:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' расчет кривой IPR в формате json
+Public Function IPR_crv_json( _
+                 ByVal pi_sm3dayatm As Double, _
+                 ByVal p_res_atma As Double, _
+        Optional ByVal fw_perc As Double = 0, _
+        Optional ByVal pb_atma As Double = -1, _
+        Optional param As String = "")
+' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
+' p_res_atma     - пластовое давление, абс. атм
+' fw_perc        - обводненность, %
+' pb_atma        - давление насыщения, абс. атм
+' param          - дополнительные параметры построения
+' результат      - кривая IPR в формате json.
+'        можно использовать decode_json_crv для декодирования
+'description_end
+Dim i As Integer
+Dim num As Integer
+Dim crv_IPR As New CInterpolation
+Dim pwf_i As Double
+Dim qliq_i As Double
+Dim res As New CReservoirVogel
+Dim prmd As Dictionary
+On Error GoTo err1:
+    Set prmd = param_to_dict(param)
+    
+    num = prmd(prm_num_value) - 1
+    If num <= 1 Then
+        num = 19
+    End If
+    
+    For i = 0 To num
+        pwf_i = 1 + (p_res_atma - 1) / num * i
+        
+        If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид подсчитает по корреляции значение
+        res.InitProp p_res_atma, pb_atma, fw_perc
+        res.pi_sm3dayatm = pi_sm3dayatm
+        qliq_i = res.calc_q_liq_sm3day(pwf_i)
+        
+        crv_IPR.AddPoint pwf_i, qliq_i
+        
+    Next i
+    crv_IPR.xName = "p_wf_atma"
+    crv_IPR.yName = "q_liq_sm3day"
+    
+    IPR_crv_json = ConvertToJson(crv_IPR.getDict)
+    Exit Function
+err1:
+    IPR_crv_json = -1
+    add_log_msg "error in function :IPR_crv_json:" & Err.Description
 End Function
 
