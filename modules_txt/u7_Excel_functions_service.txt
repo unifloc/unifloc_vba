@@ -153,13 +153,21 @@ Public Function decode_json(json, _
             If transpose Then
                 ReDim outarr(1 To 1, 1 To c.Count)
                 For Each V In c
-                    outarr(1, i) = V
+                    If TypeName(V) = "Collection" Or TypeName(V) = "Dictionary" Then
+                        outarr(1, i) = ConvertToJson(V)
+                    Else
+                        outarr(1, i) = V
+                    End If
                     i = i + 1
                 Next
             Else
                 ReDim outarr(1 To c.Count, 1 To 1)
                 For Each V In c
-                    outarr(i, 1) = V
+                    If TypeName(V) = "Collection" Or TypeName(V) = "Dictionary" Then
+                        outarr(i, 1) = ConvertToJson(V)
+                    Else
+                        outarr(i, 1) = V
+                    End If
                     i = i + 1
                 Next
             End If
@@ -180,6 +188,20 @@ Public Function decode_json(json, _
     Exit Function
 err1:
     decode_json = "error"
+End Function
+Public Function decode_feed_list(feed As String) As Collection
+    Dim col As New Collection
+    Dim col1 As Collection
+    Dim c
+    If Mid(feed, 1, 1) = "[" Then
+        Set col1 = ParseJson(feed)
+        For Each c In col1
+            col.Add ConvertToJson(c)
+        Next
+    Else
+        col.Add feed
+    End If
+    Set decode_feed_list = col
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция декодирования json строки с табличной кривой,
@@ -321,6 +343,44 @@ Public Function encode_feed( _
     If q_gas_free_sm3day > 0 Then dict("q_gas_free_sm3day") = q_gas_free_sm3day
     
     encode_feed = ConvertToJson(dict)
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+'Функция кодирования параметров потока флюидов в строку,
+Public Function encode_feed_list( _
+          Optional ByVal q_liq_sm3day As Variant = 10, _
+          Optional ByVal fw_perc As Double = -1, _
+          Optional ByVal rp_m3m3 As Double = -1, _
+          Optional ByVal q_gas_free_sm3day As Double = -1, _
+          Optional ByVal fluid As String = PVT_DEFAULT)
+' q_liq_sm3day  - дебит жидкости в ст.условиях.
+' fw_perc       - ободненность, %
+' rp_m3m3       - газовый фактор, м3/м3:
+' q_gas_free_sm3day - расход свободного газа, ст. м3/сут
+'
+' результат - закодированная строка
+'description_end
+    
+    Dim str As String
+    Dim frmt As String
+    Dim frmt_int As String
+    
+    Dim dict As Dictionary
+    
+    Dim col As Collection
+    Dim col_feed As New Collection
+    Dim q
+    
+    Set col = ParseJson(q_liq_sm3day)
+    For Each q In col
+        'Set dict = New Dictionary
+        Set dict = ParseJson(fluid)
+        dict("q_liq_sm3day") = q
+        If fw_perc >= 0 Then dict("fw_perc") = fw_perc
+        If rp_m3m3 > 0 Then dict("rp_m3m3") = rp_m3m3
+        If q_gas_free_sm3day > 0 Then dict("q_gas_free_sm3day") = q_gas_free_sm3day
+        col_feed.Add dict
+    Next
+    encode_feed_list = ConvertToJson(col_feed)
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция кодирования параметров работы УЭЦН в строку
@@ -1021,56 +1081,84 @@ er2:
     encode_t_model = "error encode_t_model. zero length"
     Exit Function
 End Function
-' not checked
-Public Sub write_curve_to_range(crv As CInterpolation, _
-                                RangX As range, _
-                       Optional RangY As range, _
-                       Optional ByVal numpt As Integer = 0)
-    Dim crv1 As CInterpolation
-    If numpt > 0 And crv.num_points > 1 Then
-        Set crv1 = crv.ClonePointsToNum(numpt)
-        Call write_curve_to_range(crv1, RangX, RangY, -1)
-    ElseIf numpt = -1 Then
-        write_curve_vert_range crv, RangX, RangY
-    Else
-        numpt = RangX.Rows.Count
-        Set crv1 = crv.ClonePointsToNum(numpt)
-        Call write_curve_to_range(crv1, RangX, RangY, -1)
-        'crv.ClonePointsToNum(numpt).WriteToRange RangX, RangY, -1
-    End If
-End Sub
-Private Sub write_curve_vert_range(crv As CInterpolation, _
-                                   RangX As range, _
-                                   RangY As range)
-' позволим кривой записывать себя за заранее данный диапазон ячеек (тут хорошо бы сообразить уместится ли запись или нет - может надо кривую масштабировать?)
-' функция записи кривой на лист excel
- On Error GoTo er1
-    Dim ValX As Double, ValY As Double
-    Dim NumStr As Integer
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' кодирование списка значений для векторных расчетов
+' значения распределены равномерно
+Public Function encode_arange(ByVal val_from As Double, _
+                              ByVal val_to As Double, _
+                              ByVal step As Double)
+' val_from   - первое значение списка
+' val_to     - последнее значение списка
+' step       - шаг значений списка
+'description_end
+    Dim col As New Collection
     Dim i As Integer
-    
-    RangX.Clear
-    If Not RangY Is Nothing Then RangY.Clear
-    NumStr = MinReal(crv.num_points, RangX.Rows.Count)   ' определяем количество элементов в списке. Оно равно числу значений по оси X
-    RangX.Cells(0, 1) = crv.xName   ' XDescription
-    If RangY Is Nothing Then
-        RangX.Cells(0, 2) = crv.yName  'YDescription
-    Else
-        RangY.Cells(0, 1) = crv.yName
+    i = 0
+    If val_to < val_from Or step <= 0 Then
+        col.Add val_from
+        encode_arange = ConvertToJson(col)
+        Exit Function
     End If
-    For i = 1 To NumStr
-        ValX = crv.pointX(i)
-        ValY = crv.PointY(i)
-        RangX.Cells(i, 1) = ValX
-        If RangY Is Nothing Then
-            RangX.Cells(i, 2) = ValY
-        Else
-            RangY.Cells(i, 1) = ValY
-        End If
-    Next i
+    Do
+        col.Add val_from + step * i
+        i = i + 1
+        ' на выходе позволим небольшую ошибку для double значений, чтобы проще искать границы
+    Loop Until (val_to - val_from - step * i) < -0.0000000001
     
-    Exit Sub
-er1:
-    Err.Raise kErrWriteDataFromWorksheet, "CInterpolation.WriteToVertRange", "Ошибка, при записи кривой. Точек " & NumStr & " в диапазон ."
-End Sub
+    encode_arange = ConvertToJson(col)
+End Function
+' not checked
+'
+'Public Sub write_curve_to_range(crv As CInterpolation, _
+'                                RangX As range, _
+'                       Optional RangY As range, _
+'                       Optional ByVal numpt As Integer = 0)
+'    Dim crv1 As CInterpolation
+'    If numpt > 0 And crv.num_points > 1 Then
+'        Set crv1 = crv.ClonePointsToNum(numpt)
+'        Call write_curve_to_range(crv1, RangX, RangY, -1)
+'    ElseIf numpt = -1 Then
+'        write_curve_vert_range crv, RangX, RangY
+'    Else
+'        numpt = RangX.Rows.Count
+'        Set crv1 = crv.ClonePointsToNum(numpt)
+'        Call write_curve_to_range(crv1, RangX, RangY, -1)
+'        'crv.ClonePointsToNum(numpt).WriteToRange RangX, RangY, -1
+'    End If
+'End Sub
+'
+'Private Sub write_curve_vert_range(crv As CInterpolation, _
+'                                   RangX As range, _
+'                                   RangY As range)
+'' позволим кривой записывать себя за заранее данный диапазон ячеек (тут хорошо бы сообразить уместится ли запись или нет - может надо кривую масштабировать?)
+'' функция записи кривой на лист excel
+' On Error GoTo er1
+'    Dim ValX As Double, ValY As Double
+'    Dim NumStr As Integer
+'    Dim i As Integer
+'
+'    RangX.Clear
+'    If Not RangY Is Nothing Then RangY.Clear
+'    NumStr = MinReal(crv.num_points, RangX.Rows.Count)   ' определяем количество элементов в списке. Оно равно числу значений по оси X
+'    RangX.Cells(0, 1) = crv.xName   ' XDescription
+'    If RangY Is Nothing Then
+'        RangX.Cells(0, 2) = crv.yName  'YDescription
+'    Else
+'        RangY.Cells(0, 1) = crv.yName
+'    End If
+'    For i = 1 To NumStr
+'        ValX = crv.pointX(i)
+'        ValY = crv.PointY(i)
+'        RangX.Cells(i, 1) = ValX
+'        If RangY Is Nothing Then
+'            RangX.Cells(i, 2) = ValY
+'        Else
+'            RangY.Cells(i, 1) = ValY
+'        End If
+'    Next i
+'
+'    Exit Sub
+'er1:
+'    Err.Raise kErrWriteDataFromWorksheet, "CInterpolation.WriteToVertRange", "Ошибка, при записи кривой. Точек " & NumStr & " в диапазон ."
+'End Sub
 
