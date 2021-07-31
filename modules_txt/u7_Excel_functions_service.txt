@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.30 primavera                                          khabibullinra@gmail.com
+'Unifloc 7.31 Beloretsk                                          khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -67,10 +67,16 @@ Public Function decode_json(json, _
                 keystr = Trim(arrkeys(i))
                 If d.Exists(keystr) Then
                     keylist(keystr) = d(keystr)
+                Else
+                    decode_json = "No key " & keystr & " found"
+                    Exit Function
                 End If
             Next i
             If keylist.Count > 0 Then
                 Set d = keylist
+            Else
+                decode_json = "No keys found"
+                Exit Function
             End If
         End If
     
@@ -139,6 +145,10 @@ Public Function decode_json(json, _
             Next i
         End If
     Else  ' expect collection here
+        If Not IsMissing(keys_filter) Then
+            decode_json = "No keys in collection"
+            Exit Function
+        End If
         
         Set c = p
         If c.Count = 1 Then
@@ -189,7 +199,93 @@ Public Function decode_json(json, _
 err1:
     decode_json = "error"
 End Function
-Public Function decode_feed_list(feed As String) As Collection
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Функция извлекает список давлений из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_p_atma(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_p_atma = decode_json(json, _
+                                    keys_filter:="p_atma", _
+                                    only_values:=True)
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Функция извлекает список температур из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_t_C(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_t_C = decode_json(json, _
+                                    keys_filter:="t_C", _
+                                    only_values:=True)
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Функция извлекает списки давлений и температур из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_pt(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_pt = decode_json(json, _
+                                 transpose:=True, _
+                                 keys_filter:="p_atma,t_C", _
+                                 only_values:=True)
+End Function
+'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+' Функция извлекает список дебитов из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_q_liq_sm3day(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_q_liq_sm3day = decode_json(json, _
+                                    keys_filter:="q_liq_sm3day", _
+                                    only_values:=True)
+End Function
+Public Function parse_feed_list_(ByVal feed As String) As Variant
+    Dim col As Collection
+    Dim c
+    Dim res() As String
+    Dim i As Integer
+    
+    If Mid(feed, 1, 1) = "[" Then
+        Set col = ParseJson(feed)
+        ReDim res(1 To col.Count)
+        i = 1
+        For Each c In col
+            res(i) = ConvertToJson(c)
+            i = i + 1
+        Next
+    Else
+        ReDim res(1 To 1)
+        res(1) = feed
+    End If
+    parse_feed_list_ = res
+End Function
+Public Function parse_list_(val) As Variant
+    Dim col As New Collection
+    Dim c
+    Dim res() As Double
+    Dim i As Integer
+    
+    Select Case VarType(val)
+        Case vbDouble
+            ReDim res(1 To 1)
+            res(1) = val
+        Case vbString
+            Set col = ParseJson(val)
+            ReDim res(1 To col.Count)
+            i = 1
+            For Each c In col
+                res(i) = c
+                i = i + 1
+            Next
+    End Select
+    parse_list_ = res
+End Function
+Public Function parse_feed_list(feed As String) As Collection
     Dim col As New Collection
     Dim col1 As Collection
     Dim c
@@ -201,7 +297,20 @@ Public Function decode_feed_list(feed As String) As Collection
     Else
         col.Add feed
     End If
-    Set decode_feed_list = col
+    Set parse_feed_list = col
+End Function
+Public Function parse_list(val) As Collection
+    Dim col As New Collection
+    Dim col1 As Collection
+    Dim c
+    
+    Select Case VarType(val)
+        Case vbDouble
+            col.Add val
+        Case vbString
+            Set col = ParseJson(val)
+    End Select
+    Set parse_list = col
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция декодирования json строки с табличной кривой,
@@ -242,12 +351,15 @@ Public Function decode_json_crv(json, _
                 Next i
             
             End If
+        Else
+            decode_json_crv = "error:decode_json_crv:no curve found in json. ""curve_x"" and ""curve_y"" keys musb be in json"
+            Exit Function
         End If
         
     decode_json_crv = out_arr
     Exit Function
 err1:
-    decode_json_crv = "error"
+    decode_json_crv = "error:decode_json_crv: " & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' Функция кодирования параметров PVT в строку,
@@ -1106,6 +1218,86 @@ Public Function encode_arange(ByVal val_from As Double, _
     Loop Until (val_to - val_from - step * i) < -0.0000000001
     
     encode_arange = ConvertToJson(col)
+End Function
+Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_)
+    Dim m As Integer
+    Dim n As Integer
+    Dim i As Integer
+    
+    Dim len_feed As Integer
+    Dim len_p As Integer
+    Dim len_t As Integer
+' здесь читаем и причесываем потенциально списочные входных данных расчетных функций
+    With ptq
+         ' определяем что на входе - один поток или вектор потоков и складываем все в коллекцию
+        .arr_feed = parse_feed_list_(feed)
+        .arr_p = parse_list_(p)
+        .arr_t = parse_list_(t)
+        len_feed = UBound(.arr_feed) - LBound(.arr_feed) + 1
+        len_p = UBound(.arr_p) - LBound(.arr_p) + 1
+        len_t = UBound(.arr_t) - LBound(.arr_t) + 1
+        
+        
+        'далее проверим что длины были везде одинаковые
+        If len_feed <> len_p Or len_feed <> len_t Then
+        ' надо выровнять
+            m = MaxInt(len_feed, len_p)
+            m = MaxInt(m, len_t)
+            If len_feed < m Then
+                n = UBound(.arr_feed)
+                If n > 1 Then log_.add_msg "warning: input list feed length > 1 but less that max length"
+                ReDim Preserve .arr_feed(1 To m)
+                For i = n + 1 To m
+                    .arr_feed(i) = .arr_feed(n)
+                Next i
+            End If
+            If len_p < m Then
+                n = UBound(.arr_p)
+                If n > 1 Then log_.add_msg "warning: input list p length > 1 but less that max length"
+                ReDim Preserve .arr_p(1 To m)
+                For i = n + 1 To m
+                    .arr_p(i) = .arr_p(n)
+                Next i
+            End If
+            If len_t < m Then
+                n = UBound(.arr_t)
+                If n > 1 Then log_.add_msg "warning: input list t length > 1 but less that max length"
+                ReDim Preserve .arr_t(1 To m)
+                For i = n + 1 To m
+                    .arr_t(i) = .arr_t(n)
+                Next i
+            End If
+        End If
+        
+        len_feed = UBound(.arr_feed) - LBound(.arr_feed) + 1
+        len_p = UBound(.arr_p) - LBound(.arr_p) + 1
+        len_t = UBound(.arr_t) - LBound(.arr_t) + 1
+        If len_feed <> len_p And len_feed <> len_t Then
+            Err.Raise 1000
+        End If
+        .len = len_feed
+    End With
+End Sub
+Public Sub init_ptq(ptq As PTQ_LIST, ptq_from As PTQ_LIST)
+    
+    ReDim ptq.arr_feed(LBound(ptq_from.arr_feed) To UBound(ptq_from.arr_feed))
+    ReDim ptq.arr_p(LBound(ptq_from.arr_p) To UBound(ptq_from.arr_p))
+    ReDim ptq.arr_t(LBound(ptq_from.arr_t) To UBound(ptq_from.arr_t))
+    ptq.len = ptq_from.len
+    
+End Sub
+Public Function convert_to_json_ptq(ptq As PTQ_LIST)
+    Dim d As New Dictionary
+    Dim i As Integer
+    Dim c As New Collection
+    
+    d("p_atma") = ptq.arr_p
+    d("t_C") = ptq.arr_t
+    For i = LBound(ptq.arr_feed) To UBound(ptq.arr_feed)
+        c.Add ParseJson(ptq.arr_feed(i))
+    Next i
+    d("feed") = c
+    convert_to_json_ptq = ConvertToJson(d)
 End Function
 ' not checked
 '

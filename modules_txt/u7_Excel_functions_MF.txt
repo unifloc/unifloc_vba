@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.30 primavera                                     khabibullinra@gmail.com
+'Unifloc 7.31 Beloretsk                                     khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -248,8 +248,8 @@ End Function
 '  расчет распределения давления и температуры в трубопроводе
 '  выводит результат в виде таблицы значений
 Public Function MF_pipe_p_atma( _
-                 ByVal p_calc_from_atma As Double, _
-                 ByVal t_calc_from_C As Double, _
+                 ByVal p_calc_from_atma, _
+                 ByVal t_calc_from_C, _
         Optional ByVal construction As String = "", _
         Optional ByVal feed As String = "", _
         Optional ByVal t_model As String = "", _
@@ -265,7 +265,7 @@ Public Function MF_pipe_p_atma( _
 '           граничное значение для проведения расчета
 ' t_calc_from_C - температура в точке где задано давление расчета
 ' feed      - параметры потока флюидов json строка. Используйте
-'           функцию encode_feed() для генерации
+'           функции encode_feed() или encode_feed_list()
 ' construction - параметры конструкции json строка. Используйте
 '           функцию encode_pipe() для генерации
 ' t_model   - параметры температурной модели json строка.
@@ -292,11 +292,15 @@ Public Function MF_pipe_p_atma( _
     Dim show_log As Boolean
     Dim show_array As Boolean
     
+    Dim ptq As PTQ_LIST
+    Dim col_res As New Collection
+    Dim i As Integer
+ 
     out_points = 20
 On Error GoTo err1:
-    
+    ' инициализируем трубу с первым фидом, который всегда есть
     Set pipe = new_pipeline_with_feed(construction, _
-                                      feed, _
+                                      encode_feed(), _
                                       t_model, _
                                       calc_along_coord, _
                                       flow_along_coord, _
@@ -304,6 +308,9 @@ On Error GoTo err1:
                                       calibr_grav, _
                                       calibr_fric, _
                                       h_start_m, h_end_m)
+    Call read_PTQ(ptq, feed, p_calc_from_atma, t_calc_from_C, pipe.log_)
+                                      
+    ' читаем параметры
     Set prmd = param_to_dict(param)
     
     show_log = prmd(prm_show_log)
@@ -312,121 +319,45 @@ On Error GoTo err1:
     
     If prmd.Exists(prm_out_points) Then out_points = prmd(prm_out_points)
     
-    
-    If show_array Then
-        res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, mainCurves))
-        res = pipe.get_result_array(out_points, show_log)
-    
-        res(0, 0) = res1(0)
-        
-        res(0, 0) = res(0, num_value)
-        res(1, 0) = res(1, num_value)
+    ' запускаем цикл по вектору потоков, даже если он один все сработает как надо
+    For i = 1 To ptq.len
+        Call pipe.fluid.init_feed(ptq.arr_feed(i))
+        If show_array And ptq.len = 1 Then
+                res1 = PT_to_array(pipe.calc_dPipe(ptq.arr_p(i), ptq.arr_t(i), mainCurves))
+                res = pipe.get_result_array(out_points, show_log)
+            
+                res(0, 0) = res1(0)
+                
+                res(0, 0) = res(0, num_value)
+                res(1, 0) = res(1, num_value)
+        Else
+            res1 = PT_to_array(pipe.calc_dPipe(ptq.arr_p(i), ptq.arr_t(i), noCurves))  ' noCurves a bit faster - not save crv at all
+            If ptq.len = 1 Then
+                res = res1(0)
+            Else
+                col_res.Add res1(0)
+            End If
+        End If
+    Next i
+    ' вывод отличается для вектора и для одного расчета
+    If ptq.len = 1 Then
+        MF_pipe_p_atma = res
     Else
-        res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, noCurves))  ' noCurves a bit faster - not save crv at all
-        res = res1(0)
+        If show_array And show_log Then
+            MF_pipe_p_atma = Array(ConvertToJson(col_res), pipe.log_.get_str_safe(show_log))
+        Else
+            MF_pipe_p_atma = ConvertToJson(col_res)
+        End If
     End If
-    MF_pipe_p_atma = res
     Exit Function
 err1:
     MF_pipe_p_atma = "Error:MF_pipe_p_atma :" & Err.Description
    ' add_log_msg "Error:MF_pipe_p_atma:" & Err.Description
 End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-'  расчет распределения давления и температуры в трубопроводе
-'  выводит полный набор результатов в виде массива json параметров
-Public Function MF_pipe_calc( _
-                 ByVal p_calc_from_atma As Double, _
-                 ByVal t_calc_from_C As Double, _
-        Optional ByVal construction As String = "", _
-        Optional ByVal feed As String = "", _
-        Optional ByVal t_model As String = "", _
-        Optional ByVal calc_along_coord As Boolean = True, _
-        Optional ByVal flow_along_coord As Boolean = True, _
-        Optional ByVal flow_correlation As Integer = 0, _
-        Optional ByVal calibr_grav As Double = 1, _
-        Optional ByVal calibr_fric As Double = 1, _
-        Optional ByVal param As String)
-' p_calc_from_atma  - давление с которого начинается расчет, атм
-'           граничное значение для проведения расчета
-' t_calc_from_C - температура в точке где задано давление расчета
-' feed      - параметры потока флюидов json строка. Используйте
-'           функцию encode_feed() для генерации
-' construction - параметры конструкции json строка. Используйте
-'           функцию encode_pipe() для генерации
-' t_model   - параметры температурной модели json строка.
-'           Используйте функцию encode_feed() для генерации
-' calc_along_coord - направление расчета относительно координат.
-' flow_along_coord - направление потока относительно координат.
-' flow_correl ation - гидравлическая корреляция, номер
-' calibr_grav  - калибровка на гравитационную составляющую
-'                градиента давления
-' calibr_fric  - калибровка на составляющую трения
-'                градиента давления
-' param     - дополнительные параметры расчета потока
-' результат - число - давление на другом конце трубы atma.
-'           и распределение параметров по трубе
-'description_end
-    Dim pipe As New CPipe
-    Dim num_value As Integer
-    Dim out_points As Integer
-    Dim out_curves As CALC_RESULTS
-    Dim prmd As Dictionary
-    
-    Dim show_log As Boolean
-    Dim show_all As Boolean
-    
-    out_points = 20
-Const nv = 4  ' output array dimension (number of columns)
-    Dim res(0 To 1, 0 To nv) As String
-    
-On Error GoTo err1:
-    
-    Set pipe = new_pipeline_with_feed(construction, _
-                                      feed, _
-                                      t_model, _
-                                      calc_along_coord, _
-                                      flow_along_coord, _
-                                      flow_correlation, _
-                                      calibr_grav, _
-                                      calibr_fric)
-    
-    Set prmd = param_to_dict(param)
-    
-    show_log = prmd(prm_show_log)
-    num_value = prmd(prm_num_value)
-    show_all = prmd(prm_show_all)
-    
-    If show_all Then
-        out_curves = allCurves
-    Else
-        out_curves = mainCurves
-    End If
-    If prmd.Exists(prm_out_points) Then out_points = prmd(prm_out_points)
-    ' calc pressure distribution
-    Call PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, out_curves))
-    
-    res(0, 0) = ConvertToJson(pipe.get_result_dict(out_points))
-    res(1, 0) = "results"
-    
-    res(0, 1) = ConvertToJson(pipe.get_result_dict_crv_main(out_points))
-    res(1, 1) = "curves"
-    
-    res(0, 2) = ConvertToJson(pipe.get_result_dict_crv_add(out_points))
-    res(1, 2) = "curves add"
-    
-    res(0, 3) = pipe.log_.get_str_safe(show_log)
-    res(1, 3) = "log"
-    
-    MF_pipe_calc = res
-    Exit Function
-err1:
-    MF_pipe_calc = "error"
-    add_log_msg "Error:MF_pipe_calc:" & Err.Description
-End Function
 ' ==============  функции для расчета штуцера ==========================
 ' =====================================================================
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' расчет расхода жидкости через штуцер по давлениям
+' расчет давления в штуцере
 Public Function MF_choke_q_sm3day( _
                      ByVal feed As String, _
                      ByVal d_choke_mm As Double, _
@@ -446,7 +377,7 @@ Public Function MF_choke_q_sm3day( _
 ' d_pipe_mm    - диаметр трубы до и после штуцера
 ' param        - параметры расчета json строка
 ' результат    - число - массив значений с параметрами штуцера
-'                и расход по заданным давлениям.
+'                и давление на штуцере на расчетной стороне.
 'description_end
 On Error GoTo err1:
     Dim choke As Cchoke
@@ -459,26 +390,12 @@ On Error GoTo err1:
     Dim q As Double
     Dim prmd As Dictionary
     
-    Dim col_feed As Collection
-    Dim col_res As New Collection
-    Dim f
-    
-    ' определяем что на входе - один поток или вектор потоков и складываем все в коллекцию
-    Set col_feed = decode_feed_list(feed)
-    
-    
-    ' один раз заводим объект, даже если считаем вектор
-    ' потом в логе должна сохраниться вся история расчетов
-    Set choke = New Cchoke
-    ' цикл расчетов - срабатывает если пришел feed вектор, иначе считает только один раз
-    For Each f In col_feed
-        Call set_choke_data(choke, d_choke_mm, f, d_pipe_mm, calibr)
-        q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
-        col_res.Add q
-    Next
-    
     num_value = 3
+    Set choke = New Cchoke
+    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr)
+    q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
     choke.fluid.q_liq_sm3day = q
+'    feed_out = choke.fluid.feed
     ' читаем параметры чтобы настроить правильный вывод
     Set prmd = param_to_dict(param)
     show_array = prmd(prm_show_array)
@@ -486,109 +403,36 @@ On Error GoTo err1:
         nv = prmd(prm_num_value)
         If nv > 0 And nv < 10 Then num_value = nv
     End If
-    
     If show_array Then
         show_log = prmd(prm_show_log)
-        If col_feed.Count = 1 Then
-            MF_choke_q_sm3day = choke.get_result_array(num_value, show_log)
-        Else
-            MF_choke_q_sm3day = Array(ConvertToJson(col_res), choke.log_.get_str_safe(show_log))
-        End If
+        MF_choke_q_sm3day = choke.get_result_array(num_value, show_log)
     Else
-        If col_feed.Count = 1 Then
-            MF_choke_q_sm3day = q
-        Else
-            MF_choke_q_sm3day = ConvertToJson(col_res)
-        End If
+        MF_choke_q_sm3day = q
     End If
     Exit Function
 err1:
     MF_choke_q_sm3day = "error:MF_choke_q_sm3day:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-' расчет штуцера (дросселя) с выводом всех параметров расчета
-' тип расчета зависит от исходных данных
-Public Function MF_choke_calc( _
-                     ByVal d_choke_mm As Double, _
-                     ByVal feed As String, _
-            Optional ByVal p_in_atma As Double = -1, _
-            Optional ByVal p_out_atma As Double = -1, _
-            Optional ByVal t_choke_C As Double = 20, _
-            Optional ByVal d_pipe_mm As Double = 70, _
-            Optional ByVal calibr As Double = 1, _
-            Optional ByVal param As String = "")
-' d_choke_mm      - диаметр штуцера (эффективный)
-' feed            - закодированная строка с параметрами потока.
-' p_in_atma       - давление на входе в штуцер, атм
-'                   если задано, то используется в расчете
-' p_out_atma      - давление на выходе из штуцера, атм
-'                   если задано, то используется в расчете
-' t_choke_C       - температура потока, С.
-' d_pipe_mm       - диаметр трубы до и после штуцера
-' calibr          - базовая калибровка штуцера (на расход)
-' param           - параметры расчета json строка
-' результат       - число или массив значений с параметрами штуцера
-'                   и давление на штуцере на расчетной стороне.
-'description_end
-Const nv = 3  ' output array dimension (number of columns)
-On Error GoTo err1:
-    Dim choke As Cchoke
-    Dim resd As Dictionary
-    Dim res(1 To 2, 1 To nv) As String
-    Dim q As Double
-    Dim show_array As Boolean
-    Dim show_log As Boolean
-    Dim prmd As Dictionary
-    
-    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr)
-    
-    Set prmd = param_to_dict(param)
-    show_log = prmd(prm_show_log)
-    show_array = prmd(prm_show_array)
-    
-    ' запускаем расчет в зависимости от опции направления расчета
-    If p_in_atma > 0 And p_out_atma < 0 Then
-        Call choke.calc_choke_p_lin(set_PT(p_in_atma, t_choke_C))
-    ElseIf p_in_atma < 0 And p_out_atma > 0 Then
-        Call choke.calc_choke_p_buf(set_PT(p_out_atma, t_choke_C))
-    ElseIf p_in_atma > 0 And p_out_atma > 0 Then
-        q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
-        choke.fluid.q_liq_sm3day = q
-        choke.add_log_msg "info: rate calculation done, check feed for results"
-    End If
-    
-    res(1, 1) = ConvertToJson(choke.get_result_dict()): res(2, 1) = "results"
-    res(1, 2) = choke.fluid.get_json: res(2, 2) = "feed"
-    res(1, 3) = choke.log_.get_str_safe(show_log): res(2, 3) = "log"
-   
-    
-    If show_array Then
-        MF_choke_calc = res
-    Else
-        MF_choke_calc = res(1, 1)
-    End If
-    
-    Exit Function
-err1:
-    MF_choke_calc = "error:MF_choke_calc:" & Err.Description
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет давления в штуцере (дросселе)
 Public Function MF_choke_p_atma( _
                      ByVal d_choke_mm As Double, _
                      ByVal feed As String, _
-                     ByVal p_calc_from_atma As Double, _
-            Optional ByVal t_choke_C As Double = 20, _
+                     ByVal p_calc_from_atma, _
+            Optional ByVal t_choke_C = 20, _
             Optional ByVal d_pipe_mm As Double = 70, _
             Optional ByVal calc_along_flow As Boolean = True, _
             Optional ByVal calibr As Double = 1, _
             Optional ByVal param As String = "")
 ' d_choke_mm      - диаметр штуцера (эффективный)
-' feed            - закодированная строка с параметрами потока.
+' feed      - параметры потока флюидов json строка. Используйте
+'           функции encode_feed() или encode_feed_list()
 ' p_calc_from_atma - давление с которого начинается расчет, атм
 '                  граничное значение для проведения расчета
-'                  либо давление на входе, либо на выходе
+'                  либо давление на входе, либо на выходе.
+'                   может быть списком.
 ' t_choke_C       - температура потока, С.
+'                   может быть списком.
 ' d_pipe_mm       - диаметр трубы до и после штуцера
 ' calc_along_flow - флаг направления расчета относительно потока
 ' param           - параметры расчета json строка
@@ -604,32 +448,38 @@ On Error GoTo err1:
     Dim show_log As Boolean
     Dim prmd As Dictionary
     
-    Dim col_feed As Collection
-    Dim col_res As New Collection
-    Dim f
-    
-    ' определяем что на входе - один поток или вектор потоков и складываем все в коллекцию
-    Set col_feed = decode_feed_list(feed)
-    
+    Dim ptq As PTQ_LIST
+    Dim ptq_out As PTQ_LIST
+  '  Dim col_res As New Collection
+    Dim i As Integer
     
     ' один раз заводим объект, даже если считаем вектор
     ' потом в логе должна сохраниться вся история расчетов
     Set choke = New Cchoke
+    
+    Call read_PTQ(ptq, feed, p_calc_from_atma, t_choke_C, choke.log_)
+    Call init_ptq(ptq_out, ptq)
+    
     ' цикл расчетов - срабатывает если пришел feed вектор, иначе считает только один раз
-    For Each f In col_feed
-        Call set_choke_data(choke, d_choke_mm, f, d_pipe_mm, calibr)
+    For i = 1 To ptq.len
+        Call set_choke_data(choke, d_choke_mm, ptq.arr_feed(i), d_pipe_mm, calibr)
         ' запускаем расчет в зависимости от опции направления расчета
         If calc_along_flow Then
-            Call choke.calc_choke_p_lin(set_PT(p_calc_from_atma, t_choke_C))
+            Call choke.calc_choke_p_lin(set_PT(ptq.arr_p(i), ptq.arr_t(i)))
             p_out = choke.p_out_atma
             num_value = 2
         Else
-            Call choke.calc_choke_p_buf(set_PT(p_calc_from_atma, t_choke_C))
+            Call choke.calc_choke_p_buf(set_PT(ptq.arr_p(i), ptq.arr_t(i)))
             p_out = choke.p_in_atma
             num_value = 1
         End If
-        col_res.Add p_out
-    Next
+      '  col_res.Add p_out
+        
+        ptq_out.arr_p(i) = p_out
+        ptq_out.arr_t(i) = ptq.arr_t(i)
+        ptq_out.arr_feed(i) = ptq.arr_feed(i)
+        
+    Next i
     ' читаем параметры чтобы настроить правильный вывод
     Set prmd = param_to_dict(param)
     show_array = prmd(prm_show_array)
@@ -639,16 +489,16 @@ On Error GoTo err1:
     End If
     If show_array Then
         show_log = prmd(prm_show_log)
-        If col_feed.Count = 1 Then
+        If ptq.len = 1 Then
             MF_choke_p_atma = choke.get_result_array(num_value, show_log)
         Else
-            MF_choke_p_atma = Array(ConvertToJson(col_res), choke.log_.get_str_safe(show_log))
+            MF_choke_p_atma = Array(convert_to_json_ptq(ptq_out), choke.log_.get_str_safe(show_log))
         End If
     Else
-        If col_feed.Count = 1 Then
+        If ptq.len = 1 Then
             MF_choke_p_atma = p_out
         Else
-            MF_choke_p_atma = ConvertToJson(col_res)
+            MF_choke_p_atma = convert_to_json_ptq(ptq_out)
         End If
     End If
     Exit Function
@@ -761,7 +611,8 @@ Private Sub set_choke_data( _
 End Sub
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет кривой - характеристики штуцера
-Public Function MF_choke_crv_json( _
+' pq - давление дебит
+Public Function MF_choke_pq_crv( _
                      ByVal d_choke_mm As Double, _
                      ByVal feed As String, _
                      ByVal p_calc_from_atma As Double, _
@@ -791,10 +642,8 @@ On Error GoTo err1:
     Dim q_i As Double
     Dim p_cr As Double
     
-    Dim choke As Cchoke
-    'Dim num_value As Integer, nv As Integer
-'    Dim p_out As Double
-'    Dim show_array As Boolean
+    Dim choke As New Cchoke
+    
     Dim p_max As Double
     Dim show_log As Boolean
     Dim prmd As Dictionary
@@ -827,8 +676,8 @@ On Error GoTo err1:
     Else
         p_max = p_calc_from_atma * 2
         For i = 0 To num
-            p_i = p_calc_from_atma + 0.06 * Exp(i * 0.25) * i '+ (p_max - 1) / num * i
-            If p_i > 300 Or i = num Then p_i = 300
+            p_i = p_calc_from_atma + (p_max - p_calc_from_atma) / num * i  '+ 0.06 * Exp(i * 0.25) * i
+            If p_i > p_max Or i = num Then p_i = p_max
             q_i = choke.calc_choke_q_liq_sm3day(p_i, p_calc_from_atma, t_choke_C)
             crv_choke.AddPoint p_i, q_i
             
@@ -836,21 +685,178 @@ On Error GoTo err1:
         crv_choke.xName = "p_in_atma"
         crv_choke.yName = "q_liq_sm3day"
     End If
-    ' читаем параметры чтобы настроить правильный вывод
-'    show_array = prmd(prm_show_array)
-'    If prmd.Exists(prm_num_value) Then
-'        nv = prmd(prm_num_value)
-'        If nv > 0 And nv < 10 Then num_value = nv
-'    End If
-'    If show_array Then
-'        show_log = prmd(prm_show_log)
-'        MF_choke_crv_json = choke.get_result_array(num_value, show_log)
-'    Else
-'         p_out
-'    End If
-    MF_choke_crv_json = ConvertToJson(crv_choke.getDict)
+    MF_choke_pq_crv = ConvertToJson(crv_choke.getDict)
     Exit Function
 err1:
-    MF_choke_crv_json = "error:MF_choke_crv_json:" & Err.Description
+    MF_choke_pq_crv = "error:MF_choke_pq_crv:" & Err.Description
 End Function
+'==========================================================================
+' перспективные варианты расчетных функций, которые пока отключены
+'==========================================================================
+'' расчет штуцера (дросселя) с выводом всех параметров расчета
+'' тип расчета зависит от исходных данных
+'Public Function MF_choke_calc( _
+'                     ByVal d_choke_mm As Double, _
+'                     ByVal feed As String, _
+'            Optional ByVal p_in_atma As Double = -1, _
+'            Optional ByVal p_out_atma As Double = -1, _
+'            Optional ByVal t_choke_C As Double = 20, _
+'            Optional ByVal d_pipe_mm As Double = 70, _
+'            Optional ByVal calibr As Double = 1, _
+'            Optional ByVal param As String = "")
+'' d_choke_mm      - диаметр штуцера (эффективный)
+'' feed            - закодированная строка с параметрами потока.
+'' p_in_atma       - давление на входе в штуцер, атм
+''                   если задано, то используется в расчете
+'' p_out_atma      - давление на выходе из штуцера, атм
+''                   если задано, то используется в расчете
+'' t_choke_C       - температура потока, С.
+'' d_pipe_mm       - диаметр трубы до и после штуцера
+'' calibr          - базовая калибровка штуцера (на расход)
+'' param           - параметры расчета json строка
+'' результат       - число или массив значений с параметрами штуцера
+''                   и давление на штуцере на расчетной стороне.
+'
+'
+'Const nv = 3  ' output array dimension (number of columns)
+'
+'On Error GoTo err1:
+'    Dim choke As Cchoke
+'    Dim resd As Dictionary
+'    Dim res(1 To 2, 1 To nv) As String
+'    Dim q As Double
+'    Dim show_array As Boolean
+'    Dim show_log As Boolean
+'    Dim prmd As Dictionary
+'
+'    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr)
+'
+'    Set prmd = param_to_dict(param)
+'    show_log = prmd(prm_show_log)
+'    show_array = prmd(prm_show_array)
+'
+'    ' запускаем расчет в зависимости от опции направления расчета
+'    If p_in_atma > 0 And p_out_atma < 0 Then
+'        Call choke.calc_choke_p_lin(set_PT(p_in_atma, t_choke_C))
+'    ElseIf p_in_atma < 0 And p_out_atma > 0 Then
+'        Call choke.calc_choke_p_buf(set_PT(p_out_atma, t_choke_C))
+'    ElseIf p_in_atma > 0 And p_out_atma > 0 Then
+'        q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
+'        choke.fluid.q_liq_sm3day = q
+'        choke.add_log_msg "info: rate calculation done, check feed for results"
+'    End If
+'
+'    res(1, 1) = ConvertToJson(choke.get_result_dict()): res(2, 1) = "results"
+'    res(1, 2) = choke.fluid.get_json: res(2, 2) = "feed"
+'    res(1, 3) = choke.log_.get_str_safe(show_log): res(2, 3) = "log"
+'
+'
+'    If show_array Then
+'        MF_choke_calc = res
+'    Else
+'        MF_choke_calc = res(1, 1)
+'    End If
+'
+'
+'    Exit Function
+'err1:
+'    MF_choke_calc = "error:MF_choke_calc:" & Err.Description
+'End Function
+'
+''  расчет распределения давления и температуры в трубопроводе
+''  выводит полный набор результатов в виде массива json параметров
+'Public Function MF_pipe_calc( _
+'                 ByVal p_calc_from_atma As Double, _
+'                 ByVal t_calc_from_C As Double, _
+'        Optional ByVal construction As String = "", _
+'        Optional ByVal feed As String = "", _
+'        Optional ByVal t_model As String = "", _
+'        Optional ByVal calc_along_coord As Boolean = True, _
+'        Optional ByVal flow_along_coord As Boolean = True, _
+'        Optional ByVal flow_correlation As Integer = 0, _
+'        Optional ByVal calibr_grav As Double = 1, _
+'        Optional ByVal calibr_fric As Double = 1, _
+'        Optional ByVal param As String)
+'' p_calc_from_atma  - давление с которого начинается расчет, атм
+''           граничное значение для проведения расчета
+'' t_calc_from_C - температура в точке где задано давление расчета
+'' feed      - параметры потока флюидов json строка. Используйте
+''           функцию encode_feed() для генерации
+'' construction - параметры конструкции json строка. Используйте
+''           функцию encode_pipe() для генерации
+'' t_model   - параметры температурной модели json строка.
+''           Используйте функцию encode_feed() для генерации
+'' calc_along_coord - направление расчета относительно координат.
+'' flow_along_coord - направление потока относительно координат.
+'' flow_correl ation - гидравлическая корреляция, номер
+'' calibr_grav  - калибровка на гравитационную составляющую
+''                градиента давления
+'' calibr_fric  - калибровка на составляющую трения
+''                градиента давления
+'' param     - дополнительные параметры расчета потока
+'' результат - число - давление на другом конце трубы atma.
+''           и распределение параметров по трубе
+'
+'    Dim pipe As New CPipe
+'    Dim num_value As Integer
+'    Dim out_points As Integer
+'    Dim out_curves As CALC_RESULTS
+'    Dim prmd As Dictionary
+'
+'    Dim show_log As Boolean
+'    Dim show_all As Boolean
+'
+'    out_points = 20
+'Const nv = 4  ' output array dimension (number of columns)
+'
+'    Dim res(0 To 1, 0 To nv) As String
+'
+'On Error GoTo err1:
+'
+'    Set pipe = new_pipeline_with_feed(construction, _
+'                                      feed, _
+'                                      t_model, _
+'                                      calc_along_coord, _
+'                                      flow_along_coord, _
+'                                      flow_correlation, _
+'                                      calibr_grav, _
+'                                      calibr_fric)
+'
+'    Set prmd = param_to_dict(param)
+'
+'    show_log = prmd(prm_show_log)
+'    num_value = prmd(prm_num_value)
+'    show_all = prmd(prm_show_all)
+'
+'    If show_all Then
+'        out_curves = allCurves
+'    Else
+'        out_curves = mainCurves
+'    End If
+'    If prmd.Exists(prm_out_points) Then out_points = prmd(prm_out_points)
+'
+'    ' calc pressure distribution
+'    Call PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, out_curves))
+'
+'    res(0, 0) = ConvertToJson(pipe.get_result_dict(out_points))
+'    res(1, 0) = "results"
+'
+'    res(0, 1) = ConvertToJson(pipe.get_result_dict_crv_main(out_points))
+'    res(1, 1) = "curves"
+'
+'    res(0, 2) = ConvertToJson(pipe.get_result_dict_crv_add(out_points))
+'    res(1, 2) = "curves add"
+'
+'    res(0, 3) = pipe.log_.get_str_safe(show_log)
+'    res(1, 3) = "log"
+'
+'    MF_pipe_calc = res
+'
+'    Exit Function
+'err1:
+'    MF_pipe_calc = "error"
+'    add_log_msg "Error:MF_pipe_calc:" & Err.Description
+'End Function
+'
+'
 
