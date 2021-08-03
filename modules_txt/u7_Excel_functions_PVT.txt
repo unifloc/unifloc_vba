@@ -922,14 +922,14 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета свойст потока после сепарации газа
 Public Function feed_mod_separate_gas( _
-               ByVal k_sep As Double, _
-               ByVal p_atma As Double, _
-               ByVal t_C As Double, _
+               ByVal k_sep, _
+               ByVal p_atma, _
+               ByVal t_C, _
                ByVal feed As String, _
       Optional ByVal param As String = "")
-' k_sep      - коэффициент сепарации газа
-' p_atma     - давление, атм
-' t_C        - температура, С.
+' k_sep      - коэффициент сепарации газа д.е., число или список
+' p_atma     - давление, атм. число или список.
+' t_C        - температура, С. число или список.
 ' feed - параметры потока флюидов, дебит, обводненность и пр
 '              используйте encode_feed для генерации
 ' param      - параметры расчета и вывода результатов
@@ -947,31 +947,67 @@ Public Function feed_mod_separate_gas( _
     Dim show_log As Boolean
     Dim show_array As Boolean
     
+    ' переменные для чтения списков данных
+    Dim ptq As PTQ_LIST
+    Dim ptq_out As PTQ_LIST
+    
+    Dim log_res As New Collection
+ 
+    ' auxiliary variables
+    Dim log_str As String
+    Dim i As Integer
+    On Error GoTo er1:
     Set prmd = param_to_dict(param)
     show_log = prmd(prm_show_log)
     show_array = prmd(prm_show_array)
     gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
+    Call read_PTQ(ptq, feed, p_atma, t_C, fluid_stream.log_, k_sep)
+    Call init_ptq(ptq_out, ptq)
+    For i = 1 To ptq.len
+        
+        With fluid_stream
+            Call .init_feed(ptq.feed(i))
+            
+            Call fluid_stream.mod_after_separation(ptq.p(i), ptq.t(i), ptq.val(i), gas_goes_into_solution)
+            
+            ptq_out.feed(i) = (fluid_stream.get_json)
+            ptq_out.p(i) = Round(ptq.p(i), const_num_decimal_out)
+            ptq_out.t(i) = Round(ptq.t(i), const_num_decimal_out)
+            ptq_out.val(i) = Round(ptq.val(i), const_num_decimal_out)
+            
+       '     col_res.Add ParseJson(fluid_stream.get_json)
+            log_res.Add ParseJson(fluid_stream.log_.get_str_safe(show_log))
+        End With
+    Next i
+            
+    Dim f As CPVT
+    Dim d As Dictionary
+    Set d = convert_to_dict_ptq(ptq_out)
+    d("k_sep") = ptq_out.val
     
-    ' auxiliary variables
-    Dim log_str As String
-    Dim i As Integer
-    With fluid_stream
-        Call .init_feed(feed)
-        
-        Call fluid_stream.mod_after_separation(p_atma, t_C, k_sep, gas_goes_into_solution)
-        
-        If show_array Then
-            res(0, 0) = fluid_stream.get_json
+    If show_array Then
+        If ptq.len = 1 Then
+            res(0, 0) = ptq_out.feed(1)
             res(1, 0) = "fluid after separation"
-            res(0, 1) = fluid_stream.log_.get_str_safe(show_log)
+            res(0, 1) = ConvertToJson(log_res(1))
             res(1, 1) = "log"
-            feed_mod_separate_gas = res
         Else
-            feed_mod_separate_gas = fluid_stream.get_json
+            res(0, 0) = ConvertToJson(d)
+            res(1, 0) = "fluids after separation"
+            res(0, 1) = ConvertToJson(log_res)
+            res(1, 1) = "log"
         End If
-    End With
-    
-    
+        feed_mod_separate_gas = res
+    Else
+        If ptq.len = 1 Then
+            feed_mod_separate_gas = ptq_out.feed(1)
+        Else
+            feed_mod_separate_gas = ConvertToJson(d)
+        End If
+    End If
+    Exit Function
+er1:
+    feed_mod_separate_gas = "error:feed_mod_separate_gas: " & Err.Description
 End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' функция расчета свойств разделенного потока флюидов

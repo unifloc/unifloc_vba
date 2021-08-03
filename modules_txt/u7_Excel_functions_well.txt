@@ -12,8 +12,8 @@ Option Explicit
 ' расчет натуральной сепарации газа на приеме насоса
 Public Function well_ksep_natural_d( _
              ByVal feed As String, _
-             ByVal p_intake_atma As Double, _
-    Optional ByVal t_intake_C As Double = 50, _
+             ByVal p_intake_atma, _
+    Optional ByVal t_intake_C = 50, _
     Optional ByVal d_intake_mm As Double = 90, _
     Optional ByVal d_cas_mm As Double = 120)
 ' feed          - закодированные параметры потока флюидов
@@ -26,13 +26,38 @@ Public Function well_ksep_natural_d( _
 On Error GoTo err1:
     Dim fluid As New CPVT
     
-    Call fluid.init_feed(feed)
-    Call fluid.calc_PVT(p_intake_atma, t_intake_C)
-    With fluid
-        well_ksep_natural_d = unf_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, .q_liq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
-                                                    .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
-    End With
+    ' переменные для чтения списков данных
+    Dim ptq As PTQ_LIST
+    Dim ptq_out As PTQ_LIST
     
+    Dim col_res As New Collection
+    Dim i As Integer
+    
+    Call read_PTQ(ptq, feed, p_intake_atma, t_intake_C, fluid.log_)
+    Call init_ptq(ptq_out, ptq)
+    For i = 1 To ptq.len
+        
+        Call fluid.init_feed(ptq.feed(i))
+        
+        Call fluid.calc_PVT(ptq.p(i), ptq.t(i))
+        With fluid
+            ptq_out.val(i) = unf_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, .q_liq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
+                                                        .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
+            ptq_out.feed(i) = fluid.get_json
+            ptq_out.p(i) = ptq.p(i)
+            ptq_out.t(i) = ptq.t(i)
+        '    col_res.Add
+        End With
+    Next i
+    Dim d As Dictionary
+    Set d = convert_to_dict_ptq(ptq_out)
+    d("k_sep") = ptq_out.val
+    
+    If ptq.len = 1 Then
+        well_ksep_natural_d = ptq_out.val(1)
+    Else
+        well_ksep_natural_d = ConvertToJson(d)
+    End If
     Exit Function
 err1:
     well_ksep_natural_d = Err.Description
@@ -41,11 +66,24 @@ End Function
 'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
 ' расчет общей сепарации на приеме насоса
 Public Function well_ksep_total_d( _
-        ByVal SepNat As Double, _
+        ByVal SepNat, _
         ByVal SepGasSep As Double)
 ' SepNat        - естественная сепарация
 ' SepGasSep     - искусственная сепарация (газосепаратор)
-    well_ksep_total_d = SepNat + (1 - SepNat) * SepGasSep
+    
+    Dim sep_nat
+    Dim i As Integer
+    Dim c As New Collection
+    
+    sep_nat = parse_list(SepNat)
+    If UBound(sep_nat) - LBound(sep_nat) + 1 = 1 Then
+        well_ksep_total_d = SepNat + (1 - SepNat) * SepGasSep
+    Else
+        For i = LBound(sep_nat) To UBound(sep_nat)
+            c.Add sep_nat(i) + (1 - sep_nat(i)) * SepGasSep
+        Next i
+        well_ksep_total_d = ConvertToJson(c)
+    End If
 End Function
 'description_end
 

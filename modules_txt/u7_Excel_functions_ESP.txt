@@ -245,9 +245,9 @@ End Function
 'функция расчета давления на выходе/входе ЭЦН в рабочих условиях
 'большинство параметров задается явно
 Public Function ESP_p_atma( _
-                 ByVal p_calc_atma As Double, _
-        Optional ByVal t_intake_C As Double = 50, _
-        Optional ByVal t_dis_C As Double = 50, _
+                 ByVal p_calc_atma, _
+        Optional ByVal t_intake_C = 50, _
+        Optional ByVal t_dis_C = 50, _
         Optional ByVal feed As String = "", _
         Optional ByVal pump_id As Long, _
         Optional ByVal num_stages As Integer = 1, _
@@ -291,9 +291,14 @@ Public Function ESP_p_atma( _
     Dim show_array As Boolean
     Dim num_value As Integer
     Dim prmd As Dictionary
-    
+        ' переменные для чтения списков данных
+    Dim ptq As PTQ_LIST
+    Dim ptq_out As PTESP_LIST
+    Dim i As Integer
 On Error GoTo er1:
     
+    Call read_PTQ(ptq, feed, p_calc_atma, t_intake_C, esp.log_, t_dis_C)
+    Call init_ptesp(ptq_out, ptq)
     Call esp.set_ID(pump_id)    ' get ESP from database
     
     If esp Is Nothing Then
@@ -312,7 +317,6 @@ On Error GoTo er1:
     show_array = prmd(prm_show_array)
     
     With esp
-        Call .fluid.init_feed(feed)  ' initialize PVT properties
         
         .gas_correct_model = gas_correct_model
         .gas_correct_stage_by_stage = gas_correct_stage_by_stage
@@ -334,124 +338,157 @@ On Error GoTo er1:
             out_points = 20
         End If
                  
-        If show_array Then
-            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
-            arr = .get_results_array(out_points, show_log)
-            If calc_along_flow Then
-                arr(0, 0) = .p_dis_atma
-                arr(1, 0) = "p_dis_atma"
-            Else
-                arr(0, 0) = .p_int_atma
-                arr(1, 0) = "p_intake_atma"
-            End If
-            arr(0, 0) = arr(0, num_value)
-            arr(1, 0) = arr(1, num_value)
-            
-            ESP_p_atma = arr
-        Else
-            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=False)
-             
-            If calc_along_flow Then
-                ESP_p_atma = .p_dis_atma
-            Else
-                ESP_p_atma = .p_int_atma
-            End If
-        End If
-    End With
-    
-    
-    Exit Function
-er1:
-    ESP_p_atma = "error" & Err.Description
-    
-End Function
-'description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
-'функция расчета давления на выходе/входе ЭЦН в рабочих условиях
-'параметры насоса задаются, как json строка
-Public Function ESP_calc( _
-                 ByVal p_calc_atma As Double, _
-        Optional ByVal t_intake_C As Double = 50, _
-        Optional ByVal t_dis_C As Double = 50, _
-        Optional ByVal feed As String = "", _
-        Optional ByVal pump_json As String = "", _
-        Optional ByVal calc_along_flow As Boolean = True, _
-        Optional ByVal param As String)
-' p_calc_atma      - давление для которого делается расчет
-'                    либо давление на приеме насоса
-'                    либо давление на выкиде насоса
-'                    определяется параметром calc_along_flow
-' t_intake_C       - температура на приеме насоcа
-' t_dis_C          - температура на выкиде насоса.
-'             если = 0 и calc_along_flow = 1 то рассчитывается
-' feed     - параметры потока флюидов json строка. Используйте
-'            функцию encode_feed() для генерации
-' pump_json        - строка с параметрами насоса
-' calc_along_flow  - режим расчета снизу вверх или сверху вниз
-'          calc_along_flow = True => p_atma давление на приеме
-'          calc_along_flow = False => p_atma давление на выкиде
-' param     - дополнительные параметры расчета потока
-' результат   - массив значений включающий
-'description_end
-    Dim arr(0 To 1, 0 To 2) As String
-    Dim esp As New CESPpump
-    Dim out_points As Integer
-    
-    Dim show_log As Boolean
-    Dim show_array As Boolean
-    Dim num_value As Integer
-    
-On Error GoTo er1:
-    
-    Call esp.init_json(pump_json)    ' get ESP from database
-    
-    If esp Is Nothing Then
-        ESP_calc = "no ESP"
-        Exit Function
-    End If
-    
-    If Len(feed) < 2 Then feed = encode_feed()
-    
-    ' read param
-    Dim prmd As Dictionary
-    
-    Set prmd = param_to_dict(param)
-         
-    show_log = prmd(prm_show_log)
-    num_value = prmd(prm_num_value)
-    show_array = prmd(prm_show_array)
-    
-    With esp
-        Call .fluid.init_feed(feed)  ' initialize PVT properties
-                        
-        If prmd.Exists(prm_out_points) Then
-            out_points = prmd(prm_out_points)
-        Else
-            out_points = 20
-        End If
-                 
-        If show_array Then
-            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
+        For i = 1 To ptq.len
+            Call .fluid.init_feed(ptq.feed(i))   ' initialize PVT properties
+            If show_array Then
+                Call .calc_ESP(ptq.p(i), ptq.t(i), ptq.val(i), calc_along_flow, saveCurve:=True)
+                arr = .get_results_array(out_points, show_log)
+                If calc_along_flow Then
+                    arr(0, 0) = .p_dis_atma
+                    arr(1, 0) = "p_dis_atma"
+                Else
+                    arr(0, 0) = .p_int_atma
+                    arr(1, 0) = "p_intake_atma"
+                End If
+                arr(0, 0) = arr(0, num_value)
+                arr(1, 0) = arr(1, num_value)
+                If ptq.len > 1 Then
                     
-            arr(0, 0) = ConvertToJson(.get_result_dict)
-            arr(1, 0) = "result_json"
-            arr(0, 1) = ConvertToJson(.get_result_dict_crv(out_points))
-            arr(1, 1) = "result_json_crv"
-            arr(0, 2) = .log_.get_str_safe(show_log)
-            arr(1, 2) = "log"
-            
-            ESP_calc = arr
+                    ptq_out.feed(i) = ptq.feed(i)
+                    ptq_out.p_dis(i) = .p_dis_atma
+                    ptq_out.t_dis(i) = .t_dis_C
+                    ptq_out.p_intake(i) = .p_int_atma
+                    ptq_out.t_intake(i) = .t_int_C
+                    
+                    
+                End If
+            Else
+                Call .calc_ESP(ptq.p(i), ptq.t(i), ptq.val(i), calc_along_flow, saveCurve:=False)
+                If ptq.len > 1 Then
+                    
+                    ptq_out.feed(i) = ptq.feed(i)
+                    ptq_out.p_dis(i) = .p_dis_atma
+                    ptq_out.t_dis(i) = .t_dis_C
+                    ptq_out.p_intake(i) = .p_int_atma
+                    ptq_out.t_intake(i) = .t_int_C
+                    
+                End If
+            End If
+        Next i
+        If show_array Then
+            If ptq.len = 1 Then
+                ESP_p_atma = arr
+            Else
+                ESP_p_atma = convert_to_json_ptesp(ptq_out)
+            End If
         Else
-            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=False)
-            ESP_calc = ConvertToJson(.get_result_dict)
+            If ptq.len = 1 Then
+                If calc_along_flow Then
+                    ESP_p_atma = .p_dis_atma
+                Else
+                    ESP_p_atma = .p_int_atma
+                End If
+            Else
+                ESP_p_atma = convert_to_json_ptesp(ptq_out)
+            End If
         End If
     End With
     
     
     Exit Function
 er1:
-    ESP_calc = "error" & Err.Description
+    ESP_p_atma = "error:ESP_p_atma: " & Err.Description
     
 End Function
+''description_to_manual      - для автогенерации описания - помещает заголовок функции и окружающие комментарии в мануал (со след строки)
+''функция расчета давления на выходе/входе ЭЦН в рабочих условиях
+''параметры насоса задаются, как json строка
+'Public Function ESP_calc( _
+'                 ByVal p_calc_atma As Double, _
+'        Optional ByVal t_intake_C As Double = 50, _
+'        Optional ByVal t_dis_C As Double = 50, _
+'        Optional ByVal feed As String = "", _
+'        Optional ByVal pump_json As String = "", _
+'        Optional ByVal calc_along_flow As Boolean = True, _
+'        Optional ByVal param As String)
+'' p_calc_atma      - давление для которого делается расчет
+''                    либо давление на приеме насоса
+''                    либо давление на выкиде насоса
+''                    определяется параметром calc_along_flow
+'' t_intake_C       - температура на приеме насоcа
+'' t_dis_C          - температура на выкиде насоса.
+''             если = 0 и calc_along_flow = 1 то рассчитывается
+'' feed     - параметры потока флюидов json строка. Используйте
+''            функцию encode_feed() для генерации
+'' pump_json        - строка с параметрами насоса
+'' calc_along_flow  - режим расчета снизу вверх или сверху вниз
+''          calc_along_flow = True => p_atma давление на приеме
+''          calc_along_flow = False => p_atma давление на выкиде
+'' param     - дополнительные параметры расчета потока
+'' результат   - массив значений включающий
+''description_end
+'
+'
+'    Dim arr(0 To 1, 0 To 2) As String
+'    Dim esp As New CESPpump
+'    Dim out_points As Integer
+'
+'    Dim show_log As Boolean
+'    Dim show_array As Boolean
+'    Dim num_value As Integer
+'
+'On Error GoTo er1:
+'
+'    Call esp.init_json(pump_json)    ' get ESP from database
+'
+'    If esp Is Nothing Then
+'        ESP_calc = "no ESP"
+'        Exit Function
+'    End If
+'
+'    If Len(feed) < 2 Then feed = encode_feed()
+'
+'    ' read param
+'    Dim prmd As Dictionary
+'
+'    Set prmd = param_to_dict(param)
+'
+'    show_log = prmd(prm_show_log)
+'    num_value = prmd(prm_num_value)
+'    show_array = prmd(prm_show_array)
+'
+'    With esp
+'        Call .fluid.init_feed(feed)  ' initialize PVT properties
+'
+'        If prmd.Exists(prm_out_points) Then
+'            out_points = prmd(prm_out_points)
+'        Else
+'            out_points = 20
+'        End If
+'
+'        If show_array Then
+'            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
+'
+'            arr(0, 0) = ConvertToJson(.get_result_dict)
+'            arr(1, 0) = "result_json"
+'            arr(0, 1) = ConvertToJson(.get_result_dict_crv(out_points))
+'            arr(1, 1) = "result_json_crv"
+'            arr(0, 2) = .log_.get_str_safe(show_log)
+'            arr(1, 2) = "log"
+'
+'            ESP_calc = arr
+'        Else
+'            Call .calc_ESP(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=False)
+'            ESP_calc = ConvertToJson(.get_result_dict)
+'        End If
+'    End With
+'
+'
+'    Exit Function
+'er1:
+'    ESP_calc = "error" & Err.Description
+'
+'End Function
 ' корректировка напора развиваемого ЭЦН из влияния газа
 ' на основе стендовых испытаний Горидько К в 2020 - 2021 году 26.04.2021
 Public Function gas_corr(Optional gf As Double = 1, Optional q As Double = 50)
@@ -807,12 +844,12 @@ End Function
 ' расчет производительности системы УЭЦН
 ' считает перепад давления, электрические параметры и деградацию КПД
 Public Function ESP_system_calc( _
-                 ByVal p_calc_atma As Double, _
+                 ByVal p_calc_atma, _
         Optional ByVal U_surf_high_lin_V As Double, _
         Optional ByVal f_surf_Hz As Double, _
         Optional ByVal power_fact_kW As Double, _
-        Optional ByVal t_intake_C As Double = 50, _
-        Optional ByVal t_dis_C As Double = 50, _
+        Optional ByVal t_intake_C = 50, _
+        Optional ByVal t_dis_C = 50, _
         Optional ByVal feed As String = "", _
         Optional ByVal pump_json As String, _
         Optional ByVal motor_json As String, _
@@ -848,32 +885,33 @@ Public Function ESP_system_calc( _
 '            КПД ЭЦН
 '            список неполон
 'description_end
-    Dim arr
     Dim i As Integer
-    Dim nrows As Integer
-    Dim fr_Hz As Double
+    
+    Dim ptq As PTQ_LIST
+    Dim ptq_out As PTESP_LIST
+    
+    
+    
 On Error GoTo er1:
     Dim ESPsys As New CESPsystem
     
-    With ESPsys
-        Call .fluid.init_feed(feed)  ' initialize PVT properties
-        Call .init_json(pump_json, motor_json, cable_json, gassep_json)
-        
-        Call .calc_ESPsys(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
-        
-    End With
+    Call read_PTQ(ptq, feed, p_calc_atma, t_intake_C, ESPsys.log_, t_dis_C)
+    Call init_ptesp(ptq_out, ptq)
+    Dim col As New Collection
     
-    
-    
-'    Call ESPsys.calc_ESPsys(p_calc_atma, t_intake_C, t_dis_C, calc_along_flow, saveCurve:=True)
-'
-    arr = ESPsys.array_out(20)
-'
-'
-'    arr(0, 0) = arr(0, num_value)
-'    arr(1, 0) = arr(1, num_value)
-'
-    ESP_system_calc = arr
+    For i = 1 To ptq.len
+        With ESPsys
+            Call .fluid.init_feed(ptq.feed(i))  ' initialize PVT properties
+            Call .init_json(pump_json, motor_json, cable_json, gassep_json)
+            Call .calc_ESPsys(ptq.p(i), ptq.t(i), ptq.val(i), calc_along_flow, saveCurve:=True)
+            col.Add ESPsys.get_result_dict ' todo тут надо доделать
+        End With
+    Next i
+    If ptq.len = 1 Then
+        ESP_system_calc = ConvertToJson(ESPsys.get_result_dict)
+    Else
+        ESP_system_calc = ConvertToJson(col)
+    End If
     Exit Function
 er1:
     ESP_system_calc = "error:" & Err.Description
