@@ -1331,7 +1331,7 @@ class API():
         self.f_ESP_system_calc = self.book.macro("ESP_system_calc")
         return self.f_ESP_system_calc(p_calc_atma,U_surf_high_lin_V,f_surf_Hz,power_fact_kW,t_intake_C,t_dis_C,feed,pump_json,motor_json,cable_json,gassep_json,calc_along_flow,param)
 
-    def GLV_q_gas_sm3day(self, d_mm,p_in_atma,p_out_atma,gamma_g,t_C,calibr=1):
+    def GLV_q_gas_sm3day(self, d_mm,p_in_atma,p_out_atma,gamma_g,t_C,c_calibr=1):
         """
  ========== description ============== 
  функция расчета расхода газа через газлифтный клапан/штуцер  результат массив значений и подписей 
@@ -1348,14 +1348,64 @@ class API():
 
      t_c - температура клапана, с    
 
-   calibr  
+   c_calibr  
 
         """
 
         self.f_GLV_q_gas_sm3day = self.book.macro("GLV_q_gas_sm3day")
-        return self.f_GLV_q_gas_sm3day(d_mm,p_in_atma,p_out_atma,gamma_g,t_C,calibr)
+        return self.f_GLV_q_gas_sm3day(d_mm,p_in_atma,p_out_atma,gamma_g,t_C,c_calibr)
 
-    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,p_open_atma=0,calibr=1):
+    def GLV_q_gas_vkr_sm3day(self, d_port_mm,d_vkr_mm,p_in_atma,p_out_atma,gamma_g,t_C):
+        """
+ ========== description ============== 
+ функция расчета расхода газа через газлифтный клапан  с учетом наличия вкруток на выходе клапана.  результат массив значений и подписей. 
+        
+ ==========  arguments  ============== 
+
+     d_port_mm - диаметр основного порта клапана, мм    
+
+     d_vkr_mm - эффективный диаметр вкруток на выходе, мм    
+
+     p_in_atma - давление на входе в клапан (затруб), атма    
+
+     p_out_atma - давление на выходе клапана (нкт), атма    
+
+     gamma_g - удельная плотность газа    
+
+     t_c - температура клапана, с   
+
+        """
+
+        self.f_GLV_q_gas_vkr_sm3day = self.book.macro("GLV_q_gas_vkr_sm3day")
+        return self.f_GLV_q_gas_vkr_sm3day(d_port_mm,d_vkr_mm,p_in_atma,p_out_atma,gamma_g,t_C)
+
+    def GLV_p_vkr_atma(self, d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False):
+        """
+ ========== description ============== 
+ функция расчета давления на входе или на выходе  газлифтного клапана (простого) при закачке газа.  результат массив значений и подписей 
+        
+ ==========  arguments  ============== 
+
+     d_port_mm - диаметр порта клапана, мм    
+
+     d_vkr_mm - диаметр вкрутки клапана, мм    
+
+     p_calc_atma - давление на входе (выходе) клапана, атма    
+
+     q_gas_sm3day - расход газа, ст. м3/сут    
+
+     gamma_g - удельная плотность газа    
+
+     t_c - температура в точке установки клапана    
+
+     calc_along_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).   
+
+        """
+
+        self.f_GLV_p_vkr_atma = self.book.macro("GLV_p_vkr_atma")
+        return self.f_GLV_p_vkr_atma(d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow)
+
+    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,p_open_atma=0,c_calibr=1):
         """
  ========== description ============== 
  функция расчета давления на входе или на выходе  газлифтного клапана (простого) при закачке газа.  результат массив значений и подписей 
@@ -1376,12 +1426,160 @@ class API():
 
      p_open_atma - давление открытия/закрытия клапана, атм    
 
-     calibr - коэффициент калибровки   
+   c_calibr  
 
         """
 
         self.f_GLV_p_atma = self.book.macro("GLV_p_atma")
-        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,p_open_atma,calibr)
+        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,p_open_atma,c_calibr)
+
+    def GLV_p_bellow_atma(self, p_atma,t_C):
+        """
+ ========== description ============== 
+ функция расчета давления зарядки сильфона на стенде при  стандартной температуре по данным рабочих давления и температуры 
+        
+ ==========  arguments  ============== 
+
+     p_atma - рабочее давление открытия клапана в скважине, атм    
+
+     t_c - рабочая температура открытия клапана в скважине, с   
+
+        """
+
+        self.f_GLV_p_bellow_atma = self.book.macro("GLV_p_bellow_atma")
+        return self.f_GLV_p_bellow_atma(p_atma,t_C)
+
+    def GLV_p_close_atma(self, p_bellow_atm,t_C):
+        """
+ ========== description ============== 
+ фукнция расчета давления в сильфоне с азотом  в рабочих условиях при заданной температуре 
+        
+ ==========  arguments  ============== 
+
+     p_bellow_atm - давление зарядки сильфона при стандартных условиях    
+
+     t_c - температура рабочая   
+
+        """
+
+        self.f_GLV_p_close_atma = self.book.macro("GLV_p_close_atma")
+        return self.f_GLV_p_close_atma(p_bellow_atm,t_C)
+
+    def GLV_d_choke_mm(self, q_gas_sm3day,p_in_atma,p_out_atma,gamma_g=0.6,t_C=25):
+        """
+ ========== description ============== 
+Функция расчета диаметра порта клапана на основе уравнения Thornhill-Crave 
+        
+ ==========  arguments  ============== 
+
+     q_gas_sm3day - расход газа, ст. м3/сут    
+
+     p_in_atma - давление на входе в клапан (затруб), атма    
+
+     p_out_atma - давление на выходе клапана (нкт), атма    
+
+     gamma_g - удельная плотность газа    
+
+     t_c - температура клапана, с   
+
+        """
+
+        self.f_GLV_d_choke_mm = self.book.macro("GLV_d_choke_mm")
+        return self.f_GLV_d_choke_mm(q_gas_sm3day,p_in_atma,p_out_atma,gamma_g,t_C)
+
+    def GLV_IPO_p_open(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+        """
+ ========== description ============== 
+Функция расчета давления открытия газлифтного клапана R1 
+        
+ ==========  arguments  ============== 
+
+     p_bellow_atma - давление зарядки сильфона на стенде, атма    
+
+     p_out_atma - давление на выходе клапана (нкт), атма    
+
+     t_c - температура клапана в рабочих условиях, с    
+
+     glv_type - тип газлифтного клапана (сейчас только r1)    
+
+     d_port_mm - диаметр порта клапана    
+
+     d_vkr1_mm - диаметр вкрутки 1, если есть    
+
+     d_vkr2_mm - диаметр вкрутки 2, если есть    
+
+     d_vkr3_mm - диаметр вкрутки 3, если есть    
+
+     d_vkr4_mm - диаметр вкрутки 4, если есть   
+
+        """
+
+        self.f_GLV_IPO_p_open = self.book.macro("GLV_IPO_p_open")
+        return self.f_GLV_IPO_p_open(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
+
+    def GLV_IPO_p_atma(self, p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow=False,GLV_type=0,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+        """
+ ========== description ============== 
+Функция расчета давления открытия газлифтного клапана R1 
+        
+ ==========  arguments  ============== 
+
+     p_bellow_atma - давление зарядки сильфона на стенде, атма  p_out_atma - давление на выходе клапана (нкт), атма    
+
+     d_port_mm - диаметр порта клапана    
+
+   p_calc_atma   
+
+   q_gas_sm3day   
+
+     t_c - температура клапана в рабочих условиях, с    
+
+   calc_along_flow   
+
+     glv_type - тип газлифтного клапана (сейчас только r1)  d_port_mm - диаметр порта клапана    
+
+     d_vkr1_mm - диаметр вкрутки 1, если есть    
+
+     d_vkr2_mm - диаметр вкрутки 2, если есть    
+
+     d_vkr3_mm - диаметр вкрутки 3, если есть    
+
+     d_vkr4_mm - диаметр вкрутки 4, если есть   
+
+        """
+
+        self.f_GLV_IPO_p_atma = self.book.macro("GLV_IPO_p_atma")
+        return self.f_GLV_IPO_p_atma(p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow,GLV_type,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
+
+    def GLV_IPO_p_close(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+        """
+ ========== description ============== 
+Функция расчета давления закрытия газлифтного клапана R1 
+        
+ ==========  arguments  ============== 
+
+     p_bellow_atma - давление зарядки сильфона на стенде, атма    
+
+     p_out_atma - давление на выходе клапана (нкт), атма    
+
+     t_c - температура клапана в рабочих условиях, с    
+
+     glv_type - тип газлифтного клапана (сейчас только r1)    
+
+     d_port_mm - диаметр порта клапана    
+
+     d_vkr1_mm - диаметр вкрутки 1, если есть    
+
+     d_vkr2_mm - диаметр вкрутки 2, если есть    
+
+     d_vkr3_mm - диаметр вкрутки 3, если есть    
+
+     d_vkr4_mm - диаметр вкрутки 4, если есть   
+
+        """
+
+        self.f_GLV_IPO_p_close = self.book.macro("GLV_IPO_p_close")
+        return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
 
     def unf_version(self, ):
         """
@@ -1854,11 +2052,11 @@ class API():
         
  ==========  arguments  ============== 
 
-     h_list_m - число - длина вертикальной трубы или массив или range  содержащий зависимость вертикальной глубины от измеренной    
+    h_list_m - число - длина вертикальной трубы или массив или range  содержащий зависимость вертикальной глубины от измеренной    
 
-     diam_list_mm - число-внутренний диаметр трубы или массив или range  содержащий зависимость внутреннего от измеренной глубины    
+    diam_list_mm - число-внутренний диаметр трубы или массив или range  содержащий зависимость внутреннего от измеренной глубины    
 
-     roughness_m - число - шероховатость, одна для всей трубы   
+    roughness_m - число - шероховатость, одна для всей трубы   
 
         """
 
@@ -2025,7 +2223,7 @@ class API():
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
 
-    def crv_fit_spline_1D(self, XA,YA,m,XIA,WA,XCA,YCA,DCA,hermite=False):
+    def crv_fit_spline_1D(self, XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
         """
  ========== description ============== 
 Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений. 
@@ -2053,7 +2251,7 @@ class API():
         """
 
         self.f_crv_fit_spline_1D = self.book.macro("crv_fit_spline_1D")
-        return self.f_crv_fit_spline_1D(XA,YA,m,XIA,WA,XCA,YCA,DCA,hermite)
+        return self.f_crv_fit_spline_1D(XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
 
     def crv_fit_linear(self, YA,XA,out,weight,constraints):
         """
@@ -2077,7 +2275,7 @@ class API():
         self.f_crv_fit_linear = self.book.macro("crv_fit_linear")
         return self.f_crv_fit_linear(YA,XA,out,weight,raints)
 
-    def crv_fit_poly(self, YA,XA,m,out,XIA,weight,constraints):
+    def crv_fit_poly(self, YA,XA,M,out,XIA,weight,constraints):
         """
  ========== description ============== 
 Аппроксимация данных полиномом функцией. Решается задача min|XM-Y| ищется вектор M 
@@ -2101,7 +2299,7 @@ class API():
         """
 
         self.f_crv_fit_poly = self.book.macro("crv_fit_poly")
-        return self.f_crv_fit_poly(YA,XA,m,out,XIA,weight,raints)
+        return self.f_crv_fit_poly(YA,XA,M,out,XIA,weight,raints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """

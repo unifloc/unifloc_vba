@@ -249,7 +249,11 @@ Public Const const_MaxSegmLen = 100
 Public Const const_n_n = 20
 Public Const const_MaxdP = 10
 Public Const const_minPpipe_atma = 0.9
-Public Const const_pressure_tolerance = 0.001
+Public Const const_pressure_tolerance = 0.01
+' эта константа используется при интегрировании трубы
+' попытка увеличить точность может при определенных обстоятельствах привести к тому
+' что расчет по корреляции Ансари не будет сходиться из-за скачкой градиента давления 13.09.2021
+' следует обращаться осторожно с этими параметрами
 Public Const const_num_decimal_out = 3
 Public Const const_well_P_tolerance = 0.05     ' допустимая погрешность при расчете забойного давления в скважине
 Public Const const_P_difference = 0.0001       ' допустимая погрешность при сравнении (в основном) давлений
@@ -499,7 +503,7 @@ End Type
 Public Type PTQ_LIST
     feed() As String
     p() As Double
-    t() As Double
+    T() As Double
     val() As Double
     
     len As Integer
@@ -537,9 +541,9 @@ Public Function subtract_PT(PT1 As PTtype, PT2 As PTtype) As PTtype
     subtract_PT.p_atma = PT1.p_atma - PT2.p_atma
     subtract_PT.t_C = PT1.t_C - PT2.t_C
 End Function
-Public Function set_PT(ByVal p As Double, ByVal t As Double) As PTtype
+Public Function set_PT(ByVal p As Double, ByVal T As Double) As PTtype
     set_PT.p_atma = p
-    set_PT.t_C = t
+    set_PT.t_C = T
 End Function
 Public Function PT_to_array(PT As PTtype)
     PT_to_array = Array(PT.p_atma, PT.t_C)
@@ -553,14 +557,14 @@ Public Function sind(ang) As Double
  sind = Sin(ang / 180 * const_Pi)
 End Function
 Public Function isEqual(a As Double, b As Double) As Double
-    Const Eps = const_P_difference
+    Const eps = const_P_difference
     isEqual = False
-    If Abs(a - b) < Eps Then isEqual = True
+    If Abs(a - b) < eps Then isEqual = True
 End Function
 Public Function isGreater(a As Double, b As Double) As Double
-    Const Eps = const_P_difference
+    Const eps = const_P_difference
     isGreater = False
-    If (a - b) > Eps Then isGreater = True
+    If (a - b) > eps Then isGreater = True
 End Function
 Public Function isBetween(a As Double, a0 As Double, a1 As Double)
     isBetween = False
@@ -750,7 +754,7 @@ On Error GoTo err1:
             ard(i, j) = val
         Next
     Next
-    Dim m As Double
+    Dim M As Double
     If remove_zeros Then
 On Error GoTo err2:
         ' transpose to delete zeros rows
@@ -762,11 +766,11 @@ On Error GoTo err2:
         Next
         ' delete zero rows
         For i = UBound(ard2, 2) To LBound(ard2, 2) Step -1
-            m = 0
+            M = 0
             For j = UBound(ard2, 1) To LBound(ard2, 1) Step -1
-                m = m + Abs(ard2(j, i))
+                M = M + Abs(ard2(j, i))
             Next
-            If m = 0 And i > 1 Then
+            If M = 0 And i > 1 Then
                 ReDim Preserve ard2(1 To UBound(ard2, 1), 1 To i - 1)
             Else
                 Exit For
@@ -785,11 +789,11 @@ On Error GoTo err2:
         ' zeros in columns can have meaning
         ' delete zero cols
             For i = UBound(ard, 2) To LBound(ard, 2) Step -1
-                m = 0
+                M = 0
                 For j = UBound(ard, 1) To LBound(ard, 1) Step -1
-                    m = m + Abs(ard(j, i))
+                    M = M + Abs(ard(j, i))
                 Next
-                If m = 0 And i > 1 Then
+                If M = 0 And i > 1 Then
                     ReDim Preserve ard(1 To UBound(ard, 1), 1 To i - 1)
                 Else
                     Exit For
@@ -932,10 +936,10 @@ Err:
     getDimension = i - 1
 End Function
 ' чтение исходных данных в виде списков
-Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
+Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, T, log_, _
                     Optional ksep = -1#)
-    Dim m As Integer
-    Dim n As Integer
+    Dim M As Integer
+    Dim N As Integer
     Dim i As Integer
     
     Dim len_feed As Integer
@@ -947,50 +951,50 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
          ' определяем что на входе - один поток или вектор потоков и складываем все в коллекцию
         .feed = parse_feed_list(feed)
         .p = parse_list(p)
-        .t = parse_list(t)
+        .T = parse_list(T)
         .val = parse_list(ksep)
         len_feed = UBound(.feed) - LBound(.feed) + 1
         len_p = UBound(.p) - LBound(.p) + 1
-        len_t = UBound(.t) - LBound(.t) + 1
+        len_t = UBound(.T) - LBound(.T) + 1
         len_ksep = UBound(.val) - LBound(.val) + 1
         
         
         'далее проверим что длины были везде одинаковые
         If len_feed <> len_p Or len_feed <> len_t Or len_feed <> len_ksep Then
         ' надо выровнять
-            m = MaxInt(len_feed, len_p)
-            m = MaxInt(m, len_t)
-            m = MaxInt(m, len_ksep)
-            If len_feed < m Then
-                n = UBound(.feed)
-                If n > 1 Then log_.add_msg "warning: input list feed length > 1 but less that max length"
-                ReDim Preserve .feed(1 To m)
-                For i = n + 1 To m
-                    .feed(i) = .feed(n)
+            M = MaxInt(len_feed, len_p)
+            M = MaxInt(M, len_t)
+            M = MaxInt(M, len_ksep)
+            If len_feed < M Then
+                N = UBound(.feed)
+                If N > 1 Then log_.add_msg "warning: input list feed length > 1 but less that max length"
+                ReDim Preserve .feed(1 To M)
+                For i = N + 1 To M
+                    .feed(i) = .feed(N)
                 Next i
             End If
-            If len_p < m Then
-                n = UBound(.p)
-                If n > 1 Then log_.add_msg "warning: input list p length > 1 but less that max length"
-                ReDim Preserve .p(1 To m)
-                For i = n + 1 To m
-                    .p(i) = .p(n)
+            If len_p < M Then
+                N = UBound(.p)
+                If N > 1 Then log_.add_msg "warning: input list p length > 1 but less that max length"
+                ReDim Preserve .p(1 To M)
+                For i = N + 1 To M
+                    .p(i) = .p(N)
                 Next i
             End If
-            If len_t < m Then
-                n = UBound(.t)
-                If n > 1 Then log_.add_msg "warning: input list t length > 1 but less that max length"
-                ReDim Preserve .t(1 To m)
-                For i = n + 1 To m
-                    .t(i) = .t(n)
+            If len_t < M Then
+                N = UBound(.T)
+                If N > 1 Then log_.add_msg "warning: input list t length > 1 but less that max length"
+                ReDim Preserve .T(1 To M)
+                For i = N + 1 To M
+                    .T(i) = .T(N)
                 Next i
             End If
-            If len_ksep < m Then
-                n = UBound(.val)
-                If n > 1 Then log_.add_msg "warning: input list ksep length > 1 but less that max length"
-                ReDim Preserve .val(1 To m)
-                For i = n + 1 To m
-                    .val(i) = .val(n)
+            If len_ksep < M Then
+                N = UBound(.val)
+                If N > 1 Then log_.add_msg "warning: input list ksep length > 1 but less that max length"
+                ReDim Preserve .val(1 To M)
+                For i = N + 1 To M
+                    .val(i) = .val(N)
                 Next i
                 
 '
@@ -1004,7 +1008,7 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
         End If
         len_feed = UBound(.feed) - LBound(.feed) + 1
         len_p = UBound(.p) - LBound(.p) + 1
-        len_t = UBound(.t) - LBound(.t) + 1
+        len_t = UBound(.T) - LBound(.T) + 1
         len_ksep = UBound(.val) - LBound(.val) + 1
         If len_feed <> len_p And len_feed <> len_t Then
             Err.Raise 1000
@@ -1016,7 +1020,7 @@ Public Sub init_ptq(ptq As PTQ_LIST, ptq_from As PTQ_LIST)
     
     ReDim ptq.feed(LBound(ptq_from.feed) To UBound(ptq_from.feed))
     ReDim ptq.p(LBound(ptq_from.p) To UBound(ptq_from.p))
-    ReDim ptq.t(LBound(ptq_from.t) To UBound(ptq_from.t))
+    ReDim ptq.T(LBound(ptq_from.T) To UBound(ptq_from.T))
     ReDim ptq.val(LBound(ptq_from.val) To UBound(ptq_from.val))
     ptq.len = ptq_from.len
     
@@ -1026,8 +1030,8 @@ Public Sub init_ptesp(ptq As PTESP_LIST, ptq_from As PTQ_LIST)
     ReDim ptq.feed(LBound(ptq_from.feed) To UBound(ptq_from.feed))
     ReDim ptq.p_intake(LBound(ptq_from.p) To UBound(ptq_from.p))
     ReDim ptq.p_dis(LBound(ptq_from.p) To UBound(ptq_from.p))
-    ReDim ptq.t_intake(LBound(ptq_from.t) To UBound(ptq_from.t))
-    ReDim ptq.t_dis(LBound(ptq_from.t) To UBound(ptq_from.t))
+    ReDim ptq.t_intake(LBound(ptq_from.T) To UBound(ptq_from.T))
+    ReDim ptq.t_dis(LBound(ptq_from.T) To UBound(ptq_from.T))
     Set ptq.d = New Dictionary
     ptq.len = ptq_from.len
     
@@ -1044,7 +1048,7 @@ Public Function convert_to_dict_ptq(ptq As PTQ_LIST)
     Dim c As New Collection
     
     d("p_atma") = ptq.p
-    d("t_C") = ptq.t
+    d("t_C") = ptq.T
 '    If ptq.ksep(1) > 0 Then
 '    End If
     For i = LBound(ptq.feed) To UBound(ptq.feed)
