@@ -243,7 +243,7 @@ class VBA_Func_Header:
         not_nedeed_in_api = [self.func_name, "ByVal",  "Optional", "Double", "Integer", "Boolean", "Long" , "Variant",
                                 "String", "Public", " As ", "Function", " _ ", " ",  "\n", "\' ", "(_", 'TEMP_CALC_METHOD']
 
-        not_nedeed_in_string = [self.func_name, "ByVal","-1", "const", "Optional", "Double", "Integer", "Boolean", "Long" , "Variant",
+        not_nedeed_in_string = [self.func_name, "ByVal","-1",  "Optional", "Double", "Integer", "Boolean", "Long" , "Variant",
                                 "String", "Public", " As ", "Function", " _ ", " ", "=",  "\n", "\' ", "(_",
                                 "PVT_DEFAULT", "H_CORRELATION", "TEMP_CALC_METHOD", 'TEMP_CALC_METHOD']
         last_step = 0
