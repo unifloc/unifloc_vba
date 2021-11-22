@@ -28,6 +28,27 @@ Function E_1(ByVal x As Double)
 'description_end
     E_1 = ExponentialIntegralEN(x, 1)
 End Function
+'====== simple solutions ========
+Private Function pd_line_source(td As Double, _
+                                rd As Double)
+    If td > 0 Then
+        pd_line_source = -0.5 * Ei(-rd * rd / 4 / td)
+    Else
+        pd_line_source = 0
+    End If
+End Function
+Private Function pd_linear_q_line_source(td As Double, _
+                                         rd As Double, _
+                                         dqd_dtd As Double)
+' расчет безразмерного давления для линейно меняющегося дебита
+    Dim r24td As Double
+    If td > 0 Then
+        r24td = rd ^ 2 / 4 / td
+        pd_linear_q_line_source = -dqd_dtd * td / 2 * ((1 + r24td) * Ei(-r24td) + Exp(-r24td))
+    Else
+        pd_linear_q_line_source = 0
+    End If
+End Function
 'description_to_manual      - для автогенерации
 ' Расчет неустановившегося решения уравнения фильтрации
 ' для различных моделей радиального притока к вертикльной скважине
@@ -61,7 +82,7 @@ On Error GoTo err1:
     Select Case Model
     
     Case 0
-        transient_pd_radial = 0.5 * E_1(rd ^ 2 / 4 / td)
+        transient_pd_radial = pd_line_source(td, rd)
     Case 1
         transient_pd_radial = Abs(Stehfest("pd_lalp_Ei", td, CoeffA))
     Case 2
@@ -123,25 +144,28 @@ Function transient_pwf_radial_atma(ByVal t_hr As Double, _
     Dim delta_p_atm As Double
     
     cd = 0.159 / h_m / porosity / ct_1atm / (rw_m * rw_m) * cs_1atm
+    
+    cd = transient_cd_from_cs(cs_1atm, rw_m, h_m, porosity, ct_1atm)
     If skin < 0 Then
         rw_m = rw_m * Exp(-skin)
         If r_m < rw_m Then r_m = rw_m
         skin = 0
     End If
     
-    td = transient_def_td(t_hr, rw_m, k_mD, porosity, mu_cP, ct_1atm)
+    td = transient_td_from_t(t_hr, rw_m, k_mD, porosity, mu_cP, ct_1atm)
     
     rd = r_m / rw_m
     
     pd = transient_pd_radial(td, cd, skin, rd, Model)
     
-    delta_p_atm = 18.41 * q_liq_sm3day * b_m3m3 * mu_cP / k_mD / h_m * pd
-    transient_pwf_radial_atma = pi_atma - delta_p_atm
+    delta_p_atm = transient_p_from_pd_atma(pd, q_liq_sm3day, pi_atma, k_mD, h_m, mu_cP, b_m3m3)
+    
+    transient_pwf_radial_atma = delta_p_atm
     
 End Function
 'description_to_manual      - для автогенерации
 ' расчет безразмерного коэффициента влияния ствола скважины (определение)
-Function transient_def_cd(ByVal cs_1atm As Double, _
+Function transient_cd_from_cs(ByVal cs_1atm As Double, _
              Optional ByVal rw_m As Double = 0.1, _
              Optional ByVal h_m As Double = 10, _
              Optional ByVal porosity As Double = 0.2, _
@@ -155,12 +179,12 @@ Function transient_def_cd(ByVal cs_1atm As Double, _
 ' результат   - безразмерный коэффициент влияния ствола скважины  cd
 'description_end
     
-    transient_def_cd = 0.159 / h_m / porosity / ct_1atm / (rw_m * rw_m) * cs_1atm
+    transient_cd_from_cs = 0.159 / h_m / porosity / ct_1atm / (rw_m * rw_m) * cs_1atm
     
 End Function
 'description_to_manual      - для автогенерации
 ' расчет коэффициента влияния ствола скважины (определение)
-Function transient_def_cs_1atm(ByVal cd As Double, _
+Function transient_cs_from_cd_1atm(ByVal cd As Double, _
              Optional ByVal rw_m As Double = 0.1, _
              Optional ByVal h_m As Double = 10, _
              Optional ByVal porosity As Double = 0.2, _
@@ -174,12 +198,12 @@ Function transient_def_cs_1atm(ByVal cd As Double, _
 ' результат   - коэффициент влияния ствола скважины  cs
 'description_end
     
-    transient_def_cs_1atm = 1 / 0.159 * h_m * porosity * ct_1atm * (rw_m * rw_m) * cd
+    transient_cs_from_cd_1atm = 1 / 0.159 * h_m * porosity * ct_1atm * (rw_m * rw_m) * cd
     
 End Function
 'description_to_manual      - для автогенерации
 ' расчет безразмерного времени (определение)
-Function transient_def_td(ByVal t_hr As Double, _
+Function transient_td_from_t(ByVal t_hr, _
              Optional ByVal rw_m As Double = 0.1, _
              Optional ByVal k_mD As Double = 100, _
              Optional ByVal porosity As Double = 0.2, _
@@ -195,12 +219,29 @@ Function transient_def_td(ByVal t_hr As Double, _
 ' результат   - безразмерное время td
 'description_end
     
-    transient_def_td = 0.00036 * k_mD / porosity / mu_cP / ct_1atm / (rw_m * rw_m) * t_hr
+    Dim t_arr
+    Dim i As Integer
+    
+    t_arr = parse_list(t_hr)
+    
+    If UBound(t_arr) = LBound(t_arr) Then
+        transient_td_from_t = 0.00036 * k_mD / porosity / mu_cP / ct_1atm / (rw_m * rw_m) * t_hr
+        Exit Function
+    Else
+        ReDim res(LBound(t_arr), UBound(t_arr)) As Double
+        For i = LBound(t_arr) To UBound(t_arr)
+            res(i) = 0.00036 * k_mD / porosity / mu_cP / ct_1atm / (rw_m * rw_m) * t_arr(i)
+        Next i
+    End If
+    
+    transient_td_from_t = ConvertToJson(res)
+    
+    
     
 End Function
 'description_to_manual      - для автогенерации
 ' расчет времени по безразмерному времени (определение)
-Function transient_def_t_hr(ByVal td As Double, _
+Function transient_t_from_td_hr(ByVal td As Double, _
              Optional ByVal rw_m As Double = 0.1, _
              Optional ByVal k_mD As Double = 100, _
              Optional ByVal porosity As Double = 0.2, _
@@ -216,12 +257,12 @@ Function transient_def_t_hr(ByVal td As Double, _
 ' результат   - время t
 'description_end
     
-    transient_def_t_hr = 1 / 0.00036 / k_mD * porosity * mu_cP * ct_1atm * (rw_m * rw_m) * td
+    transient_t_from_td_hr = 1 / 0.00036 / k_mD * porosity * mu_cP * ct_1atm * (rw_m * rw_m) * td
     
 End Function
 'description_to_manual      - для автогенерации
 ' расчет безразмерного давления (определение)
-Function transient_def_pd(ByVal p_wf_atma As Double, _
+Function transient_pd_from_p(ByVal p_wf_atma As Double, _
                           ByVal q_liq_sm3day As Double, _
                  Optional ByVal pi_atma As Double = 250, _
                  Optional ByVal k_mD As Double = 100, _
@@ -239,12 +280,12 @@ Function transient_def_pd(ByVal p_wf_atma As Double, _
 ' результат   - безразмерное время td
 'description_end
     
-    transient_def_pd = k_mD * h_m / 18.41 / q_liq_sm3day / mu_cP / b_m3m3 * (pi_atma - p_wf_atma)
+    transient_pd_from_p = k_mD * h_m / 18.41 / q_liq_sm3day / mu_cP / b_m3m3 * (pi_atma - p_wf_atma)
     
 End Function
 'description_to_manual      - для автогенерации
 ' расчет безразмерного давления (определение)
-Function transient_def_p_wf_atma(ByVal pd As Double, _
+Function transient_p_from_pd_atma(ByVal pd As Double, _
                           ByVal q_liq_sm3day As Double, _
                  Optional ByVal pi_atma As Double = 250, _
                  Optional ByVal k_mD As Double = 100, _
@@ -262,7 +303,109 @@ Function transient_def_p_wf_atma(ByVal pd As Double, _
 ' результат   - безразмерное время td
 'description_end
     
-    transient_def_p_wf_atma = pi_atma - 18.41 / k_mD / h_m * q_liq_sm3day * mu_cP * b_m3m3 * pd
+    transient_p_from_pd_atma = pi_atma - 18.41 / k_mD / h_m * q_liq_sm3day * mu_cP * b_m3m3 * pd
     
+End Function
+Function Hev(x)
+' функция Хевисайда
+    If x >= 0 Then
+        Hev = 1
+    Else
+        Hev = 0
+    End If
+End Function
+' расчет решения линейного стока
+' в том числе для данных заданных в виде массива
+Function transient_pd_line_sourse(td, _
+                        Optional rd As Double = 1, _
+                        Optional qd = 1, _
+                        Optional td_for_qd = 0, _
+                        Optional step_qd = True)
+' td - время для которого проводится расчет или массив времен
+' rd - расстояние от скважины для которого проводится расчет
+' qd - безразмерное значение дебита или массив времен и дебитов
+' td_for_qd - время срабатывания безразмерного дебита
+' step_rate - флаг динамика дебитов задана ступеньками или линейно
+    
+    Dim td_arr, arr_td_qd, arr_qd
+    Dim pd_arr() As Double
+    Dim i As Integer, j As Integer
+    Dim pds As Double
+    Dim tdj As Double
+    Dim pdj As Double
+    Dim dqd_next As Double
+    Dim dtd_next As Double
+    Dim ddqd_td As Double
+    Dim ddqd_td_pred As Double
+    Dim qdj_pred As Double
+    
+    td_arr = parse_list(td)
+    ReDim pd_arr(LBound(td_arr) To UBound(td_arr))
+    
+    arr_td_qd = parse_list(td_for_qd)
+    arr_qd = parse_list(qd)
+    
+    If UBound(arr_td_qd) <> UBound(arr_qd) Then
+        transient_pd_line_sourse = "error: td_for_qd  and qd len must be the same"
+        Exit Function
+    End If
+    If rd < 1 Then rd = 1
+    If step_qd Then
+        For i = LBound(td_arr) To UBound(td_arr)
+            ' start calculation for i time
+            qdj_pred = 0
+            pds = 0
+            ' next loop iterate through all rate changes in history
+            For j = LBound(arr_qd) To UBound(arr_qd)
+                ' calc influence of j rate step in history
+                tdj = td_arr(i) - arr_td_qd(j)
+                If tdj > 0 Then
+                    pdj = pd_line_source(tdj, rd) * (arr_qd(j) - qdj_pred)
+                Else
+                    pdj = 0
+                End If
+                pds = pds + pdj
+                qdj_pred = arr_qd(j)
+            Next j
+            pd_arr(i) = pds
+        Next i
+    Else
+        ' расчет для линейного меняющегося дебита
+        For i = LBound(td_arr) To UBound(td_arr)
+            ' start calculation for i time
+            ddqd_td_pred = 0
+            pds = 0
+            ' next loop iterate through all rate changes in history
+            For j = LBound(arr_qd) To UBound(arr_qd)
+                ' calc influence of j rate step in history
+                tdj = td_arr(i) - arr_td_qd(j)  ' time of actual rate of rate change start
+                If j < UBound(arr_qd) Then
+                    dqd_next = arr_qd(j + 1) - arr_qd(j)
+                    dtd_next = arr_td_qd(j + 1) - arr_td_qd(j)
+                    ddqd_td = dqd_next / dtd_next - ddqd_td_pred
+                Else
+                    ' last point assumes that rate will remain constant
+                    ' rate and time increments will be valid from previos step
+                    ddqd_td = -dqd_next / dtd_next '- ddqd_td_pred
+                End If
+                ' save ddqd_td for next steps
+                ddqd_td_pred = ddqd_td
+                
+                If tdj > 0 Then
+                    pdj = pd_linear_q_line_source(tdj, rd, ddqd_td)
+                Else
+                    pdj = 0
+                End If
+                pds = pds + pdj
+            Next j
+            pd_arr(i) = pds
+        Next i
+    End If
+    ' подготовим результат в таком же формате как входные значения времени для расчета
+    If UBound(td_arr) = LBound(td_arr) Then
+        transient_pd_line_sourse = pd_arr
+    Else
+        transient_pd_line_sourse = ConvertToJson(pd_arr)
+    End If
 End Function
 
