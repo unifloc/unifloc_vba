@@ -95,7 +95,7 @@ class API():
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
         return self.f_MF_choke_calibr(feed,d_choke_mm,p_in_atma,p_out_atma,calibr_type,d_pipe_mm,t_choke_C,param)
 
-    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1):
+    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
@@ -126,12 +126,14 @@ class API():
 
      h_start_m - начало расчета по трубе, м    
 
-     h_end_m - конечная точка расчета по трубе, м   
+     h_end_m - конечная точка расчета по трубе, м    
+
+     znlf - флаг для режима барботажа   
 
         """
 
         self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
-        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m)
+        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf)
 
     def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param=""):
         """
@@ -494,6 +496,24 @@ class API():
 
         self.f_PVT_pb_atma = self.book.macro("PVT_pb_atma")
         return self.f_PVT_pb_atma(t_C,PVT_prop)
+
+    def PVT_rsb_m3m3(self, pb_atma,t_C,PVT_prop):
+        """
+ ========== description ============== 
+ Расчет газосодержания по давлению насыщения 
+        
+ ==========  arguments  ============== 
+
+     pb_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации   
+
+        """
+
+        self.f_PVT_rsb_m3m3 = self.book.macro("PVT_rsb_m3m3")
+        return self.f_PVT_rsb_m3m3(pb_atma,t_C,PVT_prop)
 
     def PVT_ST_oilgas_Nm(self, p_atma,t_C,PVT_prop):
         """
@@ -1139,7 +1159,7 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q)
 
-    def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",pump_id=737,num_stages=1,freq_Hz=50,calc_along_flow=True,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,param=""):
+    def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",pump_id=737,num_stages=1,freq_Hz=50,calc_along_flow=True,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,param="",h_mes_top=1000):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях большинство параметров задается явно 
@@ -1172,12 +1192,14 @@ class API():
 
      gas_correct_stage_by_stage - модель применятеся  для всех ступеней по отдельности    
 
-     param - дополнительные параметры расчета потока   
+     param - дополнительные параметры расчета потока    
+
+     h_mes_top - глубина установки эцн (верх эцн)   
 
         """
 
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(p_calc_atma,t_intake_C,t_dis_C,feed,pump_id,num_stages,freq_Hz,calc_along_flow,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,param)
+        return self.f_ESP_p_atma(p_calc_atma,t_intake_C,t_dis_C,feed,pump_id,num_stages,freq_Hz,calc_along_flow,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,param,h_mes_top)
 
     def ESP_motor_calc_mom(self, mom_Nm,freq_Hz=50,U_V=-1,motor_json="",cable_json="",param=""):
         """
@@ -2022,7 +2044,7 @@ class API():
     def encode_arange(self, val_from,val_to,step):
         """
  ========== description ============== 
- кодирование списка значений для векторных расчетов  значения распределены равномерно 
+ кодирование списка значений для векторных расчетов  c заданным шагом, значения распределены равномерно 
         
  ==========  arguments  ============== 
 
@@ -2036,6 +2058,70 @@ class API():
 
         self.f_encode_arange = self.book.macro("encode_arange")
         return self.f_encode_arange(val_from,val_to,step)
+
+    def encode_linspace(self, val_from,val_to,num):
+        """
+ ========== description ============== 
+ кодирование списка значений для векторных расчетов  с заданным кол-вом значений, значения распределены равномерно 
+        
+ ==========  arguments  ============== 
+
+     val_from - первое значение списка    
+
+     val_to - последнее значение списка    
+
+     num - количество значений   
+
+        """
+
+        self.f_encode_linspace = self.book.macro("encode_linspace")
+        return self.f_encode_linspace(val_from,val_to,num)
+
+    def encode_logspace(self, val_from,val_to,num):
+        """
+ ========== description ============== 
+ кодирование списка значений для векторных расчетов  с заданным кол-вом значений, значения распределены логарифмически 
+        
+ ==========  arguments  ============== 
+
+     val_from - первое значение списка    
+
+     val_to - последнее значение списка    
+
+     num - количество значений   
+
+        """
+
+        self.f_encode_logspace = self.book.macro("encode_logspace")
+        return self.f_encode_logspace(val_from,val_to,num)
+
+    def list_merge(self, ParamArrayvar):
+        """
+ ========== description ============== 
+ слияние списков чисел в json формате  если значения на границе совпадают - они сливаются в одно 
+        
+ ==========  arguments  ============== 
+
+   paramarrayvar  
+
+        """
+
+        self.f_list_merge = self.book.macro("list_merge")
+        return self.f_list_merge(ParamArrayvar)
+
+    def list_concatenate(self, ParamArrayvar):
+        """
+ ========== description ============== 
+ слияние списков чисел в json формате  если значения на границе совпадают - они дублируются 
+        
+ ==========  arguments  ============== 
+
+   paramarrayvar  
+
+        """
+
+        self.f_list_concatenate = self.book.macro("list_concatenate")
+        return self.f_list_concatenate(ParamArrayvar)
 
     def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120):
         """
@@ -2082,9 +2168,9 @@ class API():
         
  ==========  arguments  ============== 
 
-     x_points - таблица аргументов функции    
+     x_points - таблица аргументов функции (или json строка - вектор)    
 
-     y_points - таблица значений функции  количество агрументов и значений функции должно совпадать  для табличной функции одному аргументу соответствует  строго одно значение функ..см.мануал   
+     y_points - таблица значений функции (или json строка - вектор)  количество агрументов и значений должно совпадать.  для табличной функции одному аргументу соответствует  строг..см.мануал   
 
      x_val - аргумент для которого надо найти значение  одно значение в ячейке или диапазон значений  для диапазона аргументов будет найден диапазон значений  диапазоны могут быть ..см.мануал   
 
@@ -2347,7 +2433,7 @@ class API():
         self.f_transient_pwf_radial_atma = self.book.macro("transient_pwf_radial_atma")
         return self.f_transient_pwf_radial_atma(t_hr,q_liq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,Model)
 
-    def transient_def_cd(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+    def transient_cd_from_cs(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет безразмерного коэффициента влияния ствола скважины (определение) 
@@ -2366,17 +2452,17 @@ class API():
 
         """
 
-        self.f_transient_def_cd = self.book.macro("transient_def_cd")
-        return self.f_transient_def_cd(cs_1atm,rw_m,h_m,porosity,ct_1atm)
+        self.f_transient_cd_from_cs = self.book.macro("transient_cd_from_cs")
+        return self.f_transient_cd_from_cs(cs_1atm,rw_m,h_m,porosity,ct_1atm)
 
-    def transient_def_cs_1atm(self, cd,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+    def transient_cs_from_cd_1atm(self, cd,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет коэффициента влияния ствола скважины (определение) 
         
  ==========  arguments  ============== 
 
-   cd   
+     cd - коэффициент влияния ствола скважины, безразмерный    
 
      rw_m - радиус скважины, м    
 
@@ -2388,17 +2474,17 @@ class API():
 
         """
 
-        self.f_transient_def_cs_1atm = self.book.macro("transient_def_cs_1atm")
-        return self.f_transient_def_cs_1atm(cd,rw_m,h_m,porosity,ct_1atm)
+        self.f_transient_cs_from_cd_1atm = self.book.macro("transient_cs_from_cd_1atm")
+        return self.f_transient_cs_from_cd_1atm(cd,rw_m,h_m,porosity,ct_1atm)
 
-    def transient_def_td(self, t_day,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+    def transient_td_from_t(self, t_hr,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет безразмерного времени (определение) 
         
  ==========  arguments  ============== 
 
-     t_day - время для которого проводится расчет, сут    
+     t_hr - время для которого проводится расчет, час    
 
      rw_m - радиус скважины, м    
 
@@ -2412,17 +2498,17 @@ class API():
 
         """
 
-        self.f_transient_def_td = self.book.macro("transient_def_td")
-        return self.f_transient_def_td(t_day,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+        self.f_transient_td_from_t = self.book.macro("transient_td_from_t")
+        return self.f_transient_td_from_t(t_hr,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-    def transient_def_t_day(self, td,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+    def transient_t_from_td_hr(self, td,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет времени по безразмерному времени (определение) 
         
  ==========  arguments  ============== 
 
-   td   
+     td - время для которого проводится расчет, безразмерное    
 
      rw_m - радиус скважины, м    
 
@@ -2436,10 +2522,10 @@ class API():
 
         """
 
-        self.f_transient_def_t_day = self.book.macro("transient_def_t_day")
-        return self.f_transient_def_t_day(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+        self.f_transient_t_from_td_hr = self.book.macro("transient_t_from_td_hr")
+        return self.f_transient_t_from_td_hr(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-    def transient_def_pd(self, p_wf_atma,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+    def transient_pd_from_p(self, p_wf_atma,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """
  ========== description ============== 
  расчет безразмерного давления (определение) 
@@ -2462,10 +2548,10 @@ class API():
 
         """
 
-        self.f_transient_def_pd = self.book.macro("transient_def_pd")
-        return self.f_transient_def_pd(p_wf_atma,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+        self.f_transient_pd_from_p = self.book.macro("transient_pd_from_p")
+        return self.f_transient_pd_from_p(p_wf_atma,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
 
-    def transient_def_p_wf_atma(self, pd,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+    def transient_p_from_pd_atma(self, pd,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """
  ========== description ============== 
  расчет безразмерного давления (определение) 
@@ -2488,7 +2574,7 @@ class API():
 
         """
 
-        self.f_transient_def_p_wf_atma = self.book.macro("transient_def_p_wf_atma")
-        return self.f_transient_def_p_wf_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+        self.f_transient_p_from_pd_atma = self.book.macro("transient_p_from_pd_atma")
+        return self.f_transient_p_from_pd_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
 
 #UniflocVBA = API(addin_name_str)
