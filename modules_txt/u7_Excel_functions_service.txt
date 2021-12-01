@@ -20,7 +20,8 @@ Public Function decode_json(json, _
                           Optional transpose As Boolean = False, _
                           Optional keys_filter = "", _
                           Optional only_values As Boolean = False, _
-                          Optional safe_out As Boolean = False)
+                          Optional safe_out As Boolean = False, _
+                          Optional null_val As String = "")
 ' json   - строка содержащая результаты расчета
 ' transpose - выбор вывода в строки или в столбцы
 ' keys_filter - строка с ключами, которые надо вывести
@@ -41,6 +42,9 @@ Public Function decode_json(json, _
     Dim keylist As Dictionary
     Dim arrkeys As Variant
     Dim keystr As String
+    Dim safe_out2 As Boolean
+    
+    safe_out2 = False
     
     On Error GoTo err1:
     
@@ -57,9 +61,7 @@ Public Function decode_json(json, _
     ' далее пытаемся раскодировать
     Set p = ParseJson(json)
     If TypeName(p) = "Dictionary" Then
-    
         Set d = p
-        
         If keys_filter <> "" Then
             arrkeys = Split(keys_filter, ",")
             Set keylist = New Dictionary
@@ -94,20 +96,28 @@ Public Function decode_json(json, _
                 Else
                     V = d.Items(i - 1)
                 End If
-                If TypeName(V) = "Collection" Then
-                    If only_values Then
-                        outarr(1, i) = ConvertToJson(V)
-                    Else
-                        outarr(2, i) = ConvertToJson(V)
-                    End If
-                Else
-                    
-                    If only_values Then
-                        outarr(1, i) = V
-                    Else
-                        outarr(2, i) = V
-                    End If
-                End If
+                Select Case TypeName(V)
+                    Case "Collection", "Dictionary"
+                        If only_values Then
+                            outarr(1, i) = ConvertToJson(V)
+                            If Len(outarr(1, i)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Else
+                            outarr(2, i) = ConvertToJson(V)
+                            If Len(outarr(2, i)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        End If
+                    Case "Null"
+                        If only_values Then
+                            outarr(1, i) = null_val
+                        Else
+                            outarr(2, i) = null_val
+                        End If
+                    Case Else
+                        If only_values Then
+                            outarr(1, i) = V
+                        Else
+                            outarr(2, i) = V
+                        End If
+                End Select
             Next
         Else
             If only_values Then
@@ -123,25 +133,28 @@ Public Function decode_json(json, _
                 Else
                     V = d.Items(i - 1)
                 End If
-                If TypeName(V) = "Collection" Then
-                    If only_values Then
-                        outarr(i, 1) = ConvertToJson(V)
-                    Else
-                        outarr(i, 2) = ConvertToJson(V)
-                    End If
-                ElseIf TypeName(V) = "Dictionary" Then
-                    If only_values Then
-                        outarr(i, 1) = ConvertToJson(V)
-                    Else
-                        outarr(i, 2) = ConvertToJson(V)
-                    End If
-                Else
-                    If only_values Then
-                        outarr(i, 1) = V
-                    Else
-                        outarr(i, 2) = V
-                    End If
-                End If
+                Select Case TypeName(V)
+                    Case "Collection", "Dictionary"
+                        If only_values Then
+                            outarr(i, 1) = ConvertToJson(V)
+                            If Len(outarr(i, 1)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Else
+                            outarr(i, 2) = ConvertToJson(V)
+                            If Len(outarr(i, 2)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        End If
+                    Case "Null"
+                        If only_values Then
+                            outarr(i, 1) = null_val
+                        Else
+                            outarr(i, 2) = null_val
+                        End If
+                    Case Else
+                        If only_values Then
+                            outarr(i, 1) = V
+                        Else
+                            outarr(i, 2) = V
+                        End If
+                End Select
             Next i
         End If
     Else  ' expect collection here
@@ -163,31 +176,48 @@ Public Function decode_json(json, _
             If transpose Then
                 ReDim outarr(1 To 1, 1 To c.Count)
                 For Each V In c
-                    If TypeName(V) = "Collection" Or TypeName(V) = "Dictionary" Then
-                        outarr(1, i) = ConvertToJson(V)
-                    Else
-                        outarr(1, i) = V
-                    End If
+                    
+                    Select Case TypeName(V)
+                        Case "Collection", "Dictionary"
+                            outarr(1, i) = ConvertToJson(V)
+                            If Len(outarr(1, i)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Case "Null"
+                            outarr(1, i) = null_val
+                        Case Else
+                            outarr(1, i) = V
+                    End Select
                     i = i + 1
                 Next
             Else
                 ReDim outarr(1 To c.Count, 1 To 1)
                 For Each V In c
-                    If TypeName(V) = "Collection" Or TypeName(V) = "Dictionary" Then
-                        outarr(i, 1) = ConvertToJson(V)
-                    Else
-                        outarr(i, 1) = V
-                    End If
+                    Select Case TypeName(V)
+                        Case "Collection", "Dictionary"
+                            outarr(i, 1) = ConvertToJson(V)
+                            If Len(outarr(i, 1)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Case "Null"
+                            outarr(i, 1) = null_val
+                        Case Else
+                            outarr(i, 1) = V
+                    End Select
                     i = i + 1
                 Next
             End If
         End If
     End If
-    If safe_out Then
+    If safe_out Or safe_out2 Then
         ReDim outarr_safe(LBound(outarr, 1) To UBound(outarr, 1), LBound(outarr, 2) To UBound(outarr, 2))
         For i = LBound(outarr, 1) To UBound(outarr, 1)
             For j = LBound(outarr, 2) To UBound(outarr, 2)
-                outarr_safe(i, j) = CStr(outarr(i, j))
+                If Not IsNull(outarr(i, j)) Then
+                    If Len(CStr(outarr(i, j))) < 100000000 Then   ' for debug
+                        outarr_safe(i, j) = CStr(outarr(i, j))
+                    Else
+                        outarr_safe(i, j) = "---"
+                    End If
+                Else
+                    outarr_safe(i, j) = null_val
+                End If
             Next j
         Next i
         'outarr_safe = outarr
