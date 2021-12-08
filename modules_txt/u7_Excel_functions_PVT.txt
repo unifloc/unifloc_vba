@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.33 tashkent                                   khabibullinra@gmail.com
+'Unifloc 7.34 december                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2021
 '
@@ -974,7 +974,7 @@ Public Function feed_mod_separate_gas( _
             
             Call fluid_stream.mod_after_separation(ptq.p(i), ptq.t(i), ptq.val(i), gas_goes_into_solution)
             
-            ptq_out.feed(i) = (fluid_stream.get_json)
+            ptq_out.feed(i) = (fluid_stream.feed)
             ptq_out.p(i) = Round(ptq.p(i), const_num_decimal_out)
             ptq_out.t(i) = Round(ptq.t(i), const_num_decimal_out)
             ptq_out.val(i) = Round(ptq.val(i), const_num_decimal_out)
@@ -1033,17 +1033,216 @@ Public Function feed_mod_split( _
 ' result - array, GJS flow rate in working conditions,
 ' signature, and log of calculation if it is connected
 ' description_end
+    Dim feed_sep_gas As String
+    Dim feed1 As New CPVT, feed2 As New CPVT, feed_in As New CPVT
+    
+    
+    feed_sep_gas = feed_mod_separate_gas(k_sep_gas, p_atma, t_C, feed)
+    
+    Call feed_in.init_feed(feed)
+    Call feed_in.calc_PVT(p_atma, t_C)
+    Call feed1.init_feed(feed_sep_gas)
+    Call feed2.init_feed(feed_sep_gas)
+    
+    Dim qo1 As Double, qw1 As Double
+    qo1 = feed1.q_oil_sm3day
+    qw1 = feed1.q_wat_sm3day
+    
+    feed2.q_liq_sm3day = qo1 * k_sep_oil + qw1 * k_sep_wat
+    feed2.fw_fr = qw1 * k_sep_wat / (qo1 * k_sep_oil + qw1 * k_sep_wat)
+    
+    feed1.q_liq_sm3day = qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)
+    feed1.fw_fr = qw1 * (1 - k_sep_wat) / (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat))
+    
+    ' весь газ после сепарации добавим во второй поток как свободный газ
+    feed2.q_gas_free_sm3day = feed_in.q_gas_free_sm3day - feed1.q_gas_free_sm3day + _
+                              (feed_in.rp_m3m3 - feed1.rp_m3m3) * feed_in.q_oil_sm3day
+    
+    Dim d As New Dictionary
+    
+    d("feed1") = ParseJson(feed1.feed)
+    d("feed2") = ParseJson(feed2.feed)
+    
+    feed_mod_split = ConvertToJson(d)
+    
 End Function
 'description_to_manual - for autogenerating the description - puts the function header and surrounding comments in the manual (from the next line)
 ' calculates two feeds mixture properties
 Public Function feed_mod_mix( _
                ByVal feed_1 As String, _
-               ByVal feed_2 As String, _
-      Optional ByVal param As String = "")
+               ByVal feed_2 As String) As String
 ' feed_1 - feed 1 encoded string
 ' feed_2 - feed 2 encoded string
-' param  - json encoded parameters for calculation and output
 ' result - json encoded feed string
 'description_end
+    feed_mod_mix = feed_1
+    
+    Dim gg_mix As Double
+    Dim go_mix As Double
+    Dim gw_mix As Double
+    Dim qo_mix_surf_sm3day As Double
+    Dim qg_mix_surf_sm3day As Double
+    Dim qw_mix_surf_sm3day As Double
+    Dim ql_mix_surf_sm3day As Double
+    Dim GOR_mix As Double
+    Dim fw_mix As Double
+    Dim pb_mix As Double
+    Dim rsb_mix As Double
+    Dim tres_mix As Double
+    Dim muob_mix As Double
+    Dim bob_mix As Double
+    Dim qgas_free_mix As Double
+    Dim corr_mix As Integer
+    
+    Dim fg1 As Double
+    Dim fo1 As Double
+    Dim fw1 As Double
+    
+    Dim feed1 As New CPVT
+    Dim feed2 As New CPVT
+    Dim fluid_json As String
+    
+    Call feed1.init_feed(feed_1)
+    Call feed2.init_feed(feed_2)
+    
+    'дебиты на поверхности можно просто сложить и получить итоговые
+    qo_mix_surf_sm3day = feed1.q_oil_sm3day + feed2.q_oil_sm3day
+    qw_mix_surf_sm3day = feed1.q_wat_sm3day + feed2.q_wat_sm3day
+    qg_mix_surf_sm3day = feed1.q_gas_sm3day - feed1.q_gas_free_sm3day + _
+                         feed2.q_gas_sm3day - feed2.q_gas_free_sm3day
+    qgas_free_mix = feed1.q_gas_free_sm3day + feed2.q_gas_free_sm3day
+    ql_mix_surf_sm3day = qo_mix_surf_sm3day + qw_mix_surf_sm3day
+    
+    ' оценим объемные доли первого флюида в общем потоке
+    If qo_mix_surf_sm3day > 0 Then
+        fo1 = feed1.q_oil_sm3day / qo_mix_surf_sm3day
+    Else
+        fo1 = 1
+    End If
+    If qw_mix_surf_sm3day > 0 Then
+        fw1 = feed1.q_wat_sm3day / qw_mix_surf_sm3day
+    Else
+        fw1 = 1
+    End If
+    If qg_mix_surf_sm3day > 0 Then
+        fg1 = feed1.q_gas_sm3day / qg_mix_surf_sm3day
+    Else
+        fg1 = 1
+    End If
+    
+    ' удельные плотности определим как средневзвешенные по объем плотности долей (как в мануале Пайпсима)
+    gg_mix = feed1.gamma_g * fg1 + feed2.gamma_g * (1 - fg1)
+    go_mix = feed1.gamma_o * fo1 + feed2.gamma_o * (1 - fo1)
+    gw_mix = feed1.gamma_w * fw1 + feed2.gamma_w * (1 - fw1)
+    ' определим соотношения фаз
+    GOR_mix = qg_mix_surf_sm3day / qo_mix_surf_sm3day
+    fw_mix = qw_mix_surf_sm3day / ql_mix_surf_sm3day * 100
+    ' выбираем корреляцию по потоку где дебит больше (для определенности)
+    If feed1.q_liq_sm3day > feed2.q_liq_sm3day Then
+        corr_mix = feed1.PVT_correlation
+    Else
+        corr_mix = feed2.PVT_correlation
+    End If
+    
+    ' далее надо определить давление насыщения, газосодержание при давлении насыщения и другие параметры
+    ' для упрощения - берем все калибровочные параметры как средне взвешенные по объемной доли нефти в потоке
+    ' потенциально надо сделать методику лучше
+    pb_mix = feed1.pb_calc_atma * fo1 + feed2.pb_calc_atma * (1 - fo1)
+    tres_mix = feed1.t_res_C * fo1 + feed2.t_res_C * (1 - fo1)
+    rsb_mix = feed1.rsb_calc_m3m3 * fo1 + feed2.rsb_calc_m3m3 * (1 - fo1)
+    bob_mix = feed1.bob_m3m3 * fo1 + feed2.bob_m3m3 * (1 - fo1)
+    muob_mix = feed1.muob_cP * fo1 + feed2.muob_cP * (1 - fo1)
+    
+    fluid_json = encode_PVT(gg_mix, go_mix, gw_mix, rsb_mix, pb_mix, tres_mix, bob_mix, muob_mix, corr_mix)
+    feed_mod_mix = encode_feed(ql_mix_surf_sm3day, fw_mix, GOR_mix, qgas_free_mix, fluid_json)
+    
+    
 End Function
+'description_to_manual      - для автогенерации
+' функция расчета массового расхода нефти
+Public Function feed_m_oil_kgsec( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - число - массовый расход нефти
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_m_oil_kgsec = PVT.mo_kgsec
+    Exit Function
+er1:
+    feed_m_oil_kgsec = "error"
+End Function
+'description_to_manual      - для автогенерации
+' функция расчета массового расхода газа
+Public Function feed_m_gas_kgsec( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - число - массовый расход свободного газа
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_m_gas_kgsec = PVT.mg_kgsec
+    Exit Function
+er1:
+    feed_m_gas_kgsec = "error"
+End Function
+'description_to_manual      - для автогенерации
+' функция расчета массового расхода воды
+Public Function feed_m_wat_kgsec( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - число - массовый расход свободного воды
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_m_wat_kgsec = PVT.mw_kgsec
+    Exit Function
+er1:
+    feed_m_wat_kgsec = "error"
+End Function
+''description_to_manual      - для автогенерации
+'' функция расчета плотности газа в потоке
+'Public Function feed_rho_gas_kgm3( _
+'               ByVal p_atma As Double, _
+'               ByVal t_C As Double, _
+'               ByVal feed As String)
+'' p_atma     - давление, атм
+'' t_C        - температура, С.
+'' feed - параметры потока флюидов, дебит, обводненность и пр
+''              используйте encode_feed для генерации
+'' результат  - массив, расход ГЖС в рабочих условиях,
+''              подпись, и лог расчета если подключен
+''description_end
+'
+' On Error GoTo er1:
+'    Dim PVT As New CPVT
+'    Call PVT.init_feed(feed)
+'    Call PVT.calc_PVT(p_atma, t_C)
+'    feed_rho_mix_kgm3 = PVT.rho_mix_rc_kgm3
+'    Exit Function
+'er1:
+'    feed_rho_mix_kgm3 = "error"
+'
+'End Function
 
