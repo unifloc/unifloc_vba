@@ -1,0 +1,99 @@
+'=======================================================================================
+'Unifloc 7.36 winter jet                                     khabibullinra@gmail.com
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2022
+'
+'=======================================================================================
+'
+'Jet pump calculation class
+Option Explicit
+Option Base 0
+Public log_ As New CLogger                      ' create new log list for each object
+Public t_C As Double
+Public fluid_in As CPVT                ' inlet fluid stream to be pumped
+Public fluid_act As CPVT               ' active (high pressure) fluid stream
+Public fluid_out As CPVT               ' outlet fluid stream at discharge
+' pump geometry
+Public d_nozzle_mm As Double     ' nozzle diam
+Public d_throat_mm As Double     ' throat diam
+Public p_out_atma As Double
+'--------------------------------------------------------
+Public Sub add_log_msg(msg As String)
+    Call log_.add_msg(msg)
+End Sub
+Public Sub copy(pump As CJetPump)
+End Sub
+'--------------------------------------------------------
+Public Property Get a_nozzle_m2() As Double
+    a_nozzle_m2 = const_Pi * d_nozzle_mm * d_nozzle_mm / 4 * 0.000001
+End Property
+Public Sub calc_dp_out_atma(ByVal q_in_sm3day As Double, _
+                            ByVal p_act_atma As Double, _
+                            ByVal p_in_atma As Double, _
+                            ByVal t_C As Double)
+' calculate output pressure by given intake and active pressures
+' active fluid properties must be set, rate will be estimated
+' intake fluid properties must be set, rate given explicitly
+Dim rho_act_kgm3 As Double, rho_in_kgm3 As Double
+Dim q_act_sm3day As Double
+Dim u_d As Double
+Dim r_d As Double
+    
+    Call fluid_act.calc_PVT(p_act_atma, t_C)
+    rho_act_kgm3 = fluid_act.rho_mix_rc_kgm3
+    
+    Call fluid_in.calc_PVT(p_in_atma, t_C)
+    rho_in_kgm3 = fluid_act.rho_mix_rc_kgm3
+    
+    '1. estimate active stream flow rate
+    
+    q_act_sm3day = q_act_v1_m3day(p_act_atma, p_in_atma, rho_act_kgm3, a_nozzle_m2)
+    
+    '2. calc u_d
+    u_d = q_in_sm3day / q_act_sm3day
+    r_d = r_out_v2_d(u_d, d_nozzle_mm, d_throat_mm, p_act_atma, p_in_atma, rho_act_kgm3, rho_in_kgm3)
+    
+    p_out_atma = (r_d * p_act_atma + p_in_atma) / (1 + r_d) - p_in_atma
+End Sub
+'--------------------------------------------------------
+Private Function r_out_v2_d(u_d As Double, _
+                   Optional d_nozzle_mm As Double = 2, _
+                   Optional d_throat_mm As Double = 6, _
+                   Optional p_act_atma As Double = 100, _
+                   Optional p_in_atma As Double = 10, _
+                   Optional rho_act_kgm3 As Double = 1000, _
+                   Optional rho_in_kgm3 As Double = 1000, _
+                   Optional k_n As Double = 0.03, _
+                   Optional k_td As Double = 0.2) As Double
+  'jet pump calc based on pipesim technical description
+  Dim a_n_m2 As Double, a_t_m2 As Double
+  Dim Fan As Double, FRho As Double, FM As Double
+  Dim B As Double, C As Double
+  Dim u_cav As Double
+  
+  a_n_m2 = 0.000001 * const_Pi * d_nozzle_mm * d_nozzle_mm / 4
+  a_t_m2 = 0.000001 * const_Pi * d_throat_mm * d_throat_mm / 4
+  Fan = a_n_m2 / a_t_m2
+  FRho = rho_in_kgm3 / rho_act_kgm3
+  FM = u_d * FRho
+  B = (1 - 2 * Fan) * Fan ^ 2 / (1 - Fan) ^ 2
+  C = 2 * Fan + B * FM ^ 2 - (1 + k_td) * Fan ^ 2 * (1 + FM) ^ 2
+  u_cav = (1 - Fan) / Fan * Sqr((1 + k_n) * p_in_atma / (1.35 * (p_act_atma - p_in_atma) + p_in_atma))
+    
+    
+  r_out_v2_d = IIf(u_d < u_cav, C / ((1 + k_n) - C), 0)
+End Function
+Private Function q_act_v1_m3day(Optional p_act_atma As Double = 100, _
+                                Optional p_in_atma As Double = 10, _
+                                Optional rho_act_kgm3 As Double = 1000, _
+                                Optional a_nozzle_m2 As Double = 0.000001, _
+                                Optional c_nozzle_d As Double = 0.97)
+    ' calc flow rate through nozzle for incompressible fluid
+    Dim p_a_Pa As Double, p_i_Pa As Double
+    
+    p_a_Pa = p_act_atma * 101325
+    p_i_Pa = p_in_atma * 101325
+    q_act_v1_m3day = (86400 * c_nozzle_d * a_nozzle_m2 * _
+            Sqr(2 * (p_a_Pa - p_i_Pa) / rho_act_kgm3))
+End Function
+
