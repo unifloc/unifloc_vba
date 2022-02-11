@@ -244,6 +244,45 @@ err1:
     On Error Resume Next
     MF_choke_calibr = "Error:MF_choke_calibr:" & Err.Description
 End Function
+' функция генерация трубы из стандартного набора данных
+' включает и параметры потока в трубе
+' нужна для упрощения пользовательских функций
+Function new_pipeline_with_feed( _
+        Optional ByVal construction As String = "", _
+        Optional ByVal feed As String = "", _
+        Optional ByVal t_model As String = "", _
+        Optional ByVal calc_along_coord As Boolean = True, _
+        Optional ByVal flow_along_coord As Boolean = True, _
+        Optional ByVal flow_correlation As Integer = 0, _
+        Optional ByVal calibr_grav As Double = 1, _
+        Optional ByVal calibr_fric As Double = 1, _
+        Optional ByVal h_start_m As Double = -10000000000#, _
+        Optional ByVal h_end_m As Double = 10000000000# _
+        ) As CPipe
+        
+    Dim pipe As New CPipe
+On Error GoTo err1:
+    ' check default values for some props
+    If Len(t_model) < 2 Then t_model = encode_t_model()
+    If Len(feed) < 2 Then feed = encode_feed()
+    If Len(construction) < 2 Then construction = encode_pipe()
+    
+    Call pipe.init_from_json(construction, feed, t_model, h_start_m, h_end_m)
+    pipe.param = set_calc_flow_param(calc_along_coord:=calc_along_coord, _
+                                     flow_along_coord:=flow_along_coord, _
+                                     hcor:=flow_correlation, _
+                                     temp_method:=pipe.param.temp_method)
+    pipe.calibr_grav = calibr_grav
+    pipe.calibr_fric = calibr_fric
+    
+    Set new_pipeline_with_feed = pipe
+    
+    Exit Function
+err1:
+    new_pipeline_with_feed = Array(-1, "error")
+    add_log_msg "Error:new_pipeline_with_stream:" & Err.Description
+                         
+End Function
 'description_to_manual      - для автогенерации
 '  расчет распределения давления и температуры в трубопроводе
 '  выводит результат в виде таблицы значений
@@ -1889,17 +1928,11 @@ On Error GoTo er2:
 er2:
     feed_mod_split = "error " & Err.Description
 End Function
-'description_to_manual - for autogenerating the description - puts the function header and surrounding comments in the manual (from the next line)
-' calculates two feeds mixture properties
-Public Function feed_mod_mix( _
-               ByVal feed_1 As String, _
-               ByVal feed_2 As String) As String
-' feed_1 - feed 1 encoded string
-' feed_2 - feed 2 encoded string
+Public Function feed_mod_mix_obj(feed1 As CPVT, feed2 As CPVT) As CPVT
+' feed1 - feed 1 object
+' feed2 - feed 2 object
 ' result - json encoded feed string
-'description_end
 On Error GoTo er1:
-    feed_mod_mix = feed_1
     
     Dim gg_mix As Double
     Dim go_mix As Double
@@ -1922,12 +1955,7 @@ On Error GoTo er1:
     Dim fo1 As Double
     Dim fw1 As Double
     
-    Dim feed1 As New CPVT
-    Dim feed2 As New CPVT
-    Dim fluid_json As String
-    
-    Call feed1.init_feed(feed_1)
-    Call feed2.init_feed(feed_2)
+    Dim feed_out As New CPVT
     
     'дебиты на поверхности можно просто сложить и получить итоговые
     qo_mix_surf_sm3day = feed1.q_oil_sm3day + feed2.q_oil_sm3day
@@ -1977,8 +2005,43 @@ On Error GoTo er1:
     bob_mix = feed1.bob_m3m3 * fo1 + feed2.bob_m3m3 * (1 - fo1)
     muob_mix = feed1.muob_cP * fo1 + feed2.muob_cP * (1 - fo1)
     
-    fluid_json = encode_PVT(gg_mix, go_mix, gw_mix, rsb_mix, pb_mix, tres_mix, bob_mix, muob_mix, corr_mix)
-    feed_mod_mix = encode_feed(ql_mix_surf_sm3day, fw_mix, GOR_mix, qgas_free_mix, fluid_json)
+    With feed_out
+        Call .init(gg_mix, go_mix, gw_mix, rsb_mix, pb_mix, bob_mix, corr_mix, tres_mix, muob_mix)
+        .q_liq_sm3day = ql_mix_surf_sm3day
+        .fw_perc = fw_mix
+        .rp_m3m3 = GOR_mix
+        .q_gas_free_sm3day = qgas_free_mix
+    End With
+    
+    Set feed_mod_mix_obj = feed_out
+Exit Function
+er1:
+On Error GoTo er2:
+    feed_mod_mix_obj = Array("error " & Err.Description, feed1.log_.get_str, , feed2.log_.get_str)
+    Exit Function
+er2:
+    feed_mod_mix_obj = "error " & Err.Description
+End Function
+'description_to_manual - for autogenerating the description - puts the function header and surrounding comments in the manual (from the next line)
+' calculates two feeds mixture properties
+Public Function feed_mod_mix( _
+               ByVal feed_1 As String, _
+               ByVal feed_2 As String) As String
+' feed_1 - feed 1 encoded string
+' feed_2 - feed 2 encoded string
+' result - json encoded feed string
+'description_end
+On Error GoTo er1:
+        
+    Dim feed1 As New CPVT
+    Dim feed2 As New CPVT
+    Dim feed_out As CPVT
+        
+    Call feed1.init_feed(feed_1)
+    Call feed2.init_feed(feed_2)
+    
+    Set feed_out = feed_mod_mix_obj(feed1, feed2)
+    feed_mod_mix = feed_out.feed
     
 Exit Function
 er1:
