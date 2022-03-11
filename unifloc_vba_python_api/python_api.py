@@ -67,7 +67,7 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
-    def MF_choke_calibr(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,calibr_type=0,d_pipe_mm=70,t_choke_C=20,param=""):
+    def MF_choke_calibr(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,calibr_type=0,d_pipe_mm=70,t_choke_C=20,param="",CDischarge=0.826):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  медленный расчет - калибровка подбирается 
@@ -88,12 +88,14 @@ class API():
 
      t_choke_c - температура, с.    
 
-     param - параметры расчета json строка   
+     param - параметры расчета json строка    
+
+     cdischarge - коэффициент совершенства штуцера   
 
         """
 
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
-        return self.f_MF_choke_calibr(feed,d_choke_mm,p_in_atma,p_out_atma,calibr_type,d_pipe_mm,t_choke_C,param)
+        return self.f_MF_choke_calibr(feed,d_choke_mm,p_in_atma,p_out_atma,calibr_type,d_pipe_mm,t_choke_C,param,CDischarge)
 
     def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
         """
@@ -135,7 +137,7 @@ class API():
         self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
         return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf)
 
-    def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param=""):
+    def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param="",CDischarge=0.826):
         """
  ========== description ============== 
  расчет давления в штуцере 
@@ -156,14 +158,16 @@ class API():
 
    calibr   
 
-     param - параметры расчета json строка   
+     param - параметры расчета json строка    
+
+     cdischarge - коэффициент совершенства штуцера   
 
         """
 
         self.f_MF_choke_q_sm3day = self.book.macro("MF_choke_q_sm3day")
-        return self.f_MF_choke_q_sm3day(feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C,d_pipe_mm,calibr,param)
+        return self.f_MF_choke_q_sm3day(feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C,d_pipe_mm,calibr,param,CDischarge)
 
-    def MF_choke_p_atma(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param=""):
+    def MF_choke_p_atma(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826):
         """
  ========== description ============== 
  расчет давления в штуцере (дросселе) 
@@ -184,14 +188,16 @@ class API():
 
    calibr   
 
-     param - параметры расчета json строка   
+     param - параметры расчета json строка    
+
+     cdischarge - коэффициент совершенства штуцера   
 
         """
 
         self.f_MF_choke_p_atma = self.book.macro("MF_choke_p_atma")
-        return self.f_MF_choke_p_atma(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param)
+        return self.f_MF_choke_p_atma(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge)
 
-    def MF_choke_calibr_fast(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,param=""):
+    def MF_choke_calibr_fast(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,param="",CDischarge=0.826):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  быстрый расчет - калибровка вычисляется 
@@ -210,14 +216,16 @@ class API():
 
      t_choke_c - температура, с.    
 
-     param - параметры расчета json строка   
+     param - параметры расчета json строка    
+
+     cdischarge - коэффициент совершенства штуцера   
 
         """
 
         self.f_MF_choke_calibr_fast = self.book.macro("MF_choke_calibr_fast")
-        return self.f_MF_choke_calibr_fast(feed,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,param)
+        return self.f_MF_choke_calibr_fast(feed,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,param,CDischarge)
 
-    def MF_choke_pq_crv(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param=""):
+    def MF_choke_pq_crv(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826):
         """
  ========== description ============== 
  расчет кривой - характеристики штуцера  pq - давление дебит 
@@ -238,12 +246,14 @@ class API():
 
    calibr   
 
-     param - параметры расчета json строка   
+     param - параметры расчета json строка    
+
+     cdischarge - коэффициент совершенства штуцера   
 
         """
 
         self.f_MF_choke_pq_crv = self.book.macro("MF_choke_pq_crv")
-        return self.f_MF_choke_pq_crv(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param)
+        return self.f_MF_choke_pq_crv(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge)
 
     def PVT_calc(self, p_atma,t_C,PVT_prop,param=""):
         """
@@ -897,7 +907,7 @@ class API():
         self.f_feed_mod_split = self.book.macro("feed_mod_split")
         return self.f_feed_mod_split(k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed,param)
 
-    def feed_mod_mix(self, feed_1,feed_2,param=""):
+    def feed_mod_mix(self, feed_1,feed_2):
         """
  ========== description ============== 
  calculates two feeds mixture properties 
@@ -906,14 +916,66 @@ class API():
 
      feed_1 - feed 1 encoded string    
 
-     feed_2 - feed 2 encoded string    
-
-     param - json encoded parameters for calculation and output  result - json encoded feed string   
+     feed_2 - feed 2 encoded string  result - json encoded feed string   
 
         """
 
         self.f_feed_mod_mix = self.book.macro("feed_mod_mix")
-        return self.f_feed_mod_mix(feed_1,feed_2,param)
+        return self.f_feed_mod_mix(feed_1,feed_2)
+
+    def feed_m_oil_kgsec(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета массового расхода нефти 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_m_oil_kgsec = self.book.macro("feed_m_oil_kgsec")
+        return self.f_feed_m_oil_kgsec(p_atma,t_C,feed)
+
+    def feed_m_gas_kgsec(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета массового расхода газа 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_m_gas_kgsec = self.book.macro("feed_m_gas_kgsec")
+        return self.f_feed_m_gas_kgsec(p_atma,t_C,feed)
+
+    def feed_m_wat_kgsec(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета массового расхода воды 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_m_wat_kgsec = self.book.macro("feed_m_wat_kgsec")
+        return self.f_feed_m_wat_kgsec(p_atma,t_C,feed)
 
     def IPR_q_liq_sm3day(self, pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc=0,pb_atma=-1,t_res_C=80):
         """
@@ -1577,6 +1639,98 @@ class API():
         self.f_GLV_IPO_p_close = self.book.macro("GLV_IPO_p_close")
         return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
 
+    def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120):
+        """
+ ========== description ============== 
+ расчет натуральной сепарации газа на приеме насоса 
+        
+ ==========  arguments  ============== 
+
+     feed - закодированные параметры потока флюидов    
+
+     p_intake_atma - давление сепарации    
+
+     t_intake_c - температура сепарации    
+
+     d_intake_mm - диаметр приемной сетки    
+
+     d_cas_mm - диаметр эксплуатационной колонны   
+
+        """
+
+        self.f_well_ksep_natural_d = self.book.macro("well_ksep_natural_d")
+        return self.f_well_ksep_natural_d(feed,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm)
+
+    def well_ksep_total_d(self, SepNat,SepGasSep):
+        """
+ ========== description ============== 
+ расчет общей сепарации на приеме насоса 
+        
+ ==========  arguments  ============== 
+
+     sepnat - естественная сепарация    
+
+     sepgassep - искусственная сепарация (газосепаратор)   dim sep_nat  dim i as integer  dim c as new collection   sep_nat = parse_list(sepnat)  if ubound(sep_nat) - lbound(sep_nat) ..см.мануал  
+
+        """
+
+        self.f_well_ksep_total_d = self.book.macro("well_ksep_total_d")
+        return self.f_well_ksep_total_d(SepNat,SepGasSep)
+
+    def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param=""):
+        """
+ ========== description ============== 
+ оценка расхода жидкости через сопло  от перепада давления 
+        
+ ==========  arguments  ============== 
+
+     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
+
+     d_nozzle_mm - диаметр сопла, мм    
+
+     p_act_atma - давление активного потока, высокое, атм    
+
+     p_in_atma - давление входного потока, низкое, атм    
+
+     t_c - температура потоков в струйном насосе, с.    
+
+     param - дополнительные параметры расчета   
+
+        """
+
+        self.f_Jet_q_nozzle_sm3day = self.book.macro("Jet_q_nozzle_sm3day")
+        return self.f_Jet_q_nozzle_sm3day(feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C,param)
+
+    def Jet_p_out_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=0):
+        """
+ ========== description ============== 
+Расчет давления на выкиде струйного насоса 
+        
+ ==========  arguments  ============== 
+
+     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
+
+     feed_in - поток перекачиваемый (низкого давления), строка    
+
+     d_nozzle_mm - диаметр сопла, мм    
+
+     d_throat_mm - диаметр камеры смешения, мм    
+
+     p_act_atma - давление активного потока, высокое, атм    
+
+     p_in_atma - давление входного потока, низкое, атм    
+
+     t_c - температура потоков в струйном насосе, с.    
+
+     param - дополнительные параметры расчета    
+
+   type_q  
+
+        """
+
+        self.f_Jet_p_out_atma = self.book.macro("Jet_p_out_atma")
+        return self.f_Jet_p_out_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C,param,type_q)
+
     def unf_version(self, ):
         """
  ========== description ============== 
@@ -1591,7 +1745,7 @@ class API():
         self.f_unf_version = self.book.macro("unf_version")
         return self.f_unf_version()
 
-    def decode_json(self, json,transpose=False,keys_filter="",only_values=False,safe_out=False):
+    def decode_json(self, json,transpose=False,keys_filter="",only_values=False,safe_out=False,null_val=""):
         """
  ========== description ============== 
  Функция декодирования json строки,  позволяет вывести содержимое json строки в таблицу 
@@ -1606,12 +1760,14 @@ class API():
 
      only_values - если = 1 подписи выводиться не будут    
 
-     safe_out - флаг заставляет выводить массив сторок,  что может работать лучше в офисе 2016 и ранее   
+     safe_out - флаг заставляет выводить массив сторок,  что может работать лучше в офисе 2016 и ранее    
+
+   null_val  
 
         """
 
         self.f_decode_json = self.book.macro("decode_json")
-        return self.f_decode_json(json,transpose,keys_filter,only_values,safe_out)
+        return self.f_decode_json(json,transpose,keys_filter,only_values,safe_out,null_val)
 
     def decode_json_p_atma(self, json):
         """
@@ -2123,44 +2279,6 @@ class API():
         self.f_list_concatenate = self.book.macro("list_concatenate")
         return self.f_list_concatenate(ParamArrayvar)
 
-    def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120):
-        """
- ========== description ============== 
- расчет натуральной сепарации газа на приеме насоса 
-        
- ==========  arguments  ============== 
-
-     feed - закодированные параметры потока флюидов    
-
-     p_intake_atma - давление сепарации    
-
-     t_intake_c - температура сепарации    
-
-     d_intake_mm - диаметр приемной сетки    
-
-     d_cas_mm - диаметр эксплуатационной колонны   
-
-        """
-
-        self.f_well_ksep_natural_d = self.book.macro("well_ksep_natural_d")
-        return self.f_well_ksep_natural_d(feed,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm)
-
-    def well_ksep_total_d(self, SepNat,SepGasSep):
-        """
- ========== description ============== 
- расчет общей сепарации на приеме насоса 
-        
- ==========  arguments  ============== 
-
-     sepnat - естественная сепарация    
-
-     sepgassep - искусственная сепарация (газосепаратор)   dim sep_nat  dim i as integer  dim c as new collection   sep_nat = parse_list(sepnat)  if ubound(sep_nat) - lbound(sep_nat) ..см.мануал  
-
-        """
-
-        self.f_well_ksep_total_d = self.book.macro("well_ksep_total_d")
-        return self.f_well_ksep_total_d(SepNat,SepGasSep)
-
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """
  ========== description ============== 
@@ -2181,7 +2299,7 @@ class API():
         self.f_crv_interpolation = self.book.macro("crv_interpolation")
         return self.f_crv_interpolation(x_points,y_points,x_val,type_interpolation)
 
-    def crv_interpolation_2D(self, XA,YA,FA,XYIA,out=1,type_interpolation=0):
+    def crv_interpolation_2D(self, XA,YA,fa,XYIA,out=1,type_interpolation=0):
         """
  ========== description ============== 
  функция поиска значения функции по двумерным табличным данным (интерполяция 2D) 
@@ -2203,7 +2321,7 @@ class API():
         """
 
         self.f_crv_interpolation_2D = self.book.macro("crv_interpolation_2D")
-        return self.f_crv_interpolation_2D(XA,YA,FA,XYIA,out,type_interpolation)
+        return self.f_crv_interpolation_2D(XA,YA,fa,XYIA,out,type_interpolation)
 
     def crv_solve(self, x_points,y_points,y_val):
         """

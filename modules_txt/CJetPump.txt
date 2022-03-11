@@ -16,7 +16,10 @@ Public fluid_out As CPVT               ' outlet fluid stream at discharge
 ' pump geometry
 Public d_nozzle_mm As Double     ' nozzle diam
 Public d_throat_mm As Double     ' throat diam
+Public c_nozzle_d As Double
+Public type_q As Integer
 Public p_out_atma As Double
+Public dp_out_atm As Double
 '--------------------------------------------------------
 Public Sub add_log_msg(msg As String)
     Call log_.add_msg(msg)
@@ -46,8 +49,13 @@ Dim r_d As Double
     rho_in_kgm3 = fluid_act.rho_mix_rc_kgm3
     
     '1. estimate active stream flow rate
+    If type_q = 0 Then
+        q_act_sm3day = q_act_v1_m3day(p_act_atma, p_in_atma, t_C, rho_act_kgm3)
+    Else
+        q_act_sm3day = q_act_v2_m3day(p_act_atma, p_in_atma, t_C)
+    End If
     
-    q_act_sm3day = q_act_v1_m3day(p_act_atma, p_in_atma, rho_act_kgm3, a_nozzle_m2)
+    fluid_act.q_liq_sm3day = q_act_sm3day
     
     '2. calc u_d
     u_d = q_in_sm3day / q_act_sm3day
@@ -56,10 +64,11 @@ Dim r_d As Double
     r_d = r_out_v2_d(u_d, d_nozzle_mm, d_throat_mm, p_act_atma, p_in_atma, rho_act_kgm3, rho_in_kgm3)
     
     '4. extract dp from r_d
-    p_out_atma = (r_d * p_act_atma + p_in_atma) / (1 + r_d) - p_in_atma
+    p_out_atma = (r_d * p_act_atma + p_in_atma) / (1 + r_d)
+    dp_out_atm = p_out_atma - p_in_atma
     
     '5. prepare output fluid
-    Set fluid_out = feed_mod_mix_obj(fluid_in, fluid_out)
+    Set fluid_out = feed_mod_mix_obj(fluid_in, fluid_act)
     
 End Sub
 '--------------------------------------------------------
@@ -90,17 +99,41 @@ Private Function r_out_v2_d(u_d As Double, _
     
   r_out_v2_d = IIf(u_d < u_cav, C / ((1 + k_n) - C), 0)
 End Function
-Private Function q_act_v1_m3day(Optional p_act_atma As Double = 100, _
-                                Optional p_in_atma As Double = 10, _
-                                Optional rho_act_kgm3 As Double = 1000, _
-                                Optional a_nozzle_m2 As Double = 0.000001, _
-                                Optional c_nozzle_d As Double = 0.97)
+Public Function q_act_v1_m3day(p_act_atma As Double, _
+                               p_in_atma As Double, _
+                      Optional t_act_C As Double = 30, _
+                      Optional rho_act_kgm3 As Double = 0)
     ' calc flow rate through nozzle for incompressible fluid
     Dim p_a_Pa As Double, p_i_Pa As Double
     
     p_a_Pa = p_act_atma * 101325
     p_i_Pa = p_in_atma * 101325
+    If rho_act_kgm3 <= 0 Then
+        ' if density not given - estimate it for active feed
+        Call fluid_act.calc_PVT(p_act_atma, t_act_C)
+        rho_act_kgm3 = fluid_act.rho_mix_rc_kgm3
+    End If
     q_act_v1_m3day = (86400 * c_nozzle_d * a_nozzle_m2 * _
             Sqr(2 * (p_a_Pa - p_i_Pa) / rho_act_kgm3))
 End Function
+Public Function q_act_v2_m3day(p_act_atma As Double, _
+                               p_in_atma As Double, _
+                      Optional t_act_C As Double = 30)
+    ' calc flow rate through nozzle for multiphase fluid
+    
+    Dim choke As New Cchoke
+    
+    Set choke.fluid = fluid_act
+    choke.d_choke_m = d_nozzle_mm / 1000#
+    choke.d_down_m = d_throat_mm / 1000#
+    choke.d_up_m = d_throat_mm / 1000#
+    choke.K = 0.95
+    
+    q_act_v2_m3day = choke.calc_choke_q_liq_sm3day(p_act_atma, p_in_atma, t_act_C)
+    
+End Function
+Private Sub Class_Initialize()
+    c_nozzle_d = 0.97
+    type_q = 0
+End Sub
 
