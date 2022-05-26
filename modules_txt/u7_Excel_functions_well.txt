@@ -1,0 +1,212 @@
+'=======================================================================================
+'Unifloc 7.38 aspo                               khabibullinra@gmail.com
+'Petroleum engineering calculations modules (macroses)
+'2000 - 2022
+'
+'=======================================================================================
+'функции дл€ проведени€ расчетов из интерфейса Excel
+'расчет параметров работы скважины с ”Ё÷Ќ
+Option Explicit
+Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
+                                   ByVal t_wf_C, _
+                                   ByVal feed As String, _
+                                   ByVal construction As String, _
+                                   ByVal esp_json As String, _
+                                   ByVal t_model As String, _
+                                   ByVal h_perf_m As Double, _
+                                   ByVal h_esp_m As Double, _
+        Optional ByVal calibr_grav As Double = 1, _
+        Optional ByVal calibr_fric As Double = 1, _
+        Optional ByVal ksep As Double = 0.5, _
+        Optional ipr As String = "", _
+        Optional t_crit_C As Double = 0)
+    Dim pipe_below_esp As New CPipe
+    Dim esp As New CESPpump
+    Dim pipe_above_esp As New CPipe
+    Dim ipr_vogel As New CReservoirVogel
+    
+    Dim flow_correlation As Integer
+    flow_correlation = 0
+    Dim calc_along_coord As Boolean
+    Dim flow_along_coord As Boolean
+    calc_along_coord = False
+    flow_along_coord = False
+    Dim res1 As PTtype
+    Dim p_intake_atma As Double
+    Dim t_intake_C As Double
+    Dim p_dis_atma As Double
+    Dim t_dis_C As Double
+    Dim p_buf_atma As Double
+    Dim t_buf_C As Double
+    Dim feed_sep As String
+    Dim p_res_atma As Double
+    Dim pi_m3dayatm As Double
+    Dim pb_atma As Double
+    Dim fw_perc As Double
+    Dim q_liq_sm3day As Double
+    
+    Dim f As Dictionary
+    Dim dout As New Dictionary
+    
+    Dim crv_p As New CInterpolation
+    Dim crv_t As New CInterpolation
+    Dim n_sol As Integer
+    Dim h_crit
+    
+' расчет снизу вверх по заданному забойному давлению
+    Set f = ParseJson(feed)
+    q_liq_sm3day = f("q_liq_sm3day")
+' 0. если задана IPR  то пытаемс€ оценить дебит
+    If Len(ipr) > 0 Then
+        Dim d As Dictionary
+        Set d = ParseJson(ipr)
+        p_res_atma = d("p_res_atma")
+        pi_m3dayatm = d("pi_m3dayatm")
+        pb_atma = d("pb_atma")
+        fw_perc = d("fw_perc")
+        
+        Call ipr_vogel.InitProp(p_res_atma, pb_atma, fw_perc)
+        ipr_vogel.pi_sm3dayatm = pi_m3dayatm
+        q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
+        
+        f("q_liq_sm3day") = q_liq_sm3day
+        feed = ConvertToJson(f)
+        
+    End If
+' 1. расчет участка э/к от забо€ до приема насоса
+' инициализируем трубу с первым фидом, который всегда есть
+    
+    Set pipe_below_esp = new_pipeline_with_feed(construction, _
+                                                feed, _
+                                                t_model, _
+                                                calc_along_coord, _
+                                                flow_along_coord, _
+                                                flow_correlation, _
+                                                calibr_grav, _
+                                                calibr_fric, _
+                                                h_esp_m, h_perf_m)
+    
+    res1 = pipe_below_esp.calc_dPipe(p_wf_atma, t_wf_C, mainCurves)
+    
+    p_intake_atma = res1.p_atma
+    t_intake_C = res1.t_C
+ ' 2. расчет свойств потока с учетом сепарации газа
+    
+    feed_sep = feed_mod_separate_gas(ksep, p_intake_atma, t_intake_C, feed)
+ 
+ ' 3. расчет перепада давлени€ в Ё÷Ќ
+    Call esp.init_json(esp_json)
+    esp.fluid.init_feed (feed_sep)
+    Call esp.calc_ESP(p_intake_atma, t_intake_C)
+    
+    p_dis_atma = esp.p_dis_atma
+    t_dis_C = esp.t_dis_C
+ ' 4. расчет распределени€ давлени€ в Ќ “
+    Set pipe_above_esp = new_pipeline_with_feed(construction, _
+                                                feed_sep, _
+                                                t_model, _
+                                                calc_along_coord, _
+                                                flow_along_coord, _
+                                                flow_correlation, _
+                                                calibr_grav, _
+                                                calibr_fric, _
+                                                0, h_esp_m)
+    
+    res1 = pipe_above_esp.calc_dPipe(p_dis_atma, t_dis_C, mainCurves)
+    p_buf_atma = res1.p_atma
+    t_buf_C = res1.t_C
+    
+    
+' подготовим кривые дл€ вывода результатов
+    Call crv_p.AddPointsCurve(pipe_above_esp.curve("c_P"), pipe_below_esp.curve("c_P"))
+    Call crv_t.AddPointsCurve(pipe_above_esp.curve("c_T"), pipe_below_esp.curve("c_T"))
+    
+    h_crit = 0
+    n_sol = crv_t.FindSolutions(t_crit_C, TS_NO_EXTRPOLATION)
+    If n_sol > 0 Then h_crit = crv_t.SolutionPointX(1)
+    If t_crit_C > crv_t.maxy Then h_crit = crv_t.maxx
+    
+    dout.Add "q_liq_sm3day", q_liq_sm3day
+    dout.Add "p_intake_atma", p_intake_atma
+    dout.Add "p_dis_atma", p_dis_atma
+    dout.Add "p_buf_atma", p_buf_atma
+    dout.Add "h_crit_m", h_crit
+    dout.Add "c_P", crv_p.getDict
+    dout.Add "c_T", crv_t.getDict
+    
+    
+     well_calc_from_pwf = ConvertToJson(dout)
+     
+     
+ 
+'    well_calc_from_pwf = Array(q_liq_sm3day, p_intake_atma, p_dis_atma, p_buf_atma)
+End Function
+Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
+                                   ByVal t_wf_C, _
+                                   ByVal feed As String, _
+                                   ByVal construction As String, _
+                                   ByVal esp_json As String, _
+                                   ByVal t_model As String, _
+                                   ByVal h_perf_m As Double, _
+                                   ByVal h_esp_m As Double, _
+        Optional ByVal calibr_grav As Double = 1, _
+        Optional ByVal calibr_fric As Double = 1, _
+        Optional ByVal ksep As Double = 0.5, _
+        Optional ipr As String = "", _
+        Optional t_crit_C As Double = 0)
+        
+' расчет сверху вниз по заданному буферному давлению
+    Dim f As Dictionary
+    Dim p_wf_max As Double
+    Dim n_pwf As Double
+    Dim step_p_wf As Double
+    
+    n_pwf = 25
+    p_wf_max = 500
+    
+' 0. если задана IPR  то пытаемс€ оценить граничное забойное давление
+    If Len(ipr) > 0 Then
+        Dim d As Dictionary
+        Set d = ParseJson(ipr)
+        p_wf_max = d("p_res_atma")
+    End If
+        
+    Dim done As Boolean
+    Dim p_wf
+    p_wf = p_wf_max
+    done = False
+    step_p_wf = p_wf_max / n_pwf
+    Dim res As String
+    Dim dres As Dictionary
+    Dim pwh_crv As New CInterpolation
+    Dim i As Integer
+    i = 0
+    While p_wf > 0 And Not done
+        res = well_calc_from_pwf(p_wf, t_wf_C, feed, construction, esp_json, t_model, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr, t_crit_C)
+        Set dres = ParseJson(res)
+        
+        If dres("p_buf_atma") < 1 And i > 1 Then
+            Call pwh_crv.AddPoint(p_wf, 0)
+            p_wf = p_wf + step_p_wf
+            step_p_wf = step_p_wf / 2
+            If step_p_wf < 1 Then done = True
+        Else
+            Call pwh_crv.AddPoint(p_wf, dres("p_buf_atma"))
+        
+        End If
+        p_wf = p_wf - step_p_wf
+        i = i + 1
+    Wend
+    
+    Dim nsol As Integer
+    nsol = pwh_crv.FindSolutions(p_wh_atma, TS_NO_EXTRPOLATION)
+    If nsol > 0 Then
+        p_wf = pwh_crv.SolutionPointX(1)
+        res = well_calc_from_pwf(p_wf, t_wf_C, feed, construction, esp_json, t_model, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr, t_crit_C)
+        well_calc_from_pwh = res
+    Else
+        well_calc_from_pwh = "not found"
+    End If
+        
+End Function
+
