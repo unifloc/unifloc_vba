@@ -9,28 +9,30 @@
 Option Explicit
 Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
                                    ByVal t_wf_C, _
-                                   ByVal feed As String, _
-                                   ByVal construction As String, _
+                                   ByVal feed_json As String, _
+                                   ByVal construction_json As String, _
                                    ByVal esp_json As String, _
-                                   ByVal t_model As String, _
+                                   ByVal t_model_json As String, _
                                    ByVal h_perf_m As Double, _
                                    ByVal h_esp_m As Double, _
-        Optional ByVal calibr_grav As Double = 1, _
-        Optional ByVal calibr_fric As Double = 1, _
-        Optional ByVal ksep As Double = 0.5, _
-        Optional ipr As String = "", _
-        Optional t_crit_C As Double = 0)
-    Dim pipe_below_esp As New CPipe
+                          Optional ByVal calibr_grav As Double = 1, _
+                          Optional ByVal calibr_fric As Double = 1, _
+                          Optional ByVal ksep As Double = 0.5, _
+                          Optional ByVal ipr_json As String = "", _
+                          Optional ByVal t_crit_C As Double = 0, _
+                          Optional ByVal p_cas_atma = 0, _
+                          Optional ByVal flow_corr As Integer = 0)
+On Error GoTo er1:
+    Const calc_along_coord = False
+    Const flow_along_coord = False
+    
     Dim esp As New CESPpump
+    Dim pipe_below_esp As New CPipe
     Dim pipe_above_esp As New CPipe
+    Dim pipe_casing_liq As New CPipe
+    Dim pipe_casing_gas As New CPipe
     Dim ipr_vogel As New CReservoirVogel
     
-    Dim flow_correlation As Integer
-    flow_correlation = 0
-    Dim calc_along_coord As Boolean
-    Dim flow_along_coord As Boolean
-    calc_along_coord = False
-    flow_along_coord = False
     Dim res1 As PTtype
     Dim p_intake_atma As Double
     Dim t_intake_C As Double
@@ -38,28 +40,31 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
     Dim t_dis_C As Double
     Dim p_buf_atma As Double
     Dim t_buf_C As Double
-    Dim feed_sep As String
     Dim p_res_atma As Double
     Dim pi_m3dayatm As Double
     Dim pb_atma As Double
     Dim fw_perc As Double
     Dim q_liq_sm3day As Double
     
+    Dim feed_sep As String
+    
     Dim f As Dictionary
     Dim dout As New Dictionary
     
     Dim crv_p As New CInterpolation
     Dim crv_t As New CInterpolation
+    Dim crv_cas_p As New CInterpolation
+    
     Dim n_sol As Integer
     Dim h_crit
     
 ' расчет снизу вверх по заданному забойному давлению
-    Set f = ParseJson(feed)
+    Set f = ParseJson(feed_json)
     q_liq_sm3day = f("q_liq_sm3day")
 ' 0. если задана IPR  то пытаемс€ оценить дебит
-    If Len(ipr) > 0 Then
+    If Len(ipr_json) > 0 Then
         Dim d As Dictionary
-        Set d = ParseJson(ipr)
+        Set d = ParseJson(ipr_json)
         p_res_atma = d("p_res_atma")
         pi_m3dayatm = d("pi_m3dayatm")
         pb_atma = d("pb_atma")
@@ -70,21 +75,21 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
         q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
         
         f("q_liq_sm3day") = q_liq_sm3day
-        feed = ConvertToJson(f)
+        feed_json = ConvertToJson(f)
         
     End If
 ' 1. расчет участка э/к от забо€ до приема насоса
 ' инициализируем трубу с первым фидом, который всегда есть
     
-    Set pipe_below_esp = new_pipeline_with_feed(construction, _
-                                                feed, _
-                                                t_model, _
+    Set pipe_below_esp = new_pipeline_with_feed(construction_json, _
+                                                feed_json, _
+                                                t_model_json, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
-                                                flow_correlation, _
+                                                flow_corr, _
                                                 calibr_grav, _
                                                 calibr_fric, _
-                                                h_esp_m, h_perf_m)
+                                                h_esp_m + 1, h_perf_m)
     
     res1 = pipe_below_esp.calc_dPipe(p_wf_atma, t_wf_C, mainCurves)
     
@@ -92,7 +97,7 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
     t_intake_C = res1.t_C
  ' 2. расчет свойств потока с учетом сепарации газа
     
-    feed_sep = feed_mod_separate_gas(ksep, p_intake_atma, t_intake_C, feed)
+    feed_sep = feed_mod_separate_gas(ksep, p_intake_atma, t_intake_C, feed_json)
  
  ' 3. расчет перепада давлени€ в Ё÷Ќ
     Call esp.init_json(esp_json)
@@ -102,12 +107,12 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
     p_dis_atma = esp.p_dis_atma
     t_dis_C = esp.t_dis_C
  ' 4. расчет распределени€ давлени€ в Ќ “
-    Set pipe_above_esp = new_pipeline_with_feed(construction, _
+    Set pipe_above_esp = new_pipeline_with_feed(construction_json, _
                                                 feed_sep, _
-                                                t_model, _
+                                                t_model_json, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
-                                                flow_correlation, _
+                                                flow_corr, _
                                                 calibr_grav, _
                                                 calibr_fric, _
                                                 0, h_esp_m)
@@ -116,6 +121,47 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
     p_buf_atma = res1.p_atma
     t_buf_C = res1.t_C
     
+ ' 5. если задано затрубное давление построим распределение давлени€ в затрубе
+    If p_cas_atma > 0 Then
+    
+        Set pipe_casing_liq = new_pipeline_with_feed(construction_json, _
+                                                    feed_sep, _
+                                                    t_model_json, _
+                                                    calc_along_coord, _
+                                                    flow_along_coord, _
+                                                    flow_corr, _
+                                                    calibr_grav, _
+                                                    calibr_fric, _
+                                                    0, h_esp_m)
+        Call pipe_casing_liq.set_ZNLF
+        res1 = pipe_casing_liq.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
+        'построим распределение давлени€ дл€ газа
+        
+        Set pipe_casing_gas = new_pipeline_with_feed(construction_json, _
+                                                    feed_sep, _
+                                                    t_model_json, _
+                                                    Not calc_along_coord, _
+                                                    flow_along_coord, _
+                                                    10, _
+                                                    calibr_grav, _
+                                                    calibr_fric, _
+                                                    0, h_esp_m)
+        res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
+        
+        ' найдем динамический уровень и построим совместное распределени€ дл€ газа и жидкости
+        Dim h_dyn_m As Double
+        h_dyn_m = intersection(pipe_casing_liq.curve("c_P"), pipe_casing_gas.curve("c_P"))(1)
+        
+        Dim i As Integer
+        Set crv_cas_p = pipe_casing_liq.curve("c_P")
+        For i = 1 To crv_cas_p.num_points
+            Call crv_cas_p.AddPoint(h_dyn_m, crv_cas_p.getPoint(h_dyn_m), True)
+            If crv_cas_p.pointX(i) < h_dyn_m Then
+                Call crv_cas_p.AddPoint(crv_cas_p.pointX(i), pipe_casing_gas.curve("c_P").getPoint(crv_cas_p.pointX(i)))
+            End If
+        Next i
+        
+    End If
     
 ' подготовим кривые дл€ вывода результатов
     Call crv_p.AddPointsCurve(pipe_above_esp.curve("c_P"), pipe_below_esp.curve("c_P"))
@@ -127,64 +173,73 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
     If t_crit_C > crv_t.maxy Then h_crit = crv_t.maxx
     
     dout.Add "q_liq_sm3day", q_liq_sm3day
+    dout.Add "p_wf_atma", p_wf_atma
     dout.Add "p_intake_atma", p_intake_atma
     dout.Add "p_dis_atma", p_dis_atma
     dout.Add "p_buf_atma", p_buf_atma
     dout.Add "h_crit_m", h_crit
     dout.Add "c_P", crv_p.getDict
     dout.Add "c_T", crv_t.getDict
+    If p_cas_atma > 0 Then
+        dout.Add "c_cas_P", pipe_casing_liq.curve("c_P").getDict
+    End If
     
+    dout.Add "h_dyn_m", h_dyn_m
     
      well_calc_from_pwf = ConvertToJson(dout)
      
-     
+     Exit Function
+er1:
+    well_calc_from_pwf = "error " & Err.Description
  
-'    well_calc_from_pwf = Array(q_liq_sm3day, p_intake_atma, p_dis_atma, p_buf_atma)
 End Function
 Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
                                    ByVal t_wf_C, _
-                                   ByVal feed As String, _
-                                   ByVal construction As String, _
+                                   ByVal feed_json As String, _
+                                   ByVal construction_json As String, _
                                    ByVal esp_json As String, _
-                                   ByVal t_model As String, _
+                                   ByVal t_model_json As String, _
                                    ByVal h_perf_m As Double, _
                                    ByVal h_esp_m As Double, _
-        Optional ByVal calibr_grav As Double = 1, _
-        Optional ByVal calibr_fric As Double = 1, _
-        Optional ByVal ksep As Double = 0.5, _
-        Optional ipr As String = "", _
-        Optional t_crit_C As Double = 0)
+                          Optional ByVal calibr_grav As Double = 1, _
+                          Optional ByVal calibr_fric As Double = 1, _
+                          Optional ByVal ksep As Double = 0.5, _
+                          Optional ipr_json As String = "", _
+                          Optional t_crit_C As Double = 0, _
+                          Optional ByVal p_cas_atma = 0, _
+                          Optional ByVal flow_corr As Integer = 0)
         
 ' расчет сверху вниз по заданному буферному давлению
     Dim f As Dictionary
     Dim p_wf_max As Double
     Dim n_pwf As Double
     Dim step_p_wf As Double
+    Dim done As Boolean
+    Dim res As String
+    Dim dres As Dictionary
+    Dim pwh_crv As New CInterpolation
+    Dim i As Integer
+    Dim nsol As Integer
+    Dim p_wf
     
     n_pwf = 25
     p_wf_max = 500
     
 ' 0. если задана IPR  то пытаемс€ оценить граничное забойное давление
-    If Len(ipr) > 0 Then
+    If Len(ipr_json) > 0 Then
         Dim d As Dictionary
-        Set d = ParseJson(ipr)
+        Set d = ParseJson(ipr_json)
         p_wf_max = d("p_res_atma")
     End If
         
-    Dim done As Boolean
-    Dim p_wf
     p_wf = p_wf_max
     done = False
     step_p_wf = p_wf_max / n_pwf
-    Dim res As String
-    Dim dres As Dictionary
-    Dim pwh_crv As New CInterpolation
-    Dim i As Integer
     i = 0
+    
     While p_wf > 0 And Not done
-        res = well_calc_from_pwf(p_wf, t_wf_C, feed, construction, esp_json, t_model, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr, t_crit_C)
+        res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
         Set dres = ParseJson(res)
-        
         If dres("p_buf_atma") < 1 And i > 1 Then
             Call pwh_crv.AddPoint(p_wf, 0)
             p_wf = p_wf + step_p_wf
@@ -196,17 +251,193 @@ Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
         End If
         p_wf = p_wf - step_p_wf
         i = i + 1
+        If i > 100 Then Err.Raise 100, "i>100"
     Wend
     
-    Dim nsol As Integer
     nsol = pwh_crv.FindSolutions(p_wh_atma, TS_NO_EXTRPOLATION)
     If nsol > 0 Then
         p_wf = pwh_crv.SolutionPointX(1)
-        res = well_calc_from_pwf(p_wf, t_wf_C, feed, construction, esp_json, t_model, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr, t_crit_C)
+        res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+                Set dres = ParseJson(res)
+                dres.Add "crv_pwf", pwh_crv.getDict
+                
+                
+                res = ConvertToJson(dres)
+        
         well_calc_from_pwh = res
     Else
         well_calc_from_pwh = "not found"
     End If
         
+End Function
+Private Function update(json As String, val As Double) As String
+    Dim d As Dictionary
+ ' оценим границу сверху
+    If Len(json) > 0 Then
+        Set d = ParseJson(json)
+        d("calibr_head") = val
+        json = ConvertToJson(d)
+    End If
+    update = json
+End Function
+              
+Public Function well_calc_from_pintake( _
+                                   ByVal p_intake_atma As Double, _
+                                   ByVal t_wf_C, _
+                                   ByVal feed_json As String, _
+                                   ByVal construction_json As String, _
+                                   ByVal esp_json As String, _
+                                   ByVal t_model_json As String, _
+                                   ByVal h_perf_m As Double, _
+                                   ByVal h_esp_m As Double, _
+                          Optional ByVal calibr_grav As Double = 1, _
+                          Optional ByVal calibr_fric As Double = 1, _
+                          Optional ByVal ksep As Double = 0.5, _
+                          Optional ipr_json As String = "", _
+                          Optional t_crit_C As Double = 0, _
+                          Optional ByVal p_cas_atma = 0, _
+                          Optional ByVal p_wh_atma As Double = 10, _
+                          Optional ByVal flow_corr As Integer = 0)
+    
+    Const calc_along_coord = False
+    Const flow_along_coord = False
+    Dim f As Dictionary
+    Dim p_wf_max As Double
+    Dim p_wf_atma As Double
+    Dim n_pwf As Double
+    Dim step_p_wf As Double
+    Dim done As Boolean
+    Dim p_wf
+    Dim res As String
+    Dim dres As Dictionary
+    Dim pwh_crv As New CInterpolation
+    Dim cal_esp_head_crv As New CInterpolation
+    Dim i As Integer
+    Dim res1 As PTtype
+    Dim pipe_below_esp As New CPipe
+    Dim nsol As Integer
+    
+On Error GoTo er1:
+    n_pwf = 20
+    p_wf_max = 300
+    
+' 0. если задана IPR  то пытаемс€ оценить граничное забойное давление
+    If Len(ipr_json) > 0 Then
+        Dim d As Dictionary
+        Set d = ParseJson(ipr_json)
+        p_wf_max = d("p_res_atma")
+    End If
+        
+    p_wf = p_wf_max
+    done = False
+    step_p_wf = p_wf_max / n_pwf
+    
+    i = 0
+    
+     
+    Set pipe_below_esp = new_pipeline_with_feed(construction_json, _
+                                                feed_json, _
+                                                t_model_json, _
+                                                calc_along_coord, _
+                                                flow_along_coord, _
+                                                flow_corr, _
+                                                calibr_grav, _
+                                                calibr_fric, _
+                                                h_esp_m + 1, h_perf_m)
+    
+    While p_wf > 0 And Not done
+        res1 = pipe_below_esp.calc_dPipe(p_wf, t_wf_C, mainCurves)
+        
+        If res1.p_atma < p_intake_atma * 0.9 Then
+            done = True
+        End If
+        Call pwh_crv.AddPoint(p_wf, res1.p_atma)
+        p_wf = p_wf - step_p_wf
+        If i > 100 Then Err.Raise 100, "i>100"
+        i = i + 1
+    Wend
+    
+    nsol = pwh_crv.FindSolutions(p_intake_atma, TS_NO_EXTRPOLATION)
+    If nsol > 0 Then
+        p_wf = pwh_crv.SolutionPointX(1)
+    Else
+        GoTo er1:
+    End If
+        
+    p_wf_atma = p_wf
+    
+    
+    
+    
+    Dim step_cal_esp_head As Double
+    Dim cal_esp_head As Double
+    Dim cal_esp_head_min As Double
+    
+    
+    cal_esp_head = 1.99
+    cal_esp_head_min = 0.01
+    step_cal_esp_head = cal_esp_head / n_pwf
+    done = False
+    
+    esp_json = update(esp_json, cal_esp_head)
+    res = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+    Set dres = ParseJson(res)
+    well_calc_from_pintake = "not found"
+    If dres("p_buf_atma") > p_wh_atma Then
+    
+        esp_json = update(esp_json, cal_esp_head_min)
+        res = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+        Set dres = ParseJson(res)
+        If dres("p_buf_atma") < p_wh_atma Then
+            i = 0
+            While cal_esp_head > 0 And Not done
+                Dim desp As Dictionary
+                
+                esp_json = update(esp_json, cal_esp_head)
+                
+                res = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+                Set dres = ParseJson(res)
+                
+                If dres("p_buf_atma") < 1 And i > 1 Then
+                    Call cal_esp_head_crv.AddPoint(cal_esp_head, 0)
+                    cal_esp_head = cal_esp_head + step_cal_esp_head
+                    step_cal_esp_head = step_cal_esp_head / 2
+                    If step_cal_esp_head < 0.001 Then done = True
+                Else
+                    Call cal_esp_head_crv.AddPoint(cal_esp_head, dres("p_buf_atma"))
+                
+                End If
+                cal_esp_head = cal_esp_head - step_cal_esp_head
+                If cal_esp_head < 0.01 Then done = True
+                i = i + 1
+                
+                If i > 100 Then Err.Raise 100, "i>100"
+            Wend
+            nsol = cal_esp_head_crv.FindSolutions(p_wh_atma, TS_NO_EXTRPOLATION)
+            If nsol > 0 Then
+                cal_esp_head = cal_esp_head_crv.SolutionPointX(1)
+                esp_json = update(esp_json, cal_esp_head)
+                
+                res = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+                Set dres = ParseJson(res)
+                dres.Add "calibr_esp", cal_esp_head
+                dres.Add "crv_pwf", pwh_crv.getDict
+                dres.Add "crv_cal", cal_esp_head_crv.getDict
+                
+                res = ConvertToJson(dres)
+                well_calc_from_pintake = res
+            
+            End If
+        End If
+        
+    End If
+    
+    
+             
+    
+    Exit Function
+er1:
+        well_calc_from_pintake = "not found"
+    
 End Function
 
