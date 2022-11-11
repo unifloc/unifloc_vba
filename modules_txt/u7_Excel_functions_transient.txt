@@ -478,6 +478,87 @@ Function transient_pd_line_sourse(td, _
         transient_pd_line_sourse = ConvertToJson(pd_arr)
     End If
 End Function
+' расчет решения с учетом суперпозиции
+' в том числе для данных заданных в виде массива
+Function transient_pd_superposition(td, _
+                                    Optional rd As Double = 1, _
+                                    Optional qd = 1, _
+                                    Optional td_for_qd = 0, _
+                                    Optional step_qd = True, _
+                    Optional ByVal cd As Double = 0, _
+                    Optional ByVal skin As Double = 0, _
+                    Optional Model As Integer = 0)
+' td - время для которого проводится расчет или массив времен
+' rd - расстояние от скважины для которого проводится расчет
+' qd - безразмерное значение дебита или массив времен и дебитов
+' td_for_qd - время срабатывания безразмерного дебита
+' step_rate - флаг динамика дебитов задана ступеньками или линейно
+' сd         - безразмерный коэффициент влияния ствола скважины
+' skin       - скин-фактор, безразмерный skin>0.
+'              для skin<0 используйте эффективный радиус скважины
+' rd         - безразмерное расстояние для которого проводится расчет
+'              rd=1 соответвует забою скважины
+' model      - модель проведения расчета. 0 - модель линейного стока Ei
+'              1 - модель линейного стока через преобразование Стефеста
+'              2 - конечный радиус скважины
+'              3 - линейный сток со скином и послепритоком
+'              4 - конечный радиус скважины со скином и послепритоком
+' результат - безразмерное давление pd
+'description_end
+    
+    Dim td_arr, arr_td_qd, arr_qd
+    Dim pd_arr() As Double
+    Dim i As Integer, j As Integer
+    Dim pds As Double
+    Dim tdj As Double
+    Dim pdj As Double
+    Dim dqd_next As Double
+    Dim dtd_next As Double
+    Dim ddqd_td As Double
+    Dim qdj_pred As Double
+    Dim dqd_prev, dtd_prev As Double
+    
+    td_arr = parse_list(td)
+    ReDim pd_arr(LBound(td_arr) To UBound(td_arr))
+    
+    arr_td_qd = parse_list(td_for_qd)
+    arr_qd = parse_list(qd)
+    
+    If UBound(arr_td_qd) <> UBound(arr_qd) Then
+        transient_pd_superposition = "error: td_for_qd  and qd len must be the same"
+        Exit Function
+    End If
+    If rd < 1 Then rd = 1
+    If step_qd Then
+        ' расчет для ступенчато меняющегося дебита (суперпозиция)
+        For i = LBound(td_arr) To UBound(td_arr)
+            ' start calculation for i time
+            qdj_pred = 0
+            pds = 0
+            ' next loop iterate through all rate changes in history
+            For j = LBound(arr_qd) To UBound(arr_qd)
+                ' calc influence of j rate step in history
+                tdj = td_arr(i) - arr_td_qd(j)
+                If tdj > 0 Then
+                    pdj = transient_pd_radial(tdj, cd, skin, rd, Model) * (arr_qd(j) - qdj_pred)
+                Else
+                    pdj = 0
+                End If
+                pds = pds + pdj
+                qdj_pred = arr_qd(j)
+            Next j
+            pd_arr(i) = pds
+        Next i
+    Else
+        transient_pd_superposition = "error: step_qd = False not supported yet"
+    End If
+    ' подготовим результат в таком же формате как входные значения времени для расчета
+    If UBound(td_arr) = LBound(td_arr) Then
+        transient_pd_superposition = pd_arr
+    Else
+        transient_pd_superposition = ConvertToJson(pd_arr)
+    End If
+End Function
 Function Stehfest(func_name As String, _
                   td As Double, _
                   CoeffA) As Double

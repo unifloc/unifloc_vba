@@ -202,4 +202,3 @@
 * Хабибуллин Ринат
 * khabibullinra@gmail.com
 
-проверка

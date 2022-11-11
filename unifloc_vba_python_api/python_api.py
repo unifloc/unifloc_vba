@@ -1688,7 +1688,7 @@ class API():
 
      sepnat - естественная сепарация    
 
-     sepgassep - искусственная сепарация (газосепаратор)   dim sep_nat  dim i as integer  dim c as new collection   sep_nat = parse_list(sepnat)  if ubound(sep_nat) - lbound(sep_nat) ..см.мануал  
+     sepgassep - искусственная сепарация (газосепаратор)   
 
         """
 
