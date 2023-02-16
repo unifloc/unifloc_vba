@@ -1,12 +1,12 @@
 '=======================================================================================
-'Unifloc 7.39 mu bug fix                                   khabibullinra@gmail.com
+'Unifloc 7.40 year 2023                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
-'2000 - 2022
+'2000 - 2023
 '
 '=======================================================================================
 ' constant definition module and some usefull functions
 Option Explicit
-Public Const const_unifloc_version = "7.39"
+Public Const const_unifloc_version = "7.40"
 Public Const esp_db_name = "\ESP_json.db"
 ' only database as global variable here
 ' in order to reduce db file read
@@ -436,6 +436,10 @@ Public Type PTQ_LIST
     p() As Double
     t() As Double
     val() As Double
+    ql() As Double
+    fw() As Double
+    rp() As Double
+    qg() As Double
     len As Integer
 End Type
 Dim lm As New CLogger           ' лог который накапливает все сообщения. поддерживает сохранение сообщений в файл
@@ -922,7 +926,12 @@ err1:
 End Function
 ' чтение исходных данных в виде списков
 Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
-                    Optional ksep = -1#)
+                     ByVal ksep, _
+                     ByVal q_liq_sm3day, _
+                     ByVal fw_perc, _
+                     ByVal rp_m3m3, _
+                     ByVal q_gas_free_sm3day _
+                    )
     Dim M As Integer
     Dim N As Integer
     Dim i As Integer
@@ -930,6 +939,11 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
     Dim len_p As Integer
     Dim len_t As Integer
     Dim len_ksep As Integer
+    Dim len_ql As Integer
+    Dim len_fw As Integer
+    Dim len_rp As Integer
+    Dim len_qg As Integer
+    
 ' здесь читаем и причесываем потенциально списочные входных данных расчетных функций
     With ptq
          ' определяем что на входе - один поток или вектор потоков и складываем все в коллекцию
@@ -937,17 +951,38 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
         .p = parse_list(p)
         .t = parse_list(t)
         .val = parse_list(ksep)
+        .ql = parse_list(q_liq_sm3day)
+        .fw = parse_list(fw_perc)
+        .rp = parse_list(rp_m3m3)
+        .qg = parse_list(q_gas_free_sm3day)
+        
         len_feed = UBound(.feed) - LBound(.feed) + 1
         len_p = UBound(.p) - LBound(.p) + 1
         len_t = UBound(.t) - LBound(.t) + 1
         len_ksep = UBound(.val) - LBound(.val) + 1
+        len_ql = UBound(.ql) - LBound(.ql) + 1
+        len_fw = UBound(.fw) - LBound(.fw) + 1
+        len_rp = UBound(.rp) - LBound(.rp) + 1
+        len_qg = UBound(.qg) - LBound(.qg) + 1
         
         'далее проверим что длины были везде одинаковые
-        If len_feed <> len_p Or len_feed <> len_t Or len_feed <> len_ksep Then
+        If len_feed <> len_p Or _
+           len_feed <> len_t Or _
+           len_feed <> len_ql Or _
+           len_feed <> len_fw Or _
+           len_feed <> len_rp Or _
+           len_feed <> len_qg Or _
+           len_feed <> len_ksep Then
         ' надо выровнять
+        
             M = MaxInt(len_feed, len_p)
             M = MaxInt(M, len_t)
             M = MaxInt(M, len_ksep)
+            M = MaxInt(M, len_ql)
+            M = MaxInt(M, len_fw)
+            M = MaxInt(M, len_rp)
+            M = MaxInt(M, len_qg)
+            
             If len_feed < M Then
                 N = UBound(.feed)
                 If N > 1 Then log_.add_msg "warning: input list feed length > 1 but less that max length"
@@ -980,12 +1015,55 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
                     .val(i) = .val(N)
                 Next i
             End If
+            If len_ql < M Then
+                N = UBound(.ql)
+                If N > 1 Then log_.add_msg "warning: input list ql length > 1 but less that max length"
+                ReDim Preserve .ql(1 To M)
+                For i = N + 1 To M
+                    .ql(i) = .ql(N)
+                Next i
+            End If
+            If len_fw < M Then
+                N = UBound(.fw)
+                If N > 1 Then log_.add_msg "warning: input list fw length > 1 but less that max length"
+                ReDim Preserve .fw(1 To M)
+                For i = N + 1 To M
+                    .fw(i) = .fw(N)
+                Next i
+            End If
+            If len_rp < M Then
+                N = UBound(.rp)
+                If N > 1 Then log_.add_msg "warning: input list rp length > 1 but less that max length"
+                ReDim Preserve .rp(1 To M)
+                For i = N + 1 To M
+                    .rp(i) = .rp(N)
+                Next i
+            End If
+            If len_qg < M Then
+                N = UBound(.qg)
+                If N > 1 Then log_.add_msg "warning: input list qg length > 1 but less that max length"
+                ReDim Preserve .qg(1 To M)
+                For i = N + 1 To M
+                    .qg(i) = .qg(N)
+                Next i
+            End If
         End If
         len_feed = UBound(.feed) - LBound(.feed) + 1
         len_p = UBound(.p) - LBound(.p) + 1
         len_t = UBound(.t) - LBound(.t) + 1
         len_ksep = UBound(.val) - LBound(.val) + 1
-        If len_feed <> len_p And len_feed <> len_t Then
+        len_ql = UBound(.ql) - LBound(.ql) + 1
+        len_fw = UBound(.fw) - LBound(.fw) + 1
+        len_rp = UBound(.rp) - LBound(.rp) + 1
+        len_qg = UBound(.qg) - LBound(.qg) + 1
+        
+         If len_feed <> len_p Or _
+           len_feed <> len_t Or _
+           len_feed <> len_ql Or _
+           len_feed <> len_fw Or _
+           len_feed <> len_rp Or _
+           len_feed <> len_qg Or _
+           len_feed <> len_ksep Then
             Err.Raise 1000
         End If
         .len = len_feed
@@ -996,6 +1074,12 @@ Public Sub init_ptq(ptq As PTQ_LIST, ptq_from As PTQ_LIST)
     ReDim ptq.p(LBound(ptq_from.p) To UBound(ptq_from.p))
     ReDim ptq.t(LBound(ptq_from.t) To UBound(ptq_from.t))
     ReDim ptq.val(LBound(ptq_from.val) To UBound(ptq_from.val))
+    
+    ReDim ptq.ql(LBound(ptq_from.ql) To UBound(ptq_from.ql))
+    ReDim ptq.fw(LBound(ptq_from.fw) To UBound(ptq_from.fw))
+    ReDim ptq.rp(LBound(ptq_from.val) To UBound(ptq_from.rp))
+    ReDim ptq.qg(LBound(ptq_from.val) To UBound(ptq_from.qg))
+    
     ptq.len = ptq_from.len
 End Sub
 Public Sub init_ptesp(ptq As PTESP_LIST, ptq_from As PTQ_LIST)
@@ -1182,7 +1266,7 @@ er1:
 End Function
 ' функция расчета ошибки в оценке давления для штуцера
 ' в зависимости от газового фактора
-Public Function calc_choke_dp_error_rp_atm(ByVal RP As Double, _
+Public Function calc_choke_dp_error_rp_atm(ByVal rp As Double, _
                                                     CoeffA As Variant) As Double
     Dim PT As PTtype
     Dim pt0 As PTtype
@@ -1196,7 +1280,7 @@ Public Function calc_choke_dp_error_rp_atm(ByVal RP As Double, _
     p_out_atma = CoeffA(2)
     
     With choke
-        .fluid.rp_m3m3 = RP
+        .fluid.rp_m3m3 = rp
         pt0.p_atma = p_out_atma
         pt0.t_C = .t_choke_C
         PT = .calc_choke_p(pt0, calc_p_down:=0)
@@ -1367,7 +1451,7 @@ Public Function calc_pipe_dp_error_calibr_fric_atm(ByVal calibr_fric As Double, 
 End Function
 ' функция расчета ошибки в оценке давления для трубы
 ' в зависимости от газового фактора
-Public Function calc_pipe_dp_error_rp_atm(ByVal RP As Double, _
+Public Function calc_pipe_dp_error_rp_atm(ByVal rp As Double, _
                                    CoeffA As Variant) As Double
     Dim PT As PTtype
     Dim pipe As CPipe
@@ -1379,7 +1463,7 @@ Public Function calc_pipe_dp_error_rp_atm(ByVal RP As Double, _
     p_out_atma = CoeffA(2)
     
     With pipe
-        .fluid.rp_m3m3 = RP
+        .fluid.rp_m3m3 = rp
         PT = .calc_dPipe(p_in_atma)
         calc_pipe_dp_error_rp_atm = (PT.p_atma - p_out_atma)
     End With
