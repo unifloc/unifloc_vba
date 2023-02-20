@@ -17,6 +17,7 @@ Public Const prm_show_log                   As String = "show_log"
 Public Const prm_show_info                  As String = "show_info"
 Public Const prm_num_value                  As String = "num_value"
 Public Const prm_show_array                 As String = "show_array"
+Public Const prm_show_json                  As String = "show_json"
 Public Const prm_show_all                   As String = "show_all"
 Public Const prm_pipe_calibr_grav           As String = "pipe_calibr_grav"
 Public Const prm_pipe_calibr_fric           As String = "pipe_calibr_fric"
@@ -189,6 +190,7 @@ Public Const const_MaxSegmLen = 100
 Public Const const_n_n = 20
 Public Const const_MaxdP = 10
 Public Const const_minPpipe_atma = 0.9
+Public Const const_decimal_output = 3
 Public Const const_pressure_tolerance = 0.01
 ' эта константа используется при интегрировании трубы
 ' попытка увеличить точность может при определенных обстоятельствах привести к тому
@@ -1176,190 +1178,32 @@ End Function
 ' набор функций для решения ДУ и уравнений для различных классов и процедур
 ' функция градиента давления для одномерной задачи расчета
 ' распределения давления в трубопроводе
-Public Function calc_grad_1d(l_m As Double, _
-                              y() As Double, _
-                              pipe As CPipe) As Double()
-    Dim out(0 To 0) As Double
-    Dim res As PIPE_FLOW_PARAMS
-    With pipe
-        res = pipe.calc_grad(l_m, y(0), pipe.t_h_mes_C(l_m), calc_dtdl:=False)
-    End With
-    out(0) = res.dp_dl
-    calc_grad_1d = out
-End Function
-' функция градиента давления для двухмерной задачи расчета
-' распределения давления в трубопроводе
-Public Function calc_grad_2d(l_m As Double, _
-                             y() As Double, _
-                             pipe As CPipe) As Double()
-    Dim out(0 To 1) As Double
-    Dim res As PIPE_FLOW_PARAMS
-    With pipe
-        res = pipe.calc_grad(l_m, y(0), y(1))
-    End With
-    out(0) = res.dp_dl
-    out(1) = res.dt_dl
-    calc_grad_2d = out
-End Function
-' функция расчета ошибки в оценке давления для штуцера
-' в зависимости от поправки на калибровочный параметр
-Public Function calc_choke_dp_error_calibr_grav_atm(ByVal calibr As Double, _
-                                                    CoeffA As Variant) As Double
-    Dim PT As PTtype
-    Dim pt0 As PTtype
-    Dim choke As Cchoke
-    Dim p_in_atma As Double
-    Dim p_out_atma As Double
-    
-    ' read coeffA - parameters
-    Set choke = CoeffA(0)
-    p_in_atma = CoeffA(1)
-    p_out_atma = CoeffA(2)
-    
-    With choke
-        .calibr_fr = calibr
-        pt0.p_atma = p_out_atma
-        pt0.t_C = .t_choke_C
-        PT = .calc_choke_p(pt0, calc_p_down:=0)
-        calc_choke_dp_error_calibr_grav_atm = (PT.p_atma - p_in_atma)
-    End With
-    
-End Function
-' функция расчета ошибки в оценке давления для штуцера
-' в зависимости от диаметра
-Public Function calc_choke_dp_error_diam_atm(ByVal diam_m As Double, _
-                                                    CoeffA As Variant) As Double
-    Dim PT As PTtype
-    Dim pt0 As PTtype
-    Dim choke As Cchoke
-    Dim p_in_atma As Double
-    Dim p_out_atma As Double
-    
-    ' read coeffA - parameters
-    Set choke = CoeffA(0)
-    p_in_atma = CoeffA(1)
-    p_out_atma = CoeffA(2)
-    
-    'On Error Resume Next
-    On Error GoTo er1
-    ' low diam can be unstable - trying eliminate it
-    
-    With choke
-        .d_choke_m = diam_m
-        pt0.p_atma = p_out_atma
-        pt0.t_C = .t_choke_C
-        PT = .calc_choke_p(pt0, calc_p_down:=0)
-        If PT.p_atma < 0 Then PT.p_atma = 0
-        calc_choke_dp_error_diam_atm = (PT.p_atma - p_in_atma)
-    End With
-    Exit Function
-er1:
-    Dim str1 As String
-    str1 = "calc_choke_dp_error_diam_atm:  error " & Err.Description & " processed. calc continue"
-    
-    On Error Resume Next
-    Call choke.add_log_msg(str1)
-    
-    On Error GoTo er1
-    Resume Next
-    
-End Function
-' функция расчета ошибки в оценке давления для штуцера
-' в зависимости от газового фактора
-Public Function calc_choke_dp_error_rp_atm(ByVal rp As Double, _
-                                                    CoeffA As Variant) As Double
-    Dim PT As PTtype
-    Dim pt0 As PTtype
-    Dim choke As Cchoke
-    Dim p_in_atma As Double
-    Dim p_out_atma As Double
-    
-    ' read coeffA - parameters
-    Set choke = CoeffA(0)
-    p_in_atma = CoeffA(1)
-    p_out_atma = CoeffA(2)
-    
-    With choke
-        .fluid.rp_m3m3 = rp
-        pt0.p_atma = p_out_atma
-        pt0.t_C = .t_choke_C
-        PT = .calc_choke_p(pt0, calc_p_down:=0)
-        calc_choke_dp_error_rp_atm = (PT.p_atma - p_in_atma)
-    End With
-    
-End Function
-' функция расчета ошибки в оценке давления для штуцера
-' в зависимости от обводненности
-Public Function calc_choke_dp_error_fw_atm(ByVal fw_fr As Double, _
-                                                    CoeffA As Variant) As Double
-    Dim PT As PTtype
-    Dim pt0 As PTtype
-    Dim choke As Cchoke
-    Dim p_in_atma As Double
-    Dim p_out_atma As Double
-    
-    ' read coeffA - parameters
-    Set choke = CoeffA(0)
-    p_in_atma = CoeffA(1)
-    p_out_atma = CoeffA(2)
-    
-    With choke
-        .fluid.fw_fr = fw_fr
-        pt0.p_atma = p_out_atma
-        pt0.t_C = .t_choke_C
-        PT = .calc_choke_p(pt0, calc_p_down:=0)
-        calc_choke_dp_error_fw_atm = (PT.p_atma - p_in_atma)
-    End With
-    
-End Function
-' функция расчета ошибки в оценке давления для штуцера
-' в зависимости от обводненности
-Public Function calc_choke_dp_error_qliq_atm(ByVal qliq As Double, _
-                                                    CoeffA As Variant) As Double
-    Dim PT As PTtype
-    Dim pt0 As PTtype
-    Dim choke As Cchoke
-    Dim p_in_atma As Double
-    Dim p_out_atma As Double
-    
-    ' read coeffA - parameters
-    Set choke = CoeffA(0)
-    p_in_atma = CoeffA(1)
-    p_out_atma = CoeffA(2)
-    
-    With choke
-        .fluid.q_liq_sm3day = qliq
-        pt0.p_atma = p_out_atma
-        pt0.t_C = .t_choke_C
-        PT = .calc_choke_p(pt0, calc_p_down:=0)
-        calc_choke_dp_error_qliq_atm = (PT.p_atma - p_in_atma)
-    End With
-    
-End Function
-' функция расчета ошибки в оценке давления для штуцера
-' в зависимости от обводненности
-Public Function calc_choke_dp_error_qgas_atm(ByVal qgas As Double, _
-                                                    CoeffA As Variant) As Double
-    Dim PT As PTtype
-    Dim pt0 As PTtype
-    Dim choke As Cchoke
-    Dim p_in_atma As Double
-    Dim p_out_atma As Double
-    
-    ' read coeffA - parameters
-    Set choke = CoeffA(0)
-    p_in_atma = CoeffA(1)
-    p_out_atma = CoeffA(2)
-    
-    With choke
-        .fluid.q_gas_free_sm3day = qgas
-        pt0.p_atma = p_out_atma
-        pt0.t_C = .t_choke_C
-        PT = .calc_choke_p(pt0, calc_p_down:=0)
-        calc_choke_dp_error_qgas_atm = (PT.p_atma - p_in_atma)
-    End With
-    
-End Function
+'Public Function calc_grad_1d(l_m As Double, _
+'                              y() As Double, _
+'                              pipe As CPipe) As Double()
+'    Dim out(0 To 0) As Double
+'    Dim res As PIPE_FLOW_PARAMS
+'    With pipe
+'        res = pipe.calc_grad(l_m, y(0), pipe.t_h_mes_C(l_m), calc_dtdl:=False)
+'    End With
+'    out(0) = res.dp_dl
+'    calc_grad_1d = out
+'End Function
+'
+'' функция градиента давления для двухмерной задачи расчета
+'' распределения давления в трубопроводе
+'Public Function calc_grad_2d(l_m As Double, _
+'                             y() As Double, _
+'                             pipe As CPipe) As Double()
+'    Dim out(0 To 1) As Double
+'    Dim res As PIPE_FLOW_PARAMS
+'    With pipe
+'        res = pipe.calc_grad(l_m, y(0), y(1))
+'    End With
+'    out(0) = res.dp_dl
+'    out(1) = res.dt_dl
+'    calc_grad_2d = out
+'End Function
 ' функция расчета ошибки в оценке давления для ЭЦН
 ' в зависимости от поправки на напор насоса
 Public Function calc_ESP_dp_error_calibr_head_atm(ByVal calibr_head As Double, _

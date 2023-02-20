@@ -67,37 +67,95 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
-    def MF_choke_calibr(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,calibr_type=0,d_pipe_mm=70,t_choke_C=20,param="",CDischarge=0.826):
+    def MF_choke_calibr(self, d_choke_mm,feed,calibr_type=0,p_in_atma=-1,p_out_atma=-1,t_choke_C=20,calibr=1,d_pipe_mm=70,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  медленный расчет - калибровка подбирается 
         
  ==========  arguments  ============== 
 
+     d_choke_mm - диаметр штуцера (эффективный), мм    
+
      feed - закодированная строка с параметрами потока.    
 
-     d_choke_mm - диаметр штуцера (эффективный), мм    
+     calibr_type    
 
      p_in_atma - давление на входе (высокой стороне)    
 
      p_out_atma - давление на выходе (низкой стороне)    
 
-   calibr_type   
+     t_choke_c - температура, с.    
+
+     calibr_type  p_in_atma - давление на входе (высокой стороне)  p_out_atma - давление на выходе (низкой стороне)  t_choke_c - температура, с.  calibr - параметр калибровки    
 
      d_pipe_mm - диаметр трубы до и после штуцера, мм    
 
-     t_choke_c - температура, с.    
-
      param - параметры расчета json строка    
 
-     cdischarge - коэффициент совершенства штуцера   
+     cdischarge - коэффициент совершенства штуцера    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
 
         """
 
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
-        return self.f_MF_choke_calibr(feed,d_choke_mm,p_in_atma,p_out_atma,calibr_type,d_pipe_mm,t_choke_C,param,CDischarge)
+        return self.f_MF_choke_calibr(d_choke_mm,feed,calibr_type,p_in_atma,p_out_atma,t_choke_C,calibr,d_pipe_mm,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+        """
+ ========== description ============== 
+ расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
+        
+ ==========  arguments  ============== 
+
+     p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+
+     t_calc_from_c - температура в точке где задано давление расчета    
+
+     construction - параметры конструкции json строка. используйте  функцию encode_pipe() для генерации    
+
+     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
+
+     t_model - параметры температурной модели json строка.  используйте функцию encode_t_model() для генерации    
+
+     calc_along_coord - направление расчета относительно координат.    
+
+     flow_along_coord - направление потока относительно координат.    
+
+     flow_correlation - гидравлическая корреляция, номер    
+
+     calibr_grav - калибровка на гравитационную составляющую  градиента давления    
+
+     calibr_fric - калибровка на составляющую трения  градиента давления    
+
+     param - дополнительные параметры расчета потока    
+
+     h_start_m - начало расчета по трубе, м    
+
+     h_end_m - конечная точка расчета по трубе, м    
+
+     znlf - флаг для режима барботажа    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
+
+        """
+
+        self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
+        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+
+    def json_pipe_calc(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
@@ -142,10 +200,10 @@ class API():
 
         """
 
-        self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
-        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        self.f_json_pipe_calc = self.book.macro("json_pipe_calc")
+        return self.f_json_pipe_calc(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param="",CDischarge=0.826):
+    def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет давления в штуцере 
@@ -164,16 +222,24 @@ class API():
 
      d_pipe_mm - диаметр трубы до и после штуцера    
 
-   calibr   
+     calibr - параметр калибровки штуцера    
 
      param - параметры расчета json строка    
 
-     cdischarge - коэффициент совершенства штуцера   
+     cdischarge - коэффициент совершенства штуцера    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
 
         """
 
         self.f_MF_choke_q_sm3day = self.book.macro("MF_choke_q_sm3day")
-        return self.f_MF_choke_q_sm3day(feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C,d_pipe_mm,calibr,param,CDischarge)
+        return self.f_MF_choke_q_sm3day(feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C,d_pipe_mm,calibr,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def MF_choke_p_atma(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -194,26 +260,26 @@ class API():
 
      calc_along_flow - флаг направления расчета относительно потока    
 
-   calibr   
+     calibr - параметр калибровки штуцера, множитель  перепад давления    
 
      param - параметры расчета json строка    
 
      cdischarge - коэффициент совершенства штуцера    
 
-   q_liq_sm3day   
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
-   fw_perc   
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
 
-   rp_m3m3   
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
 
-   q_gas_free_sm3day  
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
 
         """
 
         self.f_MF_choke_p_atma = self.book.macro("MF_choke_p_atma")
         return self.f_MF_choke_p_atma(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_choke_calibr_fast(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,param="",CDischarge=0.826):
+    def MF_choke_calibr_fast(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  быстрый расчет - калибровка вычисляется 
@@ -234,14 +300,22 @@ class API():
 
      param - параметры расчета json строка    
 
-     cdischarge - коэффициент совершенства штуцера   
+     cdischarge - коэффициент совершенства штуцера    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
 
         """
 
         self.f_MF_choke_calibr_fast = self.book.macro("MF_choke_calibr_fast")
-        return self.f_MF_choke_calibr_fast(feed,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,param,CDischarge)
+        return self.f_MF_choke_calibr_fast(feed,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_choke_pq_crv(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826):
+    def json_choke_pq_crv(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет кривой - характеристики штуцера  pq - давление дебит 
@@ -264,12 +338,20 @@ class API():
 
      param - параметры расчета json строка    
 
-     cdischarge - коэффициент совершенства штуцера   
+     cdischarge - коэффициент совершенства штуцера    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
 
         """
 
-        self.f_MF_choke_pq_crv = self.book.macro("MF_choke_pq_crv")
-        return self.f_MF_choke_pq_crv(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge)
+        self.f_json_choke_pq_crv = self.book.macro("json_choke_pq_crv")
+        return self.f_json_choke_pq_crv(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def json_PVT_calc(self, p_atma,t_C,PVT_prop,show_log=False):
         """
