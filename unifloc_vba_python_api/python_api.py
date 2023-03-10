@@ -2511,7 +2511,7 @@ class API():
         self.f_decode_json_k_sep = self.book.macro("decode_json_k_sep")
         return self.f_decode_json_k_sep(json)
 
-    def decode_json_crv(self, json,transpose=False):
+    def decode_json_crv(self, json,transpose=False,key_x="",key_y=""):
         """
  ========== description ============== 
  Функция декодирования json строки с табличной кривой,  позволяет вывести содержимое json строки в таблицу (на лист) 
@@ -2520,12 +2520,16 @@ class API():
 
      json - строка содержащая результаты расчета    
 
-     transpose - выбор вывода в строки или в столбцы   
+     transpose - выбор вывода в строки или в столбцы    
+
+   key_x   
+
+   key_y  
 
         """
 
         self.f_decode_json_crv = self.book.macro("decode_json_crv")
-        return self.f_decode_json_crv(json,transpose)
+        return self.f_decode_json_crv(json,transpose,key_x,key_y)
 
     def encode_PVT(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """

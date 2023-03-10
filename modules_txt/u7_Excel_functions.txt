@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.40 year 2023                             khabibullinra@gmail.com
+'Unifloc 7.41 year 2023                             khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -448,10 +448,11 @@ On Error GoTo err1:
         If show_json Then
             MF_pipe_p_atma = ConvertToJson(pipe.get_result_dict(20, show_array, show_log))
         Else
+            res1 = pipe.get_result_array(out_points, show_log)
             If show_array Then
-                MF_pipe_p_atma = pipe.get_result_array(out_points, show_log)
+                MF_pipe_p_atma = res1
             Else
-                MF_pipe_p_atma = Round(res1(0), const_num_decimal_out)
+                MF_pipe_p_atma = Round(res1(0, num_value), const_num_decimal_out)
             End If
         End If
     Else
@@ -3181,6 +3182,26 @@ er2:
 End Function
 ' ==============  функции дл€ расчета пласта ==========================
 ' =====================================================================
+Public Function json_ipr_crv(ipr_json As String, _
+                    Optional num_points As Integer = 20)
+    Dim res As New CReservoirVogel
+    Dim i As Integer
+    Dim crv As New CInterpolation
+    Dim p As Double
+    Dim q As Double
+    
+    Call res.init_json(ipr_json)
+    
+    
+    For i = 1 To num_points
+        p = 1 + res.p_res_atma / (num_points - 1) * (i - 1)
+        q = res.calc_q_liq_sm3day(p)
+        crv.AddPoint q, p
+        crv.xName = "q_liq (IPR)"
+        crv.yName = "p_wf (IPR)"
+    Next i
+    json_ipr_crv = crv.getJson
+End Function
 'description_to_manual      - дл€ автогенерации
 ' расчет дебита по давлению и продуктивности
 Public Function IPR_q_liq_sm3day( _
@@ -3210,6 +3231,7 @@ On Error GoTo err1:
     
     Dim pwf
     Dim res As New CReservoirVogel
+    
     If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид додсчитает по коррел€ции значение
     res.InitProp p_res_atma, pb_atma, fw_perc
     res.pi_sm3dayatm = pi_sm3dayatm
@@ -3224,7 +3246,7 @@ On Error GoTo err1:
                 Case "["
                     Set cl = ParseJson(p_wf_atma)
                     For Each pwf In cl
-                        cl_q_out.Add res.calc_q_liq_sm3day(pwf)
+                        cl_q_out.Add Round(res.calc_q_liq_sm3day(pwf), const_num_decimal_out)
                         cl_p_out.Add pwf
                         cl_t_out.Add t_res_C
                     Next
@@ -3744,24 +3766,21 @@ On Error GoTo er1:
             If show_json Then
                 ESP_p_atma = ConvertToJson(.get_result_dict(0, show_array, show_log, 2))
             Else
+                arr = .get_results_array(out_points, show_log)
+                If calc_along_flow Then
+                    arr(0, 0) = .p_dis_atma
+                    arr(1, 0) = "p_dis_atma"
+                Else
+                    arr(0, 0) = .p_int_atma
+                    arr(1, 0) = "p_intake_atma"
+                End If
+                arr(0, 0) = arr(0, num_value)
+                arr(1, 0) = arr(1, num_value)
+                
                 If show_array Then
-                    arr = .get_results_array(out_points, show_log)
-                    If calc_along_flow Then
-                        arr(0, 0) = .p_dis_atma
-                        arr(1, 0) = "p_dis_atma"
-                    Else
-                        arr(0, 0) = .p_int_atma
-                        arr(1, 0) = "p_intake_atma"
-                    End If
-                    arr(0, 0) = arr(0, num_value)
-                    arr(1, 0) = arr(1, num_value)
                     ESP_p_atma = arr
                 Else
-                    If calc_along_flow Then
-                        ESP_p_atma = .p_dis_atma
-                    Else
-                        ESP_p_atma = .p_int_atma
-                    End If
+                    ESP_p_atma = arr(0, 0)
                 End If
             End If
         Else
@@ -5051,10 +5070,10 @@ On Error GoTo er1:
     Dim t_dis_C As Double
     Dim p_buf_atma As Double
     Dim t_buf_C As Double
-    Dim p_res_atma As Double
-    Dim pi_m3dayatm As Double
-    Dim pb_atma As Double
-    Dim fw_perc As Double
+'    Dim p_res_atma As Double
+'    Dim pi_m3dayatm As Double
+'    Dim pb_atma As Double
+'    Dim fw_perc As Double
     Dim q_liq_sm3day As Double
     
     Dim feed_sep As String
@@ -5076,15 +5095,16 @@ On Error GoTo er1:
     q_liq_sm3day = f("q_liq_sm3day")
 ' 0. если задана IPR  то пытаемс€ оценить дебит
     If Len(ipr_json) > 0 Then
-        Dim d As Dictionary
-        Set d = ParseJson(ipr_json)
-        p_res_atma = d("p_res_atma")
-        pi_m3dayatm = d("pi_m3dayatm")
-        pb_atma = d("pb_atma")
-        fw_perc = d("fw_perc")
-        
-        Call ipr_vogel.InitProp(p_res_atma, pb_atma, fw_perc)
-        ipr_vogel.pi_sm3dayatm = pi_m3dayatm
+'        Dim d As Dictionary
+'        Set d = ParseJson(ipr_json)
+'        p_res_atma = d("p_res_atma")
+'        pi_m3dayatm = d("pi_m3dayatm")
+'        pb_atma = d("pb_atma")
+'        fw_perc = d("fw_perc")
+'
+'        Call ipr_vogel.InitProp(p_res_atma, pb_atma, fw_perc)
+        Call ipr_vogel.init_json(ipr_json)
+'        ipr_vogel.pi_sm3dayatm = pi_m3dayatm
         q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
         
         f("q_liq_sm3day") = q_liq_sm3day

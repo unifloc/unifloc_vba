@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.40 year 2023                                  khabibullinra@gmail.com
+'Unifloc 7.41 year 2023                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -313,7 +313,9 @@ End Function
 ' Функция декодирования json строки с табличной кривой,
 ' позволяет вывести содержимое json строки в таблицу (на лист)
 Public Function decode_json_crv(json, _
-                       Optional transpose As Boolean = False)
+                       Optional transpose As Boolean = False, _
+                       Optional key_x As String = "", _
+                       Optional key_y As String = "")
 ' json   - строка содержащая результаты расчета
 ' transpose - выбор вывода в строки или в столбцы
 ' результат - закодированная строка
@@ -324,24 +326,45 @@ Public Function decode_json_crv(json, _
     
     Dim out_arr() ' As String
     Dim i As Integer
+    Dim keyx As String, keyy As String
     
     On Error GoTo err1:
         Set d = ParseJson(json)
-        If d.Exists("curve_x") And d.Exists("curve_y") Then
-            Set cx = d(d("curve_x"))
-            Set cy = d(d("curve_y"))
+        
+        If Len(key_x) > 1 Then
+            keyx = key_x
+        Else
+            keyx = "curve_x"
+            If d.Exists(keyx) Then
+                keyx = d(keyx)
+            End If
+        End If
+        If Len(key_y) > 1 Then
+            keyy = key_y
+        Else
+            keyy = "curve_y"
+            If d.Exists(keyy) Then
+                keyy = d(keyy)
+            End If
+        End If
+        
+        If d.Exists(keyx) And d.Exists(keyy) Then
+            
+            Set cx = d(keyx)
+            Set cy = d(keyy)
+            
             If transpose Then
                 ReDim out_arr(1 To 2, 1 To cx.Count + 1)
-                out_arr(1, 1) = d("curve_x")
-                out_arr(2, 1) = d("curve_y")
+                out_arr(1, 1) = keyx
+                out_arr(2, 1) = keyy
                 For i = 1 To cx.Count
                     out_arr(1, i + 1) = cx.Item(i)
                     out_arr(2, i + 1) = cy.Item(i)
                 Next i
             Else
                 ReDim out_arr(1 To cx.Count + 1, 1 To 2)
-                out_arr(1, 1) = d("curve_x")
-                out_arr(1, 2) = d("curve_y")
+                out_arr(1, 1) = keyx
+                out_arr(1, 2) = keyy
                 For i = 1 To cx.Count
                     out_arr(i + 1, 1) = cx.Item(i)
                     out_arr(i + 1, 2) = cy.Item(i)
@@ -349,7 +372,7 @@ Public Function decode_json_crv(json, _
             
             End If
         Else
-            decode_json_crv = "error:decode_json_crv:no curve found in json. ""curve_x"" and ""curve_y"" keys musb be in json"
+            decode_json_crv = "error:decode_json_crv:no curve found in json"
             Exit Function
         End If
         
@@ -1118,7 +1141,11 @@ On Error GoTo er1:
     
     For i = LBound(t_raw, 1) To UBound(t_raw, 1)
         If UBound(t_raw, 2) = 1 Then
-            t_curve.AddPoint t_raw(i, 1), t_raw(i, 1)
+            If UBound(t_raw, 1) = 1 Then
+                t_curve.AddPoint 1000, t_raw(i, 1)
+            Else
+                t_curve.AddPoint 1000 * (i - 1), t_raw(i, 1)
+            End If
         Else
             t_curve.AddPoint t_raw(i, 1), t_raw(i, 2)
         End If
