@@ -1693,6 +1693,36 @@ class API():
         self.f_ESP_name = self.book.macro("ESP_name")
         return self.f_ESP_name(pump_id)
 
+    def ESP_freq_nom(self, pump_id):
+        """
+ ========== description ============== 
+ номинальная частота УЭЦН 
+        
+ ==========  arguments  ============== 
+
+     pump_id - идентификатор насоса в базе данных   
+
+        """
+
+        self.f_ESP_freq_nom = self.book.macro("ESP_freq_nom")
+        return self.f_ESP_freq_nom(pump_id)
+
+    def ESP_calc_stages_num(self, pump_id=1006,head=1000):
+        """
+ ========== description ============== 
+ оценка количества ступеней по напору 
+        
+ ==========  arguments  ============== 
+
+     pump_id - идентификатор насоса в базе данных    
+
+   head  
+
+        """
+
+        self.f_ESP_calc_stages_num = self.book.macro("ESP_calc_stages_num")
+        return self.f_ESP_calc_stages_num(pump_id,head)
+
     def ESP_rate_max_sm3day(self, freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_rate=1):
         """
  ========== description ============== 
@@ -1747,6 +1777,42 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q)
 
+    def ESP_p_json_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",json_ESP_pump="",calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+        """
+ ========== description ============== 
+функция расчета давления на выходе/входе ЭЦН в рабочих условиях большинство параметров задается явно 
+        
+ ==========  arguments  ============== 
+
+     p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
+
+     t_intake_c - температура на приеме насоcа    
+
+     t_dis_c - температура на выкиде насоса.    
+
+     feed - параметры потока флюидов json строка. используйте  функцию encode_feed() для генерации    
+
+     json_esp_pump - параметры насоса насоса    
+
+     определяется параметром calc_along_flow  t_intake_c - температура на приеме насоcа  t_dis_c - температура на выкиде насоса.  если = 0 и calc_along_flow = 1 то рассчитывается ..см.мануал   
+
+     param - дополнительные параметры расчета потока    
+
+     h_mes_top - глубина установки эцн (верх эцн)    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
+
+        """
+
+        self.f_ESP_p_json_atma = self.book.macro("ESP_p_json_atma")
+        return self.f_ESP_p_json_atma(p_calc_atma,t_intake_C,t_dis_C,feed,json_ESP_pump,calc_along_flow,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+
     def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",pump_id=737,num_stages=1,freq_Hz=50,calc_along_flow=True,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=1,gas_correct_stage_by_stage=1,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
@@ -1784,13 +1850,13 @@ class API():
 
      h_mes_top - глубина установки эцн (верх эцн)    
 
-   q_liq_sm3day   
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
-   fw_perc   
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
 
-   rp_m3m3   
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
 
-   q_gas_free_sm3day  
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
 
         """
 
@@ -2087,7 +2153,7 @@ class API():
         self.f_GLV_d_choke_mm = self.book.macro("GLV_d_choke_mm")
         return self.f_GLV_d_choke_mm(q_gas_sm3day,p_in_atma,p_out_atma,gamma_g,t_C)
 
-    def GLV_IPO_p_open(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+    def GLV_IPO_p_open(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1,gamma_gas=0.8):
         """
  ========== description ============== 
 Функция расчета давления открытия газлифтного клапана R1 
@@ -2110,33 +2176,35 @@ class API():
 
      d_vkr3_mm - диаметр вкрутки 3, если есть    
 
-     d_vkr4_mm - диаметр вкрутки 4, если есть   
+     d_vkr4_mm - диаметр вкрутки 4, если есть    
+
+     gamma_gas - плотность газа   
 
         """
 
         self.f_GLV_IPO_p_open = self.book.macro("GLV_IPO_p_open")
-        return self.f_GLV_IPO_p_open(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
+        return self.f_GLV_IPO_p_open(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm,gamma_gas)
 
-    def GLV_IPO_p_atma(self, p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow=False,GLV_type=0,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+    def GLV_IPO_p_atma(self, p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow=False,GLV_type=0,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1,gamma_gas=0.8):
         """
  ========== description ============== 
 Функция расчета давления открытия газлифтного клапана R1 
         
  ==========  arguments  ============== 
 
-     p_bellow_atma - давление зарядки сильфона на стенде, атма  p_out_atma - давление на выходе клапана (нкт), атма    
+     p_bellow_atma - давление зарядки сильфона на стенде, атма    
 
      d_port_mm - диаметр порта клапана    
 
-   p_calc_atma   
+     p_calc_atma - давление на выходе клапана (нкт), атма    
 
-   q_gas_sm3day   
+     q_gas_sm3day - расход газа    
 
      t_c - температура клапана в рабочих условиях, с    
 
-   calc_along_flow   
+     calc_along_flow - направление расчета    
 
-     glv_type - тип газлифтного клапана (сейчас только r1)  d_port_mm - диаметр порта клапана    
+     glv_type - тип газлифтного клапана (сейчас только r1)    
 
      d_vkr1_mm - диаметр вкрутки 1, если есть    
 
@@ -2144,14 +2212,16 @@ class API():
 
      d_vkr3_mm - диаметр вкрутки 3, если есть    
 
-     d_vkr4_mm - диаметр вкрутки 4, если есть   
+     d_vkr4_mm - диаметр вкрутки 4, если есть    
+
+     gamma_gas - плотность газа   
 
         """
 
         self.f_GLV_IPO_p_atma = self.book.macro("GLV_IPO_p_atma")
-        return self.f_GLV_IPO_p_atma(p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow,GLV_type,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
+        return self.f_GLV_IPO_p_atma(p_bellow_atma,d_port_mm,p_calc_atma,q_gas_sm3day,t_C,calc_along_flow,GLV_type,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm,gamma_gas)
 
-    def GLV_IPO_p_close(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1):
+    def GLV_IPO_p_close(self, p_bellow_atma,p_out_atma,t_C,GLV_type=0,d_port_mm=5,d_vkr1_mm=-1,d_vkr2_mm=-1,d_vkr3_mm=-1,d_vkr4_mm=-1,gamma_gas=0.8):
         """
  ========== description ============== 
 Функция расчета давления закрытия газлифтного клапана R1 
@@ -2174,12 +2244,14 @@ class API():
 
      d_vkr3_mm - диаметр вкрутки 3, если есть    
 
-     d_vkr4_mm - диаметр вкрутки 4, если есть   
+     d_vkr4_mm - диаметр вкрутки 4, если есть    
+
+     gamma_gas - плотность газа   
 
         """
 
         self.f_GLV_IPO_p_close = self.book.macro("GLV_IPO_p_close")
-        return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm)
+        return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm,gamma_gas)
 
     def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120):
         """
@@ -2605,7 +2677,7 @@ class API():
         self.f_encode_feed_list = self.book.macro("encode_feed_list")
         return self.f_encode_feed_list(q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,fluid)
 
-    def encode_ESP_pump(self, ESP_ID="1005",head_nom_m=2000,num_stages=0,freq_Hz=50,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,dnum_stages_integrate=1):
+    def encode_ESP_pump(self, ESP_ID="1006",head_nom_m=2000,num_stages=100,freq_Hz=50,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,dnum_stages_integrate=1):
         """
  ========== description ============== 
  функция кодирования параметров работы УЭЦН в строку 

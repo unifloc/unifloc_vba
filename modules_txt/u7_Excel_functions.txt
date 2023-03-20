@@ -3565,6 +3565,48 @@ err1:
     add_log_msg "Error:ESP_name:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации
+' номинальная частота УЭЦН
+Public Function ESP_freq_nom(Optional ByVal pump_id As Long)
+' pump_id    - идентификатор насоса в базе данных
+' результат - номинальная частота
+'description_end
+On Error GoTo err1:
+    Dim esp As New CESPpump
+    Call esp.set_ID(pump_id)
+    If esp Is Nothing Then
+        ESP_freq_nom = "no name"
+        Exit Function
+    End If
+    ESP_freq_nom = esp.db.freq_Hz
+    Exit Function
+err1:
+    ESP_freq_nom = -1
+    add_log_msg "Error:ESP_freq_nom:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации
+' оценка количества ступеней по напору
+Public Function ESP_calc_stages_num(Optional ByVal pump_id As Long = 1006, _
+                                    Optional ByVal head As Double = 1000)
+' pump_id   - идентификатор насоса в базе данных
+' результат - количество ступеней
+'description_end
+On Error GoTo err1:
+    Dim esp As New CESPpump
+    Call esp.set_ID(pump_id)
+    If esp Is Nothing Then
+        ESP_freq_nom = "no name"
+        Exit Function
+    End If
+    With esp
+        .freq_Hz = .db.freq_Hz
+        ESP_calc_stages_num = Round(head / .get_ESP_head_m(.db.rate_nom_sm3day, 1, 1), 0)
+    End With
+    Exit Function
+err1:
+    ESP_calc_stages_num = -1
+    add_log_msg "Error:ESP_freq_nom:" & Err.Description
+End Function
+'description_to_manual      - для автогенерации
 ' максимальный дебит ЭЦН для заданной частоты
 ' по номинальной кривой РНХ
 Public Function ESP_rate_max_sm3day( _
@@ -3646,6 +3688,85 @@ End Function
 'description_to_manual      - для автогенерации
 'функция расчета давления на выходе/входе ЭЦН в рабочих условиях
 'большинство параметров задается явно
+Public Function ESP_p_json_atma( _
+                 ByVal p_calc_atma, _
+        Optional ByVal t_intake_C = 50, _
+        Optional ByVal t_dis_C = 50, _
+        Optional ByVal feed As String = "", _
+        Optional ByVal json_ESP_pump As String = "", _
+        Optional ByVal calc_along_flow As Boolean = True, _
+        Optional ByVal param As String = "", _
+        Optional ByVal h_mes_top As Double = 1000, _
+        Optional ByVal q_liq_sm3day = -1, _
+        Optional ByVal fw_perc = -1, _
+        Optional ByVal rp_m3m3 = -1, _
+        Optional ByVal q_gas_free_sm3day = -1)
+' p_calc_atma      - давление для которого делается расчет
+'                    либо давление на приеме насоса
+'                    либо давление на выкиде насоса
+'                    определяется параметром calc_along_flow
+' t_intake_C       - температура на приеме насоcа
+' t_dis_C          - температура на выкиде насоса.
+'             если = 0 и calc_along_flow = 1 то рассчитывается
+' feed     - параметры потока флюидов json строка. Используйте
+'            функцию encode_feed() для генерации
+' json_ESP_pump          - параметры насоса насоса
+' calc_along_flow  - режим расчета снизу вверх или сверху вниз
+'          calc_along_flow = True => p_atma давление на приеме
+'          calc_along_flow = False => p_atma давление на выкиде
+' param     - дополнительные параметры расчета потока
+' h_mes_top - глубина установки ЭЦН (верх ЭЦН)
+' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
+'                может быть вектором
+' fw_perc - обводненность, перекрывает feed если задан,
+'                может быть вектором
+' rp_m3m3 - газовый фактор, перекрывает feed если задан,
+'                может быть вектором
+' q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,
+'                может быть вектором
+' результат   - массив значений включающий
+'description_end
+    Dim d As Dictionary
+    Dim prmd As Dictionary
+    
+    Dim pump_id As Long
+ On Error GoTo er1:
+ 
+    Set d = ParseJson(json_ESP_pump)
+    pump_id = d("ESP_ID")
+    
+    Set prmd = param_to_dict(param)
+    prmd(prm_dnum_stages_integrate) = d(prm_dnum_stages_integrate)
+    param = ConvertToJson(prmd)
+    
+    ESP_p_json_atma = ESP_p_atma( _
+                  p_calc_atma, _
+            t_intake_C, _
+            t_dis_C, _
+            feed, _
+            pump_id, _
+            d("num_stages"), _
+            d("freq_Hz"), _
+            calc_along_flow, _
+            d("calibr_head"), _
+            d("calibr_rate"), _
+            d("calibr_power"), _
+            d("gas_correct_model"), _
+            d("gas_correct_stage_by_stage"), _
+            param, _
+            h_mes_top, _
+            q_liq_sm3day, _
+            fw_perc, _
+            rp_m3m3, _
+            q_gas_free_sm3day)
+    Exit Function
+er1:
+    ESP_p_json_atma = "error:ESP_p_atma: " & Err.Description
+    
+End Function
+'description_to_manual      - для автогенерации
+'функция расчета давления на выходе/входе ЭЦН в рабочих условиях
+'большинство параметров задается явно
 Public Function ESP_p_atma( _
                  ByVal p_calc_atma, _
         Optional ByVal t_intake_C = 50, _
@@ -3690,6 +3811,14 @@ Public Function ESP_p_atma( _
 '             для всех ступеней сразу или для каждой по отдельности
 ' param     - дополнительные параметры расчета потока
 ' h_mes_top - глубина установки ЭЦН (верх ЭЦН)
+' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
+'                может быть вектором
+' fw_perc - обводненность, перекрывает feed если задан,
+'                может быть вектором
+' rp_m3m3 - газовый фактор, перекрывает feed если задан,
+'                может быть вектором
+' q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,
+'                может быть вектором
 ' результат   - массив значений включающий
 'description_end
     Dim arr
@@ -4766,7 +4895,8 @@ Public Function GLV_IPO_p_open(ByVal p_bellow_atma As Double, _
                  Optional ByVal d_vkr1_mm As Double = -1, _
                  Optional ByVal d_vkr2_mm As Double = -1, _
                  Optional ByVal d_vkr3_mm As Double = -1, _
-                 Optional ByVal d_vkr4_mm As Double = -1)
+                 Optional ByVal d_vkr4_mm As Double = -1, _
+                 Optional ByVal gamma_gas As Double = 0.8)
 ' p_bellow_atma - давление зарядки сильфона на стенде, атма
 ' p_out_atma    - давление на выходе клапана (НКТ), атма
 ' t_C           - температура клапана в рабочих условиях, С
@@ -4776,9 +4906,10 @@ Public Function GLV_IPO_p_open(ByVal p_bellow_atma As Double, _
 ' d_vkr2_mm     - диаметр вкрутки 2, если есть
 ' d_vkr3_mm     - диаметр вкрутки 3, если есть
 ' d_vkr4_mm     - диаметр вкрутки 4, если есть
+' gamma_gas     - плотность газа
 'description_end
     Dim GLV As New CGLvalve
-    
+    GLV.gamma_gas = gamma_gas
     Call GLV.set_GLV_R1(True, d_port_mm, d_vkr1_mm, d_vkr2_mm, d_vkr3_mm, d_vkr4_mm)
     GLV.p_bellow_sc_atma = p_bellow_atma
     GLV.p_out_atma = p_out_atma
@@ -4797,18 +4928,23 @@ Public Function GLV_IPO_p_atma(ByVal p_bellow_atma As Double, _
                  Optional ByVal d_vkr1_mm As Double = -1, _
                  Optional ByVal d_vkr2_mm As Double = -1, _
                  Optional ByVal d_vkr3_mm As Double = -1, _
-                 Optional ByVal d_vkr4_mm As Double = -1)
+                 Optional ByVal d_vkr4_mm As Double = -1, _
+                 Optional ByVal gamma_gas As Double = 0.8)
 ' p_bellow_atma - давление зарядки сильфона на стенде, атма
-' p_out_atma    - давление на выходе клапана (НКТ), атма
-' t_C           - температура клапана в рабочих условиях, С
-' GLV_type      - тип газлифтного клапана (сейчас только R1)
 ' d_port_mm     - диаметр порта клапана
+' p_calc_atma   - давление на выходе клапана (НКТ), атма
+' q_gas_sm3day  - расход газа
+' t_C           - температура клапана в рабочих условиях, С
+' calc_along_flow - направление расчета
+' GLV_type      - тип газлифтного клапана (сейчас только R1)
 ' d_vkr1_mm     - диаметр вкрутки 1, если есть
 ' d_vkr2_mm     - диаметр вкрутки 2, если есть
 ' d_vkr3_mm     - диаметр вкрутки 3, если есть
 ' d_vkr4_mm     - диаметр вкрутки 4, если есть
+' gamma_gas     - плотность газа
 'description_end
     Dim GLV As New CGLvalve
+    GLV.gamma_gas = gamma_gas
     
     Call GLV.set_GLV_R1(True, d_port_mm, d_vkr1_mm, d_vkr2_mm, d_vkr3_mm, d_vkr4_mm)
     GLV.p_bellow_sc_atma = p_bellow_atma
@@ -4831,7 +4967,8 @@ Public Function GLV_IPO_p_close(ByVal p_bellow_atma As Double, _
                  Optional ByVal d_vkr1_mm As Double = -1, _
                  Optional ByVal d_vkr2_mm As Double = -1, _
                  Optional ByVal d_vkr3_mm As Double = -1, _
-                 Optional ByVal d_vkr4_mm As Double = -1)
+                 Optional ByVal d_vkr4_mm As Double = -1, _
+                 Optional ByVal gamma_gas As Double = 0.8)
 ' p_bellow_atma - давление зарядки сильфона на стенде, атма
 ' p_out_atma    - давление на выходе клапана (НКТ), атма
 ' t_C           - температура клапана в рабочих условиях, С
@@ -4841,8 +4978,10 @@ Public Function GLV_IPO_p_close(ByVal p_bellow_atma As Double, _
 ' d_vkr2_mm     - диаметр вкрутки 2, если есть
 ' d_vkr3_mm     - диаметр вкрутки 3, если есть
 ' d_vkr4_mm     - диаметр вкрутки 4, если есть
+' gamma_gas     - плотность газа
 'description_end
     Dim GLV As New CGLvalve
+    GLV.gamma_gas = gamma_gas
     
     Call GLV.set_GLV_R1(True, d_port_mm, d_vkr1_mm, d_vkr2_mm, d_vkr3_mm, d_vkr4_mm)
     GLV.p_bellow_sc_atma = p_bellow_atma
