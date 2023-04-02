@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.41 year 2023                             khabibullinra@gmail.com
+'Unifloc 7.44 jet separation                             khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -435,7 +435,7 @@ On Error GoTo err1:
         Call pipe.fluid.update_feed(ptq.ql(i), ptq.fw(i), ptq.rp(i), ptq.qg(i))
         ' some tuning
         If znlf Then pipe.set_ZNLF
-        If (show_array Or show_json) And ptq.len = 1 Then save_crv = mainCurves
+        If (show_array Or show_json Or (num_value > 0)) And ptq.len = 1 Then save_crv = mainCurves
        
         res1 = PT_to_array(pipe.calc_dPipe(ptq.p(i), ptq.t(i), save_crv))  ' main calc sub call
         
@@ -680,7 +680,7 @@ Public Function MF_choke_p_atma( _
 On Error GoTo err1:
     Dim choke As Cchoke
     Dim num_value As Integer, nv As Integer
-    Dim p_out As Double
+    Dim P_out As Double
     Dim show_array As Boolean
     Dim show_log As Boolean
     Dim show_json As Boolean
@@ -704,16 +704,16 @@ On Error GoTo err1:
         ' запускаем расчет в зависимости от опции направления расчета
         If calc_along_flow Then
             Call choke.calc_choke_p_lin(set_PT(ptq.p(i), ptq.t(i)))
-            p_out = choke.p_out_atma
+            P_out = choke.p_out_atma
             num_value = 2
         Else
             Call choke.calc_choke_p_buf(set_PT(ptq.p(i), ptq.t(i)))
-            p_out = choke.p_in_atma
+            P_out = choke.p_in_atma
             num_value = 1
         End If
       '  col_res.Add p_out
         
-        ptq_out.p(i) = Round(p_out, const_num_decimal_out)
+        ptq_out.p(i) = Round(P_out, const_num_decimal_out)
         ptq_out.t(i) = Round(ptq.t(i), const_num_decimal_out)
         ptq_out.feed(i) = choke.fluid.feed
     Next i
@@ -737,7 +737,7 @@ On Error GoTo err1:
             If show_array Then
                 MF_choke_p_atma = choke.get_result_array(num_value, show_log)
             Else
-                MF_choke_p_atma = p_out
+                MF_choke_p_atma = P_out
             End If
         End If
     Else
@@ -2750,6 +2750,58 @@ er2:
     feed_q_mix_rc_m3day = "error " & Err.Description
 End Function
 'description_to_manual      - для автогенерации
+' функция расчета расхода жидкости
+Public Function feed_q_liq_rc_m3day( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_q_liq_rc_m3day = PVT.qliq_rc_m3day
+    Exit Function
+er1:
+On Error GoTo er2:
+    feed_q_liq_rc_m3day = Array("error " & Err.Description, PVT.log_.get_str)
+    Exit Function
+er2:
+    feed_q_liq_rc_m3day = "error " & Err.Description
+End Function
+'description_to_manual      - для автогенерации
+' функция расчета расхода газа в рабочих условиях
+Public Function feed_q_gas_rc_m3day( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_q_gas_rc_m3day = PVT.q_gas_rc_m3day
+    Exit Function
+er1:
+On Error GoTo er2:
+    feed_q_gas_rc_m3day = Array("error " & Err.Description, PVT.log_.get_str)
+    Exit Function
+er2:
+    feed_q_gas_rc_m3day = "error " & Err.Description
+End Function
+'description_to_manual      - для автогенерации
 ' функция расчета расхода свободного газа в потоке
 Public Function feed_q_gas_free_sm3day( _
                ByVal p_atma As Double, _
@@ -2802,6 +2854,32 @@ er2:
     feed_rho_mix_kgm3 = "error " & Err.Description
 End Function
 'description_to_manual      - для автогенерации
+' функция расчета плотности жидкости
+Public Function feed_rho_liq_kgm3( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_rho_liq_kgm3 = PVT.rho_liq_rc_kgm3
+    Exit Function
+er1:
+On Error GoTo er2:
+    feed_rho_liq_kgm3 = Array("error " & Err.Description, PVT.log_.get_str)
+    Exit Function
+er2:
+    feed_rho_liq_kgm3 = "error " & Err.Description
+End Function
+'description_to_manual      - для автогенерации
 ' функция расчета плотности газо жидкостной смеси (ГЖС)
 Public Function feed_mu_mix_cP( _
                ByVal p_atma As Double, _
@@ -2826,6 +2904,32 @@ On Error GoTo er2:
     Exit Function
 er2:
     feed_mu_mix_cP = "error " & Err.Description
+End Function
+'description_to_manual      - для автогенерации
+' функция расчета вязкости жидкости
+Public Function feed_mu_liq_cP( _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+               ByVal feed As String)
+' p_atma     - давление, атм
+' t_C        - температура, С.
+' feed - параметры потока флюидов, дебит, обводненность и пр
+'              используйте encode_feed для генерации
+' результат  - массив, расход ГЖС в рабочих условиях,
+'              подпись, и лог расчета если подключен
+'description_end
+ On Error GoTo er1:
+    Dim PVT As New CPVT
+    Call PVT.init_feed(feed)
+    Call PVT.calc_PVT(p_atma, t_C)
+    feed_mu_liq_cP = PVT.mu_liq_cP
+    Exit Function
+er1:
+On Error GoTo er2:
+    feed_mu_liq_cP = Array("error " & Err.Description, PVT.log_.get_str)
+    Exit Function
+er2:
+    feed_mu_liq_cP = "error " & Err.Description
 End Function
 'description_to_manual      - для автогенерации
 ' function for calculating flow properties after gas separation
@@ -4021,7 +4125,7 @@ Public Function gas_corr(Optional gf As Double = 1, Optional q As Double = 50)
 '
 '
     Dim arr(1 To 12, 1 To 20) As Double
-    Dim x(1 To 12, 1 To 1) As Double
+    Dim X(1 To 12, 1 To 1) As Double
     Dim y(1 To 1, 1 To 20) As Double
     
     Dim a As Variant
@@ -4058,7 +4162,7 @@ Public Function gas_corr(Optional gf As Double = 1, Optional q As Double = 50)
     Dim j As Integer
     
     For i = 1 To 12
-        x(i, 1) = x_(i - 1)
+        X(i, 1) = x_(i - 1)
         For j = 1 To 20
             arr(i, j) = a(j - 1)(i - 1)
             If i = 1 Then y(1, j) = y_(j - 1)
@@ -4068,7 +4172,7 @@ Public Function gas_corr(Optional gf As Double = 1, Optional q As Double = 50)
     Dim arg(1 To 1, 1 To 2) As Double
     arg(1, 1) = q
     arg(1, 2) = gf
-    gas_corr = crv_interpolation_2D(y, x, arr, arg)(1, 1)
+    gas_corr = crv_interpolation_2D(y, X, arr, arg)(1, 1)
 End Function
 '======================================================================
 'description_to_manual      - для автогенерации
@@ -4600,8 +4704,8 @@ Public Function GLV_p_vkr_atma(ByVal d_port_mm As Double, _
 'description_end
     ' ищем давление внутри клапана
     Dim p_v_atma As Double
-    Dim p_in As Double
-    Dim p_out As Double
+    Dim P_in As Double
+    Dim P_out As Double
     Dim p_atma As Double
     Dim p2
     Dim p1
@@ -4614,8 +4718,8 @@ On Error GoTo er1:
     crit1 = False
     crit2 = False
     If calc_along_flow Then
-        p_in = p_calc_atma
-        p1 = GLV_p_atma(d_port_mm, p_in, q_gas_sm3day, gamma_g, t_C, True)
+        P_in = p_calc_atma
+        p1 = GLV_p_atma(d_port_mm, P_in, q_gas_sm3day, gamma_g, t_C, True)
         p_v_atma = p1(0)(0)
         If p_v_atma < 0 Then
         ' critical flow through the port achived
@@ -4636,12 +4740,12 @@ On Error GoTo er1:
         Else
             p_atma = p_v_atma
         End If
-        p_out = p_atma
+        P_out = p_atma
         If q_gas_sm3day < qg0 Then
             p_atma = -1
         End If
     Else
-        p_out = p_calc_atma
+        P_out = p_calc_atma
         If d_vkr_mm > 0 Then
             p1 = GLV_p_atma(d_vkr_mm, p_calc_atma, q_gas_sm3day, gamma_g, t_C, False)
             p_v_atma = p1(0)(0)
@@ -4662,9 +4766,9 @@ On Error GoTo er1:
             p_atma = p2(0)(2)
             crit1 = True
         End If
-        p_in = p_atma
+        P_in = p_atma
     End If
-    GLV_p_vkr_atma = Array(Array(p_atma, p_in, p_v_atma, p_out, q_gas_sm3day, crit1, crit2), _
+    GLV_p_vkr_atma = Array(Array(p_atma, P_in, p_v_atma, P_out, q_gas_sm3day, crit1, crit2), _
                            Array("p_atma", "p_in_atma", "p_v_atma", "p_out_atma", "q_gas_sm3day", "port critical flow", "vkrutka critical flow"))
     Exit Function
 er1:
@@ -5080,12 +5184,18 @@ Public Function well_ksep_natural_d( _
              ByVal p_intake_atma, _
     Optional ByVal t_intake_C = 50, _
     Optional ByVal d_intake_mm As Double = 90, _
-    Optional ByVal d_cas_mm As Double = 120)
+    Optional ByVal d_cas_mm As Double = 120, _
+    Optional ByVal model As Integer = 0, _
+    Optional ByVal pkv_prod_period_ratio As Double = 1)
 ' feed          - закодированные параметры потока флюидов
 ' p_intake_atma - давление сепарации
 ' t_intake_C    - температура сепарации
 ' d_intake_mm   - диаметр приемной сетки
 ' d_cas_mm      - диаметр эксплуатационной колонны
+' model - тип модели. 0 - упрощенная Маркеса для ЭЦН. 1 - механистическая Маркеса  для ЭЦН
+'               2  - механистическая Михайлова для реверсивного потока жидкости и газа с ЭЦН ниже перфорации
+'               3 - механистическая для скважин ПКВ
+' pkv_prod_period_ratio - для ПКВ отношение времени работы к времени цикла
 ' результат     - число - естественная сепарация
 'description_end
 On Error GoTo err1:
@@ -5106,8 +5216,27 @@ On Error GoTo err1:
         
         Call fluid.calc_PVT(ptq.p(i), ptq.t(i))
         With fluid
-            ptq_out.val(i) = unf_natural_separation(d_intake_mm / 1000, d_cas_mm / 1000, .q_liq_sm3day, .q_gas_sm3day, .bo_m3m3, .bg_m3m3, _
-                                                        .sigma_oil_gas_Nm, .sigma_wat_gas_Nm, .rho_oil_sckgm3, .rho_gas_sckgm3, .fw_perc)
+            Select Case model
+                Case 0
+                
+                    ptq_out.val(i) = unf_ksep_natural_simplified_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                                                    .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3)
+                Case 1
+                
+                    ptq_out.val(i) = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                                                     .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
+                                                     .mu_liq_cP, .mu_gas_cP, 1, 1, 1)
+                Case 2
+                
+                    ptq_out.val(i) = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                                                     .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
+                                                     .mu_liq_cP, .mu_gas_cP, 1, 1, 0)
+                Case 3
+                    ptq_out.val(i) = unf_ksep_mechanistic_PKV(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                                                     .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
+                                                     .mu_liq_cP, .mu_gas_cP, , pkv_prod_period_ratio)
+                
+            End Select
             ptq_out.feed(i) = fluid.feed
             ptq_out.p(i) = ptq.p(i)
             ptq_out.t(i) = ptq.t(i)

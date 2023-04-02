@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.41 year 2023                                  khabibullinra@gmail.com
+'Unifloc 7.44 jet separation                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -19,6 +19,9 @@ Public d_throat_mm As Double     ' throat diam
 Public c_nozzle_d As Double
 Public type_q As Integer
 Public p_out_atma As Double
+Public p_act_atma As Double
+Public p_in_atma As Double
+Public efficiency As Double
 Public dp_out_atm As Double
 '--------------------------------------------------------
 Public Sub add_log_msg(msg As String)
@@ -30,8 +33,70 @@ End Sub
 Public Property Get a_nozzle_m2() As Double
     a_nozzle_m2 = const_Pi * d_nozzle_mm * d_nozzle_mm / 4 * 0.000001
 End Property
-Public Sub calc_dp_out_atma(ByVal q_in_sm3day As Double, _
-                            ByVal p_act_atma As Double, _
+Public Sub calc_p_in(ByVal p_out_atma As Double, _
+                     ByVal t_C As Double)
+' calculate active and input pressure by given rates
+' active fluid properties must be set, rate given explicitly
+' intake fluid properties must be set, rate given explicitly
+Dim rho_act_kgm3 As Double, rho_in_kgm3 As Double
+Dim q_act_sm3day As Double
+Dim u_d As Double
+Dim r_d As Double
+    Dim choke As New Cchoke
+'    Dim p_act_atma As Double
+'    Dim p_in_atma As Double
+    
+    Set choke.fluid = fluid_act
+    choke.d_choke_m = d_nozzle_mm / 1000#
+    choke.d_down_m = d_throat_mm / 1000#
+    choke.d_up_m = d_throat_mm / 1000#
+    choke.K = 0.8
+    
+    Dim ptline As PTtype
+    Dim ptbuf As PTtype
+    
+    ptline.p_atma = p_out_atma
+    ptline.t_C = t_C
+    
+    ptbuf = choke.calc_choke_p_buf(ptline)
+    Me.p_out_atma = p_out_atma
+    p_act_atma = ptbuf.p_atma
+    p_in_atma = p_out_atma ' rough estimation
+    
+    Call fluid_act.calc_PVT(p_act_atma, t_C)
+    rho_act_kgm3 = fluid_act.rho_mix_rc_kgm3
+    
+    Call fluid_in.calc_PVT(p_in_atma, t_C)
+    rho_in_kgm3 = fluid_in.rho_mix_rc_kgm3
+    
+    '1. estimate active stream flow rate
+'    If type_q = 0 Then
+'        q_act_sm3day = q_act_v1_m3day(p_act_atma, p_in_atma, t_C, rho_act_kgm3)
+'    Else
+'        q_act_sm3day = q_act_v2_m3day(p_act_atma, p_in_atma, t_C)
+'    End If
+    
+   ' fluid_act.q_liq_sm3day = q_act_sm3day
+    
+    '2. calc u_d
+    'u_d = q_in_sm3day / q_act_sm3day
+    u_d = fluid_in.q_mix_rc_m3day / fluid_act.q_mix_rc_m3day
+    
+    '3. calc r_d by dimensionless correlation
+    r_d = r_out_v2_d(u_d, d_nozzle_mm, d_throat_mm, p_act_atma, p_in_atma, rho_act_kgm3, rho_in_kgm3)
+    
+    '4. extract dp from r_d
+    p_in_atma = p_in_atma - r_d * (p_act_atma - p_in_atma)
+    If p_in_atma < 1 Then
+        p_in_atma = p_out_atma
+        r_d = 0
+    End If
+    dp_out_atm = p_out_atma - p_in_atma
+    
+   
+    efficiency = r_d * u_d
+End Sub
+Public Sub calc_dp_out_atma(ByVal p_act_atma As Double, _
                             ByVal p_in_atma As Double, _
                             ByVal t_C As Double)
 ' calculate output pressure by given intake and active pressures
@@ -46,7 +111,7 @@ Dim r_d As Double
     rho_act_kgm3 = fluid_act.rho_mix_rc_kgm3
     
     Call fluid_in.calc_PVT(p_in_atma, t_C)
-    rho_in_kgm3 = fluid_act.rho_mix_rc_kgm3
+    rho_in_kgm3 = fluid_in.rho_mix_rc_kgm3
     
     '1. estimate active stream flow rate
     If type_q = 0 Then
@@ -58,7 +123,8 @@ Dim r_d As Double
     fluid_act.q_liq_sm3day = q_act_sm3day
     
     '2. calc u_d
-    u_d = q_in_sm3day / q_act_sm3day
+    'u_d = q_in_sm3day / q_act_sm3day
+    u_d = fluid_in.q_mix_rc_m3day / fluid_act.q_mix_rc_m3day
     
     '3. calc r_d by dimensionless correlation
     r_d = r_out_v2_d(u_d, d_nozzle_mm, d_throat_mm, p_act_atma, p_in_atma, rho_act_kgm3, rho_in_kgm3)
@@ -79,8 +145,8 @@ Private Function r_out_v2_d(u_d As Double, _
                    Optional p_in_atma As Double = 10, _
                    Optional rho_act_kgm3 As Double = 1000, _
                    Optional rho_in_kgm3 As Double = 1000, _
-                   Optional k_n As Double = 0.03, _
-                   Optional k_td As Double = 0.2) As Double
+                   Optional k_n As Double = 0.2, _
+                   Optional k_td As Double = 0.5) As Double
   'jet pump calc based on pipesim technical description
   Dim a_n_m2 As Double, a_t_m2 As Double
   Dim Fan As Double, FRho As Double, FM As Double
@@ -136,4 +202,101 @@ Private Sub Class_Initialize()
     c_nozzle_d = 0.97
     type_q = 0
 End Sub
+'===========================================================
+Public Sub calc_p_in_2(ByVal p_out_atma As Double, _
+                     ByVal t_C As Double)
+' calculate active and input pressure by given rates
+' active fluid properties must be set, rate given explicitly
+' intake fluid properties must be set, rate given explicitly
+Dim rho_act_kgm3 As Double, rho_in_kgm3 As Double
+Dim q_act_sm3day As Double
+Dim u_d As Double
+Dim r_d As Double
+    Dim choke As New Cchoke
+'    Dim p_act_atma As Double
+'    Dim p_in_atma As Double
+    
+    Set choke.fluid = fluid_act
+    choke.d_choke_m = d_nozzle_mm / 1000#
+    choke.d_down_m = d_throat_mm / 1000#
+    choke.d_up_m = d_throat_mm / 1000#
+    choke.K = 0.95
+    
+    Dim ptline As PTtype
+    Dim ptbuf As PTtype
+    
+    ptline.p_atma = p_out_atma
+    ptline.t_C = t_C
+    
+    ptbuf = choke.calc_choke_p_buf(ptline)
+    Me.p_out_atma = p_out_atma
+    p_act_atma = ptbuf.p_atma
+    p_in_atma = p_out_atma ' rough estimation
+    
+    Call fluid_act.calc_PVT(p_act_atma, t_C)
+    rho_act_kgm3 = fluid_act.rho_mix_rc_kgm3
+    
+    Call fluid_in.calc_PVT(p_in_atma, t_C)
+    rho_in_kgm3 = fluid_in.rho_mix_rc_kgm3
+    
+    '1. estimate active stream flow rate
+'    If type_q = 0 Then
+'        q_act_sm3day = q_act_v1_m3day(p_act_atma, p_in_atma, t_C, rho_act_kgm3)
+'    Else
+'        q_act_sm3day = q_act_v2_m3day(p_act_atma, p_in_atma, t_C)
+'    End If
+    
+   ' fluid_act.q_liq_sm3day = q_act_sm3day
+    
+    '2. calc u_d
+    'u_d = q_in_sm3day / q_act_sm3day
+    u_d = fluid_in.q_mix_rc_m3day / fluid_act.q_mix_rc_m3day
+    
+    
+    
+    p_in_atma = Pin(u_d, p_out_atma, p_act_atma)
+    
+    dp_out_atm = p_out_atma - p_in_atma
+    
+   
+    efficiency = Jet_effeciency(u_d, p_act_atma, p_in_atma, p_out_atma)
+End Sub
+'===========================================================
+Public Function Pmix(ByVal Ucp_c As Double, _
+                            Ppr As Double, _
+                            Prab As Double)
+   ' Calculate output jet pressure
+   Pmix = 0.218 * Ucp_c ^ (-0.563) * (Prab - Ppr) + Ppr
+Set fluid_out = feed_mod_mix_obj(fluid_in, fluid_act)
+End Function
+Public Function Pin(ByVal Ucp_c As Double, _
+                            Pmix As Double, _
+                            Prab As Double)
+Dim a As Double
+   ' Calculate input jet pressure
+   a = 0.218 * Ucp_c ^ (-0.563)
+   Pin = (Prab * a - Pmix) / (a - 1)
+End Function
+Public Function Dimensionless_presure(U_cp As Double)
+Dimensionless_presure = 0.2177 * U_cp ^ (-0.563)
+End Function
+Public Function U_integral(Q_liq As Double, _
+                            Q_gas As Double, _
+                            Q_act As Double, _
+                            P_in As Double, _
+                            P_out As Double)
+' рассчитывает среднеинтегральный коэффициент инжекции
+U_integral = Q_liq / Q_act + Q_gas / Q_act * P_in / (P_out - P_in) * Log(P_out / P_in)
+End Function
+Public Function Jet_effeciency(U_int As Double, _
+                            P_act As Double, _
+                            P_in As Double, _
+                            P_out As Double)
+' расчет КПД струйного аппарата
+Jet_effeciency = U_int * (P_out - P_in) / (P_act - P_out)
+End Function
+Public Function Jet_relation(U_int As Double)
+' расчет отношения диаметра камеры смешения к диаметру сопла (исходя из среднестатистических данных)
+Jet_relation = 1.9081 * U_int ^ 0.2744
+End Function
 

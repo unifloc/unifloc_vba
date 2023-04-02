@@ -1331,6 +1331,42 @@ class API():
         self.f_feed_q_mix_rc_m3day = self.book.macro("feed_q_mix_rc_m3day")
         return self.f_feed_q_mix_rc_m3day(p_atma,t_C,feed)
 
+    def feed_q_liq_rc_m3day(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета расхода жидкости 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_q_liq_rc_m3day = self.book.macro("feed_q_liq_rc_m3day")
+        return self.f_feed_q_liq_rc_m3day(p_atma,t_C,feed)
+
+    def feed_q_gas_rc_m3day(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета расхода газа в рабочих условиях 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_q_gas_rc_m3day = self.book.macro("feed_q_gas_rc_m3day")
+        return self.f_feed_q_gas_rc_m3day(p_atma,t_C,feed)
+
     def feed_q_gas_free_sm3day(self, p_atma,t_C,feed):
         """
  ========== description ============== 
@@ -1367,6 +1403,24 @@ class API():
         self.f_feed_rho_mix_kgm3 = self.book.macro("feed_rho_mix_kgm3")
         return self.f_feed_rho_mix_kgm3(p_atma,t_C,feed)
 
+    def feed_rho_liq_kgm3(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета плотности жидкости 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_rho_liq_kgm3 = self.book.macro("feed_rho_liq_kgm3")
+        return self.f_feed_rho_liq_kgm3(p_atma,t_C,feed)
+
     def feed_mu_mix_cP(self, p_atma,t_C,feed):
         """
  ========== description ============== 
@@ -1384,6 +1438,24 @@ class API():
 
         self.f_feed_mu_mix_cP = self.book.macro("feed_mu_mix_cP")
         return self.f_feed_mu_mix_cP(p_atma,t_C,feed)
+
+    def feed_mu_liq_cP(self, p_atma,t_C,feed):
+        """
+ ========== description ============== 
+ функция расчета вязкости жидкости 
+        
+ ==========  arguments  ============== 
+
+     p_atma - давление, атм    
+
+     t_c - температура, с.    
+
+     feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации   
+
+        """
+
+        self.f_feed_mu_liq_cP = self.book.macro("feed_mu_liq_cP")
+        return self.f_feed_mu_liq_cP(p_atma,t_C,feed)
 
     def feed_mod_separate_gas(self, k_sep,p_atma,t_C,feed,param=""):
         """
@@ -2253,7 +2325,7 @@ class API():
         self.f_GLV_IPO_p_close = self.book.macro("GLV_IPO_p_close")
         return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm,gamma_gas)
 
-    def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120):
+    def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120,model=0,pkv_prod_period_ratio=1):
         """
  ========== description ============== 
  расчет натуральной сепарации газа на приеме насоса 
@@ -2268,12 +2340,16 @@ class API():
 
      d_intake_mm - диаметр приемной сетки    
 
-     d_cas_mm - диаметр эксплуатационной колонны   
+     d_cas_mm - диаметр эксплуатационной колонны    
+
+     model - тип модели. 0 - упрощенная маркеса для эцн. 1 - механистическая маркеса для эцн  2 - механистическая михайлова для реверсивного потока жидкости и газа с эцн ниже перфора..см.мануал   
+
+     pkv_prod_period_ratio - для пкв отношение времени работы к времени цикла   
 
         """
 
         self.f_well_ksep_natural_d = self.book.macro("well_ksep_natural_d")
-        return self.f_well_ksep_natural_d(feed,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm)
+        return self.f_well_ksep_natural_d(feed,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm,model,pkv_prod_period_ratio)
 
     def well_ksep_total_d(self, SepNat,SepGasSep):
         """
@@ -2474,6 +2550,36 @@ class API():
 
         self.f_Jet_p_out_atma = self.book.macro("Jet_p_out_atma")
         return self.f_Jet_p_out_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C,param,type_q)
+
+    def Jet_p_in_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C=30,param="",type_q=1,model=0):
+        """
+ ========== description ============== 
+Расчет давления на выкиде струйного насоса 
+        
+ ==========  arguments  ============== 
+
+     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
+
+     feed_in - поток перекачиваемый (низкого давления), строка    
+
+     d_nozzle_mm - диаметр сопла, мм    
+
+     d_throat_mm - диаметр камеры смешения, мм  p_act_atma - давление активного потока, высокое, атм  p_in_atma - давление входного потока, низкое, атм    
+
+   p_out_atma   
+
+     t_c - температура потоков в струйном насосе, с.    
+
+     param - дополнительные параметры расчета    
+
+   type_q   
+
+   model  
+
+        """
+
+        self.f_Jet_p_in_atma = self.book.macro("Jet_p_in_atma")
+        return self.f_Jet_p_in_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C,param,type_q,model)
 
     def unf_version(self, ):
         """
@@ -3211,7 +3317,7 @@ class API():
         self.f_crv_parametric_interpolation = self.book.macro("crv_parametric_interpolation")
         return self.f_crv_parametric_interpolation(x_points,y_points,x_val,type_interpolation,param_points)
 
-    def Ei(self, x):
+    def Ei(self, X):
         """
  ========== description ============== 
  Расчет интегральной показательной функции Ei(x) 
@@ -3223,9 +3329,9 @@ class API():
         """
 
         self.f_Ei = self.book.macro("Ei")
-        return self.f_Ei(x)
+        return self.f_Ei(X)
 
-    def E_1(self, x):
+    def E_1(self, X):
         """
  ========== description ============== 
  Расчет интегральной показательной функции $E_1(x)$  для вещественных положительных x, x>0 верно E_1(x)=- Ei(-x) 
@@ -3237,9 +3343,9 @@ class API():
         """
 
         self.f_E_1 = self.book.macro("E_1")
-        return self.f_E_1(x)
+        return self.f_E_1(X)
 
-    def transient_pd_radial(self, td,cd=0,skin=0,rd=1,Model=0):
+    def transient_pd_radial(self, td,cd=0,skin=0,rd=1,model=0):
         """
  ========== description ============== 
  Расчет неустановившегося решения уравнения фильтрации  для различных моделей радиального притока к вертикльной скважине  основано не решениях в пространстве Лапласа и преобразовании Стефеста 
@@ -3259,9 +3365,9 @@ class API():
         """
 
         self.f_transient_pd_radial = self.book.macro("transient_pd_radial")
-        return self.f_transient_pd_radial(td,cd,skin,rd,Model)
+        return self.f_transient_pd_radial(td,cd,skin,rd,model)
 
-    def transient_pwf_radial_atma(self, t_hr,q_liq_sm3day,pi_atma=250,skin=0,cs_1atm=0,r_m=0.1,rw_m=0.1,k_mD=100,h_m=10,porosity=0.2,mu_cP=1,b_m3m3=1.2,ct_1atm=0.00001,Model=0):
+    def transient_pwf_radial_atma(self, t_hr,q_liq_sm3day,pi_atma=250,skin=0,cs_1atm=0,r_m=0.1,rw_m=0.1,k_mD=100,h_m=10,porosity=0.2,mu_cP=1,b_m3m3=1.2,ct_1atm=0.00001,model=0):
         """
  ========== description ============== 
  расчет изменения забойного давления после запуска скважины  с постоянным дебитом (terminal rate solution) 
@@ -3299,7 +3405,7 @@ class API():
         """
 
         self.f_transient_pwf_radial_atma = self.book.macro("transient_pwf_radial_atma")
-        return self.f_transient_pwf_radial_atma(t_hr,q_liq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,Model)
+        return self.f_transient_pwf_radial_atma(t_hr,q_liq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,model)
 
     def transient_cd_from_cs(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
         """

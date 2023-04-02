@@ -1,0 +1,544 @@
+Option Explicit
+' Расчет естественной сепарации по Маркезу на основе упрощенной модели
+Public Function unf_ksep_natural_simplified_Marquez( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        Optional out_num As Integer = 1)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра для вывода
+    
+    Dim a_p As Double
+    Dim lambda_l  As Double
+    Dim rho_n As Double
+    Dim v_sg As Double
+    Dim v_sl As Double
+    Dim v_m As Double
+    Dim n_fr As Double
+    Dim flow_pattern As Integer
+    Dim v_inf As Double
+    Dim a As Double, B As Double, C As Double, d As Double, ST As Double, backst As Double, M As Double
+    
+    
+    If (qliq_rc_m3day = 0) Or (d_tub_m_ = d_cas_m_) Then
+        unf_ksep_natural_simplified_Marquez = 1
+        Exit Function
+    End If
+        
+    'Annulus cross-sectional area
+    a_p = const_Pi * (d_cas_m_ ^ 2 - d_tub_m_ ^ 2) / 4
+    'volume fraction of liquid at no-slip conditions
+    lambda_l = qliq_rc_m3day / (qliq_rc_m3day + q_gas_rc_m3day)
+    'no-slip mixture density
+    rho_n = rho_liq_rc_kgm3 * lambda_l + rho_gas_rc_kgm3 * (1 - lambda_l)
+    'Gas sureficial velocity
+    v_sg = 0.000011574 * q_gas_rc_m3day / a_p
+    'Liquid sureficial velocity
+    v_sl = 0.000011574 * qliq_rc_m3day / a_p
+    '----------------------
+    'Sureficial velocities
+    v_m = v_sl + v_sg
+    'Froude number
+    n_fr = v_m ^ 2 / (const_g * (d_cas_m_ - d_tub_m_))
+    '-----------------------------------------------------------------------
+    'determine flow pattern
+    If (n_fr >= 316 * lambda_l ^ 0.302 Or n_fr >= 0.5 * lambda_l ^ -6.738) Then
+        flow_pattern = 2
+    Else
+        If (n_fr <= 0.000925 * lambda_l ^ -2.468) Then
+            flow_pattern = 0
+        Else
+            If (n_fr <= 0.1 * lambda_l ^ -1.452) Then
+                flow_pattern = 3
+            Else
+                flow_pattern = 1
+            End If
+        End If
+    End If
+    '-----------------------
+    'Calculate terminal gas rise velosity
+    If (flow_pattern = 0 Or flow_pattern = 1) Then
+        v_inf = 1.53 * (const_g * sigma_liq_Nm * (rho_liq_rc_kgm3 - rho_gas_rc_kgm3) / rho_liq_rc_kgm3 ^ 2) ^ 0.25
+    Else
+        v_inf = 1.41 * (const_g * sigma_liq_Nm * (rho_liq_rc_kgm3 - rho_gas_rc_kgm3) / rho_liq_rc_kgm3 ^ 2) ^ 0.25
+    End If
+    ' calculate separation efficienty
+    a = -0.0093
+    B = 57.758
+    C = 34.4
+    d = 1.308
+    ST = 272
+    backst = 1 / 272
+    M = v_sl / v_inf
+    If M > 13 Then
+        unf_ksep_natural_simplified_Marquez = 0
+        Exit Function
+    End If
+    
+    Dim ksep_res As Double
+    ksep_res = ((1 + (a * B + C * M ^ d) / (B + M ^ d)) ^ ST + M ^ ST) ^ backst - M
+    
+    Dim res, res_desc
+    res = Array(ksep_res, flow_pattern, v_inf)
+    res_desc = Array("ksep", "flow regime", "v_ooz")
+         
+    
+    Select Case out_num
+        Case 0
+            unf_ksep_natural_simplified_Marquez = Array(res, res_desc)
+        Case Else
+            unf_ksep_natural_simplified_Marquez = res(out_num - 1)
+    End Select
+    
+End Function
+Static Function Log10x(X)
+    Log10x = Log(X) / Log(10#)
+End Function
+Private Function friction_annulus_estimate(d_casing_m, d_intake_m, n_Re)
+    ' оценка коэффициента трения для концентрического расположения труб
+    Dim d_h As Double, k_D_h As Double, f_ca As Double, f_D_h As Double
+    Dim a_f As Double, b_f As Double, f_D_h1 As Double, f_D_h2 As Double
+    Dim i As Integer
+    
+    i = 0
+    d_h = d_casing_m - d_intake_m
+    k_D_h = d_intake_m / d_casing_m
+    
+    f_ca = 16 * (1 - k_D_h) ^ 2 / ((1 - k_D_h ^ 4) / (1 - k_D_h ^ 2) - (1 - k_D_h ^ 2) / Log(1 / k_D_h))
+    'Расчет коэффициента гидравлического трения
+    If n_Re <= 3000 Then
+        f_D_h = f_ca / n_Re
+    Else
+        a_f = 0.00000001
+        b_f = 1#
+        Do
+            f_D_h = (a_f + b_f) / 2
+            f_D_h1 = 1 / (f_D_h * (16 / f_ca) ^ (0.45 * Exp(-(n_Re - 3000) / 10 ^ 6))) ^ 0.5
+            f_D_h2 = 4 * Log10x(n_Re * (f_D_h * (16 / f_ca) ^ (0.45 * Exp(-(n_Re - 3000) / 10 ^ 6))) ^ 0.5) - 0.4
+            If Abs(f_D_h1 - f_D_h2) > 0.0001 Then
+                 If f_D_h1 > f_D_h2 Then
+                    a_f = f_D_h
+                Else
+                    b_f = f_D_h
+                End If
+            Else
+                Exit Do
+            End If
+            
+            i = i + 1
+            If i > 100 Then
+                Exit Do
+                Debug.Print "warning friction_annulus_estimate  too many interations"
+            End If
+        Loop
+    End If
+    
+    friction_annulus_estimate = f_D_h
+End Function
+Public Function unf_ksep_mechanistic_PKV( _
+                                        ByVal d_intake_m As Double, _
+                                        ByVal d_casing_m As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional ByVal L_perf As Double = 1, _
+                                        Optional pkv_prod_period_ratio As Double = 1) As Variant
+' оценка коэффициента сепарации для скважины в ПКВ режиме на основе
+' механистической модели Маркеса Михайлова
+'d_intake_mm - внешний диаметр НКТ на уровне интервала перфорации, мм
+'d_cas_ID_mm - внутренний диаметр ЭК, мм
+'qliq_rc_m3day - дебит жидкости в рабочих условиях, м3/сут
+'q_gas_rc_m3day - дебит свободного газа в рабочих условиях, м3/сут
+'sigma_liq_Nm - коэффициент поверхностного натяжения, жидкости газ Нм
+'rho_liq_rc_kgm3 - плотность жидкости в рабочих условиях, кг/м3
+'rho_gas_rc_kgm3 - плотность газа в рабочих условиях, кг/м3
+'mu_liq_rc_cP - вязкость жидкости в рабочих условия, сП
+'mu_gas_rc_cP - вязкость газа в рабочих условиях, сП
+'L_perf - длина перфорации для модели сепарации с реверсивным потоком, м
+'pkv_prod_period_ratio - отношение времени работы скважины в ПКВ к общему
+'         времени цикла
+' 1. сначала оценим коэффициент сепарации для потока газа захватываемого из затруба
+If pkv_prod_period_ratio < 0 Then
+    unf_ksep_mechanistic_PKV = 0
+    Exit Function
+End If
+If pkv_prod_period_ratio >= 1 Then
+    unf_ksep_mechanistic_PKV = unf_ksep_mechanistic_Marquez(d_intake_m, _
+                                         d_casing_m, _
+                                         qliq_rc_m3day * (pkv_prod_period_ratio), _
+                                         q_gas_rc_m3day * (pkv_prod_period_ratio), _
+                                         sigma_liq_Nm, _
+                                         rho_liq_rc_kgm3, _
+                                         rho_gas_rc_kgm3, _
+                                         mu_liq_rc_cP, _
+                                         mu_gas_rc_cP, _
+                                          L_perf, _
+                                         1, _
+                                         submodel:=1)
+    Exit Function
+End If
+Dim ksep_zatr As Double
+ksep_zatr = unf_ksep_mechanistic_Marquez(d_intake_m, _
+                                         d_casing_m, _
+                                         qliq_rc_m3day * (1 - pkv_prod_period_ratio), _
+                                         q_gas_rc_m3day * (1 - pkv_prod_period_ratio), _
+                                         sigma_liq_Nm, _
+                                         rho_liq_rc_kgm3, _
+                                         rho_gas_rc_kgm3, _
+                                         mu_liq_rc_cP, _
+                                         mu_gas_rc_cP, _
+                                          L_perf, _
+                                         1, _
+                                         submodel:=0)
+' если ksep_zatr = 1 (больше 0.99) значит скорость движения потока вниз мала для того, чтобы увлечь газ
+' это значит при работе газ из затруба в скважину подсасывать не будет
+' если ksep_zatr < 0.9 значит близка граница зоны захвата газа и тогда можно считать что
+' с потоком жидкости из затруба будет захватываться газ и тогда сепарации газа не будет
+Dim lim As Double
+lim = 0.95
+If ksep_zatr > lim Then
+    unf_ksep_mechanistic_PKV = unf_ksep_mechanistic_Marquez(d_intake_m, _
+                                         d_casing_m, _
+                                         qliq_rc_m3day * (pkv_prod_period_ratio), _
+                                         q_gas_rc_m3day * (pkv_prod_period_ratio), _
+                                         sigma_liq_Nm, _
+                                         rho_liq_rc_kgm3, _
+                                         rho_gas_rc_kgm3, _
+                                         mu_liq_rc_cP, _
+                                         mu_gas_rc_cP, _
+                                          L_perf, _
+                                         1, _
+                                         submodel:=1) * ksep_zatr * (ksep_zatr - lim) * (1 / (1 - lim))
+Else
+    unf_ksep_mechanistic_PKV = 0
+End If
+                                        
+End Function
+Public Function unf_ksep_mechanistic_Marquez( _
+                                        ByVal d_intake_m As Double, _
+                                        ByVal d_casing_m As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional ByVal L_perf As Double = 1, _
+                                        Optional out_num As Integer = 1, _
+                                        Optional submodel As Integer = 1) As Variant
+                                        
+'d_intake_mm - внешний диаметр НКТ на уровне интервала перфорации, мм
+'d_cas_ID_mm - внутренний диаметр ЭК, мм
+'qliq_rc_m3day - дебит жидкости в рабочих условиях, м3/сут
+'q_gas_rc_m3day - дебит свободного газа в рабочих условиях, м3/сут
+'sigma_liq_Nm - коэффициент поверхностного натяжения, жидкости газ Нм
+'rho_liq_rc_kgm3 - плотность жидкости в рабочих условиях, кг/м3
+'rho_gas_rc_kgm3 - плотность газа в рабочих условиях, кг/м3
+'mu_liq_rc_cP - вязкость жидкости в рабочих условия, сП
+'mu_gas_rc_cP - вязкость газа в рабочих условиях, сП
+'L_perf - длина перфорации для модели сепарации с реверсивным потоком, м
+'out_num - номер параметра для вывода результатов
+'submodel - тип подмодели. 1 - механистическая модель Маркеса для
+' сепарации газа на приеме ЭЦН. 0 - механистическая модель Михайлова В.Г.
+' для реверсивной сепарации для ЭЦН ниже перфорации
+    
+    Dim h_p As Double
+    Dim d_crit As Double, v_m As Double, lamda_l As Double
+    Dim ro_m As Double, mu_m As Double, d_h As Double, n_Re As Double, d_max As Double
+    Dim regim As Integer
+    Dim v_sg_bubble As Double, f_D_h As Double
+    Dim v_sg_annular As Double, v_sg_slug As Double, v_ooz As Double
+    Dim v_sl_msec As Double, v_sg_msec As Double, Ean As Double
+    Dim sigma_l As Double, ro_l As Double, ro_g As Double, mu_l As Double, mu_g As Double
+    
+    Dim h_0 As Double
+    Dim separation As Double
+    
+    Dim typeReg As String
+    
+    
+    'd_intake_m = d_intake_m
+    'd_casing_m = d_cas_ID_m
+    d_h = d_casing_m - d_intake_m
+    
+    h_p = L_perf
+    
+    sigma_l = sigma_liq_Nm
+    ro_l = rho_liq_rc_kgm3
+    ro_g = rho_gas_rc_kgm3
+    mu_l = mu_liq_rc_cP * 0.001
+    mu_g = mu_gas_rc_cP * 0.001
+    
+    ' оценка приведенных скоростей жидкости и газа
+    Dim vconvert As Double
+    vconvert = 1 / 86400 / (3.14 * (d_casing_m ^ 2 - d_intake_m ^ 2) / 4)
+    v_sg_msec = q_gas_rc_m3day * vconvert
+    v_sl_msec = qliq_rc_m3day * vconvert
+    
+    v_m = v_sl_msec + v_sg_msec
+    lamda_l = v_sl_msec / v_m
+    ro_m = ro_l * lamda_l + ro_g * (1 - lamda_l)
+    mu_m = mu_l * lamda_l + mu_g * (1 - lamda_l)
+    n_Re = ro_m * v_m * d_h / mu_m
+    
+    '---------------------------------------------------Расчет режима течения----------------------------------------------------------------------
+    
+    ' если газа нет, то и сепарации нет
+    If q_gas_rc_m3day < 0.001 Then
+        Ean = 0
+        unf_ksep_mechanistic_Marquez = 0
+        Exit Function
+    End If
+    
+    
+    f_D_h = friction_annulus_estimate(d_casing_m, d_intake_m, n_Re)
+    ' критического диаметра при котором поддерживается сферическая форма пузырька газа. Критический диаметр пузырька газа можно определить Brodkey (1967)
+    d_crit = (0.4 * sigma_l / (9.81 * (ro_l - ro_g))) ^ 0.5
+    
+    ' максимального диаметра стабильного пузырька при дисперсно-пузырьковом режиме течения
+    d_max = (0.725 + 4.15 * (v_sg_msec / v_m) ^ 0.5) * (sigma_l / ro_l) ^ 0.6 * (2 * v_m ^ 3 * f_D_h / d_h) ^ (-0.4)
+    If d_crit > d_max Then
+        ' Barnea et al. (1985) предложили условие перехода пузырькового режима течения в дисперсно-пузырьковый
+        regim = 2
+        typeReg = "Пробковый"
+    Else
+        'уравнение приведенной скорости газа на границе перехода от пузырькового режима течения к пробковому для концентрического положения труб колонны и НКТ
+        v_sg_bubble = v_sl_msec / 4 + 0.306 * (9.81 * (ro_l - ro_g) * sigma_l / ro_l ^ 2) ^ 0.25
+    
+        If v_sg_msec < v_sg_bubble Then
+            regim = 1
+            typeReg = "Пузырьковый"
+        Else
+            v_sg_annular = 3.1 * (sigma_l * 9.81 * (ro_l - ro_g) / ro_g ^ 2) ^ 0.25
+    
+            If v_sg_msec > v_sg_annular Then
+                regim = 4
+                typeReg = "Кольцевой"
+            Else
+                v_sg_slug = 1.083 * v_sl_msec + 0.796 * (9.81 * (ro_l - ro_g) * sigma_l / ro_l ^ 2) ^ 0.25
+    
+                If v_sg_msec < v_sg_slug Then
+                    regim = 2
+                    typeReg = "Пробковый"
+                Else
+                    regim = 3
+                    typeReg = "Дисперснопузырьковый"
+                End If
+            End If
+        End If
+    End If
+    
+    ' уравнение для скорости пузырька газа всплывающего вертикально вверх
+    If regim = 2 Or regim = 1 Then
+        v_ooz = 1.53 * (9.81 * (ro_l - ro_g) * sigma_l / ro_l ^ 2) ^ 0.25
+    Else
+        v_ooz = 1.41 * (9.81 * (ro_l - ro_g) * sigma_l / ro_l ^ 2) ^ 0.25
+    End If
+    '------------------Численный расчет траектории движения пузырька газа--------------------------------------------
+    
+    Select Case submodel
+    
+    Case 0
+        separation = calc_h_bubble_trajectory_annulus(v_sg_msec, v_sl_msec, v_ooz, h_p, _
+                                               d_casing_m, d_intake_m, mu_l, ro_l, ro_g, regim)
+    
+    Case 1
+        separation = calc_r_bubble_trajectory_annulus(v_sg_msec, v_sl_msec, v_ooz, h_p, _
+                                                      d_casing_m, d_intake_m, mu_l, ro_l, ro_g, regim)
+                                                     
+       
+    End Select
+    
+    If separation < 0 Then separation = 0
+    If separation > 1 Then separation = 1
+    
+    Ean = separation
+    
+  
+    Dim res, res_desc
+    res = Array(Ean, typeReg, v_ooz, v_sl_msec, v_sg_msec, calc_li(v_sg_msec, v_ooz))
+    res_desc = Array("ksep", "flow regime", "v_ooz", "vsl", "vsg", "li")
+    
+    Select Case out_num
+        Case 0
+            unf_ksep_mechanistic_Marquez = Array(res, res_desc)
+        Case Else
+            unf_ksep_mechanistic_Marquez = res(out_num - 1)
+    End Select
+End Function
+Private Function calc_li(v_sg_msec As Double, _
+                         v_ooz As Double, _
+                        Optional v_sl_msec As Double = 0, _
+                        Optional regime_num As Integer = 1, _
+                        Optional correl_type As Integer = 0)
+    Dim v_sg_ft As Double, l_i As Double, alpha_g As Double
+    Dim v_sl_ft As Double
+    Select Case correl_type
+        Case 0
+            ' interface characteristic length estimation based on TUALP data
+            v_sg_ft = v_sg_msec / 0.3048
+            alpha_g = v_sg_msec / (v_sg_msec + v_ooz)
+            l_i = 3 * alpha_g / (71.617 * (1 - Exp(-2.364 * v_sg_ft))) * 0.0254 ' eq (5.45) from Marquez dissertation
+            ' comparing l_i from (5.45)  with experiment data from dissertation and with l_i applied
+            ' for two phase model (6.60) (6.59) and also with ksep estimation from simplified model
+            ' it looks like l_i value underestimated by factor 2
+            ' so here we apply correction for better agreement with simplified model
+            l_i = l_i * 2
+        Case 1
+            If regime_num = 1 Then
+                v_sl_ft = v_sl_msec / 0.3048
+                l_i = -0.1653 * (-0.0492 - Exp(-1.0476 * v_sl_ft))
+            Else
+                v_sg_ft = v_sg_msec / 0.3048
+                l_i = 0.036 * (2.364 ^ v_sg_ft) * v_sg_ft ^ 0.72
+            End If
+    End Select
+    calc_li = l_i
+End Function
+Private Function calc_h_bubble_trajectory_annulus(v_sg_msec As Double, _
+                                                  v_sl_msec As Double, _
+                                                  v_ooz As Double, _
+                                                  h_p As Double, _
+                                                  d_casing_m As Double, _
+                                                  d_intake_m As Double, _
+                                                  mu_l As Double, _
+                                                  ro_l As Double, _
+                                                  ro_g As Double, _
+                                                  regime As Integer)
+        'Перевод в инженерную метрическую систему
+    Dim l_i As Double
+    Dim dh As Double, rc As Double, rp As Double, tan_B As Double, j As Integer
+    Dim h_0  As Double, r_0 As Double, ri_0 As Double
+    Dim a_0 As Double, b_0 As Double, c_0 As Double, dr_dz_0 As Double
+    Dim h_i As Double, r_i As Double, ri_i As Double
+    Dim a_i As Double, b_i As Double, c_i As Double, dr_dz_i As Double, separation As Double
+    
+    ' interface characteristic length estimation based on TUALP data
+    l_i = calc_li(v_sg_msec, v_ooz)
+'    l_i = calc_li(v_sg_msec, v_ooz, v_sl_msec, regime, 1)
+    
+    j = 0
+    dh = h_p / 200
+    rc = d_casing_m / 2
+    rp = d_intake_m / 2
+    tan_B = (rc - rp) / h_p
+    
+        'Начальные условия
+    h_0 = h_p
+    r_0 = rp
+    a_0 = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
+    b_0 = (rp + (h_0 / h_p) * (rc - rp)) * tan_B * v_sl_msec
+    c_0 = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_0 ^ 3) * b_0 + 1 / r_0
+    dr_dz_0 = -a_0 * b_0 * c_0
+    'Расчет в i-том сечении
+    Do
+        h_i = h_0 - dh
+        ri_i = rp + (h_p - h_i) * tan_B
+        b_i = (rp + (h_i / h_p) * (rc - rp)) * tan_B * v_sl_msec
+        r_i = r_0 - dr_dz_0 * dh
+        c_i = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_i ^ 3) * b_i + 1 / r_i
+        dr_dz_i = -a_0 * b_i * c_i
+        
+        If r_i < rc Or h_i <= 0 Then
+            h_0 = h_i
+            ri_0 = ri_i
+            r_0 = r_i
+            dr_dz_0 = dr_dz_i
+            j = j + 1
+            If ri_0 > rc Then
+                Exit Do
+            End If
+            If h_i < 0 Then Exit Do
+        Else
+            Exit Do
+        End If
+        If j > 1000 Then Exit Do
+    Loop
+    calc_h_bubble_trajectory_annulus = (h_p - h_0) / h_p
+End Function
+Private Function calc_r_bubble_trajectory_annulus(v_sg_msec As Double, _
+                                                  v_sl_msec As Double, _
+                                                  v_ooz As Double, _
+                                                  h_p As Double, _
+                                                  d_casing_m As Double, _
+                                                  d_intake_m As Double, _
+                                                  mu_l As Double, _
+                                                  ro_l As Double, _
+                                                  ro_g As Double, _
+                                                  Optional regime As Integer = 1)
+        'Перевод в инженерную метрическую систему
+    Dim l_i As Double, dh As Double, rc As Double, rp As Double, tan_B As Double, j As Double
+    Dim h_0 As Double, r_0 As Double, ri_0 As Double
+    Dim a_0 As Double, b_0 As Double, c_0 As Double, dr_dz_0 As Double, Variance_0 As Double
+    
+    h_p = 0.1
+    l_i = calc_li(v_sg_msec, v_ooz)
+ '   l_i = calc_li(v_sg_msec, v_ooz, v_sl_msec, regime, 1)
+    
+    j = 30
+    dh = h_p / 200
+    rc = d_casing_m / 2
+    rp = d_intake_m / 2
+    tan_B = (rc - rp) / h_p
+    
+        'Начальные условия
+    h_0 = h_p
+    r_0 = rp
+    ri_0 = rc - (h_p - h_0) * tan_B
+    a_0 = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
+    b_0 = (rp + (h_0 / h_p) * (rc - rp)) * tan_B * v_sl_msec
+    c_0 = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_0 ^ 3) * b_0 + 1 / r_0
+    dr_dz_0 = -a_0 * b_0 * c_0
+    Variance_0 = r_0 - ri_0
+        
+        'Расчет в i-том сечении
+    Dim h_i, r_i, ri_i, a_i, b_i, c_i, dr_dz_i, Variance_i, separation As Double
+    
+    Do
+        
+        h_i = h_0 - dh
+        ri_i = rc - (h_p - h_i) * tan_B
+        a_i = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
+        b_i = (rp + (h_i / h_p) * (rc - rp)) * tan_B * v_sl_msec
+        r_i = r_0 - dr_dz_0 * dh
+        c_i = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_i ^ 3) * b_i + 1 / r_i
+        dr_dz_i = -a_i * b_i * c_i
+        Variance_i = r_i - ri_i
+        If Variance_i < 0 Then
+             h_0 = h_i
+             ri_0 = ri_i
+             a_0 = a_i
+             b_0 = b_i
+             r_0 = r_i
+             c_0 = c_i
+             dr_dz_0 = dr_dz_i
+             Variance_0 = Variance_i
+                 If ri_0 > rc Then
+                     Exit Do
+                 End If
+         Else
+             Exit Do
+         End If
+            
+    Loop
+    
+    calc_r_bubble_trajectory_annulus = ((rc ^ 2 - ri_0 ^ 2) / (rc ^ 2 - rp ^ 2))
+End Function
+
