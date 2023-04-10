@@ -1,6 +1,6 @@
 Option Explicit
 '=======================================================================================
-'Unifloc 7.44 jet separation                                  khabibullinra@gmail.com
+'Unifloc 7.45 super jet separation                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -45,7 +45,11 @@ Public Function Jet_p_out_atma(feed_act As String, _
                                p_in_atma As Double, _
                       Optional t_C As Double = 30, _
                       Optional param As String = "", _
-                      Optional type_q As Integer = 0)
+                      Optional type_q As Integer = 1, _
+                      Optional model As Integer = 0, _
+                      Optional k_n As Double = 0.2, _
+                      Optional k_td As Double = 0.5, _
+                      Optional kchoke As Double = 0.8)
 ' feed_act  - поток рабочий (высокого давления), строка
 '             расход игнорируется - будет расчтан
 ' feed_in   - поток перекачиваемый (низкого давления), строка
@@ -72,11 +76,14 @@ Public Function Jet_p_out_atma(feed_act As String, _
     Set jet.fluid_act = fa
     Set jet.fluid_in = fi
     
-    'q = fi.q_liq_sm3day
+    Call jet.calc_pout_qact_v3(p_act_atma, p_in_atma, t_C, model, k_n, k_td, kchoke)
     
-    Call jet.calc_dp_out_atma(p_act_atma, p_in_atma, t_C)
     
-    Jet_p_out_atma = Array(jet.p_out_atma, jet.fluid_out.feed)
+    With jet
+        Dim u_d_av  As Double
+        u_d_av = jet.U_integral(.fluid_in.qliq_rc_m3day, .fluid_in.q_gas_rc_m3day, .fluid_act.q_mix_rc_m3day, .p_in_atma, .p_out_atma)
+        Jet_p_out_atma = Array(.p_out_atma, .fluid_out.feed, .p_act_atma, .p_in_atma, .p_out_atma, .u_d, u_d_av, .dpd_out, .rd_out, .efficiency)
+    End With
 End Function
 'description_to_manual      - для автогенерации
 'Расчет давления на выкиде струйного насоса
@@ -115,117 +122,127 @@ Public Function Jet_p_in_atma(feed_act As String, _
     Set jet.fluid_act = fa
     Set jet.fluid_in = fi
     
-    'q = fi.q_liq_sm3day
-    If model = 0 Then
-        Call jet.calc_p_in(p_out_atma, t_C)
-    Else
-        Call jet.calc_p_in_2(p_out_atma, t_C)
-    End If
-    Jet_p_in_atma = Array(jet.p_in_atma, jet.p_act_atma, jet.efficiency)
+    Call jet.calc_pin(p_out_atma, t_C, model)
+    
+    With jet
+        Jet_p_in_atma = Array(.p_in_atma, .fluid_out.feed, .p_act_atma, .p_in_atma, .p_out_atma, .u_d, .dpd_out, .rd_out, .efficiency)
+    End With
 End Function
-Public Function Jet_test(q, dn, dt, pa, pi)
-    Dim fa As New CPVT
-    Dim fi As New CPVT
-    Dim po
-    
-    fa.fw_fr = 1
-    fi.fw_fr = 1
-    
-    Dim jet As New CJetPump
-    jet.d_nozzle_mm = dn
-    jet.d_throat_mm = dt
-    Set jet.fluid_act = fa
-    Set jet.fluid_in = fi
-    
-    Call jet.calc_dp_out_atma(pa, pi, 30)
-    po = jet.p_out_atma
-    
-    Jet_test = po
-End Function
-'=========================================================
-' NEW Расчет давления на выходе из насоса, основанный на
-'данных экспериментальных исследований при наивысшем КПД СА
-Public Function Jet_p_out_stat_atma(Ucp_c As Double, _
-                               Ppr As Double, _
-                               Prab As Double, _
-                              Optional feed_act As String, _
-                              Optional feed_in As String)
-                         
-    Dim fa As New CPVT
-    Dim fi As New CPVT
-    Dim jet As New CJetPump
-    Dim P_out As Double
-  
-    Call fa.init_feed(feed_act)
-    Call fi.init_feed(feed_in)
-    
-    Set jet.fluid_act = fa
-   Set jet.fluid_in = fi
-    
-    P_out = jet.Pmix(Ucp_c, Ppr, Prab)
-    
-Jet_p_out_stat_atma = Array(P_out, jet.fluid_out.feed)
-End Function
-'NEW  Расчет давления на приеме (на случай расчета сверху вниз)
-Public Function Jet_p_in_stat_atma(Ucp_c As Double, _
-                               Pmix As Double, _
-                               Prab As Double)
-    Dim jet As New CJetPump
-    Dim P_in As Double
-  
-    P_in = jet.Pin(Ucp_c, Pmix, Prab)
-    Jet_p_in_stat_atma = P_in
-    
-End Function
-'NEW Расчет среднеинтегрального коэффициента инжекции СА
-Public Function Jet_U_integ(Q_liq As Double, _
-                            Q_gas As Double, _
-                            Q_act As Double, _
-                            P_in As Double, _
-                            P_out As Double)
- 
-    Dim jet As New CJetPump
-    Dim Uint As Double
-    
-   Call jet.U_integral(Q_liq, Q_gas, Q_act, P_in, P_out)
-    Uint = jet.U_integral(Q_liq, Q_gas, Q_act, P_in, P_out)
-    
-   Jet_U_integ = Uint
-  End Function
-'NEW Расчет КПД СА
-Public Function Jet_effeciency(U_int As Double, _
-                            P_act As Double, _
-                            P_in As Double, _
-                            P_out As Double)
- 
-    Dim jet As New CJetPump
-    Dim effect As Double
-    
-   Call jet.Jet_effeciency(U_int, P_act, P_in, P_out)
-    effect = jet.Jet_effeciency(U_int, P_act, P_in, P_out)
-    
-   Jet_effeciency = effect
-  End Function
-'NEW Отношение диаметра камеры смешения к диаметру сопла из статистических данных
-Public Function Jet_diam_relat(U_int As Double)
- 
-    Dim jet As New CJetPump
-    Dim diam As Double
-    
-   Call jet.Jet_relation(U_int)
-    diam = jet.Jet_relation(U_int)
-    
-   Jet_diam_relat = diam
-  End Function
-'NEW Зависимость безразмерного относительного давления от среднеинтегрального коэффициента инжекции
-Public Function Jet_dp_dp(U_int As Double)
- 
-    Dim jet As New CJetPump
-    Dim dp As Double
-    
-   Call jet.Dimensionless_presure(U_int)
-    dp = jet.Dimensionless_presure(U_int)
-    
-   Jet_dp_dp = dp
-  End Function
+'Public Function Jet_test(q, dn, dt, pa, pi)
+'
+'    Dim fa As New CPVT
+'    Dim fi As New CPVT
+'    Dim po
+'
+'    fa.fw_fr = 1
+'    fi.fw_fr = 1
+'
+'    Dim jet As New CJetPump
+'    jet.d_nozzle_mm = dn
+'    jet.d_throat_mm = dt
+'    Set jet.fluid_act = fa
+'    Set jet.fluid_in = fi
+'
+'    Call jet.calc_pout_qact_v2_pipesim(pa, pi, 30)
+'    po = jet.p_out_atma
+'
+'    Jet_test = po
+'End Function
+'
+'
+''=========================================================
+'' NEW Расчет давления на выходе из насоса, основанный на
+''данных экспериментальных исследований при наивысшем КПД СА
+'Public Function Jet_p_out_stat_atma(Ucp_c As Double, _
+'                               Ppr As Double, _
+'                               Prab As Double, _
+'                              Optional feed_act As String, _
+'                              Optional feed_in As String)
+'
+'
+'    Dim fa As New CPVT
+'    Dim fi As New CPVT
+'    Dim jet As New CJetPump
+'    Dim P_out As Double
+'
+'    Call fa.init_feed(feed_act)
+'    Call fi.init_feed(feed_in)
+'
+'    Set jet.fluid_act = fa
+'   Set jet.fluid_in = fi
+'
+'    P_out = jet.Pmix(Ucp_c, Ppr, Prab)
+'
+'Jet_p_out_stat_atma = Array(P_out, jet.fluid_out.feed)
+'End Function
+'
+''NEW  Расчет давления на приеме (на случай расчета сверху вниз)
+'Public Function Jet_p_in_stat_atma(Ucp_c As Double, _
+'                               Pmix As Double, _
+'                               Prab As Double)
+'
+'    Dim jet As New CJetPump
+'    Dim P_in As Double
+'
+'
+'    P_in = jet.Pin(Ucp_c, Pmix, Prab)
+'    Jet_p_in_stat_atma = P_in
+'
+'End Function
+'
+''NEW Расчет среднеинтегрального коэффициента инжекции СА
+'Public Function Jet_U_integ(Q_liq As Double, _
+'                            Q_gas As Double, _
+'                            Q_act As Double, _
+'                            P_in As Double, _
+'                            P_out As Double)
+'
+'    Dim jet As New CJetPump
+'    Dim Uint As Double
+'
+'   Call jet.U_integral(Q_liq, Q_gas, Q_act, P_in, P_out)
+'    Uint = jet.U_integral(Q_liq, Q_gas, Q_act, P_in, P_out)
+'
+'   Jet_U_integ = Uint
+'  End Function
+'
+''NEW Расчет КПД СА
+'Public Function Jet_effeciency(U_int As Double, _
+'                            P_act As Double, _
+'                            P_in As Double, _
+'                            P_out As Double)
+'
+'    Dim jet As New CJetPump
+'    Dim effect As Double
+'
+'   Call jet.Jet_effeciency(U_int, P_act, P_in, P_out)
+'    effect = jet.Jet_effeciency(U_int, P_act, P_in, P_out)
+'
+'   Jet_effeciency = effect
+'  End Function
+'
+''NEW Отношение диаметра камеры смешения к диаметру сопла из статистических данных
+'Public Function Jet_diam_relat(U_int As Double)
+'
+'    Dim jet As New CJetPump
+'    Dim diam As Double
+'
+'   Call jet.Jet_relation(U_int)
+'    diam = jet.Jet_relation(U_int)
+'
+'   Jet_diam_relat = diam
+'  End Function
+'
+''NEW Зависимость безразмерного относительного давления от среднеинтегрального коэффициента инжекции
+'Public Function Jet_dp_dp(U_int As Double)
+'
+'    Dim jet As New CJetPump
+'    Dim dp As Double
+'
+'   Call jet.Dimensionless_presure(U_int)
+'    dp = jet.Dimensionless_presure(U_int)
+'
+'   Jet_dp_dp = dp
+'  End Function
+'
 
