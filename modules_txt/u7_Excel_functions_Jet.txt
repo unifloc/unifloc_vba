@@ -14,7 +14,10 @@ Public Function Jet_q_nozzle_sm3day(feed_act As String, _
                                     p_act_atma As Double, _
                                     p_in_atma As Double, _
                            Optional t_C As Double = 30, _
-                           Optional param As String = "")
+                           Optional param As String = "", _
+                           Optional type_q As Integer = 1, _
+                           Optional kchoke As Double = 0.8, _
+                           Optional d_throat_mm As Double = -1)
 ' feed_act  - поток рабочий (высокого давления), строка
 '             расход игнорируется - будет расчтан
 ' d_nozzle_mm - диаметр сопла, мм
@@ -29,11 +32,20 @@ Public Function Jet_q_nozzle_sm3day(feed_act As String, _
     Dim q As Double
     
     Call fa.init_feed(feed_act)
+    Call fa.calc_PVT(p_act_atma, t_C)
     jet.d_nozzle_mm = d_nozzle_mm
+    If d_throat_mm < 0 Then d_throat_mm = d_nozzle_mm * 2
+    jet.d_throat_mm = d_throat_mm
     Set jet.fluid_act = fa
     
-    Jet_q_nozzle_sm3day = jet.q_act_v1_m3day(p_act_atma, p_in_atma, _
-                                             t_act_C:=t_C)
+    Select Case type_q
+    Case 0
+        Jet_q_nozzle_sm3day = jet.q_act_v1_m3day(p_act_atma, p_in_atma, _
+                                             t_act_C:=t_C, rho_act_kgm3:=fa.rho_mix_rc_kgm3)
+    Case 1
+        Jet_q_nozzle_sm3day = jet.q_act_v2_m3day(p_act_atma, p_in_atma, _
+                                             t_act_C:=t_C, kchoke:=kchoke)
+    End Select
 End Function
 'description_to_manual      - для автогенерации
 'Расчет давления на выкиде струйного насоса
@@ -76,7 +88,7 @@ Public Function Jet_p_out_atma(feed_act As String, _
     Set jet.fluid_act = fa
     Set jet.fluid_in = fi
     
-    Call jet.calc_pout_qact_v3(p_act_atma, p_in_atma, t_C, model, k_n, k_td, kchoke)
+    Call jet.calc_pout(p_act_atma, p_in_atma, t_C, model, k_n, k_td, kchoke)
     
     
     With jet
@@ -114,7 +126,7 @@ Public Function Jet_p_in_atma(feed_act As String, _
     'Dim q As Double
     
     Call fa.init_feed(feed_act)
-    Call fi.init_feed(feed_in)
+    Call fi.init_feed(feed_in, allow_zero_qliq:=True)
     
     jet.d_nozzle_mm = d_nozzle_mm
     jet.d_throat_mm = d_throat_mm

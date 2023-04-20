@@ -5207,6 +5207,7 @@ On Error GoTo err1:
     
     Dim col_res As New Collection
     Dim i As Integer
+    Dim ksep_ As Double
     
     Call read_PTQ(ptq, feed, p_intake_atma, t_intake_C, fluid.log_, 0, 0, 0, 0, 0)
     Call init_ptq(ptq_out, ptq)
@@ -5219,24 +5220,26 @@ On Error GoTo err1:
             Select Case model
                 Case 0
                 
-                    ptq_out.val(i) = unf_ksep_natural_simplified_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_natural_simplified_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                     .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3)
                 Case 1
                 
-                    ptq_out.val(i) = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
                                                      .mu_liq_cP, .mu_gas_cP, 1, 1, 1)
                 Case 2
                 
-                    ptq_out.val(i) = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
                                                      .mu_liq_cP, .mu_gas_cP, 1, 1, 0)
                 Case 3
-                    ptq_out.val(i) = unf_ksep_mechanistic_PKV(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_mechanistic_PKV(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
                                                      .mu_liq_cP, .mu_gas_cP, , pkv_prod_period_ratio)
                 
             End Select
+            
+            ptq_out.val(i) = Round(ksep_, 5)
             ptq_out.feed(i) = fluid.feed
             ptq_out.p(i) = ptq.p(i)
             ptq_out.t(i) = ptq.t(i)
@@ -5245,7 +5248,7 @@ On Error GoTo err1:
     Next i
     Dim d As Dictionary
     Set d = convert_to_dict_ptq(ptq_out)
-    d("k_sep") = Round(ptq_out.val(1), 5)
+    d("k_sep") = ptq_out.val
     
     If ptq.len = 1 Then
         well_ksep_natural_d = ptq_out.val(1)
@@ -5267,16 +5270,16 @@ Public Function well_ksep_total_d( _
 'description_end
     Dim sep_nat
     Dim i As Integer
-    Dim C As New Collection
+    Dim c As New Collection
     
     sep_nat = parse_list(SepNat)
     If UBound(sep_nat) - LBound(sep_nat) + 1 = 1 Then
         well_ksep_total_d = SepNat + (1 - SepNat) * SepGasSep
     Else
         For i = LBound(sep_nat) To UBound(sep_nat)
-            C.Add sep_nat(i) + (1 - sep_nat(i)) * SepGasSep
+            c.Add sep_nat(i) + (1 - sep_nat(i)) * SepGasSep
         Next i
-        well_ksep_total_d = ConvertToJson(C)
+        well_ksep_total_d = ConvertToJson(c)
     End If
 End Function
 'description_end
@@ -5501,24 +5504,33 @@ On Error GoTo er1:
     
     If Not fast Then
         
-        dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 3)
-        dout.Add "p_wf_atma", Round(p_wf_atma, 3)
-        dout.Add "p_intake_atma", Round(p_intake_atma, 3)
-        dout.Add "p_dis_atma", Round(p_dis_atma, 3)
-        dout.Add "p_buf_atma", Round(p_buf_atma, 3)
-        dout.Add "h_crit_m", Round(h_crit, 3)
+        dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 2)
+        dout.Add "p_wf_atma", Round(p_wf_atma, 2)
+        dout.Add "p_intake_atma", Round(p_intake_atma, 2)
+        dout.Add "p_dis_atma", Round(p_dis_atma, 2)
+        dout.Add "p_buf_atma", Round(p_buf_atma, 2)
+        dout.Add "h_crit_m", h_crit
+        crv_p.xName = "h_mes,m"
+        crv_p.yName = "p,atma"
         dout.Add "c_P", crv_p.getDict
+        crv_t.xName = "h_mes,m"
+        crv_t.yName = "t,C"
         dout.Add "c_T", crv_t.getDict
         If p_cas_atma > 0 Then
+            pipe_casing_liq.curve("c_P").xName = "h_mes,m"
+            pipe_casing_liq.curve("c_P").yName = "p,atma"
             dout.Add "c_cas_P", pipe_casing_liq.curve("c_P").ClonePointsToNum(25).getDict
         End If
         
-        dout.Add "h_dyn_m", Round(h_dyn_m, 3)
-        dout.Add "gas_fraction at pump", Round(gas_fraction, 3)
-        dout.Add "q_gas_cas_sm3day", Round(qgas_cas_sm3day, 3)
+        dout.Add "h_dyn_m", Round(h_dyn_m, 2)
+        dout.Add "gas_fraction at pump", Round(gas_fraction, 4)
+        dout.Add "q_gas_cas_sm3day", Round(qgas_cas_sm3day, 2)
+        dout.Add "ksep", Round(ksep, 2)
+        dout.Add "t_intake_C", Round(t_intake_C, 2)
+        dout.Add "t_dis_C", Round(t_dis_C, 2)
         well_calc_from_pwf = ConvertToJson(dout)
     Else
-        well_calc_from_pwf = Round(p_buf_atma, 3)
+        well_calc_from_pwf = p_buf_atma
     End If
      
     Exit Function
@@ -5532,6 +5544,7 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
    
     
     Dim p_wh_atma As Double
+    Dim res As Double
     
     Dim t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr
     
@@ -5552,7 +5565,8 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
     p_cas_atma = CoeffA(13)
     flow_corr = CoeffA(14)
     
-    calc_well_pwf = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, fast:=True) - p_wh_atma
+    res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, fast:=True) - p_wh_atma
+    calc_well_pwf = res
 End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине

@@ -20,92 +20,417 @@ Public Function unf_ksep_natural_simplified_Marquez( _
     'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
     'out_num - номер параметра дл€ вывода
     
-    Dim a_p As Double
-    Dim lambda_l  As Double
-    Dim rho_n As Double
-    Dim v_sg As Double
-    Dim v_sl As Double
-    Dim v_m As Double
-    Dim n_fr As Double
-    Dim flow_pattern As Integer
-    Dim v_inf As Double
-    Dim a As Double, B As Double, C As Double, d As Double, ST As Double, backst As Double, M As Double
-    
-    
-    If (qliq_rc_m3day = 0) Or (d_tub_m_ = d_cas_m_) Then
-        unf_ksep_natural_simplified_Marquez = 1
-        Exit Function
-    End If
-        
-    'Annulus cross-sectional area
-    a_p = const_Pi * (d_cas_m_ ^ 2 - d_tub_m_ ^ 2) / 4
-    'volume fraction of liquid at no-slip conditions
-    lambda_l = qliq_rc_m3day / (qliq_rc_m3day + q_gas_rc_m3day)
-    'no-slip mixture density
-    rho_n = rho_liq_rc_kgm3 * lambda_l + rho_gas_rc_kgm3 * (1 - lambda_l)
-    'Gas sureficial velocity
-    v_sg = 0.000011574 * q_gas_rc_m3day / a_p
-    'Liquid sureficial velocity
-    v_sl = 0.000011574 * qliq_rc_m3day / a_p
-    '----------------------
-    'Sureficial velocities
-    v_m = v_sl + v_sg
-    'Froude number
-    n_fr = v_m ^ 2 / (const_g * (d_cas_m_ - d_tub_m_))
-    '-----------------------------------------------------------------------
-    'determine flow pattern
-    If (n_fr >= 316 * lambda_l ^ 0.302 Or n_fr >= 0.5 * lambda_l ^ -6.738) Then
-        flow_pattern = 2
-    Else
-        If (n_fr <= 0.000925 * lambda_l ^ -2.468) Then
-            flow_pattern = 0
-        Else
-            If (n_fr <= 0.1 * lambda_l ^ -1.452) Then
-                flow_pattern = 3
-            Else
-                flow_pattern = 1
-            End If
-        End If
-    End If
-    '-----------------------
-    'Calculate terminal gas rise velosity
-    If (flow_pattern = 0 Or flow_pattern = 1) Then
-        v_inf = 1.53 * (const_g * sigma_liq_Nm * (rho_liq_rc_kgm3 - rho_gas_rc_kgm3) / rho_liq_rc_kgm3 ^ 2) ^ 0.25
-    Else
-        v_inf = 1.41 * (const_g * sigma_liq_Nm * (rho_liq_rc_kgm3 - rho_gas_rc_kgm3) / rho_liq_rc_kgm3 ^ 2) ^ 0.25
-    End If
-    ' calculate separation efficienty
-    a = -0.0093
-    B = 57.758
-    C = 34.4
-    d = 1.308
-    ST = 272
-    backst = 1 / 272
-    M = v_sl / v_inf
-    If M > 13 Then
-        unf_ksep_natural_simplified_Marquez = 0
-        Exit Function
-    End If
-    
+    Dim natsep As New CWellNaturalSeparation
     Dim ksep_res As Double
-    ksep_res = ((1 + (a * B + C * M ^ d) / (B + M ^ d)) ^ ST + M ^ ST) ^ backst - M
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        ksep_res = .ksep_simplified_Marquez(qliq_rc_m3day, q_gas_rc_m3day)
     
-    Dim res, res_desc
-    res = Array(ksep_res, flow_pattern, v_inf)
-    res_desc = Array("ksep", "flow regime", "v_ooz")
-         
-    
-    Select Case out_num
-        Case 0
-            unf_ksep_natural_simplified_Marquez = Array(res, res_desc)
-        Case Else
-            unf_ksep_natural_simplified_Marquez = res(out_num - 1)
-    End Select
-    
+        Dim res, res_desc
+        res = Array(ksep_res, .flow_pattern, .v_inf_msec)
+        res_desc = Array("ksep", "flow regime", "v_ooz")
+             
+        
+        Select Case out_num
+            Case 0
+                unf_ksep_natural_simplified_Marquez = Array(res, res_desc)
+            Case Else
+                unf_ksep_natural_simplified_Marquez = res(out_num - 1)
+        End Select
+    End With
 End Function
-Static Function Log10x(X)
-    Log10x = Log(X) / Log(10#)
+Public Function unf_ksep_mechanistic_Marquez_( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional out_num As Integer = 1, _
+                                        Optional hintake_m As Double = 0.1, _
+                                        Optional calibr_li As Double = 2, _
+                                        Optional calibr_st As Double = 1)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра дл€ вывода
+    
+    Dim natsep As New CWellNaturalSeparation
+    Dim ksep_res As Double
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm * calibr_st
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        .mu_gas_cP = mu_gas_rc_cP
+        .mu_liq_cP = mu_liq_rc_cP
+        .h_intake_m = hintake_m
+        .calibr_li = calibr_li
+        ksep_res = .ksep_mechanistic_Marquez(qliq_rc_m3day, q_gas_rc_m3day)
+    
+        Dim res, res_desc
+        res = Array(ksep_res, .flow_pattern, .v_inf_msec, .vsl_msec, .vsg_msec, .calc_li(0, 1))
+        res_desc = Array("ksep", "flow regime", "v_ooz", "vsl", "vsg", "li")
+             
+        
+        Select Case out_num
+            Case 0
+                unf_ksep_mechanistic_Marquez_ = Array(res, res_desc)
+            Case Else
+                unf_ksep_mechanistic_Marquez_ = res(out_num - 1)
+        End Select
+    End With
 End Function
+Public Function unf_ksep_mechanistic_Marquez_pkv( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional out_num As Integer = 1, _
+                                        Optional hintake_m As Double = 0.1, _
+                                        Optional calibr_li As Double = 2, _
+                                        Optional calibr_st As Double = 1, _
+                                        Optional pkv_ratio As Double = 0.5)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра дл€ вывода
+    
+    Dim natsep As New CWellNaturalSeparation
+    Dim ksep_res As Double
+    Dim ksep_res_instant As Double
+    Dim resksep
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm * calibr_st
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        .mu_gas_cP = mu_gas_rc_cP
+        .mu_liq_cP = mu_liq_rc_cP
+        .h_intake_m = hintake_m
+        .calibr_li = calibr_li
+        .pkv_ratio = pkv_ratio
+        resksep = .ksep_mechanistic_pkv(qliq_rc_m3day, q_gas_rc_m3day)
+    
+        Dim res, res_desc
+        res = Array(resksep(0), resksep(1), .flow_pattern, .v_inf_msec, .vsl_msec, .vsg_msec, .calc_li(0, 1), .vg_downflow)
+        res_desc = Array("ksep", "ksep_inst", "flow regime", "v_ooz", "vsl", "vsg", "li", "vg_downflow")
+             
+        
+        Select Case out_num
+            Case 0
+                unf_ksep_mechanistic_Marquez_pkv = Array(res, res_desc)
+            Case Else
+                unf_ksep_mechanistic_Marquez_pkv = res(out_num - 1)
+        End Select
+    End With
+End Function
+Public Function unf_ksep_mechanistic_Marquez_build_bubble_tracks( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional hintake_m As Double = 0.1, _
+                                        Optional calibr_li As Double = 2, _
+                                        Optional calibr_st As Double = 1)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра дл€ вывода
+    
+    Dim natsep As New CWellNaturalSeparation
+    Dim ksep_res As Double
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm * calibr_st
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        .mu_gas_cP = mu_gas_rc_cP
+        .mu_liq_cP = mu_liq_rc_cP
+        .h_intake_m = hintake_m
+        .calibr_li = calibr_li
+        'ksep_res = .ksep_mechanistic_Marquez(qliq_rc_m3day, q_gas_rc_m3day)
+    
+        unf_ksep_mechanistic_Marquez_build_bubble_tracks = .build_bubble_tracks_mechanistic_Marquez(qliq_rc_m3day, q_gas_rc_m3day)
+    End With
+End Function
+Public Function unf_ksep_mechanistic_Marquez_reverse( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional out_num As Integer = 1, _
+                                        Optional hperf_m As Double = 0.1, _
+                                        Optional calibr_li As Double = 2, _
+                                        Optional calibr_st As Double = 1)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра дл€ вывода
+    
+    Dim natsep As New CWellNaturalSeparation
+    Dim ksep_res As Double
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm * calibr_st
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        .mu_gas_cP = mu_gas_rc_cP
+        .mu_liq_cP = mu_liq_rc_cP
+        .h_perf_m = hperf_m
+        .calibr_li = calibr_li
+        ksep_res = .ksep_mechanistic_Marquez_reverse(qliq_rc_m3day, q_gas_rc_m3day)
+    
+        Dim res, res_desc
+        res = Array(ksep_res, .flow_pattern, .v_inf_msec, .vsl_msec, .vsg_msec, .calc_li(0, 1), .vg_downflow)
+        res_desc = Array("ksep", "flow regime", "v_ooz", "vsl", "vsg", "li", "vg_downflow")
+             
+        
+        Select Case out_num
+            Case 0
+                unf_ksep_mechanistic_Marquez_reverse = Array(res, res_desc)
+            Case Else
+                unf_ksep_mechanistic_Marquez_reverse = res(out_num - 1)
+        End Select
+    End With
+End Function
+Public Function unf_ksep_mechanistic_Marquez_reverse_build_bubble_tracks( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional hperf_m As Double = 0.1, _
+                                        Optional calibr_li As Double = 2, _
+                                        Optional calibr_st As Double = 1)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра дл€ вывода
+    
+    Dim natsep As New CWellNaturalSeparation
+    Dim ksep_res As Double
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm * calibr_st
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        .mu_gas_cP = mu_gas_rc_cP
+        .mu_liq_cP = mu_liq_rc_cP
+        .h_perf_m = hperf_m
+        .calibr_li = calibr_li
+        'ksep_res = .ksep_mechanistic_Marquez(qliq_rc_m3day, q_gas_rc_m3day)
+    
+        unf_ksep_mechanistic_Marquez_reverse_build_bubble_tracks = .build_bubble_tracks_mechanistic_Marquez_reverse(qliq_rc_m3day, q_gas_rc_m3day)
+    End With
+End Function
+Public Function unf_ksep_mechanistic_pkv_build_bubble_tracks( _
+                                        ByVal d_tub_m_ As Double, _
+                                        ByVal d_cas_m_ As Double, _
+                                        ByVal qliq_rc_m3day As Double, _
+                                        ByVal q_gas_rc_m3day As Double, _
+                                        ByVal sigma_liq_Nm As Double, _
+                                        ByVal rho_liq_rc_kgm3 As Double, _
+                                        ByVal rho_gas_rc_kgm3 As Double, _
+                                        ByVal mu_liq_rc_cP As Double, _
+                                        ByVal mu_gas_rc_cP As Double, _
+                                        Optional hintake_m As Double = 0.1, _
+                                        Optional calibr_li As Double = 2, _
+                                        Optional calibr_st As Double = 1, _
+                                        Optional pkv_ratio As Double = 0.5)
+    'function calculates natural separation efficiency
+    
+    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+    'out_num - номер параметра дл€ вывода
+    
+    Dim natsep As New CWellNaturalSeparation
+    Dim ksep_res As Double
+    With natsep
+        .d_intake_m = d_tub_m_
+        .d_cas_m = d_cas_m_
+        .sigma_liq_Nm = sigma_liq_Nm * calibr_st
+        .rho_liq_rc_kgm3 = rho_liq_rc_kgm3
+        .rho_gas_rc_kgm3 = rho_gas_rc_kgm3
+        .mu_gas_cP = mu_gas_rc_cP
+        .mu_liq_cP = mu_liq_rc_cP
+        .h_intake_m = hintake_m
+        .calibr_li = calibr_li
+        .pkv_ratio = pkv_ratio
+    
+        unf_ksep_mechanistic_pkv_build_bubble_tracks = .build_bubble_tracks_mechanistic_pkv(qliq_rc_m3day, q_gas_rc_m3day)
+    End With
+End Function
+'
+'Public Function unf_ksep_natural_simplified_Marquez_( _
+'                                        ByVal d_tub_m_ As Double, _
+'                                        ByVal d_cas_m_ As Double, _
+'                                        ByVal qliq_rc_m3day As Double, _
+'                                        ByVal q_gas_rc_m3day As Double, _
+'                                        ByVal sigma_liq_Nm As Double, _
+'                                        ByVal rho_liq_rc_kgm3 As Double, _
+'                                        ByVal rho_gas_rc_kgm3 As Double, _
+'                                        Optional out_num As Integer = 1)
+'    'function calculates natural separation efficiency
+'
+'    'd_tub_m_ -  internal diameter arr_theta_deg( (m))
+'    'd_cas_m_ -  internal diameter arr_theta_deg( (m))
+'    'qliq_rc_m3day - liquid rate in situ conditions ( (m3/day))
+'    'q_gas_rc_m3day - gas rate in situ conditions ((m3/day))
+'    'sigma_liq_Nm - liquid-gAs surface tension coefficient ((Newton/m))
+'    'rho_liq_rc_kgm3 - liquid density in situ conditions ( (kg/m3))
+'    'rho_gas_rc_kgm3 - gas density in situ conditions((kg/m3))
+'    'out_num - номер параметра дл€ вывода
+'
+'    Dim a_p As Double
+'    Dim lambda_l  As Double
+'    Dim rho_n As Double
+'    Dim v_sg As Double
+'    Dim v_sl As Double
+'    Dim v_m As Double
+'    Dim n_Fr As Double
+'    Dim flow_pattern As Integer
+'    Dim v_inf As Double
+'    Dim a As Double, B As Double, c As Double, d As Double, ST As Double, backst As Double, M As Double
+'
+'
+'    If (qliq_rc_m3day = 0) Or (d_tub_m_ = d_cas_m_) Then
+'        unf_ksep_natural_simplified_Marquez_ = 1
+'        Exit Function
+'    End If
+'
+'    'Annulus cross-sectional area
+'    a_p = const_Pi * (d_cas_m_ ^ 2 - d_tub_m_ ^ 2) / 4
+'    'volume fraction of liquid at no-slip conditions
+'    lambda_l = qliq_rc_m3day / (qliq_rc_m3day + q_gas_rc_m3day)
+'    'no-slip mixture density
+'    rho_n = rho_liq_rc_kgm3 * lambda_l + rho_gas_rc_kgm3 * (1 - lambda_l)
+'    'Gas sureficial velocity
+'    v_sg = 0.000011574 * q_gas_rc_m3day / a_p
+'    'Liquid sureficial velocity
+'    v_sl = 0.000011574 * qliq_rc_m3day / a_p
+'    '----------------------
+'    'Sureficial velocities
+'    v_m = v_sl + v_sg
+'    'Froude number
+'    n_Fr = v_m ^ 2 / (const_g * (d_cas_m_ - d_tub_m_))
+'    '-----------------------------------------------------------------------
+'    'determine flow pattern
+'    If (n_Fr >= 316 * lambda_l ^ 0.302 Or n_Fr >= 0.5 * lambda_l ^ -6.738) Then
+'        flow_pattern = 2
+'    Else
+'        If (n_Fr <= 0.000925 * lambda_l ^ -2.468) Then
+'            flow_pattern = 0
+'        Else
+'            If (n_Fr <= 0.1 * lambda_l ^ -1.452) Then
+'                flow_pattern = 3
+'            Else
+'                flow_pattern = 1
+'            End If
+'        End If
+'    End If
+'    '-----------------------
+'    'Calculate terminal gas rise velosity
+'    If (flow_pattern = 0 Or flow_pattern = 1) Then
+'        v_inf = 1.53 * (const_g * sigma_liq_Nm * (rho_liq_rc_kgm3 - rho_gas_rc_kgm3) / rho_liq_rc_kgm3 ^ 2) ^ 0.25
+'    Else
+'        v_inf = 1.41 * (const_g * sigma_liq_Nm * (rho_liq_rc_kgm3 - rho_gas_rc_kgm3) / rho_liq_rc_kgm3 ^ 2) ^ 0.25
+'    End If
+'    ' calculate separation efficienty
+'    a = -0.0093
+'    B = 57.758
+'    c = 34.4
+'    d = 1.308
+'    ST = 272
+'    backst = 1 / 272
+'    M = v_sl / v_inf
+'    If M > 13 Then
+'        unf_ksep_natural_simplified_Marquez_ = 0
+'        Exit Function
+'    End If
+'
+'    Dim ksep_res As Double
+'    ksep_res = ((1 + (a * B + c * M ^ d) / (B + M ^ d)) ^ ST + M ^ ST) ^ backst - M
+'
+'    Dim res, res_desc
+'    res = Array(ksep_res, flow_pattern, v_inf)
+'    res_desc = Array("ksep", "flow regime", "v_ooz")
+'
+'
+'    Select Case out_num
+'        Case 0
+'            unf_ksep_natural_simplified_Marquez_ = Array(res, res_desc)
+'        Case Else
+'            unf_ksep_natural_simplified_Marquez_ = res(out_num - 1)
+'    End Select
+'
+'End Function
 Private Function friction_annulus_estimate(d_casing_m, d_intake_m, n_Re)
     ' оценка коэффициента трени€ дл€ концентрического расположени€ труб
     Dim d_h As Double, k_D_h As Double, f_ca As Double, f_D_h As Double
@@ -126,7 +451,7 @@ Private Function friction_annulus_estimate(d_casing_m, d_intake_m, n_Re)
         Do
             f_D_h = (a_f + b_f) / 2
             f_D_h1 = 1 / (f_D_h * (16 / f_ca) ^ (0.45 * Exp(-(n_Re - 3000) / 10 ^ 6))) ^ 0.5
-            f_D_h2 = 4 * Log10x(n_Re * (f_D_h * (16 / f_ca) ^ (0.45 * Exp(-(n_Re - 3000) / 10 ^ 6))) ^ 0.5) - 0.4
+            f_D_h2 = 4 * Log10(n_Re * (f_D_h * (16 / f_ca) ^ (0.45 * Exp(-(n_Re - 3000) / 10 ^ 6))) ^ 0.5) - 0.4
             If Abs(f_D_h1 - f_D_h2) > 0.0001 Then
                  If f_D_h1 > f_D_h2 Then
                     a_f = f_D_h
@@ -288,7 +613,7 @@ Public Function unf_ksep_mechanistic_Marquez( _
     
     ' оценка приведенных скоростей жидкости и газа
     Dim vconvert As Double
-    vconvert = 1 / 86400 / (3.14 * (d_casing_m ^ 2 - d_intake_m ^ 2) / 4)
+    vconvert = 1 / 86400 / (3.1415 * (d_casing_m ^ 2 - d_intake_m ^ 2) / 4)
     v_sg_msec = q_gas_rc_m3day * vconvert
     v_sl_msec = qliq_rc_m3day * vconvert
     
@@ -353,15 +678,17 @@ Public Function unf_ksep_mechanistic_Marquez( _
     End If
     '------------------„исленный расчет траектории движени€ пузырька газа--------------------------------------------
     
+    Dim bbltr
+    
     Select Case submodel
     
     Case 0
         separation = calc_h_bubble_trajectory_annulus(v_sg_msec, v_sl_msec, v_ooz, h_p, _
-                                               d_casing_m, d_intake_m, mu_l, ro_l, ro_g, regim)
+                                               d_casing_m, d_intake_m, mu_l, ro_l, ro_g, regim, bbltr)
     
     Case 1
         separation = calc_r_bubble_trajectory_annulus(v_sg_msec, v_sl_msec, v_ooz, h_p, _
-                                                      d_casing_m, d_intake_m, mu_l, ro_l, ro_g, regim)
+                                                      d_casing_m, d_intake_m, mu_l, ro_l, ro_g, regim, bbltr)
                                                      
        
     End Select
@@ -379,6 +706,11 @@ Public Function unf_ksep_mechanistic_Marquez( _
     Select Case out_num
         Case 0
             unf_ksep_mechanistic_Marquez = Array(res, res_desc)
+        Case 2
+            Dim dout As New Dictionary
+            dout("ksep") = Ean
+            dout("tr") = ConvertToJson(bbltr)
+            unf_ksep_mechanistic_Marquez = ConvertToJson(dout)
         Case Else
             unf_ksep_mechanistic_Marquez = res(out_num - 1)
     End Select
@@ -421,18 +753,18 @@ Private Function calc_h_bubble_trajectory_annulus(v_sg_msec As Double, _
                                                   mu_l As Double, _
                                                   ro_l As Double, _
                                                   ro_g As Double, _
-                                                  regime As Integer)
-        'ѕеревод в инженерную метрическую систему
+                                                  regime As Integer, _
+                                                  Optional ByRef bbl_tr = 0)
+    ' расчет траектории движени€ пузырька газа при реверсивной сепарации
+    
+    'ѕеревод в инженерную метрическую систему
     Dim l_i As Double
     Dim dh As Double, rc As Double, rp As Double, tan_B As Double, j As Integer
-    Dim h_0  As Double, r_0 As Double, ri_0 As Double
-    Dim a_0 As Double, b_0 As Double, c_0 As Double, dr_dz_0 As Double
     Dim h_i As Double, r_i As Double, ri_i As Double
-    Dim a_i As Double, b_i As Double, c_i As Double, dr_dz_i As Double, separation As Double
-    
+    Dim dr_dz_i As Double, separation As Double
+    Dim bbl_tr_ As New CInterpolation
     ' interface characteristic length estimation based on TUALP data
     l_i = calc_li(v_sg_msec, v_ooz)
-'    l_i = calc_li(v_sg_msec, v_ooz, v_sl_msec, regime, 1)
     
     j = 0
     dh = h_p / 200
@@ -441,28 +773,21 @@ Private Function calc_h_bubble_trajectory_annulus(v_sg_msec As Double, _
     tan_B = (rc - rp) / h_p
     
         'Ќачальные услови€
-    h_0 = h_p
-    r_0 = rp
-    a_0 = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
-    b_0 = (rp + (h_0 / h_p) * (rc - rp)) * tan_B * v_sl_msec
-    c_0 = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_0 ^ 3) * b_0 + 1 / r_0
-    dr_dz_0 = -a_0 * b_0 * c_0
+    h_i = h_p
+    r_i = rp
     '–асчет в i-том сечении
     Do
-        h_i = h_0 - dh
-        ri_i = rp + (h_p - h_i) * tan_B
-        b_i = (rp + (h_i / h_p) * (rc - rp)) * tan_B * v_sl_msec
-        r_i = r_0 - dr_dz_0 * dh
-        c_i = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_i ^ 3) * b_i + 1 / r_i
-        dr_dz_i = -a_0 * b_i * c_i
+        dr_dz_i = dr_dz_(r_i, h_i, rp, rc, h_p, l_i, mu_l, ro_l, ro_g, tan_B, v_sl_msec)
         
+        r_i = r_i - dr_dz_i * dh
+        h_i = h_i - dh
+        ri_i = rp + (h_p - h_i) * tan_B
+        
+        bbl_tr_.AddPoint h_i, r_i
+            
         If r_i < rc Or h_i <= 0 Then
-            h_0 = h_i
-            ri_0 = ri_i
-            r_0 = r_i
-            dr_dz_0 = dr_dz_i
             j = j + 1
-            If ri_0 > rc Then
+            If ri_i > rc Then
                 Exit Do
             End If
             If h_i < 0 Then Exit Do
@@ -471,7 +796,22 @@ Private Function calc_h_bubble_trajectory_annulus(v_sg_msec As Double, _
         End If
         If j > 1000 Then Exit Do
     Loop
-    calc_h_bubble_trajectory_annulus = (h_p - h_0) / h_p
+    ReDim bbl_tr(1 To 2, 1 To bbl_tr_.num_points) As Double
+    Dim i As Integer
+    For i = 1 To bbl_tr_.num_points
+        bbl_tr(1, i) = bbl_tr_.pointX(i)
+        bbl_tr(2, i) = bbl_tr_.PointY(i)
+    Next i
+    calc_h_bubble_trajectory_annulus = (h_p - h_i) / h_p
+End Function
+Private Function dr_dz_(r_i, h_i, rp, rc, h_p, l_i, mu_l, ro_l, ro_g, tan_B, v_sl_msec)
+Dim a_i, b_i, c_i As Double
+        a_i = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
+        b_i = (rp + (h_i / h_p) * (rc - rp)) * tan_B * v_sl_msec
+        
+        
+        c_i = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_i ^ 3) * b_i + 1 / r_i
+        dr_dz_ = -a_i * b_i * c_i
 End Function
 Private Function calc_r_bubble_trajectory_annulus(v_sg_msec As Double, _
                                                   v_sl_msec As Double, _
@@ -482,63 +822,59 @@ Private Function calc_r_bubble_trajectory_annulus(v_sg_msec As Double, _
                                                   mu_l As Double, _
                                                   ro_l As Double, _
                                                   ro_g As Double, _
-                                                  Optional regime As Integer = 1)
+                                                  Optional regime As Integer = 1, _
+                                                  Optional ByRef bbl_tr = 0)
         'ѕеревод в инженерную метрическую систему
     Dim l_i As Double, dh As Double, rc As Double, rp As Double, tan_B As Double, j As Double
-    Dim h_0 As Double, r_0 As Double, ri_0 As Double
-    Dim a_0 As Double, b_0 As Double, c_0 As Double, dr_dz_0 As Double, Variance_0 As Double
+    
+    Dim bbl_tr_ As New CInterpolation
+    
+    Dim h_i, r_i, ri_i, dr_dz_i, separation As Double
     
     h_p = 0.1
+    
     l_i = calc_li(v_sg_msec, v_ooz)
- '   l_i = calc_li(v_sg_msec, v_ooz, v_sl_msec, regime, 1)
     
     j = 30
-    dh = h_p / 200
+    dh = h_p / 50
     rc = d_casing_m / 2
     rp = d_intake_m / 2
     tan_B = (rc - rp) / h_p
     
         'Ќачальные услови€
-    h_0 = h_p
-    r_0 = rp
-    ri_0 = rc - (h_p - h_0) * tan_B
-    a_0 = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
-    b_0 = (rp + (h_0 / h_p) * (rc - rp)) * tan_B * v_sl_msec
-    c_0 = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_0 ^ 3) * b_0 + 1 / r_0
-    dr_dz_0 = -a_0 * b_0 * c_0
-    Variance_0 = r_0 - ri_0
+    
+    h_i = h_p
+    r_i = rp
+    
+    bbl_tr_.AddPoint h_i, r_i
+       
         
-        '–асчет в i-том сечении
-    Dim h_i, r_i, ri_i, a_i, b_i, c_i, dr_dz_i, Variance_i, separation As Double
+    '–асчет в i-том сечении
     
     Do
+        dr_dz_i = dr_dz_(r_i, h_i, rp, rc, h_p, l_i, mu_l, ro_l, ro_g, tan_B, v_sl_msec)
         
-        h_i = h_0 - dh
+        h_i = h_i - dh
+        r_i = r_i - dr_dz_i * dh
         ri_i = rc - (h_p - h_i) * tan_B
-        a_i = 54 * mu_l / (l_i ^ 2 * (ro_l - ro_g) * 9.81)
-        b_i = (rp + (h_i / h_p) * (rc - rp)) * tan_B * v_sl_msec
-        r_i = r_0 - dr_dz_0 * dh
-        c_i = (2 * l_i ^ 2 * ro_l) / (9 * mu_l * r_i ^ 3) * b_i + 1 / r_i
-        dr_dz_i = -a_i * b_i * c_i
-        Variance_i = r_i - ri_i
-        If Variance_i < 0 Then
-             h_0 = h_i
-             ri_0 = ri_i
-             a_0 = a_i
-             b_0 = b_i
-             r_0 = r_i
-             c_0 = c_i
-             dr_dz_0 = dr_dz_i
-             Variance_0 = Variance_i
-                 If ri_0 > rc Then
-                     Exit Do
-                 End If
-         Else
-             Exit Do
-         End If
+        
+        If r_i - ri_i < 0 Then
+            If ri_i > rc Then
+                Exit Do
+            End If
+            bbl_tr_.AddPoint h_i, r_i
+        Else
+            Exit Do
+        End If
             
     Loop
     
-    calc_r_bubble_trajectory_annulus = ((rc ^ 2 - ri_0 ^ 2) / (rc ^ 2 - rp ^ 2))
+    ReDim bbl_tr(1 To 2, 1 To bbl_tr_.num_points) As Double
+    Dim i As Integer
+    For i = 1 To bbl_tr_.num_points
+        bbl_tr(1, i) = bbl_tr_.pointX(i)
+        bbl_tr(2, i) = bbl_tr_.PointY(i)
+    Next i
+    calc_r_bubble_trajectory_annulus = ((rc ^ 2 - ri_i ^ 2) / (rc ^ 2 - rp ^ 2))
 End Function
 
