@@ -5186,20 +5186,36 @@ Public Function well_ksep_natural_d( _
     Optional ByVal d_intake_mm As Double = 90, _
     Optional ByVal d_cas_mm As Double = 120, _
     Optional ByVal model As Integer = 0, _
-    Optional ByVal pkv_prod_period_ratio As Double = 1)
+    Optional ByVal pkv_prod_period_ratio As Double = 0.5, _
+    Optional ByVal h_intake_m As Double = 0.1, _
+    Optional ByVal h_perf_m As Double = 1, _
+    Optional param As String = "")
 ' feed          - закодированные параметры потока флюидов
 ' p_intake_atma - давление сепарации
 ' t_intake_C    - температура сепарации
 ' d_intake_mm   - диаметр приемной сетки
 ' d_cas_mm      - диаметр эксплуатационной колонны
-' model - тип модели. 0 - упрощенная Маркеса для ЭЦН. 1 - механистическая Маркеса  для ЭЦН
-'               2  - механистическая Михайлова для реверсивного потока жидкости и газа с ЭЦН ниже перфорации
-'               3 - механистическая для скважин ПКВ
+' model - тип модели: 0 - упрощенная Маркеса для ЭЦН, 1 - механистическая Маркеса для ЭЦН,
+'               2  - механистическая с ЭЦН ниже перфорации,
+'               3 - механистическая для скважин ПКВ.
 ' pkv_prod_period_ratio - для ПКВ отношение времени работы к времени цикла
+' h_intake_m - высота приемной сейти насоса, м
+' h_perf_m - высота интервала перфорации (для модели ЭЦН ниже перфорации), м
+' param       - дополнительные параметры расчета
 ' результат     - число - естественная сепарация
 'description_end
 On Error GoTo err1:
+    Dim prmd As Dictionary
+    Dim show_array As Boolean
+    Dim show_json As Boolean
+    Dim calibr_li As Double
+    Dim calibr_st As Double
+    Dim gas_goes_into_solution As Double
+    
     Dim fluid As New CPVT
+    
+    Dim fluid_annular As CPVT
+    Dim fluid_pump As CPVT
     
     ' переменные для чтения списков данных
     Dim ptq As PTQ_LIST
@@ -5211,47 +5227,80 @@ On Error GoTo err1:
     
     Call read_PTQ(ptq, feed, p_intake_atma, t_intake_C, fluid.log_, 0, 0, 0, 0, 0)
     Call init_ptq(ptq_out, ptq)
+    
+    ' читаем параметры
+    Set prmd = param_to_dict(param)
+    show_array = prmd(prm_show_array)
+    show_json = prmd(prm_show_json)
+    gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
+    calibr_li = 1
+    calibr_st = 1
+    If prmd.Exists("calibr_li") Then calibr_li = prmd("calibr_li")
+    If prmd.Exists("calibr_st") Then calibr_st = prmd("calibr_st")
     For i = 1 To ptq.len
         
         Call fluid.init_feed(ptq.feed(i))
         
         Call fluid.calc_PVT(ptq.p(i), ptq.t(i))
+        
+        Set fluid_pump = fluid.clone
+        
         With fluid
             Select Case model
                 Case 0
                 
-                    ksep_ = unf_ksep_natural_simplified_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_ESP_natural_simplified_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                     .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3)
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
                 Case 1
                 
-                    ksep_ = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_ESP_natural_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
-                                                     .mu_liq_cP, .mu_gas_cP, 1, 1, 1)
+                                                     .mu_liq_cP, .mu_gas_cP, 1, h_intake_m, calibr_li, calibr_st)
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
                 Case 2
                 
-                    ksep_ = unf_ksep_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_ESP_natural_mechanistic_pump_below_perf(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
-                                                     .mu_liq_cP, .mu_gas_cP, 1, 1, 0)
+                                                     .mu_liq_cP, .mu_gas_cP, 1, h_perf_m, calibr_li, calibr_st)
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
                 Case 3
-                    ksep_ = unf_ksep_mechanistic_PKV(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    ksep_ = unf_ksep_ESP_natural_mechanistic_pkv(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
-                                                     .mu_liq_cP, .mu_gas_cP, , pkv_prod_period_ratio)
+                                                     .mu_liq_cP, .mu_gas_cP, 1, h_intake_m, calibr_li, calibr_st, pkv_prod_period_ratio)
+                    Set fluid_annular = fluid.clone
+                    fluid_annular.q_liq_sm3day = fluid.q_liq_sm3day * 1 / (pkv_prod_period_ratio)
+                    ' может быть можно было бы учесть, что поменяется обводненность - но пока не будем
+                    fluid_annular.rp_m3m3 = 1
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
+                    
+                    Set fluid_pump = feed_mod_mix_obj(fluid_pump, fluid_annular)
                 
             End Select
             
             ptq_out.val(i) = Round(ksep_, 5)
-            ptq_out.feed(i) = fluid.feed
+            ptq_out.feed(i) = fluid_pump.feed
             ptq_out.p(i) = ptq.p(i)
             ptq_out.t(i) = ptq.t(i)
-        '    col_res.Add
         End With
     Next i
+    
+    
     Dim d As Dictionary
     Set d = convert_to_dict_ptq(ptq_out)
     d("k_sep") = ptq_out.val
     
     If ptq.len = 1 Then
-        well_ksep_natural_d = ptq_out.val(1)
+        If show_array Then
+            Dim res, resd
+            res = Array(ptq_out.val(1), ptq_out.feed(1), ptq_out.p(1), ptq_out.t(1))
+            resd = Array("ksep", "feed pump", "p, atma", "t, C")
+            well_ksep_natural_d = Array(res, resd)
+        ElseIf show_json Then
+            well_ksep_natural_d = ConvertToJson(d)
+        Else
+            well_ksep_natural_d = ptq_out.val(1)
+        End If
     Else
         well_ksep_natural_d = ConvertToJson(d)
     End If
@@ -5343,10 +5392,6 @@ On Error GoTo er1:
     Dim t_dis_C As Double
     Dim p_buf_atma As Double
     Dim t_buf_C As Double
-'    Dim p_res_atma As Double
-'    Dim pi_m3dayatm As Double
-'    Dim pb_atma As Double
-'    Dim fw_perc As Double
     Dim q_liq_sm3day As Double
     
     Dim feed_sep As String

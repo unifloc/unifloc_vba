@@ -2325,7 +2325,7 @@ class API():
         self.f_GLV_IPO_p_close = self.book.macro("GLV_IPO_p_close")
         return self.f_GLV_IPO_p_close(p_bellow_atma,p_out_atma,t_C,GLV_type,d_port_mm,d_vkr1_mm,d_vkr2_mm,d_vkr3_mm,d_vkr4_mm,gamma_gas)
 
-    def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120,model=0,pkv_prod_period_ratio=1):
+    def well_ksep_natural_d(self, feed,p_intake_atma,t_intake_C=50,d_intake_mm=90,d_cas_mm=120,model=0,pkv_prod_period_ratio=0.5,h_intake_m=0.1,h_perf_m=1,param=""):
         """
  ========== description ============== 
  расчет натуральной сепарации газа на приеме насоса 
@@ -2342,14 +2342,20 @@ class API():
 
      d_cas_mm - диаметр эксплуатационной колонны    
 
-     model - тип модели. 0 - упрощенная маркеса для эцн. 1 - механистическая маркеса для эцн  2 - механистическая михайлова для реверсивного потока жидкости и газа с эцн ниже перфора..см.мануал   
+     model - тип модели: 0 - упрощенная маркеса для эцн, 1 - механистическая маркеса для эцн,  2 - механистическая с эцн ниже перфорации,  3 - механистическая для скважин пкв.    
 
-     pkv_prod_period_ratio - для пкв отношение времени работы к времени цикла   
+     pkv_prod_period_ratio - для пкв отношение времени работы к времени цикла    
+
+     h_intake_m - высота приемной сейти насоса, м    
+
+     h_perf_m - высота интервала перфорации (для модели эцн ниже перфорации), м    
+
+     param - дополнительные параметры расчета   
 
         """
 
         self.f_well_ksep_natural_d = self.book.macro("well_ksep_natural_d")
-        return self.f_well_ksep_natural_d(feed,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm,model,pkv_prod_period_ratio)
+        return self.f_well_ksep_natural_d(feed,p_intake_atma,t_intake_C,d_intake_mm,d_cas_mm,model,pkv_prod_period_ratio,h_intake_m,h_perf_m,param)
 
     def well_ksep_total_d(self, SepNat,SepGasSep):
         """
@@ -2497,7 +2503,7 @@ class API():
         self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
         return self.f_well_calc_from_pintake(p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,p_wh_atma,flow_corr)
 
-    def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param=""):
+    def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
         """
  ========== description ============== 
  оценка расхода жидкости через сопло  от перепада давления 
@@ -2514,14 +2520,20 @@ class API():
 
      t_c - температура потоков в струйном насосе, с.    
 
-     param - дополнительные параметры расчета   
+     param - дополнительные параметры расчета    
+
+   type_q   
+
+   kchoke   
+
+   d_throat_mm  
 
         """
 
         self.f_Jet_q_nozzle_sm3day = self.book.macro("Jet_q_nozzle_sm3day")
-        return self.f_Jet_q_nozzle_sm3day(feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C,param)
+        return self.f_Jet_q_nozzle_sm3day(feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C,param,type_q,kchoke,d_throat_mm)
 
-    def Jet_p_out_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=0):
+    def Jet_p_out_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,model=0,k_n=0.2,k_td=0.5,kchoke=0.8):
         """
  ========== description ============== 
 Расчет давления на выкиде струйного насоса 
@@ -2544,12 +2556,20 @@ class API():
 
      param - дополнительные параметры расчета    
 
-   type_q  
+   type_q   
+
+   model   
+
+   k_n   
+
+   k_td   
+
+   kchoke  
 
         """
 
         self.f_Jet_p_out_atma = self.book.macro("Jet_p_out_atma")
-        return self.f_Jet_p_out_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C,param,type_q)
+        return self.f_Jet_p_out_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C,param,type_q,model,k_n,k_td,kchoke)
 
     def Jet_p_in_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C=30,param="",type_q=1,model=0):
         """
