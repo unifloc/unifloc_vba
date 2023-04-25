@@ -13,6 +13,7 @@
 ' - механистическая модель Михайлова для реверсивной потока с ЭЦН ниже перфорации
 ' - механистическая модель на основе модели Маркеса-Прадо для ЭЦН в ПКВ режиме
 Option Explicit
+Public d_tub_m As Double      ' диаметр НКТ внешний
 Public d_intake_m As Double   ' диаметр приема ЭЦН
 Public d_cas_m As Double      ' диаметр э/к в месте установки ЭЦН
 Public h_perf_m As Double     ' высота перфорации для модели реверсивного потока с ЭЦН ниже перфорации
@@ -43,6 +44,10 @@ End Sub
 Public Property Get area_annulus_intake_m2() As Double
     area_annulus_intake_m2 = const_Pi * (d_cas_m ^ 2 - d_intake_m ^ 2) / 4
 End Property
+' площадь кольцевого пространства между НКТ и э/к
+Public Property Get area_annulus_tubing_m2() As Double
+    area_annulus_tubing_m2 = const_Pi * (d_cas_m ^ 2 - d_tub_m ^ 2) / 4
+End Property
 ' гидравлический диаметр кольцевого зазора около приема насоса
 Public Property Get d_h() As Double
     d_h = d_cas_m - d_intake_m
@@ -72,21 +77,57 @@ End Property
 Public Property Get vsl_msec() As Double
     vsl_msec = 0.000011574 * qliq_rc_m3day / area_annulus_intake_m2
 End Property
+'Liquid sureficial velocity
+Public Property Get vsl_tub_msec() As Double
+    vsl_tub_msec = 0.000011574 * qliq_rc_m3day / area_annulus_tubing_m2
+End Property
 ' абсолютная скорость газа в реверсивном потоке жидкости
 ' используется для расчета ЭЦН ниже перфорации и для ПКВ режима
 Public Property Get vg_downflow_msec() As Double
+'
+'    If pkv_ratio > 0 Then
+'        vg_downflow_msec = 1.2 * (vsg_msec - vsl_msec) * (1 / pkv_ratio - 1) + v_inf_msec(1)
+'    Else
+'       vg_downflow_msec = 1.2 * (vsg_msec - vsl_msec) + v_inf_msec(1)
+'    End If
+' для оценки границы существования режима при котором жидкость двигается вниз
+' а газ вверх будем использовать только приведенную скорость жидкости
+' это примерно верно исходя из экспериментов
     If pkv_ratio > 0 Then
-        vg_downflow_msec = 1.2 * (vsg_msec - vsl_msec) * (1 / pkv_ratio - 1) + v_inf_msec(1)
+        vg_downflow_msec = 1.3 * (-vsl_msec) * (1 / pkv_ratio - 1) + v_inf_msec(1)
     Else
-       vg_downflow_msec = 1.2 * (vsg_msec - vsl_msec) + v_inf_msec(1)
+       vg_downflow_msec = 1.3 * (-vsl_msec) + v_inf_msec(1)
+    End If
+End Property
+' абсолютная скорость газа в реверсивном потоке жидкости
+' используется для расчета ЭЦН ниже перфорации и для ПКВ режима
+Public Property Get vg_downflow_tub_msec() As Double
+'
+'    If pkv_ratio > 0 Then
+'        vg_downflow_tub_msec = 1.2 * (vsg_tub_msec - vsl_tub_msec) * (1 / pkv_ratio - 1) + v_inf_msec(1)
+'    Else
+'       vg_downflow_tub_msec = 1.2 * (vsg_tub_msec - vsl_tub_msec) + v_inf_msec(1)
+'    End If
+    
+    If pkv_ratio > 0 Then
+        vg_downflow_tub_msec = 1.3 * (-vsl_tub_msec) * (1 / pkv_ratio - 1) + v_inf_msec(1)
+    Else
+       vg_downflow_tub_msec = 1.3 * (-vsl_tub_msec) + v_inf_msec(1)
     End If
 End Property
 'Gas sureficial velocity
 Public Property Get vsg_msec() As Double
     vsg_msec = 0.000011574 * q_gas_rc_m3day / area_annulus_intake_m2
 End Property
+'Gas sureficial velocity
+Public Property Get vsg_tub_msec() As Double
+    vsg_tub_msec = 0.000011574 * q_gas_rc_m3day / area_annulus_tubing_m2
+End Property
 Public Property Get vsmix_msec() As Double
     vsmix_msec = vsl_msec + vsg_msec
+End Property
+Public Property Get vsmix_tub_msec() As Double
+    vsmix_tub_msec = vsl_tub_msec + vsg_tub_msec
 End Property
 'Froude number
 Public Property Get n_Fr() As Double
@@ -656,11 +697,13 @@ Public Function ksep_mechanistic_pkv(ByVal qliq_rc_m3day As Double, _
         ksep_mechanistic_pkv = ksep
         Exit Function
     End If
+'    Dim vg_lim As Double
+'    Dim alpha As Double
     Dim ri As Double, rp As Double, rc As Double
     rc = d_cas_m / 2
     rp = d_intake_m / 2
     ri = calc_r_bubble_trajectory_annulus_pkv(h_intake_m, d_intake_m / 2)
-    
+'    vg_lim = 0.2
     If vg_downflow_msec > 0 Then
         ' оценим сепарацию газа из потока из пласта (мгновенная сепарация)
         ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2))
@@ -668,10 +711,42 @@ Public Function ksep_mechanistic_pkv(ByVal qliq_rc_m3day As Double, _
         ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
     Else
         ' если нисходящий поток из затруба затянет с собой газ
-        ' никакой сепарации газа не будет
+        ' никакой сепарации газа из потока из пласта не будет
         ksep = 0
-        ksep_average = 0
+        If vg_downflow_tub_msec > 0 Then
+            ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
+        Else
+            ' небольшое значение здесь символизирует, что не весь газ получится засосать
+            ' в насос при включении насоса. Но точное значение оценить пока трудно (да вроде и незачем)
+            ksep_average = 0.05
+        End If
+        ' дополнительно снаружи надо будет учесть, что жидкость
+        ' из затруба может принести свой газ
     End If
+                
+                
+          
+'        If vg_downflow_tub_msec > 0 Then
+'            ' оценим сепарацию газа из потока из пласта (мгновенная сепарация)
+'            ' произвольно уменьшим ее  (так как первое время будем забирать газ из
+'            ' пространства между э/к и насосом
+'            ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2)) * 0.5
+'            ' оценим сепарацию среднюю
+'            ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
+'
+'        Else
+''            If vg_downflow_tub_msec < -vg_lim Then
+''            Else
+''                alpha = ((vg_downflow_tub_msec) / vg_lim + 1) / 2
+''                ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2)) * 0.5
+''                ksep = ksep * alpha
+''            End If
+''            If ksep > 0 Then
+''                ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
+''            Else
+''                ksep_average = 0
+''            End If
+'        End If
     
     ksep_mechanistic_pkv = Array(ksep_average, ksep)
 End Function
@@ -787,7 +862,8 @@ Public Sub init_from_values( _
                         Optional hperf_m As Double = 0.1, _
                         Optional calibr_li As Double = 2, _
                         Optional calibr_st As Double = 1, _
-                        Optional pkv_ratio As Double = 0.5)
+                        Optional pkv_ratio As Double = 0.5, _
+                        Optional d_tub_m As Double = 0.073)
         Me.d_intake_m = d_intake_m
         Me.d_cas_m = d_cas_m
         Me.sigma_liq_Nm = sigma_liq_Nm * calibr_st
@@ -799,6 +875,7 @@ Public Sub init_from_values( _
         Me.h_perf_m = hperf_m
         Me.calibr_li = calibr_li
         Me.pkv_ratio = pkv_ratio
+        Me.d_tub_m = d_tub_m
         
         Me.qliq_rc_m3day = q_liq_rc_m3day
         Me.q_gas_rc_m3day = q_gas_rc_m3day
@@ -818,13 +895,14 @@ End Function
 Public Function get_result_array()
     Dim res, res_desc
     If pkv_ratio > 0 Then
-        res = Array(ksep, ksep_average, flow_pattern, v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec, calc_li(0, 1), _
-                    pkv_ratio, -vsl_msec * (1 / pkv_ratio - 1), vsg_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1))
-        res_desc = Array("ksep", "ksep_average", "flow regime", "v_ooz", "vsl", "vsg", "vg_downflow", "li", _
-                    "pkv_ratio", "vsl_annular_msec", "vsg_annular_msec")
+        res = Array(ksep, ksep_average, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec, _
+                    pkv_ratio, -vsl_msec * (1 / pkv_ratio - 1), vsg_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1), _
+                    -vsl_tub_msec * (1 / pkv_ratio - 1), vsg_tub_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1), vg_downflow_tub_msec)
+        res_desc = Array("ksep", "ksep_average", "flow regime", "li", "v_ooz", "vsl", "vsg", "vg_downflow", _
+                    "pkv_ratio", "vsl_ann_intake_msec", "vsg_ann_intake_msec", "vsl_ann_tub_msec", "vsg_ann_tub_msec", "vg_downflow_tub_msec")
     Else
-        res = Array(ksep, ksep_average, flow_pattern, v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec, calc_li(0, 1))
-        res_desc = Array("ksep", "ksep_average", "flow regime", "v_ooz", "vsl", "vsg", "vg_downflow", "li")
+        res = Array(ksep, ksep_average, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec)
+        res_desc = Array("ksep", "ksep_average", "flow regime", "li", "v_ooz", "vsl", "vsg", "vg_downflow")
     End If
     get_result_array = Array(res, res_desc)
 End Function

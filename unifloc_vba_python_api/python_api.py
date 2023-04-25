@@ -2373,7 +2373,7 @@ class API():
         self.f_well_ksep_total_d = self.book.macro("well_ksep_total_d")
         return self.f_well_ksep_total_d(SepNat,SepGasSep)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False):
+    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -2400,7 +2400,7 @@ class API():
 
     calibr_fric - калибровка для гидравлической корреляции по трению    
 
-    ksep - общий коэффициент сепарации газа на приеме эцн    
+    ksep - общий коэффициент сепарации газа на приеме эцн, если 0 то  будет рассчитываться    
 
     ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
 
@@ -2410,14 +2410,20 @@ class API():
 
     flow_corr - номер гидравлической корреляции, как для трубы    
 
-    fast - флаг, если 1 то будет рассчитано только давление,   
+    fast - флаг, если 1 то будет рассчитано только давление,    
+
+    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
+
+   dcas_mm   
+
+   dint_mm  
 
         """
 
         self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,flow_corr,fast)
+        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,dcas_mm,dint_mm)
 
-    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0):
+    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,pkv_ratio=0,dcas_mm=130,dint_mm=102):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе устьевого (буферного) давления (расчет сверху вниз) 
@@ -2452,12 +2458,18 @@ class API():
 
     p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
 
-    flow_corr - номер гидравлической корреляции, как для трубы   
+    flow_corr - номер гидравлической корреляции, как для трубы    
+
+    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
+
+   dcas_mm   
+
+   dint_mm  
 
         """
 
         self.f_well_calc_from_pwh = self.book.macro("well_calc_from_pwh")
-        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,flow_corr)
+        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,flow_corr,pkv_ratio,dcas_mm,dint_mm)
 
     def well_calc_from_pintake(self, p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,p_wh_atma=10,flow_corr=0):
         """
@@ -3570,5 +3582,153 @@ class API():
 
         self.f_transient_p_from_pd_atma = self.book.macro("transient_p_from_pd_atma")
         return self.f_transient_p_from_pd_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+
+    def unf_ksep_ESP_natural_simplified_Marquez(self, d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,out=1,calibr_st=1):
+        """
+ ========== description ============== 
+ Расчет естественной сепарации по Маркезу на основе упрощенной модели.  рабочая функция для тестирования корреляции. 
+        
+ ==========  arguments  ============== 
+
+    d_intake_m - диаметр приемной сетки насоса эцн (m)    
+
+    d_cas_m - диаметр эксплуатационной колонны напротив приема эцн (m)    
+
+    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
+
+    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
+
+    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
+
+    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
+
+    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
+
+    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
+
+    calibr_st - множитель для коэффициента поверхностного натяжения  для проведения анализа чувствительности   
+
+        """
+
+        self.f_unf_ksep_ESP_natural_simplified_Marquez = self.book.macro("unf_ksep_ESP_natural_simplified_Marquez")
+        return self.f_unf_ksep_ESP_natural_simplified_Marquez(d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,out,calibr_st)
+
+    def unf_ksep_ESP_natural_mechanistic_Marquez(self, d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out=1,hintake_m=0.1,calibr_li=2,calibr_st=1):
+        """
+ ========== description ============== 
+ Расчет естественной сепарации по Маркезу на основе механистической модели.  рабочая функция для тестирования корреляции. 
+        
+ ==========  arguments  ============== 
+
+    d_intake_m - диаметр приемной сетки насоса эцн (m)    
+
+    d_cas_m - диаметр эксплуатационной колонны напротив приема эцн (m)    
+
+    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
+
+    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
+
+    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
+
+    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
+
+    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
+
+    mu_liq_rc_cp - вязкость жидкости в рабочих условиях сп    
+
+    mu_gas_rc_cp - вязкость газа в рабочих условиях, сп    
+
+    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
+
+    hintake_m - высота приемной сети насоса, м    
+
+    calibr_li - множитель на параметр характеризующий размеры пузырьков газа,  для проведения анализа чувствительности    
+
+    calibr_st - множитель для коэффициента поверхностного натяжения,  для проведения анализа чувствительности   
+
+        """
+
+        self.f_unf_ksep_ESP_natural_mechanistic_Marquez = self.book.macro("unf_ksep_ESP_natural_mechanistic_Marquez")
+        return self.f_unf_ksep_ESP_natural_mechanistic_Marquez(d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out,hintake_m,calibr_li,calibr_st)
+
+    def unf_ksep_ESP_natural_mechanistic_pkv(self, d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out=1,hintake_m=0.1,calibr_li=2,calibr_st=1,pkv_ratio=0.5,d_tub_m=0.073):
+        """
+ ========== description ============== 
+ Расчет естественной сепарации для ПКВ по Михайлову Маркесу на основе механистической модели.  рабочая функция для тестирования корреляции. 
+        
+ ==========  arguments  ============== 
+
+    d_intake_m - диаметр приемной сетки насоса эцн (m)    
+
+    d_cas_m - диаметр эксплуатационной колонны напротив приема эцн (m)    
+
+    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
+
+    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
+
+    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
+
+    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
+
+    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
+
+    mu_liq_rc_cp - вязкость жидкости в рабочих условиях сп    
+
+    mu_gas_rc_cp - вязкость газа в рабочих условиях, сп    
+
+    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
+
+    hintake_m - высота приемной сети насоса, м    
+
+    calibr_li - множитель на параметр характеризующий размеры пузырьков газа,  для проведения анализа чувствительности    
+
+    calibr_st - множитель для коэффициента поверхностного натяжения,  для проведения анализа чувствительности    
+
+    pkv_ratio - пкв отношение (работа к общему времени цикла)    
+
+    d_tub_m - внешний диаметр нкт   
+
+        """
+
+        self.f_unf_ksep_ESP_natural_mechanistic_pkv = self.book.macro("unf_ksep_ESP_natural_mechanistic_pkv")
+        return self.f_unf_ksep_ESP_natural_mechanistic_pkv(d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out,hintake_m,calibr_li,calibr_st,pkv_ratio,d_tub_m)
+
+    def unf_ksep_ESP_natural_mechanistic_pump_below_perf(self, d_tub_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out=1,hperf_m=0.1,calibr_li=2,calibr_st=1):
+        """
+ ========== description ============== 
+ Расчет естественной сепарации для ПКВ по Михайлову Маркесу на основе механистической модели.  рабочая функция для тестирования корреляции. 
+        
+ ==========  arguments  ============== 
+
+    d_tub_m - диаметр нкт (или насоса) напротив перфорации (m)    
+
+    d_cas_m - диаметр эксплуатационной колонны напротив перфорации (m)    
+
+    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
+
+    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
+
+    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
+
+    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
+
+    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
+
+    mu_liq_rc_cp - вязкость жидкости в рабочих условиях сп    
+
+    mu_gas_rc_cp - вязкость газа в рабочих условиях, сп    
+
+    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
+
+    hperf_m - высота интервала перфорации, м    
+
+    calibr_li - множитель на параметр характеризующий размеры пузырьков газа,  для проведения анализа чувствительности    
+
+    calibr_st - множитель для коэффициента поверхностного натяжения,  для проведения анализа чувствительности   
+
+        """
+
+        self.f_unf_ksep_ESP_natural_mechanistic_pump_below_perf = self.book.macro("unf_ksep_ESP_natural_mechanistic_pump_below_perf")
+        return self.f_unf_ksep_ESP_natural_mechanistic_pump_below_perf(d_tub_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out,hperf_m,calibr_li,calibr_st)
 
 #UniflocVBA = API(addin_name_str)

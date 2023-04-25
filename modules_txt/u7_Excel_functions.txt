@@ -3159,9 +3159,9 @@ On Error GoTo er1:
     ' далее надо определить давление насыщения, газосодержание при давлении насыщения и другие параметры
     ' для упрощения - берем все калибровочные параметры как средне взвешенные по объемной доли нефти в потоке
     ' потенциально надо сделать методику лучше
-    pb_mix = feed1.pb_calc_atma * fo1 + feed2.pb_calc_atma * (1 - fo1)
+    pb_mix = feed1.pb_atma * fo1 + feed2.pb_atma * (1 - fo1)
     tres_mix = feed1.t_res_C * fo1 + feed2.t_res_C * (1 - fo1)
-    rsb_mix = feed1.rsb_calc_m3m3 * fo1 + feed2.rsb_calc_m3m3 * (1 - fo1)
+    rsb_mix = feed1.rsb_m3m3 * fo1 + feed2.rsb_m3m3 * (1 - fo1)
     bob_mix = feed1.bob_m3m3 * fo1 + feed2.bob_m3m3 * (1 - fo1)
     muob_mix = feed1.muob_cP * fo1 + feed2.muob_cP * (1 - fo1)
     
@@ -5210,7 +5210,7 @@ On Error GoTo err1:
     Dim show_json As Boolean
     Dim calibr_li As Double
     Dim calibr_st As Double
-    Dim gas_goes_into_solution As Double
+  '  Dim gas_goes_into_solution As Double
     
     Dim fluid As New CPVT
     
@@ -5224,6 +5224,7 @@ On Error GoTo err1:
     Dim col_res As New Collection
     Dim i As Integer
     Dim ksep_ As Double
+    Dim resksep
     
     Call read_PTQ(ptq, feed, p_intake_atma, t_intake_C, fluid.log_, 0, 0, 0, 0, 0)
     Call init_ptq(ptq_out, ptq)
@@ -5232,7 +5233,7 @@ On Error GoTo err1:
     Set prmd = param_to_dict(param)
     show_array = prmd(prm_show_array)
     show_json = prmd(prm_show_json)
-    gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
+   ' gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
     calibr_li = 1
     calibr_st = 1
     If prmd.Exists("calibr_li") Then calibr_li = prmd("calibr_li")
@@ -5251,31 +5252,70 @@ On Error GoTo err1:
                 
                     ksep_ = unf_ksep_ESP_natural_simplified_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                     .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3)
-                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution:=1)
                 Case 1
                 
                     ksep_ = unf_ksep_ESP_natural_mechanistic_Marquez(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
                                                      .mu_liq_cP, .mu_gas_cP, 1, h_intake_m, calibr_li, calibr_st)
-                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution:=1)
                 Case 2
                 
                     ksep_ = unf_ksep_ESP_natural_mechanistic_pump_below_perf(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
                                                      .mu_liq_cP, .mu_gas_cP, 1, h_perf_m, calibr_li, calibr_st)
-                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
+                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution:=1)
                 Case 3
-                    ksep_ = unf_ksep_ESP_natural_mechanistic_pkv(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
+                    resksep = unf_ksep_ESP_natural_mechanistic_pkv(d_intake_mm / 1000, d_cas_mm / 1000, .qliq_rc_m3day, .q_gas_rc_m3day, _
                                                      .sigma_liq_Nm, .rho_liq_rc_kgm3, .rho_gas_rc_kgm3, _
-                                                     .mu_liq_cP, .mu_gas_cP, 1, h_intake_m, calibr_li, calibr_st, pkv_prod_period_ratio)
-                    Set fluid_annular = fluid.clone
-                    fluid_annular.q_liq_sm3day = fluid.q_liq_sm3day * 1 / (pkv_prod_period_ratio)
-                    ' может быть можно было бы учесть, что поменяется обводненность - но пока не будем
-                    fluid_annular.rp_m3m3 = 1
-                    Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution)
+                                                     .mu_liq_cP, .mu_gas_cP, 0, h_intake_m, calibr_li, calibr_st, pkv_prod_period_ratio)
+                    ' для пкв режима поток поступающий в насос состоит из двух - из пласта и из затруба
+                    ' подготовим далее параметры этих потоков и смешаем их, чтобы получить для расчетов смешанный поток для насоса
+                    ksep_ = resksep(0)(0)
+                    Dim ksep_av As Double
+                    Dim ksep_ann As Double
                     
-                    Set fluid_pump = feed_mod_mix_obj(fluid_pump, fluid_annular)
-                
+                    ksep_av = resksep(0)(1)
+                    
+                    If ksep_av > 0 Then
+                    
+                        If ksep_ < 0.01 And ksep_av < 0.1 Then
+                            ksep_ann = 0.1
+                        Else
+                            ksep_ann = 0.99
+                        End If
+                        Set fluid_annular = fluid.clone
+                        
+                        ' для флюида из затруба уберем весь газ из потока (ксеп = 1)
+                        Call fluid_annular.mod_after_separation(ptq.p(i), ptq.t(i), ksep_ann, gas_goes_into_solution:=1)
+                        ' учтем, что из затруба объем жидкости определяется пкв отношением
+                        fluid_annular.q_liq_sm3day = fluid.q_liq_sm3day * 1 / (pkv_prod_period_ratio) * (1 - pkv_prod_period_ratio)
+                        ' может быть можно было бы учесть, что поменяется обводненность - но пока не будем
+                        
+                        fluid_annular.rp_m3m3 = fluid_annular.rsb_m3m3
+                        
+                        Call fluid_annular.calc_PVT(ptq.p(i), ptq.t(i))
+                        Call fluid_pump.calc_PVT(ptq.p(i), ptq.t(i))
+                        
+                        Dim qgf1 As Double, qgf2 As Double
+                        
+                        qgf1 = fluid_annular.q_gas_rc_m3day
+                        qgf2 = fluid_pump.q_gas_rc_m3day
+                        
+                        Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution:=1)
+                        
+                        
+                        Call fluid_annular.calc_PVT(ptq.p(i), ptq.t(i))
+                        Call fluid_pump.calc_PVT(ptq.p(i), ptq.t(i))
+                        
+                        qgf1 = fluid_annular.q_gas_rc_m3day
+                        qgf2 = fluid_pump.q_gas_rc_m3day
+                        
+                        Set fluid_pump = feed_mod_mix_obj(fluid_pump, fluid_annular)
+                    Else
+                        ksep_ = 0
+                        Call fluid_pump.mod_after_separation(ptq.p(i), ptq.t(i), ksep_, gas_goes_into_solution:=1)
+                    End If
             End Select
             
             ptq_out.val(i) = Round(ksep_, 5)
@@ -5297,7 +5337,12 @@ On Error GoTo err1:
             resd = Array("ksep", "feed pump", "p, atma", "t, C")
             well_ksep_natural_d = Array(res, resd)
         ElseIf show_json Then
-            well_ksep_natural_d = ConvertToJson(d)
+            Dim dd As New Dictionary
+            dd("k_sep") = ptq_out.val(1)
+            Set dd("feed") = ParseJson(ptq_out.feed(1))
+            dd("p") = ptq_out.p(1)
+            dd("t") = ptq_out.t(1)
+            well_ksep_natural_d = ConvertToJson(dd)
         Else
             well_ksep_natural_d = ptq_out.val(1)
         End If
@@ -5307,7 +5352,6 @@ On Error GoTo err1:
     Exit Function
 err1:
     well_ksep_natural_d = Err.Description
-    'add_log_msg "Error:MF_ksep_natural_d:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации
 ' расчет общей сепарации на приеме насоса
@@ -5350,7 +5394,10 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
                           Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal p_cas_atma = 0, _
                           Optional ByVal flow_corr As Integer = 0, _
-                          Optional ByVal fast As Boolean = False)
+                          Optional ByVal fast As Boolean = False, _
+                          Optional ByVal pkv_ratio As Double = 0.5, _
+                          Optional ByVal dcas_mm As Double = 125, _
+                          Optional ByVal dint_mm As Double = 110)
 'p_wf_atma - забойное давление
 't_wf_C - температура флюида на забое скважины
 'feed_json - параметры потока в скважине (с забоя)
@@ -5364,7 +5411,8 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
 '          в конструкции диаметры должны учитывать глубину спуска ЭЦН
 'calibr_grav - калибровка для гидравлической корреляции по гравитации
 'calibr_fric - калибровка для гидравлической корреляции по трению
-'ksep - общий коэффициент сепарации газа на приеме ЭЦН
+'ksep - общий коэффициент сепарации газа на приеме ЭЦН, если 0 то
+'       будет рассчитываться
 'ipr_json - параметры пласта, используйте encode_ipr
 '           если не заданы, считается для постоянного дебита из feed_json
 't_crit_C - критическая температура для АСПО
@@ -5373,6 +5421,7 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
 'flow_corr - номер гидравлической корреляции, как для трубы
 'fast - флаг, если 1 то будет рассчитано только давление,
 '       если 0 - то результат json с кривыми
+'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
 'description_end
 On Error GoTo er1:
     Const calc_along_coord = False
@@ -5413,16 +5462,7 @@ On Error GoTo er1:
     q_liq_sm3day = f("q_liq_sm3day")
 ' 0. если задана IPR  то пытаемся оценить дебит
     If Len(ipr_json) > 0 Then
-'        Dim d As Dictionary
-'        Set d = ParseJson(ipr_json)
-'        p_res_atma = d("p_res_atma")
-'        pi_m3dayatm = d("pi_m3dayatm")
-'        pb_atma = d("pb_atma")
-'        fw_perc = d("fw_perc")
-'
-'        Call ipr_vogel.InitProp(p_res_atma, pb_atma, fw_perc)
         Call ipr_vogel.init_json(ipr_json)
-'        ipr_vogel.pi_sm3dayatm = pi_m3dayatm
         q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
         
         f("q_liq_sm3day") = q_liq_sm3day
@@ -5450,21 +5490,37 @@ On Error GoTo er1:
     t_intake_C = res1.t_C
     
     
+                Dim rksep As String
+                Dim dcasep As Dictionary
  
     
     If Len(esp_json) > 1 Then
-       ' если данные по ЭЦН есть - пытаемся их анализировать
-       ' 2. расчет свойств потока с учетом сепарации газа
-       feed_sep = feed_mod_separate_gas(ksep, p_intake_atma, t_intake_C, feed_json)
-       gas_fraction = feed_gas_fraction_d(p_intake_atma, t_intake_C, feed_json, ksep)
-       qgas_cas_sm3day = feed_q_gas_free_sm3day(p_intake_atma, t_intake_C, feed_json) * ksep
-       ' 3. расчет перепада давления в ЭЦН
-       Call esp.init_json(esp_json)
-       esp.fluid.init_feed (feed_sep)
-       Call esp.calc_ESP(p_intake_atma, t_intake_C)
-       
-       p_dis_atma = esp.p_dis_atma
-       t_dis_C = esp.t_dis_C
+        ' если данные по ЭЦН есть - пытаемся их анализировать
+        ' 2. расчет свойств потока с учетом сепарации газа
+        If ksep > 0 Then
+            feed_sep = feed_mod_separate_gas(ksep, p_intake_atma, t_intake_C, feed_json)
+        Else
+            ' если ксеп не задан - пытаемся оценить по корреляции
+            If pkv_ratio = 0 Then
+                rksep = well_ksep_natural_d(feed_json, p_intake_atma, t_intake_C, dint_mm, dcas_mm, 1, , , , "{""show_json"":1,""calibr_li"":2}")
+                Set dcasep = ParseJson(rksep)
+                feed_sep = ConvertToJson(dcasep("feed"))
+            Else
+                rksep = well_ksep_natural_d(feed_json, p_intake_atma, t_intake_C, dint_mm, dcas_mm, 3, pkv_ratio, , , "{""show_json"":1,""calibr_li"":2}")
+                Set dcasep = ParseJson(rksep)
+                feed_sep = ConvertToJson(dcasep("feed"))
+            End If
+            ksep = dcasep("k_sep")
+        End If
+        gas_fraction = feed_gas_fraction_d(p_intake_atma, t_intake_C, feed_sep)
+        qgas_cas_sm3day = feed_q_gas_free_sm3day(p_intake_atma, t_intake_C, feed_json) * ksep
+        ' 3. расчет перепада давления в ЭЦН
+        Call esp.init_json(esp_json)
+        Call esp.fluid.init_feed(feed_sep)
+        Call esp.calc_ESP(p_intake_atma, t_intake_C)
+        
+        p_dis_atma = esp.p_dis_atma
+        t_dis_C = esp.t_dis_C
     Else
         ' если данных по ЭЦН нет - тогда это фонтанирующая скважина
         feed_sep = feed_json
@@ -5570,9 +5626,15 @@ On Error GoTo er1:
         dout.Add "h_dyn_m", Round(h_dyn_m, 2)
         dout.Add "gas_fraction at pump", Round(gas_fraction, 4)
         dout.Add "q_gas_cas_sm3day", Round(qgas_cas_sm3day, 2)
+        
         dout.Add "ksep", Round(ksep, 2)
         dout.Add "t_intake_C", Round(t_intake_C, 2)
         dout.Add "t_dis_C", Round(t_dis_C, 2)
+        
+        Set f = ParseJson(feed_sep)
+        
+        dout.Add "q_liq_esp_sm3day", Round(f("q_liq_sm3day"), 2)
+        
         well_calc_from_pwf = ConvertToJson(dout)
     Else
         well_calc_from_pwf = p_buf_atma
@@ -5591,7 +5653,7 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
     Dim p_wh_atma As Double
     Dim res As Double
     
-    Dim t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr
+    Dim t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, pkv_ratio, dcas_mm, dint_mm
     
     p_wh_atma = CoeffA(0)
     
@@ -5609,8 +5671,11 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
     t_crit_C = CoeffA(12)
     p_cas_atma = CoeffA(13)
     flow_corr = CoeffA(14)
+    pkv_ratio = CoeffA(15)
+    dcas_mm = CoeffA(16)
+    dint_mm = CoeffA(17)
     
-    res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, fast:=True) - p_wh_atma
+    res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, True, pkv_ratio, dcas_mm, dint_mm) - p_wh_atma
     calc_well_pwf = res
 End Function
 'description_to_manual      - для автогенерации
@@ -5630,7 +5695,10 @@ Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
                           Optional ByVal ipr_json As String = "", _
                           Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal p_cas_atma = 0, _
-                          Optional ByVal flow_corr As Integer = 0)
+                          Optional ByVal flow_corr As Integer = 0, _
+                          Optional ByVal pkv_ratio As Double = 0, _
+                          Optional ByVal dcas_mm As Double = 130, _
+                          Optional ByVal dint_mm As Double = 102)
 'p_wh_atma - устьевое (буферное) давление
 't_wf_C - температура флюида на забое скважины
 'feed_json - параметры потока в скважине (с забоя)
@@ -5651,12 +5719,13 @@ Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
 '          в результатах будет вычислена глубина достижения t_crit_C
 'p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m
 'flow_corr - номер гидравлической корреляции, как для трубы
+'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
 'description_end
         
 ' расчет сверху вниз по заданному буферному давлению
     Dim p_wf_max As Double
     Dim res As String
-    Dim CoeffA(0 To 14)
+    Dim CoeffA(0 To 17)
     Dim prm As New CSolveParam
     Dim i As Integer
 On Error GoTo er1:
@@ -5685,17 +5754,20 @@ On Error GoTo er1:
     CoeffA(12) = t_crit_C
     CoeffA(13) = p_cas_atma
     CoeffA(14) = flow_corr
+    CoeffA(15) = pkv_ratio
+    CoeffA(16) = dcas_mm
+    CoeffA(17) = dint_mm
     
     prm.y_tolerance = 0.01
     
     If solve_equation_bisection("calc_well_pwf", 1, p_wf_max, CoeffA, prm) Then
-        res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+        res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, , pkv_ratio, dcas_mm, dint_mm)
         well_calc_from_pwh = res
     Else
         ' здесь может оказаться, что решениий несколько и надо искать их посреди интервала
         For i = 1 To 10
             If solve_equation_bisection("calc_well_pwf", 1 + (p_wf_max / 10) * (i - 1), 1 + (p_wf_max / 10) * i, CoeffA, prm) Then
-                res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+                res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, , pkv_ratio, dcas_mm, dint_mm)
                 well_calc_from_pwh = res
                 Exit Function
             Else

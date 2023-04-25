@@ -23,7 +23,8 @@ file_name = ["u7_Excel_functions.txt",
              "u7_Excel_functions_Jet.txt",
              "u7_Excel_functions_service.txt",
              "u7_Excel_functions_crv.txt",
-             "u7_Excel_functions_transient.txt"]
+             "u7_Excel_functions_transient.txt",
+             "u7_separation_gas_esp.txt"]
 
 path_vba_txt = 'modules_txt/'
 path_listings_out = 'description_generated/'
