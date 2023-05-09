@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.45 super jet separation                                  khabibullinra@gmail.com
+'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -305,60 +305,12 @@ Public Sub calc_motor_slip(s As Double, _
         Call set_motor_data_Gridin_(s, data_.U_phase_V, freq_Hz)
     End If
 End Sub
-'Public Sub calc_motor_power(pow_mech_kW As Double, _
-'                      Optional freq_Hz As Double = 50, _
-'                      Optional Ulin_V As Double = 1000)
-'' расчет параметров двигателя при заданном моменте на валу
-'    Dim load As Double
-'    Dim s As Double, S1 As Double, S2 As Double
-'    Dim i As Integer
-'    Dim Uf As Double
-'
-'    Uf = Ulin_V / nom_data_.U_lin_V
-'
-'    If Uf < 0.8 Or Uf > 1.2 Then
-'        add_log_msg "Warning: CESPMotor.calc_motor_power: Ulin_V / nom_data_.U_lin_V out of range " + CStr(Uf)
-'    End If
-'
-'    i = 0
-'    data_.U_lin_V = Ulin_V
-'    data_.U_phase_V = Ulin_V / root3
-'
-'    If ID = 2 Then
-'        S2 = nom_data_.s_d * 3 ' макс граница
-'        S1 = 0
-'        ' дихотомией найдем значение проскальзывания
-'        ' до 8 итераций обычно надо
-'        ' можно и быстрее сделать, но потом
-'        Do
-'            s = (S1 + S2) / 2
-'            Call set_motor_data_Gridin_(s, data_.U_phase_V, freq_Hz)
-'            If pow_mech_kW > data_.Pshaft_kW Then
-'                S1 = s
-'            Else
-'                S2 = s
-'            End If
-'            i = i + 1
-'        Loop Until Abs(pow_mech_kW - data_.Pshaft_kW) < 0.01 Or i > 25
-'
-'        If i >= 25 Then
-'            Dim msg As String
-'            msg = "CESPMotor.calc_motor method Gridin Ошибка при расчете мотора, расчет проскальзования по мощности не сошелся, i =" + CStr(i)
-'            add_log_msg msg
-'            Err.Raise kErrESPcalc, , msg
-'        End If
-'
-'    ElseIf ID = 1 Then
-'      '  data_ = set_motor_data_(load, nom_data_.U_lin_V, nom_data_.I_lin_A, freq_Hz, , Ulin_V)
-'    ElseIf ID = 0 Then
-'        data_ = set_motor_data_simple_(False, pow_mech_kW, nom_data_.U_lin_V, nom_data_.f_Hz, nom_data_.eff_d, nom_data_.s_d, nom_data_.cosphi)
-'
-'    End If
-'End Sub
 ' расчет работы мотора по параметрам напряжения и частоты на поверхности и известному моменту на валу
+' или по известному скольжению
 Public Sub calc_motor_mom_surf_Nm(Mshaft_Nm As Double, _
                       Optional freq_Hz As Double = -1, _
-                      Optional Ulin_surf_V As Double = -1)
+                      Optional Ulin_surf_V As Double = -1, _
+                      Optional slip As Double = -1)
     ' цель этой процедуры - определить параметры ПЭД при заданном напряжении на поверхности
     ' на высокой стороне трансформатора
     ' сложность в падении напряжения в кабельной линии
@@ -373,7 +325,7 @@ Public Sub calc_motor_mom_surf_Nm(Mshaft_Nm As Double, _
     Dim i As Integer
     
     If Ulin_surf_V <= 0 Then
-       ' Ulin_surf_V = data.U_trans_high_V
+        Ulin_surf_V = nom_data.U_lin_V
     End If
     If freq_Hz <= 0 Then
         freq_Hz = data_.f_Hz
@@ -387,7 +339,11 @@ Public Sub calc_motor_mom_surf_Nm(Mshaft_Nm As Double, _
         ' 2. оцениваем напряжения на ПЭД
         Umotor = Ulin_surf_V - DU
         ' 3. считаем параметры ПЭД при фиксированном моменте на валу
-        Call estimate_motor_mom_Nm(Mshaft_Nm, freq_Hz, Umotor)
+        If slip < 0 Then
+            Call estimate_motor_mom_Nm(Mshaft_Nm, freq_Hz, Umotor)
+        Else
+            Call calc_motor_slip(slip, freq_Hz, Umotor)
+        End If
         I_A = data_.I_lin_A
         ' 4. по получившемуся току определяем падение напряжения на кабеле
         dU_1 = I_A * cable_.R_Omkm * h_mes_top_m / 1000
@@ -397,8 +353,18 @@ Public Sub calc_motor_mom_surf_Nm(Mshaft_Nm As Double, _
    ' U_motor_V_ = Umotor
     If i = 10 Then log_.add_msg "warning CESPMotor:calc_motor_mom_surf_Nm: iteration limit reached"
     If dU_1 / Ulin_surf_V > 0.8 Then
-        log_.add_msg "warning CESPMotor:calc_motor_mom_surf_Nm: voltage drop in cable too high. Reduced"
+        log_.add_msg "Warning:CESPMotor:calc_motor_mom_surf_Nm: voltage drop in cable too high. Reduced"
         dU_1 = Ulin_surf_V * 0.8
+    End If
+    If data_.load_d > 1.3 Then
+        log_.add_msg "Warning:CESPMotor:calc_motor_mom_surf_Nm: load " & str(Round(data_.load_d, 3)) & " too high"
+        If ID = 1 Then
+                Dim msg As String
+                msg = "Error:CESPMotor.calc_motor_mom_surf_Nm: motor.ID=1 not compatible with high load > 1.3"
+                log_.add_msg msg
+                Err.Raise kErrESPcalc, , msg
+            
+        End If
     End If
     cable_.dU_V = dU_1
     '5 по падению напряжения оценим мощность рассеиваемую кабелем в тепло. учитываем 3 жилы. Тут учитывается полный ток и активный и реактивный
@@ -545,7 +511,7 @@ Private Function set_motor_data_mom_( _
         d.cosphi = d.Pelectr_kW * 1000 / (root3 * d.U_lin_V * d.I_phase_A)
         If d.cosphi > 1 Then d.cosphi = 1
         d.I_lin_A = d.I_phase_A
-        d.load_d = load
+        d.load_d = load / 100
         set_motor_data_mom_ = d
         
 End Function
@@ -591,7 +557,7 @@ Private Function set_motor_data_simple_(ByVal nom As Boolean, _
     If nom Then
         d.load_d = 1
     Else
-        d.load_d = pow_mech_kW / nom_data_.Pshaft_kW * f / nom_data_.f_Hz * 100
+        d.load_d = pow_mech_kW / nom_data_.Pshaft_kW * f / nom_data_.f_Hz '* 100
     End If
     
     set_motor_data_simple_ = d
@@ -706,7 +672,7 @@ Private Sub set_motor_data_Gridin_(ByVal s As Double, _
         .Pelectr_kW = 3 * .U_phase_V * .I_phase_A * .cosphi / 1000
         .Pshaft_kW = .Mshaft_Nm * Fw_Hz * (1 - s) * (2 * const_Pi) / 1000
         .eff_d = .Pshaft_kW / .Pelectr_kW
-        .load_d = .Mshaft_Nm / nom_data_.Mshaft_Nm * 100
+        .load_d = .Mshaft_Nm / nom_data_.Mshaft_Nm '* 100
     End With
 End Sub
 ' процедура расчета скольжения по заданному моменту на валу двигателя
@@ -775,6 +741,8 @@ Public Sub set_cable(ByVal cable_type As Integer)
 End Sub
 Public Sub init_json(json As String, _
                     Optional json_cable As String)
+' инициализация двигателя из json строки
+' если задан кабель, то используется также
     Dim d As Dictionary
     Dim DC As Dictionary
     
@@ -793,9 +761,10 @@ End Sub
  
 Public Sub init_dictionary(dict As Dictionary, _
                             Optional dict_cable As Dictionary)
- 
- Dim ESP_ID As Long
- Dim HeadNom_m As Double
+' инициализация параметров двигателя из словаря
+' если задан кабель, то используется
+' Dim ESP_ID As Long
+' Dim HeadNom_m As Double
  Dim U_nom_lin_V As Double
  Dim P_nom_kW As Double
  Dim f_nom_Hz As Double
@@ -813,7 +782,7 @@ On Error GoTo err1:
             Err.Raise kErrESPcalc, , msg
         End If
           
-        If .Exists("U_surf_high_lin_V") Then data_.U_trans_high_V = .Item("U_surf_high_lin_V")
+'        If .Exists("U_surf_high_lin_V") Then data_.U_trans_high_V = .Item("U_surf_high_lin_V")
         If .Exists("f_surf_Hz") Then data_.f_Hz = .Item("f_surf_Hz")
         If .Exists("power_fact_kW") Then data_.power_fact_kW = .Item("power_fact_kW")
         
@@ -858,4 +827,64 @@ err1:
     add_log_msg errmsg
     Err.Raise kErrESPcalc, Err.source, errmsg
 End Sub
+Public Function get_result_array(Optional show_log As Boolean = False)
+' подготовка массива для вывода в Excel
+    Dim arr, arr_name
+    With data
+        arr = Array(Round(.I_lin_A, 3), _
+                    Round(.cosphi, 5), _
+                    Round(.eff_full_d, 5), _
+                    Round(.s_d, 5), _
+                    Round(.Mshaft_Nm, 3), _
+                    Round(.Pshaft_kW, 3), _
+                    Round(.load_d, 5), _
+                    Round(Me.cable.dU_V, 3), _
+                    Round(.U_lin_V, 3), _
+                    Round(.eff_d, 5), _
+                    Me.log_.get_str_safe(show_log))
+                    
+        arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "load", "cable_dU_V", "U_motor_V", "eff_motor_fr", "log")
+        get_result_array = array_join(Array(arr, arr_name))
+    End With
+End Function
+Public Function get_result_dict(Optional ByVal show_log As Boolean = False)
+' подготовка словаря для вывода в json
+    Dim resd As Dictionary
+    Set resd = New Dictionary
+    With data
+        resd("I_lin_A") = Round(.I_lin_A, 3)
+        resd("CosPhi_d") = Round(.cosphi, 5)
+        resd("eff_d") = Round(.eff_d, 5)
+        resd("s_d") = Round(.s_d, 5)
+        resd("M_Nm") = Round(.Mshaft_Nm, 3)
+        resd("Pshaft_kW") = Round(.Pshaft_kW, 3)
+        resd("cable_dU_V") = Round(Me.cable.dU_V, 3)
+        resd("U_motor_V") = Round(.U_lin_V, 3)
+        resd("eff_full_fr") = Round(.eff_full_d, 5)
+        resd("load_d") = Round(.load_d, 5)
+        If show_log Then resd("log") = Me.log_.get_str_safe(show_log)
+    End With
+    Set get_result_dict = resd
+End Function
+Public Function get_result_nom_dict(Optional ByVal show_log As Boolean = False, _
+                                    Optional ByVal freq_Hz As Double = 50)
+' подготовка словаря для вывода в json
+    Dim resd As Dictionary
+    Set resd = New Dictionary
+    With nom_data
+        resd("Pnom_kW") = Round(.Pshaft_kW * freq_Hz / .f_Hz, 3)
+        resd("Unom_lin_V") = Round(.U_lin_V * (freq_Hz / .f_Hz) ^ Me.U_F_ratio_power, 3)
+        resd("Inom_lin_A") = Round(.I_lin_A, 3)
+        resd("Snom_d") = Round(.s_d, 3)
+        resd("Mnom_Nm") = Round(.Mshaft_Nm, 3)
+        resd("CosPhinom_d") = Round(.cosphi, 3)
+        resd("Fnom_Hz") = Round(.f_Hz, 3)
+        resd("F_Hz") = Round(freq_Hz, 3)
+        resd("length_m") = Round(Me.length_m, 3)
+        resd("d_od_mm") = Round(Me.d_od_mm, 3)
+        If show_log Then resd("log") = Me.log_.get_str_safe(show_log)
+       
+    End With
+    Set get_result_nom_dict = resd
+End Function
 

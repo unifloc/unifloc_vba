@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.45 super jet separation                                  khabibullinra@gmail.com
+'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -519,22 +519,26 @@ End Function
 'description_to_manual      - дл€ автогенерации
 ' функци€ кодировани€ параметров работы ”Ё÷Ќ в строку
 Public Function encode_ESP_pump( _
-            Optional ByVal ESP_ID As Long = "1006", _
+            Optional ByVal q_nom_sm3day As Double = 50, _
             Optional ByVal head_nom_m As Double = 2000, _
-            Optional ByVal num_stages As Integer = 100, _
-            Optional ByVal freq_Hz As Double = 50, _
+            Optional ByVal freq_nom_Hz As Double = 50, _
+            Optional ByVal ESP_ID As Long = -1, _
+            Optional ByVal num_stages As Integer = -1, _
             Optional ByVal calibr_head As Double = 1, _
             Optional ByVal calibr_rate As Double = 1, _
             Optional ByVal calibr_power As Double = 1, _
             Optional ByVal gas_correct_model As Integer = 0, _
             Optional ByVal gas_correct_stage_by_stage As Integer = 0, _
             Optional ByVal dnum_stages_integrate = 1)
-' esp_ID         - идентификатор насоса
+' q_nom_sm3day   - номинальна€ подача Ё÷Ќ
+'                - соответствует подаче в записи Ё÷Ќ 50-2000
 ' head_nom_m     - номинальный напор системы ”Ё÷Ќ
-'                - соответствует напора в записи Ё÷Ќ 50-2000
+'                - соответствует напору в записи Ё÷Ќ 50-2000
+' freq_nom_Hz    - номинальна€ частота, √ц, дл€ которой задан номинальный напор
+' esp_ID         - идентификатор насоса
+'                  если задан - перекрывает подачу
 ' num_stages     - количество ступеней, если задано
 '                  перекрывает значение напора
-' freq_Hz        - частота, √ц
 ' calibr_head    - калибровка по напору
 ' calibr_rate    - калибровка по подаче
 ' calibr_power   - калибровка по мощности
@@ -548,11 +552,20 @@ Public Function encode_ESP_pump( _
 '    Dim calibr_power As Double
     Dim dict As New Dictionary
     
+    If ESP_ID < 0 Then
+        ESP_ID = ESP_id_by_rate(q_nom_sm3day, freq_nom_Hz)
+    End If
+    If num_stages < 0 Then
+        num_stages = ESP_calc_stages_num(ESP_ID, head_nom_m, freq_nom_Hz, q_nom_sm3day)
+    End If
     
-    dict.Add "ESP_ID", ESP_ID
+    dict.Add "q_nom_sm3day", q_nom_sm3day
     dict.Add "head_nom_m", head_nom_m
-    If num_stages > 0 Then dict.Add "num_stages", num_stages
-    dict.Add "freq_Hz", freq_Hz
+    dict.Add "freq_nom_Hz", freq_nom_Hz
+    dict.Add "name", "ESP-" & Round(q_nom_sm3day) & "-" & Round(head_nom_m)
+    dict.Add "ESP_ID", ESP_ID
+    dict.Add "num_stages", num_stages
+    
     dict.Add "gas_correct_model", gas_correct_model
     dict.Add "gas_correct_stage_by_stage", gas_correct_stage_by_stage
     dict.Add "calibr_head", calibr_head
@@ -574,7 +587,6 @@ Public Function encode_ESP_motor( _
             Optional ByVal eff_nom_fr As Double = 0.82, _
             Optional ByVal cosphi_nom_fr As Double = 0.88, _
             Optional ByVal slip_nom_fr As Double = 0.053, _
-            Optional ByVal U_surf_high_lin_V As Double = 1000, _
             Optional ByVal f_surf_Hz As Double = 50, _
             Optional ByVal power_fact_kW As Double = 30, _
             Optional ByVal d_od_mm As Double = 0, _
@@ -619,7 +631,7 @@ Public Function encode_ESP_motor( _
     Dim dict As New Dictionary
     
     dict.Add "motor_ID", motor_ID
-   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
+'   If U_surf_high_lin_V > 0 Then dict.Add "U_surf_high_lin_V", U_surf_high_lin_V
    If f_surf_Hz > 0 Then dict.Add "f_surf_Hz", f_surf_Hz
    If power_fact_kW > 0 Then dict.Add "power_fact_kW", power_fact_kW
    If U_nom_lin_V > 0 Then dict.Add "U_nom_lin_V", U_nom_lin_V

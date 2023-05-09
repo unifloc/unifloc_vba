@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.45 super jet separation                                  khabibullinra@gmail.com
+'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -29,10 +29,13 @@ Public mu_liq_cP As Double       ' вязкость жидкости в рабочих условиях
 Public mu_gas_cP As Double       ' вязкость жидкости в рабочих условиях
 Public calibr_li As Double ' калибровочный множитель на характерный размер пузырьков газа
                            ' применяется для корреляции TUALP для настройки механистической модели
-Public ksep As Double           ' коэффициент сепарации для флюида из пласта
-                                ' учитывает только газ, который поступил за время работы скважины
-Public ksep_average As Double   ' для ПКВ режима - средний коэффициент сепарации
-                                ' учитывающий весь газ, включая за время простоя
+Public ksep_work As Double           ' коэффициент сепарации для флюида из пласта
+                                     ' учитывает только газ, который поступил за время работы скважины
+Public ksep_average_cycle As Double  ' для ПКВ режима - средний коэффициент сепарации за цикл
+                                     ' учитывающий весь газ, включая за время простоя
+                                
+'Public ksep_full_work As Double      ' коэффициент сепарации для флюида поступающего в насос
+'                                     ' учитывает во время работы флюид поступающий из затруба
 Public bbl_track As New CInterpolation ' кривая для записи траектории пузырька
 Private Sub Class_Initialize()
     calibr_li = 2   ' подобран для согласования эмпирической и механистической модели Маркеса Прадо
@@ -206,9 +209,10 @@ Public Function ksep_simplified_Marquez(ByVal qliq_rc_m3day As Double, _
         ksep_simplified_Marquez = 0
         Exit Function
     End If
-    ksep = ((1 + (a * B + c * M ^ d) / (B + M ^ d)) ^ ST + M ^ ST) ^ backst - M
-    ksep_average = ksep
-    ksep_simplified_Marquez = ksep
+    ksep_work = ((1 + (a * B + c * M ^ d) / (B + M ^ d)) ^ ST + M ^ ST) ^ backst - M
+    ksep_average_cycle = ksep_work
+'    ksep_full_work = ksep_work
+    ksep_simplified_Marquez = ksep_work
 End Function
 ' ============================================
 ' Механистическая модель
@@ -667,8 +671,9 @@ Public Function ksep_mechanistic_Marquez(ByVal qliq_rc_m3day As Double, _
     
     ' если газа нет, то и сепарации нет
     If q_gas_rc_m3day < 0.001 Then
-        ksep = 0
-        ksep_average = ksep
+        ksep_work = 0
+        ksep_average_cycle = ksep_work
+'        ksep_full_work = ksep_work
         ksep_mechanistic_Marquez = 0
         Exit Function
     End If
@@ -677,9 +682,11 @@ Public Function ksep_mechanistic_Marquez(ByVal qliq_rc_m3day As Double, _
     rp = d_intake_m / 2
     ri = calc_r_bubble_trajectory_annulus(h_intake_m, d_intake_m / 2)
     
-    ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2))
-    ksep_average = ksep
-    ksep_mechanistic_Marquez = ksep
+    ksep_work = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2))
+    ksep_average_cycle = ksep_work
+'    ksep_full_work = ksep_work
+    
+    ksep_mechanistic_Marquez = ksep_work
 End Function
 Public Function ksep_mechanistic_pkv(ByVal qliq_rc_m3day As Double, _
                                      ByVal q_gas_rc_m3day As Double) As Variant
@@ -692,9 +699,10 @@ Public Function ksep_mechanistic_pkv(ByVal qliq_rc_m3day As Double, _
     
     ' если газа нет, то и сепарации нет
     If q_gas_rc_m3day < 0.001 Then
-        ksep = 0
-        ksep_average = ksep
-        ksep_mechanistic_pkv = ksep
+        ksep_work = 0
+        ksep_average_cycle = ksep_work
+'        ksep_full_work = ksep_work
+        ksep_mechanistic_pkv = ksep_work
         Exit Function
     End If
 '    Dim vg_lim As Double
@@ -706,49 +714,29 @@ Public Function ksep_mechanistic_pkv(ByVal qliq_rc_m3day As Double, _
 '    vg_lim = 0.2
     If vg_downflow_msec > 0 Then
         ' оценим сепарацию газа из потока из пласта (мгновенная сепарация)
-        ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2))
+        ksep_work = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2))
         ' оценим сепарацию среднюю
-        ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
+        'ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
+'        ksep_full_work = (ksep_work * pkv_ratio + 1 - pkv_ratio)
+        ksep_average_cycle = (ksep_work * pkv_ratio + 1 - pkv_ratio)
     Else
         ' если нисходящий поток из затруба затянет с собой газ
         ' никакой сепарации газа из потока из пласта не будет
-        ksep = 0
+        ksep_work = 0
         If vg_downflow_tub_msec > 0 Then
-            ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
+'            ksep_full_work = (ksep_work * pkv_ratio + 1 - pkv_ratio)
+            ksep_average_cycle = (ksep_work * pkv_ratio + 1 - pkv_ratio)
         Else
             ' небольшое значение здесь символизирует, что не весь газ получится засосать
             ' в насос при включении насоса. Но точное значение оценить пока трудно (да вроде и незачем)
-            ksep_average = 0.05
+'            ksep_full_work = 0.05
+            ksep_average_cycle = 0.05
         End If
         ' дополнительно снаружи надо будет учесть, что жидкость
         ' из затруба может принести свой газ
     End If
-                
-                
-          
-'        If vg_downflow_tub_msec > 0 Then
-'            ' оценим сепарацию газа из потока из пласта (мгновенная сепарация)
-'            ' произвольно уменьшим ее  (так как первое время будем забирать газ из
-'            ' пространства между э/к и насосом
-'            ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2)) * 0.5
-'            ' оценим сепарацию среднюю
-'            ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
-'
-'        Else
-''            If vg_downflow_tub_msec < -vg_lim Then
-''            Else
-''                alpha = ((vg_downflow_tub_msec) / vg_lim + 1) / 2
-''                ksep = ((rc ^ 2 - ri ^ 2) / (rc ^ 2 - rp ^ 2)) * 0.5
-''                ksep = ksep * alpha
-''            End If
-''            If ksep > 0 Then
-''                ksep_average = (ksep + 1 / pkv_ratio) / (1 + 1 / pkv_ratio)
-''            Else
-''                ksep_average = 0
-''            End If
-'        End If
-    
-    ksep_mechanistic_pkv = Array(ksep_average, ksep)
+  
+    ksep_mechanistic_pkv = Array(ksep_work, ksep_average_cycle)
 End Function
 Public Function ksep_mechanistic_Marquez_reverse(ByVal qliq_rc_m3day As Double, _
                                          ByVal q_gas_rc_m3day As Double) As Variant
@@ -765,17 +753,19 @@ Public Function ksep_mechanistic_Marquez_reverse(ByVal qliq_rc_m3day As Double, 
     
     ' если газа нет, то и сепарации нет
     If q_gas_rc_m3day < 0.001 Then
-        ksep = 0
-        ksep_average = ksep
-        ksep_mechanistic_Marquez_reverse = ksep
+        ksep_work = 0
+        ksep_average_cycle = ksep_work
+'        ksep_full_work = ksep_work
+        
+        ksep_mechanistic_Marquez_reverse = ksep_work
         Exit Function
     End If
     h_i = calc_h_bubble_trajectory_annulus(h_perf_m, d_intake_m / 2)
     
-    ksep = (h_perf_m - h_i) / h_perf_m
+    ksep_work = (h_perf_m - h_i) / h_perf_m
     vg_lim = 0.1
     
-    If ksep > 0 Then
+    If ksep_work > 0 Then
         ' проверим какая будет скорость газа увлкаемая потоком вниз
         ' если газ может убежать из потока, то сепарация будет полная
         ' вниз пойдет дегазированная смесь
@@ -784,14 +774,16 @@ Public Function ksep_mechanistic_Marquez_reverse(ByVal qliq_rc_m3day As Double, 
         ' размашем ее в консервативную сторону на величину bg_lim (занизим величину ксеп)
         ' и сгладим итоговую зависимость от дебита жидкости
         
-        If vg_downflow_msec > vg_lim Then ksep = 1
+        If vg_downflow_msec > vg_lim Then ksep_work = 1
         If vg_downflow_msec < vg_lim And vg_downflow_msec > 0 Then
             alpha = (vg_lim - vg_downflow_msec) / vg_lim '/ 2
-            ksep = (1 - alpha) + ksep * alpha
+            ksep_work = (1 - alpha) + ksep_work * alpha
         End If
     End If
     
-    ksep_mechanistic_Marquez_reverse = ksep
+    ksep_mechanistic_Marquez_reverse = ksep_work
+        ksep_average_cycle = ksep_work
+'        ksep_full_work = ksep_work
 End Function
 Public Function build_bubble_tracks_mechanistic_Marquez(ByVal qliq_rc_m3day As Double, _
                                                         ByVal q_gas_rc_m3day As Double)
@@ -862,7 +854,7 @@ Public Sub init_from_values( _
                         Optional hperf_m As Double = 0.1, _
                         Optional calibr_li As Double = 2, _
                         Optional calibr_st As Double = 1, _
-                        Optional pkv_ratio As Double = 0.5, _
+                        Optional pkv_ratio As Double = 0, _
                         Optional d_tub_m As Double = 0.073)
         Me.d_intake_m = d_intake_m
         Me.d_cas_m = d_cas_m
@@ -882,27 +874,41 @@ Public Sub init_from_values( _
 End Sub
 Public Function get_result_dict()
                 Dim dout As New Dictionary
-                dout.Add "ksep", ksep
-                dout.Add "ksep average", ksep_average
+                dout.Add "ksep", ksep_work
                 dout.Add "flow_pattern", flow_pattern
                 dout.Add "vsl_msec", vsl_msec
                 dout.Add "vsg_msec", vsg_msec
                 dout.Add "v_inf_msec", v_inf_msec
                 dout.Add "vg_downflow_msec", vg_downflow_msec
                 dout.Add "li m", calc_li(0, 1)
+                If pkv_ratio > 0 Then
+                    dout.Add "ksep average", ksep_average_cycle
+'                    dout.Add "ksep_full_work", ksep_full_work
+                    dout.Add "pkv_ratio", pkv_ratio
+                    dout.Add "vsl_ann_intake_msec", -vsl_msec * (1 / pkv_ratio - 1)
+                    dout.Add "vsg_ann_intake_msec", vsg_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1)
+                    dout.Add "vsl_ann_tub_msec", -vsl_tub_msec * (1 / pkv_ratio - 1)
+                    dout.Add "vsg_ann_tub_msec", vsg_tub_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1)
+                    dout.Add "vg_downflow_tub_msec", vg_downflow_tub_msec
+                End If
                 Set get_result_dict = dout
 End Function
 Public Function get_result_array()
     Dim res, res_desc
     If pkv_ratio > 0 Then
-        res = Array(ksep, ksep_average, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec, _
+        res = Array(ksep_work, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec, ksep_average_cycle, _
                     pkv_ratio, -vsl_msec * (1 / pkv_ratio - 1), vsg_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1), _
                     -vsl_tub_msec * (1 / pkv_ratio - 1), vsg_tub_msec * (1 / pkv_ratio - 1) * IIf(vg_downflow_msec > 0, 1, -1), vg_downflow_tub_msec)
-        res_desc = Array("ksep", "ksep_average", "flow regime", "li", "v_ooz", "vsl", "vsg", "vg_downflow", _
+        res_desc = Array("ksep", "flow regime", "li", "v_ooz", "vsl", "vsg", "vg_downflow", "ksep_average_cycle", _
                     "pkv_ratio", "vsl_ann_intake_msec", "vsg_ann_intake_msec", "vsl_ann_tub_msec", "vsg_ann_tub_msec", "vg_downflow_tub_msec")
     Else
-        res = Array(ksep, ksep_average, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec)
-        res_desc = Array("ksep", "ksep_average", "flow regime", "li", "v_ooz", "vsl", "vsg", "vg_downflow")
+        If h_perf_m > 0 Then
+            res = Array(ksep_work, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec, vg_downflow_msec)
+            res_desc = Array("ksep", "flow regime", "li", "v_ooz", "vsl", "vsg", "vg_downflow")
+        Else
+            res = Array(ksep_work, flow_pattern, calc_li(0, 1), v_inf_msec, vsl_msec, vsg_msec)
+            res_desc = Array("ksep", "flow regime", "li", "v_ooz", "vsl", "vsg")
+        End If
     End If
     get_result_array = Array(res, res_desc)
 End Function
@@ -911,7 +917,7 @@ Public Function get_result(out As Integer)
             Case 0
                 get_result = get_result_array()
             Case 1
-                get_result = ksep
+                get_result = ksep_work
             Case 2
                 get_result = ConvertToJson(get_result_dict())
             Case Else

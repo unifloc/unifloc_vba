@@ -1779,21 +1779,25 @@ class API():
         self.f_ESP_freq_nom = self.book.macro("ESP_freq_nom")
         return self.f_ESP_freq_nom(pump_id)
 
-    def ESP_calc_stages_num(self, pump_id=1006,head=1000):
+    def ESP_calc_stages_num(self, pump_id=1006,head=1000,f_nom_Hz=50,q_nom_sm3day=-1):
         """
  ========== description ============== 
- оценка количества ступеней по напору 
+ оценка количества ступеней по напору с учетом номинальной частоты 
         
  ==========  arguments  ============== 
 
      pump_id - идентификатор насоса в базе данных    
 
-   head  
+     head - номинальный напор установки    
+
+     f_nom_hz - номинальная частота, если отлична от 50 гц    
+
+     q_nom_sm3day - номиналный дебит, если частота отлична от 50 гц   
 
         """
 
         self.f_ESP_calc_stages_num = self.book.macro("ESP_calc_stages_num")
-        return self.f_ESP_calc_stages_num(pump_id,head)
+        return self.f_ESP_calc_stages_num(pump_id,head,f_nom_Hz,q_nom_sm3day)
 
     def ESP_rate_max_sm3day(self, freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_rate=1):
         """
@@ -1835,19 +1839,21 @@ class API():
         self.f_ESP_optRate_m3day = self.book.macro("ESP_optRate_m3day")
         return self.f_ESP_optRate_m3day(freq_Hz,pump_id,mu_cSt,calibr_rate)
 
-    def ESP_id_by_rate(self, q):
+    def ESP_id_by_rate(self, q,f_nom_Hz=50):
         """
  ========== description ============== 
  функция возвращает идентификатор типового насоса по значению  номинального дебита 
         
  ==========  arguments  ============== 
 
-     q - номинальный дебит   
+     q - номинальный дебит    
+
+     f_nom_hz - номинальная частота для нестандартных насосов   
 
         """
 
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
-        return self.f_ESP_id_by_rate(q)
+        return self.f_ESP_id_by_rate(q,f_nom_Hz)
 
     def ESP_p_json_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",json_ESP_pump="",calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -2815,20 +2821,22 @@ class API():
         self.f_encode_feed_list = self.book.macro("encode_feed_list")
         return self.f_encode_feed_list(q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,fluid)
 
-    def encode_ESP_pump(self, ESP_ID="1006",head_nom_m=2000,num_stages=100,freq_Hz=50,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,dnum_stages_integrate=1):
+    def encode_ESP_pump(self, q_nom_sm3day=50,head_nom_m=2000,freq_nom_Hz=50,ESP_ID=-1,num_stages=-1,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,dnum_stages_integrate=1):
         """
  ========== description ============== 
  функция кодирования параметров работы УЭЦН в строку 
         
  ==========  arguments  ============== 
 
-     esp_id - идентификатор насоса    
+     q_nom_sm3day - номинальная подача эцн  - соответствует подаче в записи эцн 50-2000    
 
-     head_nom_m - номинальный напор системы уэцн  - соответствует напора в записи эцн 50-2000    
+     head_nom_m - номинальный напор системы уэцн  - соответствует напору в записи эцн 50-2000    
+
+     freq_nom_hz - номинальная частота, гц, для которой задан номинальный напор    
+
+     esp_id - идентификатор насоса  если задан - перекрывает подачу    
 
      num_stages - количество ступеней, если задано  перекрывает значение напора    
-
-     freq_hz - частота, гц    
 
      calibr_head - калибровка по напору    
 
@@ -2845,9 +2853,9 @@ class API():
         """
 
         self.f_encode_ESP_pump = self.book.macro("encode_ESP_pump")
-        return self.f_encode_ESP_pump(ESP_ID,head_nom_m,num_stages,freq_Hz,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,dnum_stages_integrate)
+        return self.f_encode_ESP_pump(q_nom_sm3day,head_nom_m,freq_nom_Hz,ESP_ID,num_stages,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,dnum_stages_integrate)
 
-    def encode_ESP_motor(self, motor_ID=0,P_nom_kW=30,U_nom_lin_V=1000,f_nom_Hz=50,eff_nom_fr=0.82,cosphi_nom_fr=0.88,slip_nom_fr=0.053,U_surf_high_lin_V=1000,f_surf_Hz=50,power_fact_kW=30,d_od_mm=0,lambda_=0,alpha0=0,xi0=0,Ixcf=0):
+    def encode_ESP_motor(self, motor_ID=0,P_nom_kW=30,U_nom_lin_V=1000,f_nom_Hz=50,eff_nom_fr=0.82,cosphi_nom_fr=0.88,slip_nom_fr=0.053,f_surf_Hz=50,power_fact_kW=30,d_od_mm=0,lambda_=0,alpha0=0,xi0=0,Ixcf=0):
         """
  ========== description ============== 
  функция кодирования параметров ПЭД в строку 
@@ -2866,9 +2874,7 @@ class API():
 
     cosphi_nom_fr - коэффициент мощности при номинальный    
 
-    slip_nom_fr - скольжение при номинальном режиме работы    
-
-    u_surf_high_lin_v - напряжение на поверхности    
+    slip_nom_fr - скольжение при номинальном режиме работы u_surf_high_lin_v - напряжение на поверхности    
 
     f_surf_hz - частота тока на поверхности    
 
@@ -2887,7 +2893,7 @@ class API():
         """
 
         self.f_encode_ESP_motor = self.book.macro("encode_ESP_motor")
-        return self.f_encode_ESP_motor(motor_ID,P_nom_kW,U_nom_lin_V,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,U_surf_high_lin_V,f_surf_Hz,power_fact_kW,d_od_mm,lambda_,alpha0,xi0,Ixcf)
+        return self.f_encode_ESP_motor(motor_ID,P_nom_kW,U_nom_lin_V,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,f_surf_Hz,power_fact_kW,d_od_mm,lambda_,alpha0,xi0,Ixcf)
 
     def encode_ESP_cable(self, length_m=1000,cable_R_Omkm=1.18,cable_X_Omkm=0.01,cable_t_max_C=120,manufacturer="default",name="default_name",d_mm=16):
         """

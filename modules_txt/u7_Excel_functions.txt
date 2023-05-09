@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.45 super jet separation                             khabibullinra@gmail.com
+'Unifloc 7.47 motor update                             khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -3688,22 +3688,30 @@ err1:
     add_log_msg "Error:ESP_freq_nom:" & Err.Description
 End Function
 'description_to_manual      - дл€ автогенерации
-' оценка количества ступеней по напору
+' оценка количества ступеней по напору с учетом номинальной частоты
 Public Function ESP_calc_stages_num(Optional ByVal pump_id As Long = 1006, _
-                                    Optional ByVal head As Double = 1000)
+                                    Optional ByVal head As Double = 1000, _
+                                    Optional ByVal f_nom_Hz As Double = 50, _
+                                    Optional ByVal q_nom_sm3day As Double = -1)
 ' pump_id   - идентификатор насоса в базе данных
-' результат - количество ступеней
+' head - номинальный напор установки
+' f_nom_Hz - номинальна€ частота, если отлична от 50 √ц
+' q_nom_sm3day - номиналный дебит, если частота отлична от 50 √ц
 'description_end
+' результат - количество ступеней
 On Error GoTo err1:
     Dim esp As New CESPpump
+    Dim f_ratio As Double
     Call esp.set_ID(pump_id)
     If esp Is Nothing Then
         ESP_freq_nom = "no name"
         Exit Function
     End If
     With esp
-        .freq_Hz = .db.freq_Hz
-        ESP_calc_stages_num = Round(head / .get_ESP_head_m(.db.rate_nom_sm3day, 1, 1), 0)
+        f_ratio = .db.freq_Hz / f_nom_Hz
+        If q_nom_sm3day <= 0 Then q_nom_sm3day = .db.rate_nom_sm3day
+        .freq_Hz = f_nom_Hz
+        ESP_calc_stages_num = Round(head / .get_ESP_head_m(q_nom_sm3day, 1, 1), 0)
     End With
     Exit Function
 err1:
@@ -3767,11 +3775,20 @@ End Function
 'description_to_manual      - дл€ автогенерации
 ' функци€ возвращает идентификатор типового насоса по значению
 ' номинального дебита
-Public Function ESP_id_by_rate(q As Double)
+Public Function ESP_id_by_rate(ByVal q As Double, _
+                      Optional ByVal f_nom_Hz As Double = 50)
+' Q - номинальный дебит
+' f_nom_Hz - номинальна€ частота дл€ нестандартных насосов
+'description_end
 ' возвращает ID в зависимости от номинального дебита.
 ' насосы подобраны вручную из текущей базы.
-' Q - номинальный дебит
-'description_end
+' все насосы в тестовой базе приведены дл€ 50 √ц
+' поэтому надо скорректировать частоты дл€ них
+    
+    Const f_nom_db_Hz = 50#
+    
+    q = q * f_nom_db_Hz / f_nom_Hz  ' закон подоби€ дл€ дебита линеен
+    
     If q > 0 And q < 20 Then ESP_id_by_rate = 738: ' Ё÷Ќ5-15
     If q >= 20 And q < 40 Then ESP_id_by_rate = 740: ' Ё÷Ќ5-30
     If q >= 40 And q < 60 Then ESP_id_by_rate = 1005: ' Ё÷Ќ5-50
@@ -3850,7 +3867,7 @@ Public Function ESP_p_json_atma( _
             feed, _
             pump_id, _
             d("num_stages"), _
-            d("freq_Hz"), _
+            d("freq_nom_Hz"), _
             calc_along_flow, _
             d("calibr_head"), _
             d("calibr_rate"), _
@@ -4193,72 +4210,31 @@ Public Function ESP_motor_calc_mom(ByVal mom_Nm As Double, _
 ' param       - строка с закодированными параметрами
 'description_end
 On Error GoTo er1:
-    Dim arr, arr_name
     Dim prmd As Dictionary
-    Dim resd As Dictionary
-    
     Dim motor As New CESPMotor
     Dim show_log As Boolean
     Dim show_array As Boolean
      
     Call motor.init_json(motor_json, cable_json)
-    
     Set prmd = param_to_dict(param)
-         
     show_log = prmd(prm_show_log)
     show_array = prmd(prm_show_array)
-    
     Call motor.calc_motor_mom_surf_Nm(mom_Nm, freq_Hz, U_V)
     
     With motor.data
         If show_array Then
-            arr = Array(.I_lin_A, .cosphi, .eff_full_d, .s_d, .Mshaft_Nm, .Pshaft_kW, motor.log_.get_str_safe(show_log))
-            arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
-            ESP_motor_calc_mom = array_join(Array(arr, arr_name))
+            ESP_motor_calc_mom = motor.get_result_array(show_log)
         Else
-            Set resd = New Dictionary
-            resd("I_lin_A") = .I_lin_A
-            resd("CosPhi_d") = .cosphi
-            resd("eff_d") = .eff_d
-            resd("s_d") = .s_d
-            resd("M_Nm") = .Mshaft_Nm
-            resd("Pshaft_kW") = .Pshaft_kW
-            resd("cable_dU_V") = .cable_dU_V
-            resd("U_motor_V") = .U_lin_V
-            'resd("U_trans_high_V") = .U_trans_high_V
-            resd("eff_full_fr") = .eff_full_d
-            resd("load_d") = .load_d
-            If show_log Then
-                ReDim arr(1 To 2, 1 To 2)
-                arr(1, 1) = ConvertToJson(resd)
-                arr(2, 1) = "result"
-                arr(1, 2) = motor.log_.get_str_safe(show_log)
-                arr(2, 1) = "log"
-                ESP_motor_calc_mom = arr
-            Else
-                ESP_motor_calc_mom = ConvertToJson(resd)
-                
-            End If
+            ESP_motor_calc_mom = ConvertToJson(motor.get_result_dict(show_log))
         End If
     End With
     Exit Function
 er1:
 On Error GoTo er2:
-    'ESP_motor_calc_mom = -1
     motor.add_log_msg "Error:ESP_motor_calc_mom: exit function "
-    If show_array Then
-        arr = Array(-1, -1, -1, -1, -1, -1, motor.log_.get_str_safe(show_log))
-        arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
-        ESP_motor_calc_mom = array_join(Array(arr, arr_name))
-    Else
-        ReDim arr(1 To 2, 1 To 2)
-        arr(1, 1) = "error"
-        arr(2, 1) = "result"
-        arr(1, 2) = motor.log_.get_str_safe(show_log)
-        arr(2, 1) = "log"
-        ESP_motor_calc_mom = arr
-    End If
+    ESP_motor_calc_mom = motor.log_.get_str_safe(show_log)
     Exit Function
+    
 er2:
     ESP_motor_calc_mom = "error"
 End Function
@@ -4274,59 +4250,24 @@ Public Function ESP_motor_nameplate( _
 ' cable_json  - строка с закодированными параметрами кабел€
 ' freq_Hz     - частота тока, √ц
 ' param       - строка с закодированными параметрами
-'   результат   - формальное название ѕЁƒ
+'   результат   - json c номинальными параметрами
 'description_end
 On Error GoTo er1:
-    Dim arr, arr_name
     Dim prmd As Dictionary
-    Dim resd As Dictionary
-    
     Dim motor As New CESPMotor
     Dim show_log As Boolean
      
     Call motor.init_json(motor_json, cable_json)
-    
     Set prmd = param_to_dict(param)
-         
     show_log = prmd(prm_show_log)
-    
-    With motor.nom_data
-        Set resd = New Dictionary
-        resd("Pnom_kW") = .Pshaft_kW * freq_Hz / .f_Hz
-        resd("Unom_lin_V") = .U_lin_V * (freq_Hz / .f_Hz) ^ motor.U_F_ratio_power
-        resd("Inom_lin_A") = .I_lin_A
-        resd("Snom_d") = .s_d
-        resd("Mnom_Nm") = .Mshaft_Nm
-        resd("CosPhinom_d") = .cosphi
-        resd("Fnom_Hz") = .f_Hz
-        resd("F_Hz") = freq_Hz
-        resd("length_m") = motor.length_m
-        resd("d_od_mm") = motor.d_od_mm
-        If show_log Then
-            ReDim arr(1 To 2, 1 To 2)
-            arr(1, 1) = ConvertToJson(resd)
-            arr(2, 1) = "result"
-            arr(1, 2) = motor.log_.get_str_safe(show_log)
-            arr(2, 1) = "log"
-            ESP_motor_nameplate = arr
-        Else
-            ESP_motor_nameplate = ConvertToJson(resd)
-        End If
-    End With
+    ESP_motor_nameplate = ConvertToJson(motor.get_result_nom_dict(show_log, freq_Hz))
     Exit Function
+    
 er1:
 On Error GoTo er2:
-    'ESP_motor_calc_mom = -1
-    motor.add_log_msg "Error:ESP_motor_calc_mom: exit function "
-    
-    ReDim arr(1 To 2, 1 To 2)
-    arr(1, 1) = "error"
-    arr(2, 1) = "result"
-    arr(1, 2) = motor.log_.get_str_safe(show_log)
-    arr(2, 1) = "log"
-    ESP_motor_nameplate = arr
-    
+    ESP_motor_nameplate = "Error:ESP_motor_calc_mom: exit function." & motor.log_.get_str_safe(show_log)
     Exit Function
+    
 er2:
     ESP_motor_nameplate = "error"
 End Function
@@ -4365,59 +4306,30 @@ On Error GoTo er1:
     show_log = prmd(prm_show_log)
     show_array = prmd(prm_show_array)
     
+    If motor.ID < 2 Then
+        ESP_motor_calc_slip = "Error: Motor ID must be 2 to calc from slip"
+        Exit Function
+    End If
+    
     sk = motor.calc_s_M_krit(U_V, freq_Hz)
-    motor.calc_motor_slip s, freq_Hz, U_V
-'    Call motor.calc_motor_mom_surf_Nm(mom_Nm, freq_Hz, U_V)
+   ' motor.calc_motor_slip s, freq_Hz, U_V
+    
+    Call motor.calc_motor_mom_surf_Nm(1, freq_Hz, U_V, s)
     
     With motor.data
         If show_array Then
-            arr = Array(.I_lin_A, .cosphi, .eff_full_d, .s_d, .Mshaft_Nm, .Pshaft_kW, motor.log_.get_str_safe(show_log))
-            arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
-            ESP_motor_calc_slip = array_join(Array(arr, arr_name))
+            ESP_motor_calc_slip = motor.get_result_array(show_log)
         Else
-            Set resd = New Dictionary
-            resd("I_lin_A") = .I_lin_A
-            resd("CosPhi_d") = .cosphi
-            resd("eff_d") = .eff_d
-            resd("s_d") = .s_d
-            resd("M_Nm") = .Mshaft_Nm
-            resd("Pshaft_kW") = .Pshaft_kW
-            resd("cable_dU_V") = .cable_dU_V
-            resd("U_motor_V") = .U_lin_V
-            'resd("U_trans_high_V") = .U_trans_high_V
-            resd("eff_full_fr") = .eff_full_d
-            resd("load_d") = .load_d
-            If show_log Then
-                ReDim arr(1 To 2, 1 To 2)
-                arr(1, 1) = ConvertToJson(resd)
-                arr(2, 1) = "result"
-                arr(1, 2) = motor.log_.get_str_safe(show_log)
-                arr(2, 1) = "log"
-                ESP_motor_calc_slip = arr
-            Else
-                ESP_motor_calc_slip = ConvertToJson(resd)
-                
-            End If
+            ESP_motor_calc_slip = ConvertToJson(motor.get_result_dict(show_log))
         End If
     End With
     Exit Function
 er1:
 On Error GoTo er2:
-    'ESP_motor_calc_mom = -1
     motor.add_log_msg "Error:ESP_motor_calc_mom: exit function "
-    If show_array Then
-        arr = Array(-1, -1, -1, -1, -1, -1, motor.log_.get_str_safe(show_log))
-        arr_name = Array("I_lin_A", "CosPhi_d", "eff_d", "slip", "M_Nm", "Pshaft_kW", "log")
-        ESP_motor_calc_slip = array_join(Array(arr, arr_name))
-    Else
-        ReDim arr(1 To 2, 1 To 2)
-        arr(1, 1) = "error"
-        arr(2, 1) = "result"
-        arr(1, 2) = motor.log_.get_str_safe(show_log)
-        arr(2, 1) = "log"
-        ESP_motor_calc_slip = arr
-    End If
+    ESP_motor_calc_slip = motor.log_.get_str_safe(show_log)
     Exit Function
+    
 er2:
     ESP_motor_calc_slip = "error"
 End Function
@@ -4534,8 +4446,8 @@ On Error GoTo er1:
             Call .fluid.init_feed(ptq.feed(i))  ' initialize PVT properties
             Call .fluid.update_feed(ptq.ql(i), ptq.fw(i), ptq.rp(i), ptq.qg(i))
             Call .init_json(pump_json, motor_json, cable_json, gassep_json)
-            Call .calc_ESPsys(ptq.p(i), ptq.t(i), ptq.val(i), calc_along_flow, saveCurve:=True)
-            col.Add ESPsys.get_result_dict ' todo тут надо доделать
+            Call .calc_ESPsys(ptq.p(i), ptq.t(i), ptq.val(i), U_surf_high_lin_V, f_surf_Hz, power_fact_kW, calc_along_flow, saveCurve:=True)
+            col.Add ESPsys.get_result_dict
         End With
     Next i
     If ptq.len = 1 Then
@@ -5275,7 +5187,7 @@ On Error GoTo err1:
                     Dim ksep_av As Double
                     Dim ksep_ann As Double
                     
-                    ksep_av = resksep(0)(1)
+                    ksep_av = resksep(0)(7)
                     
                     If ksep_av > 0 Then
                     
