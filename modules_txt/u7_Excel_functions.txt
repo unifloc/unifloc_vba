@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.47 motor update                             khabibullinra@gmail.com
+'Unifloc 7.48 new strategy                             khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -108,31 +108,28 @@ End Function
 ' расчет корректирующего фактора (множителя) модели штуцера под замеры
 ' медленный расчет - калибровка подбирается
 Public Function MF_choke_calibr( _
-                     ByVal d_choke_mm As Double, _
-                     ByVal feed As String, _
+                     ByVal choke_json As String, _
+                     ByVal feed_json As String, _
             Optional ByVal calibr_type As Integer = 0, _
             Optional ByVal p_in_atma As Double = -1, _
             Optional ByVal p_out_atma As Double = -1, _
             Optional ByVal t_choke_C As Double = 20, _
-            Optional ByVal calibr As Double = 1, _
-            Optional ByVal d_pipe_mm As Double = 70, _
             Optional ByVal param As String = "", _
-            Optional ByVal CDischarge As Double = 0.826, _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
             
-' d_choke_mm    - диаметр штуцера (эффективный), мм
-' feed         - закодированная строка с параметрами потока.
-' calibr_type
+' choke_json  - параметры штуцера закодированные в строке
+' feed_json   - параметры потока флюидов json строка. Используйте
+'               функции encode_feed() или encode_feed_list()
+' calibr_type тип калибровки: 0 - calibr, 1 - диаметра штуцера
+'   2 - газовый фактор, 3 - обводненность, 4 - дебит жидкости
+' , 5 - дебита свободного газа
 ' p_in_atma     - давление на входе (высокой стороне)
 ' p_out_atma    - давление на выходе (низкой стороне)
 ' t_choke_C     - температура, С.
-' calibr        - параметр калибровки
-' d_pipe_mm     - диаметр трубы до и после штуцера, мм
 ' param        - параметры расчета json строка
-' CDischarge      - коэффициент совершенства штуцера
 ' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
 '                может быть вектором
 ' fw_perc - обводненность, перекрывает feed если задан,
@@ -157,8 +154,6 @@ On Error GoTo err1:
     Dim Func As String
     Dim val_min As Double, val_max As Double
     Dim prm As New CSolveParam
-    'Dim calibr As Double
-    'Dim calibr_type As Integer
     Dim cal_type_string As String
     Dim prmd As Dictionary
     
@@ -169,9 +164,10 @@ On Error GoTo err1:
     Dim resd As New Dictionary
     Dim res(0 To 1, 0 To 3) As String
     
-   ' calibr = 1
+    Call choke.init_from_json(choke_json)
+    choke.fluid.init_feed (feed_json)
     
-    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr, CDischarge)
+    'Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr, CDischarge)
     Call choke.fluid.update_feed(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     
     If choke.fluid.gas_only Then
@@ -289,9 +285,8 @@ End Function
 ' pipe generation function from the standard data set
 ' includes and parameters of the flow in the pipe
 ' needed to simplify user functions
-Private Function new_pipeline_with_feed( _
+Private Function new_pipeline( _
         Optional ByVal construction As String = "", _
-        Optional ByVal feed As String = "", _
         Optional ByVal t_model As String = "", _
         Optional ByVal calc_along_coord As Boolean = True, _
         Optional ByVal flow_along_coord As Boolean = True, _
@@ -299,80 +294,237 @@ Private Function new_pipeline_with_feed( _
         Optional ByVal calibr_grav As Double = 1, _
         Optional ByVal calibr_fric As Double = 1, _
         Optional ByVal h_start_m As Double = -10000000000#, _
-        Optional ByVal h_end_m As Double = 10000000000#, _
-        Optional ByVal q_liq_sm3day As Double = -1, _
-        Optional ByVal fw_perc As Double = -1, _
-        Optional ByVal rp_m3m3 As Double = -1, _
-        Optional ByVal q_gas_free_sm3day As Double = -1 _
+        Optional ByVal h_end_m As Double = 10000000000# _
         ) As CPipe
         
     Dim pipe As New CPipe
 On Error GoTo err1:
     ' check default values for some props
     If Len(t_model) < 2 Then t_model = encode_t_model()
-    If Len(feed) < 2 Then feed = encode_feed()
-    If Len(construction) < 2 Then construction = encode_pipe()
+    If Len(construction) < 2 Then construction = encode_pipe_construction()
     
-    Call pipe.init_from_json(construction, feed, t_model, h_start_m, h_end_m)
-    Call pipe.fluid.update_feed(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
+    Call pipe.init_from_json(construction, t_model, h_start_m, h_end_m)
     
-    pipe.param = set_calc_flow_param(calc_along_coord:=calc_along_coord, _
+    Call pipe.set_calc_flow_param(calc_along_coord:=calc_along_coord, _
                                      flow_along_coord:=flow_along_coord, _
                                      hcor:=flow_correlation, _
                                      temp_method:=pipe.param.temp_method)
     pipe.calibr_grav = calibr_grav
     pipe.calibr_fric = calibr_fric
     
-    Set new_pipeline_with_feed = pipe
+    Set new_pipeline = pipe
     
     Exit Function
 err1:
-    new_pipeline_with_feed = Array(-1, "error")
-    add_log_msg "Error:new_pipeline_with_stream:" & Err.Description
+    new_pipeline = Array(-1, "error")
+    add_log_msg "Error:new_pipeline:" & Err.Description
                          
 End Function
+' pipe generation function from the standard data set
+' includes and parameters of the flow in the pipe
+' needed to simplify user functions
+Private Function new_pipeline2( _
+        Optional ByVal pipe_object As String = "", _
+        Optional ByVal calc_along_coord As Boolean = True _
+        ) As CPipe
+        
+    Dim pipe As New CPipe
+    Dim piped As Dictionary
+    
+On Error GoTo err1:
+    
+    Set piped = ParseJson(pipe_object)
+    
+    ' check default values for some props
+    
+    Dim h_start_m As Double
+    Dim h_end_m As Double
+    
+    h_start_m = piped("h_start_m")
+    h_end_m = piped("h_end_m")
+    
+    If h_start_m = 0 And h_end_m = 0 Then
+        h_start_m = -10000000000#
+        h_end_m = 10000000000#
+    End If
+    
+    Call pipe.init_from_dict(piped("construction"), piped("t_model"), h_start_m, h_end_m)
+    
+    Call pipe.set_calc_flow_param(calc_along_coord:=calc_along_coord, _
+                                     flow_along_coord:=piped("flow_along_coord"), _
+                                     hcor:=piped("flow_correlation"), _
+                                     temp_method:=pipe.param.temp_method)
+    pipe.calibr_grav = piped("calibr_grav")
+    pipe.calibr_fric = piped("calibr_fric")
+    
+    
+    If piped("znlf") Then pipe.set_ZNLF
+    
+    Set new_pipeline2 = pipe
+    
+    Exit Function
+err1:
+    new_pipeline2 = Array(-1, "error")
+    add_log_msg "Error:new_pipeline2:" & Err.Description
+                         
+End Function
+'
+''escription_to_manual      - для автогенерации
+''  расчет распределения давления и температуры в трубопроводе
+''  выводит результат в виде таблицы значений
+'Public Function MF_pipe_p_atma( _
+'                 ByVal p_calc_from_atma, _
+'                 ByVal t_calc_from_C, _
+'        Optional ByVal construction As String = "", _
+'        Optional ByVal feed As String = "", _
+'        Optional ByVal t_model As String = "", _
+'        Optional ByVal calc_along_coord As Boolean = True, _
+'        Optional ByVal flow_along_coord As Boolean = True, _
+'        Optional ByVal flow_correlation As Integer = 0, _
+'        Optional ByVal calibr_grav As Double = 1, _
+'        Optional ByVal calibr_fric As Double = 1, _
+'        Optional ByVal param As String = "", _
+'        Optional ByVal h_start_m As Double = -10000000000.1, _
+'        Optional ByVal h_end_m As Double = 10000000000.1, _
+'        Optional ByVal znlf As Boolean = False, _
+'        Optional ByVal q_liq_sm3day = -1, _
+'        Optional ByVal fw_perc = -1, _
+'        Optional ByVal rp_m3m3 = -1, _
+'        Optional ByVal q_gas_free_sm3day = -1)
+'' p_calc_from_atma  - давление с которого начинается расчет, атм
+''           граничное значение для проведения расчета
+'' t_calc_from_C - температура в точке где задано давление расчета
+'' construction - параметры конструкции json строка. Используйте
+''           функцию encode_pipe_construction() для генерации
+'' feed      - параметры потока флюидов json строка. Используйте
+''           функции encode_feed() или encode_feed_list()
+'' t_model   - параметры температурной модели json строка.
+''           Используйте функцию encode_t_model() для генерации
+'' calc_along_coord - направление расчета относительно координат.
+'' flow_along_coord - направление потока относительно координат.
+'' flow_correlation - гидравлическая корреляция, номер
+'' calibr_grav  - калибровка на гравитационную составляющую
+''                градиента давления
+'' calibr_fric  - калибровка на составляющую трения
+''                градиента давления
+'' param     - дополнительные параметры расчета потока
+'' h_start_m - начало расчета по трубе, м
+'' h_end_m   - конечная точка расчета по трубе, м
+'' znlf      - флаг для режима барботажа
+'' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
+''                может быть вектором
+'' fw_perc - обводненность, перекрывает feed если задан,
+''                может быть вектором
+'' rp_m3m3 - газовый фактор, перекрывает feed если задан,
+''                может быть вектором
+'' q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,
+''                может быть вектором
+'' результат - число - давление на другом конце трубы atma.
+''           и распределение параметров по трубе
+''escription_end
+'
+'    Dim pipe As New CPipe
+'    Dim prmd As Dictionary
+'    Dim res1
+'    Dim num_value As Integer
+'    Dim out_points As Integer
+'
+'    Dim show_log As Boolean
+'    Dim show_array As Boolean
+'    Dim show_json As Boolean
+'
+'    Dim save_crv As CALC_RESULTS
+'    Dim ptq As PTQ_LIST
+'    Dim ptq_out As PTQ_LIST
+'
+'    Dim i As Integer
+'
+'    save_crv = noCurves
+'    out_points = 20 ' default number of points in output arrays
+'
+'On Error GoTo err1:
+'    ' инициализируем трубу с первым фидом, который всегда есть
+'    Set pipe = new_pipeline(construction, _
+'                                      t_model, _
+'                                      calc_along_coord, _
+'                                      flow_along_coord, _
+'                                      flow_correlation, _
+'                                      calibr_grav, _
+'                                      calibr_fric, _
+'                                      h_start_m, h_end_m)
+'
+'    ' read vector input values if given
+'    Call read_PTQ(ptq, feed, p_calc_from_atma, t_calc_from_C, pipe.log_, 0, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
+'    Call init_ptq(ptq_out, ptq)
+'
+'    ' читаем параметры
+'    Set prmd = param_to_dict(param)
+'
+'    show_log = prmd(prm_show_log)
+'    num_value = prmd(prm_num_value)
+'    show_array = prmd(prm_show_array)
+'    show_json = prmd(prm_show_json)
+'
+'    If prmd.Exists(prm_out_points) Then out_points = prmd(prm_out_points)
+'
+'    ' запускаем цикл по вектору потоков, даже если он один все сработает как надо
+'    For i = 1 To ptq.len
+'        ' get proper feed from input vectors
+'        Call pipe.init_feed(ptq.feed(i), ptq.ql(i), ptq.fw(i), ptq.rp(i), ptq.qg(i), True)
+'        If znlf Then pipe.set_ZNLF
+'
+'        If (show_array Or show_json Or (num_value > 0)) And ptq.len = 1 Then save_crv = mainCurves
+'
+'        res1 = PT_to_array(pipe.calc_dPipe(ptq.p(i), ptq.t(i), save_crv))  ' main calc sub call
+'
+'        ptq_out.p(i) = Round(res1(0), const_num_decimal_out)
+'        ptq_out.t(i) = Round(res1(1), const_num_decimal_out)
+'        ptq_out.feed(i) = pipe.fluid.feed
+'    Next i
+'
+'    If ptq.len = 1 Then ' вывод отличается для вектора и для одного расчета
+'        If show_json Then
+'            MF_pipe_p_atma = ConvertToJson(pipe.get_result_dict(20, show_array, show_log))
+'        Else
+'            res1 = pipe.get_result_array(out_points, show_log)
+'            If show_array Then
+'                If num_value > 0 Then res1(0, 0) = res1(0, num_value)
+'                MF_pipe_p_atma = res1
+'            Else
+'                MF_pipe_p_atma = Round(res1(0, num_value), const_num_decimal_out)
+'            End If
+'        End If
+'    Else
+'        MF_pipe_p_atma = convert_to_json_ptq(ptq_out)
+'    End If
+'
+'    Exit Function
+'err1:
+'    MF_pipe_p_atma = "Error:MF_pipe_p_atma :" & Err.Description
+'End Function
 'description_to_manual      - для автогенерации
 '  расчет распределения давления и температуры в трубопроводе
 '  выводит результат в виде таблицы значений
 Public Function MF_pipe_p_atma( _
                  ByVal p_calc_from_atma, _
                  ByVal t_calc_from_C, _
-        Optional ByVal construction As String = "", _
+        Optional ByVal pipe_object As String = "", _
         Optional ByVal feed As String = "", _
-        Optional ByVal t_model As String = "", _
         Optional ByVal calc_along_coord As Boolean = True, _
-        Optional ByVal flow_along_coord As Boolean = True, _
-        Optional ByVal flow_correlation As Integer = 0, _
-        Optional ByVal calibr_grav As Double = 1, _
-        Optional ByVal calibr_fric As Double = 1, _
         Optional ByVal param As String = "", _
-        Optional ByVal h_start_m As Double = -10000000000.1, _
-        Optional ByVal h_end_m As Double = 10000000000.1, _
-        Optional ByVal znlf As Boolean = False, _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
-' p_calc_from_atma  - давление с которого начинается расчет, атм
+ ' p_calc_from_atma  - давление с которого начинается расчет, атм
 '           граничное значение для проведения расчета
 ' t_calc_from_C - температура в точке где задано давление расчета
-' construction - параметры конструкции json строка. Используйте
-'           функцию encode_pipe() для генерации
+' pipe_object - параметры конструкции json строка. Используйте
+'           функцию encode_pipe_construction() для генерации
 ' feed      - параметры потока флюидов json строка. Используйте
 '           функции encode_feed() или encode_feed_list()
-' t_model   - параметры температурной модели json строка.
-'           Используйте функцию encode_t_model() для генерации
 ' calc_along_coord - направление расчета относительно координат.
-' flow_along_coord - направление потока относительно координат.
-' flow_correlation - гидравлическая корреляция, номер
-' calibr_grav  - калибровка на гравитационную составляющую
-'                градиента давления
-' calibr_fric  - калибровка на составляющую трения
-'                градиента давления
 ' param     - дополнительные параметры расчета потока
-' h_start_m - начало расчета по трубе, м
-' h_end_m   - конечная точка расчета по трубе, м
-' znlf      - флаг для режима барботажа
 ' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
 '                может быть вектором
 ' fw_perc - обводненность, перекрывает feed если задан,
@@ -404,15 +556,8 @@ Public Function MF_pipe_p_atma( _
     out_points = 20 ' default number of points in output arrays
 On Error GoTo err1:
     ' инициализируем трубу с первым фидом, который всегда есть
-    Set pipe = new_pipeline_with_feed(construction, _
-                                      encode_feed(), _
-                                      t_model, _
-                                      calc_along_coord, _
-                                      flow_along_coord, _
-                                      flow_correlation, _
-                                      calibr_grav, _
-                                      calibr_fric, _
-                                      h_start_m, h_end_m)
+    Set pipe = new_pipeline2(pipe_object, _
+                                      calc_along_coord)
                                       
     ' read vector input values if given
     Call read_PTQ(ptq, feed, p_calc_from_atma, t_calc_from_C, pipe.log_, 0, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
@@ -431,10 +576,8 @@ On Error GoTo err1:
     ' запускаем цикл по вектору потоков, даже если он один все сработает как надо
     For i = 1 To ptq.len
         ' get proper feed from input vectors
-        Call pipe.fluid.init_feed(ptq.feed(i))
-        Call pipe.fluid.update_feed(ptq.ql(i), ptq.fw(i), ptq.rp(i), ptq.qg(i))
-        ' some tuning
-        If znlf Then pipe.set_ZNLF
+        Call pipe.init_feed(ptq.feed(i), ptq.ql(i), ptq.fw(i), ptq.rp(i), ptq.qg(i))
+        
         If (show_array Or show_json Or (num_value > 0)) And ptq.len = 1 Then save_crv = mainCurves
        
         res1 = PT_to_array(pipe.calc_dPipe(ptq.p(i), ptq.t(i), save_crv))  ' main calc sub call
@@ -464,48 +607,121 @@ On Error GoTo err1:
 err1:
     MF_pipe_p_atma = "Error:MF_pipe_p_atma :" & Err.Description
 End Function
+'
+''escription_to_manual      - для автогенерации
+''  расчет распределения давления и температуры в трубопроводе
+''  выводит результат в виде таблицы значений
+'Public Function MF_pipe3_p_atma( _
+'                 ByVal p_calc_from_atma, _
+'                 ByVal t_calc_from_C, _
+'        Optional ByVal pipe_object As String = "", _
+'        Optional ByVal feed As String = "", _
+'        Optional ByVal calc_along_coord As Boolean = True, _
+'        Optional ByVal param As String = "", _
+'        Optional ByVal q_liq_sm3day = -1, _
+'        Optional ByVal fw_perc = -1, _
+'        Optional ByVal rp_m3m3 = -1, _
+'        Optional ByVal q_gas_free_sm3day = -1)
+'' p_calc_from_atma  - давление с которого начинается расчет, атм
+''           граничное значение для проведения расчета
+'' t_calc_from_C - температура в точке где задано давление расчета
+'' pipe_object - параметры конструкции json строка. Используйте
+''           функцию encode_pipe_construction() для генерации
+'' feed      - параметры потока флюидов json строка. Используйте
+''           функции encode_feed() или encode_feed_list()
+'' calc_along_coord - направление расчета относительно координат.
+'' param     - дополнительные параметры расчета потока
+'' znlf      - флаг для режима барботажа
+'' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
+''                может быть вектором
+'' fw_perc - обводненность, перекрывает feed если задан,
+''                может быть вектором
+'' rp_m3m3 - газовый фактор, перекрывает feed если задан,
+''                может быть вектором
+'' q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,
+''                может быть вектором
+'' результат - число - давление на другом конце трубы atma.
+''           и распределение параметров по трубе
+''escription_end
+'
+'    Dim pipe As New CPipe
+'    Dim prmd As Dictionary
+'    Dim res1
+'    Dim num_value As Integer
+'    Dim out_points As Integer
+'
+'    Dim show_log As Boolean
+'    Dim show_array As Boolean
+'    Dim show_json As Boolean
+'
+'    Dim save_crv As CALC_RESULTS
+'
+'    Dim i As Integer
+'
+'    save_crv = noCurves
+'    out_points = 20 ' default number of points in output arrays
+'
+'On Error GoTo err1:
+'
+'
+'    ' читаем параметры
+'    Set prmd = param_to_dict(param)
+'    show_log = prmd(prm_show_log)
+'    num_value = prmd(prm_num_value)
+'    show_array = prmd(prm_show_array)
+'    show_json = prmd(prm_show_json)
+'
+'    If prmd.Exists(prm_out_points) Then out_points = prmd(prm_out_points)
+'
+'    ' инициализируем трубу с первым фидом, который всегда есть
+'    Set pipe = new_pipeline2(pipe_object, calc_along_coord)
+'    Call pipe.init_feed(feed, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day, True)
+'
+'    If (show_array Or show_json Or (num_value > 0)) Then save_crv = mainCurves
+'
+'    res1 = PT_to_array(pipe.calc_dPipe(p_calc_from_atma, t_calc_from_C, save_crv))  ' main calc sub call
+'
+'    If show_json Then
+'        MF_pipe3_p_atma = ConvertToJson(pipe.get_result_dict(20, show_array, show_log))
+'    Else
+'        res1 = pipe.get_result_array(out_points, show_log)
+'        If show_array Then
+'            If num_value > 0 Then res1(0, 0) = res1(0, num_value)
+'            MF_pipe3_p_atma = res1
+'        Else
+'            MF_pipe3_p_atma = Round(res1(0, num_value), const_num_decimal_out)
+'        End If
+'    End If
+'
+'    Exit Function
+'err1:
+'    MF_pipe3_p_atma = "Error:MF_pipe_p_atma :" & Err.Description
+'End Function
 'description_to_manual      - для автогенерации
 '  расчет распределения давления и температуры в трубопроводе
 '  выводит результат в виде таблицы значений
 Public Function json_pipe_calc( _
-                 ByVal p_calc_from_atma, _
-                 ByVal t_calc_from_C, _
-        Optional ByVal construction As String = "", _
-        Optional ByVal feed As String = "", _
-        Optional ByVal t_model As String = "", _
-        Optional ByVal calc_along_coord As Boolean = True, _
-        Optional ByVal flow_along_coord As Boolean = True, _
-        Optional ByVal flow_correlation As Integer = 0, _
-        Optional ByVal calibr_grav As Double = 1, _
-        Optional ByVal calibr_fric As Double = 1, _
+                 ByVal pipe_object As String, _
+                 ByVal feed As String, _
+        Optional ByVal p_in_atma As Double = -1, _
+        Optional ByVal p_out_atma As Double = -1, _
+        Optional ByVal t_in_C As Double = 30, _
         Optional ByVal param As String = "", _
-        Optional ByVal h_start_m As Double = -10000000000.1, _
-        Optional ByVal h_end_m As Double = 10000000000.1, _
-        Optional ByVal znlf As Boolean = False, _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
-' p_calc_from_atma  - давление с которого начинается расчет, атм
-'           граничное значение для проведения расчета
-' t_calc_from_C - температура в точке где задано давление расчета
+' pipe_object - параметры объекта труба - json строка. Используйте
+'           функцию encode_pipe_object() для генерации
 ' feed      - параметры потока флюидов json строка. Используйте
 '           функции encode_feed() или encode_feed_list()
-' construction - параметры конструкции json строка. Используйте
-'           функцию encode_pipe() для генерации
-' t_model   - параметры температурной модели json строка.
-'           Используйте функцию encode_t_model() для генерации
-' calc_along_coord - направление расчета относительно координат.
-' flow_along_coord - направление потока относительно координат.
-' flow_correl ation - гидравлическая корреляция, номер
-' calibr_grav  - калибровка на гравитационную составляющую
-'                градиента давления
-' calibr_fric  - калибровка на составляющую трения
-'                градиента давления
+' p_in_atma  - давление на входе потока в трубу, атм
+'              если задано, учитывается, иначе рассчитывается
+' p_out_atma - давление на выходе потока из трубы, атм
+'              если задано, учитывается, иначе рассчитывается
+' t_in_C - температура потока на входе в трубу, С
+'       если возможно, учитывается в расчете
 ' param     - дополнительные параметры расчета потока
-' h_start_m - начало расчета по трубе, м
-' h_end_m   - конечная точка расчета по трубе, м
-' znlf      - флаг для режима барботажа
 ' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
 '                может быть вектором
 ' fw_perc - обводненность, перекрывает feed если задан,
@@ -514,7 +730,7 @@ Public Function json_pipe_calc( _
 '                может быть вектором
 ' q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,
 '                может быть вектором
-' результат - число - давление на другом конце трубы atma.
+' результат - json - давление на другом конце трубы atma.
 '           и распределение параметров по трубе
 'description_end
     Dim prmd As Dictionary
@@ -524,54 +740,58 @@ Public Function json_pipe_calc( _
     
     param = ConvertToJson(prmd)
  
-    json_pipe_calc = MF_pipe_p_atma(p_calc_from_atma, _
-                                    t_calc_from_C, _
-                                    construction, _
-                                    feed, _
-                                    t_model, _
-                                    calc_along_coord, _
-                                    flow_along_coord, _
-                                    flow_correlation, _
-                                    calibr_grav, _
-                                    calibr_fric, _
-                                    param, _
-                                    h_start_m, _
-                                    h_end_m, _
-                                    znlf, _
-                                    q_liq_sm3day, _
-                                    fw_perc, _
-                                    rp_m3m3, _
-                                    q_gas_free_sm3day)
+    Dim piped As Dictionary
+    Set piped = ParseJson(pipe_object)
+    
+    If p_in_atma > 0 And p_out_atma < 0 Then
+        json_pipe_calc = MF_pipe_p_atma(p_in_atma, _
+                                         t_in_C, _
+                                         pipe_object, _
+                                         feed, _
+                                         piped("flow_along_coord"), _
+                                         param, _
+                                         q_liq_sm3day, _
+                                         fw_perc, _
+                                         rp_m3m3, _
+                                         q_gas_free_sm3day)
+    ElseIf p_in_atma < 0 And p_out_atma > 0 Then
+        json_pipe_calc = MF_pipe_p_atma(p_out_atma, _
+                                         t_in_C, _
+                                         pipe_object, _
+                                         feed, _
+                                         Not piped("flow_along_coord"), _
+                                         param, _
+                                         q_liq_sm3day, _
+                                         fw_perc, _
+                                         rp_m3m3, _
+                                         q_gas_free_sm3day)
+        
+    End If
 End Function
 ' ==============  функции для расчета штуцера ==========================
 ' =====================================================================
 'description_to_manual      - для автогенерации
 ' расчет давления в штуцере
 Public Function MF_choke_q_sm3day( _
-                     ByVal feed As String, _
-                     ByVal d_choke_mm As Double, _
+                     ByVal choke_json As String, _
+                     ByVal feed_json As String, _
                      ByVal p_in_atma As Double, _
                      ByVal p_out_atma As Double, _
             Optional ByVal t_choke_C = 20, _
-            Optional ByVal d_pipe_mm As Double = 70, _
-            Optional ByVal calibr As Double = 1, _
             Optional ByVal param As String = "", _
-            Optional ByVal CDischarge As Double = 0.826, _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
-' feed         - закодированная строка с параметрами потока.
-' d_choke_mm   - диаметр штуцера (эффективный)
+' choke_json  - параметры штуцера закодированные в строке
+' feed_json   - параметры потока флюидов json строка. Используйте
+'               функции encode_feed() или encode_feed_list()
 ' p_in_atma    - давление на входе в штуцер, атм.
 '                высокая сторона
 ' p_out_atma   - давление на выходе из штуцера, атм.
 '                низкая сторона
 ' t_choke_C    - температура потока, С.
-' d_pipe_mm    - диаметр трубы до и после штуцера
-' calibr       - параметр калибровки штуцера
 ' param        - параметры расчета json строка
-' CDischarge      - коэффициент совершенства штуцера
 ' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
 '                может быть вектором
 ' fw_perc - обводненность, перекрывает feed если задан,
@@ -598,8 +818,9 @@ On Error GoTo err1:
     
     num_value = 3
     Set choke = New Cchoke
-    
-    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr, CDischarge)
+    Call choke.init_from_json(choke_json)
+    choke.fluid.init_feed (feed_json)
+'    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, calibr, CDischarge)
     Call choke.fluid.update_feed(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     
     q = choke.calc_choke_q_liq_sm3day(p_in_atma, p_out_atma, t_choke_C)
@@ -637,34 +858,27 @@ End Function
 'description_to_manual      - для автогенерации
 ' расчет давления в штуцере (дросселе)
 Public Function MF_choke_p_atma( _
-                     ByVal d_choke_mm As Double, _
-                     ByVal feed As String, _
+                     ByVal choke_json As String, _
+                     ByVal feed_json As String, _
                      ByVal p_calc_from_atma, _
             Optional ByVal t_choke_C = 20, _
-            Optional ByVal d_pipe_mm As Double = 70, _
             Optional ByVal calc_along_flow As Boolean = True, _
-            Optional ByVal calibr As Double = 1, _
             Optional ByVal param As String = "", _
-            Optional ByVal CDischarge As Double = 0.826, _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
-' d_choke_mm      - диаметр штуцера (эффективный)
-' feed      - параметры потока флюидов json строка. Используйте
-'           функции encode_feed() или encode_feed_list()
+' choke_json  - параметры штуцера закодированные в строке
+' feed_json   - параметры потока флюидов json строка. Используйте
+'               функции encode_feed() или encode_feed_list()
 ' p_calc_from_atma - давление с которого начинается расчет, атм
 '                  граничное значение для проведения расчета
 '                  либо давление на входе, либо на выходе.
 '                   может быть списком.
 ' t_choke_C       - температура потока, С.
 '                   может быть списком.
-' d_pipe_mm       - диаметр трубы до и после штуцера
 ' calc_along_flow - флаг направления расчета относительно потока
-' calibr          - параметр калибровки штуцера, множитель
-'                   перепад давления
 ' param           - параметры расчета json строка
-' CDischarge      - коэффициент совершенства штуцера
 ' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
 '                может быть вектором
 ' fw_perc - обводненность, перекрывает feed если задан,
@@ -686,6 +900,7 @@ On Error GoTo err1:
     Dim show_json As Boolean
     Dim prmd As Dictionary
     
+    
     Dim ptq As PTQ_LIST
     Dim ptq_out As PTQ_LIST
     Dim i As Integer
@@ -694,12 +909,14 @@ On Error GoTo err1:
     ' потом в логе должна сохраниться вся история расчетов
     Set choke = New Cchoke
     
-    Call read_PTQ(ptq, feed, p_calc_from_atma, t_choke_C, choke.log_, 0, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
+    Call read_PTQ(ptq, feed_json, p_calc_from_atma, t_choke_C, choke.log_, 0, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     Call init_ptq(ptq_out, ptq)
     
     ' цикл расчетов - срабатывает если пришел feed вектор, иначе считает только один раз
     For i = 1 To ptq.len
-        Call set_choke_data(choke, d_choke_mm, ptq.feed(i), d_pipe_mm, calibr, CDischarge)
+        Call choke.init_from_json(choke_json)
+        Call choke.fluid.init_feed(ptq.feed(i))
+       ' Call set_choke_data(choke, d_choke_mm, ptq.feed(i), d_pipe_mm, calibr, CDischarge)
         Call choke.fluid.update_feed(ptq.ql(i), ptq.fw(i), ptq.rp(i), ptq.qg(i))
         ' запускаем расчет в зависимости от опции направления расчета
         If calc_along_flow Then
@@ -752,26 +969,23 @@ End Function
 ' расчет корректирующего фактора (множителя) модели штуцера под замеры
 ' быстрый расчет - калибровка вычисляется
 Public Function MF_choke_calibr_fast( _
-            ByVal feed As String, _
-            ByVal d_choke_mm As Double, _
+                     ByVal choke_json As String, _
+                     ByVal feed_json As String, _
             Optional ByVal p_in_atma As Double = -1, _
             Optional ByVal p_out_atma As Double = -1, _
-            Optional ByVal d_pipe_mm As Double = 70, _
             Optional ByVal t_choke_C As Double = 20, _
             Optional ByVal param As String = "", _
-            Optional ByVal CDischarge As Double = 0.826, _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
-' feed         - закодированная строка с параметрами потока.
-' d_choke_mm    - диаметр штуцера (эффективный), мм
+' choke_json  - параметры штуцера закодированные в строке
+' feed_json   - параметры потока флюидов json строка. Используйте
+'               функции encode_feed() или encode_feed_list()
 ' p_in_atma     - давление на входе (высокой стороне)
 ' p_out_atma    - давление на выходе (низкой стороне)
-' d_pipe_mm     - диаметр трубы до и после штуцера, мм
 ' t_choke_C     - температура, С.
 ' param        - параметры расчета json строка
-' CDischarge      - коэффициент совершенства штуцера
 ' q_liq_sm3day - дебит жидкости, перекрывает feed если задан,
 '                может быть вектором
 ' fw_perc - обводненность, перекрывает feed если задан,
@@ -794,7 +1008,10 @@ On Error GoTo err1:
     Dim prmd As Dictionary
     Dim res
     
-    Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, 1, CDischarge)
+    Call choke.init_from_json(choke_json)
+    choke.fluid.init_feed (feed_json)
+    
+  '  Call set_choke_data(choke, d_choke_mm, feed, d_pipe_mm, 1, CDischarge)
     Call choke.fluid.update_feed(q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     
     If choke.fluid.gas_only Then
@@ -982,7 +1199,7 @@ err1:
     json_choke_pq_crv = "error:MF_choke_pq_crv:" & Err.Description
 End Function
 'description_to_manual      - для автогенерации
-' function for calculating all PVT properties of oil at a given
+' calculate all PVT properties of oil at a given
 ' pressure and temperature
 Public Function json_PVT_calc( _
             ByVal p_atma As Double, _
@@ -1045,7 +1262,7 @@ err1:
     Call fluid.add_log_msg("{error: " & Chr(34) & Err.Description & Chr(34) & "}")
 End Function
 'description_to_manual      - для автогенерации
-' функция расчета объемного коэффициента газа
+' расчет объемного коэффициента газа
 Public Function PVT_bg_m3m3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
@@ -1494,7 +1711,7 @@ er2:
     
 End Function
 'description_to_manual      - для автогенерации
-' расчет газосодержания
+' расчет газосодержания при заданных p,t
 Public Function PVT_rs_m3m3( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
@@ -1817,7 +2034,8 @@ er2:
     
 End Function
 'description_to_manual      - для автогенерации
-' Расчет давления насыщения
+' Расчет давления насыщения по известному
+' газосодержанию при давлении насыщения
 Public Function PVT_pb_atma( _
             ByVal t_C As Double, _
    Optional ByVal PVT_prop As String = "", _
@@ -1881,7 +2099,8 @@ er2:
     
 End Function
 'description_to_manual      - для автогенерации
-' Расчет газосодержания по давлению насыщения
+' Расчет газосодержания при давлении насыщения
+' по известному давлению насыщения
 Public Function PVT_rsb_m3m3( _
             ByVal pb_atma As Double, _
             ByVal t_C As Double, _
@@ -2231,7 +2450,7 @@ er2:
     
 End Function
 'description_to_manual      - для автогенерации
-' расчет теплоемкости газа при постоянном давлении cp
+' расчет теплоемкости газа при постоянном объеме cv
 Public Function PVT_cv_gas_JkgC( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
@@ -2491,7 +2710,7 @@ er2:
     
 End Function
 'description_to_manual      - для автогенерации
-' расчет сжимаемости нефти
+' расчет сжимаемости газа
 Public Function PVT_compressibility_gas_1atm( _
             ByVal p_atma As Double, _
             ByVal t_C As Double, _
@@ -2556,7 +2775,7 @@ er2:
     
 End Function
 'description_to_manual      - для автогенерации
-' функция расчета параметров потока
+' расчет всех параметров потока с выводом в json
 Public Function json_feed_calc( _
                ByVal p_atma As Double, _
                ByVal t_C As Double, _
@@ -2611,7 +2830,7 @@ err2:
         End With
 End Function
 'description_to_manual      - для автогенерации
-' функция расчета коэффициента Джоуля Томсона
+' расчета доли газа в потоке (объемная, расходная доля газа)
 Public Function feed_gas_fraction_d( _
                ByVal p_atma As Double, _
                ByVal t_C As Double, _
@@ -2625,14 +2844,14 @@ Public Function feed_gas_fraction_d( _
 ' результат  - значение доли газа в потоке (расходна доля)
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_gas_fraction_d = PVT.gas_fraction_d(ksep_add_fr)
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_gas_fraction_d = pvt.gas_fraction_d(ksep_add_fr)
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_gas_fraction_d = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_gas_fraction_d = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_gas_fraction_d = "error " & Err.Description
@@ -2653,13 +2872,13 @@ Public Function feed_p_gas_fraction_atma( _
 ' результат  - число - давление
 'description_end
 On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    feed_p_gas_fraction_atma = PVT.p_gas_fraction_atma(free_gas_d, t_C, ksep_add_fr)
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    feed_p_gas_fraction_atma = pvt.p_gas_fraction_atma(free_gas_d, t_C, ksep_add_fr)
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_p_gas_fraction_atma = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_p_gas_fraction_atma = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_p_gas_fraction_atma = "error " & Err.Description
@@ -2683,15 +2902,15 @@ Public Function feed_rp_gas_fraction_m3m3( _
 'description_end
       
 On Error GoTo er1:
-    Dim PVT As New CPVT
+    Dim pvt As New CPVT
     
-    Call PVT.init_feed(feed)
-    feed_rp_gas_fraction_m3m3 = PVT.rp_gas_fraction_m3m3(free_gas_d, p_atma, t_C, ksep_add_fr)
+    Call pvt.init_feed(feed)
+    feed_rp_gas_fraction_m3m3 = pvt.rp_gas_fraction_m3m3(free_gas_d, p_atma, t_C, ksep_add_fr)
     
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_rp_gas_fraction_m3m3 = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_rp_gas_fraction_m3m3 = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_rp_gas_fraction_m3m3 = "error " & Err.Description
@@ -2710,14 +2929,14 @@ Public Function feed_cJT_Katm( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_cJT_Katm = PVT.cJT_Katm
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_cJT_Katm = pvt.cJT_Katm
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_cJT_Katm = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_cJT_Katm = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_cJT_Katm = "error " & Err.Description
@@ -2737,14 +2956,14 @@ Public Function feed_q_mix_rc_m3day( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_q_mix_rc_m3day = PVT.q_mix_rc_m3day
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_q_mix_rc_m3day = pvt.q_mix_rc_m3day
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_q_mix_rc_m3day = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_q_mix_rc_m3day = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_q_mix_rc_m3day = "error " & Err.Description
@@ -2763,14 +2982,14 @@ Public Function feed_q_liq_rc_m3day( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_q_liq_rc_m3day = PVT.qliq_rc_m3day
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_q_liq_rc_m3day = pvt.qliq_rc_m3day
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_q_liq_rc_m3day = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_q_liq_rc_m3day = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_q_liq_rc_m3day = "error " & Err.Description
@@ -2789,14 +3008,14 @@ Public Function feed_q_gas_rc_m3day( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_q_gas_rc_m3day = PVT.q_gas_rc_m3day
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_q_gas_rc_m3day = pvt.q_gas_rc_m3day
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_q_gas_rc_m3day = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_q_gas_rc_m3day = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_q_gas_rc_m3day = "error " & Err.Description
@@ -2815,14 +3034,14 @@ Public Function feed_q_gas_free_sm3day( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_q_gas_free_sm3day = PVT.q_gas_insitu_sm3day
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_q_gas_free_sm3day = pvt.q_gas_insitu_sm3day
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_q_gas_free_sm3day = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_q_gas_free_sm3day = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_q_gas_free_sm3day = "error " & Err.Description
@@ -2841,14 +3060,14 @@ Public Function feed_rho_mix_kgm3( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_rho_mix_kgm3 = PVT.rho_mix_rc_kgm3
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_rho_mix_kgm3 = pvt.rho_mix_rc_kgm3
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_rho_mix_kgm3 = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_rho_mix_kgm3 = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_rho_mix_kgm3 = "error " & Err.Description
@@ -2867,14 +3086,14 @@ Public Function feed_rho_liq_kgm3( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_rho_liq_kgm3 = PVT.rho_liq_rc_kgm3
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_rho_liq_kgm3 = pvt.rho_liq_rc_kgm3
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_rho_liq_kgm3 = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_rho_liq_kgm3 = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_rho_liq_kgm3 = "error " & Err.Description
@@ -2893,14 +3112,14 @@ Public Function feed_mu_mix_cP( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_mu_mix_cP = PVT.mu_mix_cP
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_mu_mix_cP = pvt.mu_mix_cP
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_mu_mix_cP = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_mu_mix_cP = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_mu_mix_cP = "error " & Err.Description
@@ -2919,14 +3138,14 @@ Public Function feed_mu_liq_cP( _
 '              подпись, и лог расчета если подключен
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_mu_liq_cP = PVT.mu_liq_cP
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_mu_liq_cP = pvt.mu_liq_cP
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_mu_liq_cP = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_mu_liq_cP = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_mu_liq_cP = "error " & Err.Description
@@ -2938,13 +3157,13 @@ Public Function feed_mod_separate_gas( _
                ByVal p_atma, _
                ByVal t_C, _
                ByVal feed As String, _
-      Optional ByVal param As String = "")
+      Optional ByVal sol_factor As Double = 0)
 ' k_sep - gas separation factor, fraction, number or list
 ' p_atma - pressure, atm, number or list
 ' t_C - temperature, C, number or list
 ' feed - json encoded fluid flow parameters,
 ' use encode_feed to generate
-' param - json encoded calculation and output parameters
+' sol_factor - gas solution factor
 ' result - json encoded feed string
 'description_end
     Const nv = 1
@@ -2952,13 +3171,9 @@ Public Function feed_mod_separate_gas( _
     
     Dim res(0 To 1, 0 To nv) As Variant
     ' param dictionary and settings variables with default values
-    Dim prmd As Dictionary
     Dim gas_goes_into_solution As Double
-    Dim show_log As Boolean
-    Dim show_array As Boolean
     Dim ptq As PTQ_LIST
     Dim ptq_out As PTQ_LIST
-    Dim log_res As New Collection
  
     ' auxiliary variables
     Dim log_str As String
@@ -2966,10 +3181,8 @@ Public Function feed_mod_separate_gas( _
     Dim d As Dictionary
     
     On Error GoTo er1:
-    Set prmd = param_to_dict(param)
-    show_log = prmd(prm_show_log)
-    show_array = prmd(prm_show_array)
-    gas_goes_into_solution = prmd(prm_gas_goes_into_solution)
+    gas_goes_into_solution = 0
+    If sol_factor >= 0 And sol_factor <= 1 Then gas_goes_into_solution = sol_factor
     Call read_PTQ(ptq, feed, p_atma, t_C, fluid_stream.log_, k_sep, 0, 0, 0, 0)
     Call init_ptq(ptq_out, ptq)
     For i = 1 To ptq.len
@@ -2984,33 +3197,18 @@ Public Function feed_mod_separate_gas( _
             ptq_out.t(i) = Round(ptq.t(i), const_num_decimal_out)
             ptq_out.val(i) = Round(ptq.val(i), const_num_decimal_out)
             
-            log_res.Add ParseJson(fluid_stream.log_.get_str_safe(show_log))
         End With
     Next i
       
     Set d = convert_to_dict_ptq(ptq_out)
     d("k_sep") = ptq_out.val
     
-    If show_array Then
-        If ptq.len = 1 Then
-            res(0, 0) = ptq_out.feed(1)
-            res(1, 0) = "fluid after separation"
-            res(0, 1) = ConvertToJson(log_res(1))
-            res(1, 1) = "log"
-        Else
-            res(0, 0) = ConvertToJson(d)
-            res(1, 0) = "fluids after separation"
-            res(0, 1) = ConvertToJson(log_res)
-            res(1, 1) = "log"
-        End If
-        feed_mod_separate_gas = res
+    If ptq.len = 1 Then
+        feed_mod_separate_gas = ptq_out.feed(1)
     Else
-        If ptq.len = 1 Then
-            feed_mod_separate_gas = ptq_out.feed(1)
-        Else
-            feed_mod_separate_gas = ConvertToJson(d)
-        End If
+        feed_mod_separate_gas = ConvertToJson(d)
     End If
+    
     Exit Function
 er1:
 On Error GoTo er2:
@@ -3027,8 +3225,7 @@ Public Function feed_mod_split( _
                ByVal k_sep_wat As Double, _
                ByVal p_atma As Double, _
                ByVal t_C As Double, _
-               ByVal feed As String, _
-      Optional ByVal param As String = "")
+               ByVal feed As String)
 ' k_sep_gas - gas separation factor
 ' k_sep_oil - oil separation factor
 ' k_sep_wat - water separation factor
@@ -3036,7 +3233,6 @@ Public Function feed_mod_split( _
 ' t_C - temperature, C.
 ' feed - fluid flow parameters, flow rate, watercut, etc.
 ' use encode_feed for generation
-' param - json encoded parameters for calculation and output
 ' result - array, GJS flow rate in working conditions,
 ' signature, and log of calculation if it is connected
 ' description_end
@@ -3057,11 +3253,14 @@ On Error GoTo er1:
     qw1 = feed1.q_wat_sm3day
     
     feed2.q_liq_sm3day = qo1 * k_sep_oil + qw1 * k_sep_wat
-    feed2.fw_fr = qw1 * k_sep_wat / (qo1 * k_sep_oil + qw1 * k_sep_wat)
+    If (qo1 * k_sep_oil + qw1 * k_sep_wat) > 0 Then
+        feed2.fw_fr = qw1 * k_sep_wat / (qo1 * k_sep_oil + qw1 * k_sep_wat)
+    End If
     
     feed1.q_liq_sm3day = qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)
-    feed1.fw_fr = qw1 * (1 - k_sep_wat) / (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat))
-    
+    If (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)) > 0 Then
+        feed1.fw_fr = qw1 * (1 - k_sep_wat) / (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat))
+    End If
     ' весь газ после сепарации добавим во второй поток как свободный газ
     feed2.q_gas_free_sm3day = feed_in.q_gas_free_sm3day - feed1.q_gas_free_sm3day + _
                               (feed_in.rp_m3m3 - feed1.rp_m3m3) * feed_in.q_oil_sm3day
@@ -3224,14 +3423,14 @@ Public Function feed_m_oil_kgsec( _
 ' результат  - число - массовый расход нефти
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_m_oil_kgsec = PVT.mo_kgsec
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_m_oil_kgsec = pvt.mo_kgsec
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_m_oil_kgsec = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_m_oil_kgsec = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_m_oil_kgsec = "error " & Err.Description
@@ -3249,14 +3448,14 @@ Public Function feed_m_gas_kgsec( _
 ' результат  - число - массовый расход свободного газа
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_m_gas_kgsec = PVT.mg_kgsec
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_m_gas_kgsec = pvt.mg_kgsec
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_m_gas_kgsec = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_m_gas_kgsec = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_m_gas_kgsec = "error " & Err.Description
@@ -3274,244 +3473,17 @@ Public Function feed_m_wat_kgsec( _
 ' результат  - число - массовый расход свободного воды
 'description_end
  On Error GoTo er1:
-    Dim PVT As New CPVT
-    Call PVT.init_feed(feed)
-    Call PVT.calc_PVT(p_atma, t_C)
-    feed_m_wat_kgsec = PVT.mw_kgsec
+    Dim pvt As New CPVT
+    Call pvt.init_feed(feed)
+    Call pvt.calc_PVT(p_atma, t_C)
+    feed_m_wat_kgsec = pvt.mw_kgsec
     Exit Function
 er1:
 On Error GoTo er2:
-    feed_m_wat_kgsec = Array("error " & Err.Description, PVT.log_.get_str)
+    feed_m_wat_kgsec = Array("error " & Err.Description, pvt.log_.get_str)
     Exit Function
 er2:
     feed_m_wat_kgsec = "error " & Err.Description
-End Function
-' ==============  функции для расчета пласта ==========================
-' =====================================================================
-Public Function json_ipr_crv(ipr_json As String, _
-                    Optional num_points As Integer = 20)
-    Dim res As New CReservoirVogel
-    Dim i As Integer
-    Dim crv As New CInterpolation
-    Dim p As Double
-    Dim q As Double
-    
-    Call res.init_json(ipr_json)
-    
-    
-    For i = 1 To num_points
-        p = 1 + res.p_res_atma / (num_points - 1) * (i - 1)
-        q = res.calc_q_liq_sm3day(p)
-        crv.AddPoint q, p
-        crv.xName = "q_liq (IPR)"
-        crv.yName = "p_wf (IPR)"
-    Next i
-    json_ipr_crv = crv.getJson
-End Function
-'description_to_manual      - для автогенерации
-' расчет дебита по давлению и продуктивности
-Public Function IPR_q_liq_sm3day( _
-                 ByVal pi_sm3dayatm As Double, _
-                 ByVal p_res_atma As Double, _
-                 ByVal p_wf_atma, _
-        Optional ByVal fw_perc As Double = 0, _
-        Optional ByVal pb_atma As Double = -1, _
-        Optional ByVal t_res_C As Double = 80)
-' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
-' p_res_atma     - пластовое давление, абс. атм
-' p_wf_atma      - забойное давление, абс. атм.
-'                  можно задать список [],
-'                  тогда результат будет в виде списка
-' fw_perc        - обводненность, %
-' pb_atma        - давление насыщения, абс. атм
-' t_res_C        - температура флюида в пласте, С
-' результат      - значение дебита жидкости, ст.м3/сут
-'                  или список значений
-'description_end
-On Error GoTo err1:
-    Dim cl As Collection
-    Dim cl_q_out As New Collection
-    Dim cl_p_out As New Collection
-    Dim cl_t_out As New Collection
-    Dim dic_out As New Dictionary
-    
-    Dim pwf
-    Dim res As New CReservoirVogel
-    
-    If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид додсчитает по корреляции значение
-    res.InitProp p_res_atma, pb_atma, fw_perc
-    res.pi_sm3dayatm = pi_sm3dayatm
-    
-    ' разберемся со значением забойного давления
-    
-    Select Case VBA.VarType(p_wf_atma)
-        Case vbDouble
-             IPR_q_liq_sm3day = res.calc_q_liq_sm3day(p_wf_atma)
-        Case vbString
-            Select Case VBA.Mid$(p_wf_atma, 1, 1)
-                Case "["
-                    Set cl = ParseJson(p_wf_atma)
-                    For Each pwf In cl
-                        cl_q_out.Add Round(res.calc_q_liq_sm3day(pwf), const_num_decimal_out)
-                        cl_p_out.Add pwf
-                        cl_t_out.Add t_res_C
-                    Next
-                    Set dic_out("p_atma") = cl_p_out
-                    Set dic_out("t_C") = cl_t_out
-                    Set dic_out("q_liq_sm3day") = cl_q_out
-                    IPR_q_liq_sm3day = ConvertToJson(dic_out)
-                Case Else
-                    pwf = Cdbl_(p_wf_atma)
-                    IPR_q_liq_sm3day = res.calc_q_liq_sm3day(pwf)
-            End Select
-    End Select
-        
-    Set res = Nothing
-    
-    Exit Function
-err1:
-    IPR_q_liq_sm3day = "Error:IPR_q_liq_sm3day:" & Err.Description
-End Function
-'description_to_manual      - для автогенерации
-' расчет забойного давления по дебиту и продуктивности
-Public Function IPR_p_wf_atma( _
-                 ByVal pi_sm3dayatm As Double, _
-                 ByVal p_res_atma As Double, _
-                 ByVal q_liq_sm3day, _
-        Optional ByVal fw_perc As Double = 0, _
-        Optional ByVal pb_atma As Double = -1, _
-        Optional ByVal t_res_C As Double = 80)
-  ' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
-' p_res_atma      - пластовое давление, абс. атм
-' q_liq_sm3day    - дебит жидкости скважины на поверхности, ст.м3/сут
-' fw_perc        - обводненность, %
-' pb_atma        - давление насыщения, абс. атм
-' t_res_C        - температура флюида в пласте, С
-' результат      - значение забойного давления, абс. атм
-'description_end
-On Error GoTo err1:
-    Dim cl As Collection
-    Dim cl_q_out As New Collection
-    Dim cl_p_out As New Collection
-    Dim cl_t_out As New Collection
-    Dim dic_out As New Dictionary
-    Dim ql
-    Dim res As New CReservoirVogel
-    If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид подсчитает по корреляции значение
-    res.InitProp p_res_atma, pb_atma, fw_perc
-    res.pi_sm3dayatm = pi_sm3dayatm
-    
-    
-    ' разберемся со значением дебита
-    
-    Select Case VBA.VarType(q_liq_sm3day)
-        Case vbDouble
-             IPR_p_wf_atma = res.calc_p_wf_atma(q_liq_sm3day)
-        Case vbString
-            Select Case VBA.Mid$(q_liq_sm3day, 1, 1)
-                Case "["
-                    Set cl = ParseJson(q_liq_sm3day)
-                    For Each ql In cl
-                        cl_q_out.Add ql
-                        cl_p_out.Add res.calc_p_wf_atma(ql)
-                        cl_t_out.Add t_res_C
-                    Next
-                    Set dic_out("p_atma") = cl_p_out
-                    Set dic_out("t_C") = cl_t_out
-                    Set dic_out("q_liq_sm3day") = cl_q_out
-                    IPR_p_wf_atma = ConvertToJson(dic_out)
-                Case Else
-                    ql = Cdbl_(q_liq_sm3day)
-                    IPR_p_wf_atma = res.calc_p_wf_atma(ql)
-            End Select
-    End Select
-    
-    Set res = Nothing
-    
-    Exit Function
-err1:
-    IPR_p_wf_atma = "Error:IPR_p_wf_atma:" & Err.Description
-   
-End Function
-'description_to_manual      - для автогенерации
-' расчет коэффициента продуктивности пласта
-' по данным тестовой эксплуатации
-Public Function IPR_pi_sm3dayatm( _
-                 ByVal Qtest_sm3day As Double, _
-                 ByVal pwf_test_atma As Double, _
-                 ByVal p_res_atma As Double, _
-        Optional ByVal fw_perc As Double = 0, _
-        Optional ByVal pb_atma As Double = -1)
-' Qtest_sm3day   - тестовый дебит скважины, ст.м3/сут
-' pwf_test_atma  - тестовое забойное давление, абс. атм
-' p_res_atma      - пластовое давление, абс. атм
-' fw_perc        - обводненность, %
-' pb_atma        - давление насыщения, абс. атм
-' результат      - значение коэффициента продуктивности, ст.м3/сут/атм
-'description_end
-On Error GoTo err1:
-    Dim res As New CReservoirVogel
-    If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид подсчитает по корреляции значение
-    res.InitProp p_res_atma, pb_atma, fw_perc
-    IPR_pi_sm3dayatm = res.calc_pi_sm3dayatm(Qtest_sm3day, pwf_test_atma)
-    Set res = Nothing
-    
-    Exit Function
-err1:
-    IPR_pi_sm3dayatm = -1
-    add_log_msg "error in function :IPR_pi_sm3dayatm:" & Err.Description
-End Function
-'description_to_manual      - для автогенерации
-' расчет кривой IPR в формате json
-' pq_crv - кривая давление температура
-Public Function IPR_pq_crv( _
-                 ByVal pi_sm3dayatm As Double, _
-                 ByVal p_res_atma As Double, _
-        Optional ByVal fw_perc As Double = 0, _
-        Optional ByVal pb_atma As Double = -1, _
-        Optional param As String = "")
-' pi_sm3dayatm   - коэффициент продуктивности, ст.м3/сут/атм
-' p_res_atma     - пластовое давление, абс. атм
-' fw_perc        - обводненность, %
-' pb_atma        - давление насыщения, абс. атм
-' param          - дополнительные параметры построения
-' результат      - кривая IPR в формате json.
-'        можно использовать decode_json_crv для декодирования
-'description_end
-Dim i As Integer
-Dim num As Integer
-Dim crv_IPR As New CInterpolation
-Dim pwf_i As Double
-Dim qliq_i As Double
-Dim res As New CReservoirVogel
-Dim prmd As Dictionary
-On Error GoTo err1:
-    Set prmd = param_to_dict(param)
-    
-    num = prmd(prm_num_value) - 1
-    If num <= 1 Then
-        num = 19
-    End If
-    
-    For i = 0 To num
-        pwf_i = 1 + (p_res_atma - 1) / num * i
-        
-        If pb_atma <= 0 Then pb_atma = 0   ' поставим ноль иначе флюид подсчитает по корреляции значение
-        res.InitProp p_res_atma, pb_atma, fw_perc
-        res.pi_sm3dayatm = pi_sm3dayatm
-        qliq_i = res.calc_q_liq_sm3day(pwf_i)
-        
-        crv_IPR.AddPoint pwf_i, qliq_i
-        
-    Next i
-    crv_IPR.xName = "p_wf_atma"
-    crv_IPR.yName = "q_liq_sm3day"
-    
-    IPR_pq_crv = ConvertToJson(crv_IPR.getDict)
-    Exit Function
-err1:
-    IPR_pq_crv = -1
-    add_log_msg "error in function :IPR_pq_crv:" & Err.Description
 End Function
 '
 ''=======================================================
@@ -5302,7 +5274,7 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
                           Optional ByVal ksep As Double = 0.5, _
-                          Optional ByVal ipr_json As String = "", _
+                          Optional ByVal IPR_json As String = "", _
                           Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal p_cas_atma = 0, _
                           Optional ByVal flow_corr As Integer = 0, _
@@ -5373,8 +5345,8 @@ On Error GoTo er1:
     Set f = ParseJson(feed_json)
     q_liq_sm3day = f("q_liq_sm3day")
 ' 0. если задана IPR  то пытаемся оценить дебит
-    If Len(ipr_json) > 0 Then
-        Call ipr_vogel.init_json(ipr_json)
+    If Len(IPR_json) > 0 Then
+        Call ipr_vogel.init_json(IPR_json)
         q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
         
         f("q_liq_sm3day") = q_liq_sm3day
@@ -5384,8 +5356,7 @@ On Error GoTo er1:
 ' 1. расчет участка э/к от забоя до приема насоса
 ' инициализируем трубу с первым фидом, который всегда есть
     
-    Set pipe_below_esp = new_pipeline_with_feed(construction_json, _
-                                                feed_json, _
+    Set pipe_below_esp = new_pipeline(construction_json, _
                                                 t_model_json, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
@@ -5440,8 +5411,7 @@ On Error GoTo er1:
        t_dis_C = t_intake_C
     End If
  ' 4. расчет распределения давления в НКТ
-    Set pipe_above_esp = new_pipeline_with_feed(construction_json, _
-                                                feed_sep, _
+    Set pipe_above_esp = new_pipeline(construction_json, _
                                                 t_model_json, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
@@ -5462,8 +5432,7 @@ On Error GoTo er1:
         Set f = ParseJson(feed_sep)
         f("q_gas_free_sm3day") = qgas_cas_sm3day
         feed_sep = ConvertToJson(f)
-        Set pipe_casing_liq = new_pipeline_with_feed(construction_json, _
-                                                    feed_sep, _
+        Set pipe_casing_liq = new_pipeline(construction_json, _
                                                     t_model_json, _
                                                     calc_along_coord, _
                                                     flow_along_coord, _
@@ -5475,8 +5444,7 @@ On Error GoTo er1:
         res1 = pipe_casing_liq.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
         'построим распределение давления для газа
         
-        Set pipe_casing_gas = new_pipeline_with_feed(construction_json, _
-                                                    feed_sep, _
+        Set pipe_casing_gas = new_pipeline(construction_json, _
                                                     t_model_json, _
                                                     Not calc_along_coord, _
                                                     flow_along_coord, _
@@ -5565,7 +5533,7 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
     Dim p_wh_atma As Double
     Dim res As Double
     
-    Dim t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, pkv_ratio, dcas_mm, dint_mm
+    Dim t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr, pkv_ratio, dcas_mm, dint_mm
     
     p_wh_atma = CoeffA(0)
     
@@ -5579,7 +5547,7 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
     calibr_grav = CoeffA(8)
     calibr_fric = CoeffA(9)
     ksep = CoeffA(10)
-    ipr_json = CoeffA(11)
+    IPR_json = CoeffA(11)
     t_crit_C = CoeffA(12)
     p_cas_atma = CoeffA(13)
     flow_corr = CoeffA(14)
@@ -5587,7 +5555,7 @@ Private Function calc_well_pwf(ByVal p_wf As Double, _
     dcas_mm = CoeffA(16)
     dint_mm = CoeffA(17)
     
-    res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, True, pkv_ratio, dcas_mm, dint_mm) - p_wh_atma
+    res = well_calc_from_pwf(p_wf, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr, True, pkv_ratio, dcas_mm, dint_mm) - p_wh_atma
     calc_well_pwf = res
 End Function
 'description_to_manual      - для автогенерации
@@ -5604,7 +5572,7 @@ Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
                           Optional ByVal ksep As Double = 0.5, _
-                          Optional ByVal ipr_json As String = "", _
+                          Optional ByVal IPR_json As String = "", _
                           Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal p_cas_atma = 0, _
                           Optional ByVal flow_corr As Integer = 0, _
@@ -5644,9 +5612,9 @@ On Error GoTo er1:
     p_wf_max = 500
     
 ' 0. если задана IPR  то пытаемся оценить граничное забойное давление
-    If Len(ipr_json) > 0 Then
+    If Len(IPR_json) > 0 Then
         Dim d As Dictionary
-        Set d = ParseJson(ipr_json)
+        Set d = ParseJson(IPR_json)
         p_wf_max = d("p_res_atma")
     End If
         
@@ -5662,7 +5630,7 @@ On Error GoTo er1:
     CoeffA(8) = calibr_grav
     CoeffA(9) = calibr_fric
     CoeffA(10) = ksep
-    CoeffA(11) = ipr_json
+    CoeffA(11) = IPR_json
     CoeffA(12) = t_crit_C
     CoeffA(13) = p_cas_atma
     CoeffA(14) = flow_corr
@@ -5673,13 +5641,13 @@ On Error GoTo er1:
     prm.y_tolerance = 0.01
     
     If solve_equation_bisection("calc_well_pwf", 1, p_wf_max, CoeffA, prm) Then
-        res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, , pkv_ratio, dcas_mm, dint_mm)
+        res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr, , pkv_ratio, dcas_mm, dint_mm)
         well_calc_from_pwh = res
     Else
         ' здесь может оказаться, что решениий несколько и надо искать их посреди интервала
         For i = 1 To 10
             If solve_equation_bisection("calc_well_pwf", 1 + (p_wf_max / 10) * (i - 1), 1 + (p_wf_max / 10) * i, CoeffA, prm) Then
-                res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, , pkv_ratio, dcas_mm, dint_mm)
+                res = well_calc_from_pwf(prm.x_solution, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr, , pkv_ratio, dcas_mm, dint_mm)
                 well_calc_from_pwh = res
                 Exit Function
             Else
@@ -5712,7 +5680,7 @@ Public Function unf_well_calc_pintake_from_pwf( _
                                    ByVal h_esp_m As Double, _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
-                          Optional ByVal ipr_json As String = "", _
+                          Optional ByVal IPR_json As String = "", _
                           Optional ByVal flow_corr As Integer = 0)
     Const calc_along_coord = False
     Const flow_along_coord = False
@@ -5730,9 +5698,9 @@ Public Function unf_well_calc_pintake_from_pwf( _
     Set f = ParseJson(feed_json)
     q_liq_sm3day = f("q_liq_sm3day")
 ' 0. если задана IPR  то пытаемся оценить дебит
-    If Len(ipr_json) > 0 Then
+    If Len(IPR_json) > 0 Then
         Dim d As Dictionary
-        Set d = ParseJson(ipr_json)
+        Set d = ParseJson(IPR_json)
         p_res_atma = d("p_res_atma")
         pi_m3dayatm = d("pi_m3dayatm")
         pb_atma = d("pb_atma")
@@ -5748,8 +5716,7 @@ Public Function unf_well_calc_pintake_from_pwf( _
     End If
 ' 1. расчет участка э/к от забоя до приема насоса
 ' инициализируем трубу с первым фидом, который всегда есть
-    Set pipe_below_esp = new_pipeline_with_feed(construction_json, _
-                                                feed_json, _
+    Set pipe_below_esp = new_pipeline(construction_json, _
                                                 t_model_json, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
@@ -5769,7 +5736,7 @@ Private Function calc_well_pwf_from_pint(ByVal p_wf As Double, _
     
     Dim p_int_atma As Double
     
-    Dim t_wf_C, feed_json, construction_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ipr_json, flow_corr
+    Dim t_wf_C, feed_json, construction_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, IPR_json, flow_corr
     
     p_int_atma = CoeffA(0)
     
@@ -5781,13 +5748,13 @@ Private Function calc_well_pwf_from_pint(ByVal p_wf As Double, _
     h_esp_m = CoeffA(6)
     calibr_grav = CoeffA(7)
     calibr_fric = CoeffA(8)
-    ipr_json = CoeffA(9)
+    IPR_json = CoeffA(9)
     flow_corr = CoeffA(10)
     
     Dim res As String
     Dim dres As Dictionary
     
-    res = unf_well_calc_pintake_from_pwf(p_wf, t_wf_C, feed_json, construction_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ipr_json, flow_corr)
+    res = unf_well_calc_pintake_from_pwf(p_wf, t_wf_C, feed_json, construction_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, IPR_json, flow_corr)
     
     calc_well_pwf_from_pint = res - p_int_atma
     
@@ -5801,7 +5768,7 @@ Private Function calc_well_calibr_esp(ByVal calibr_esp As Double, _
     
     Dim p_wh_atma As Double
     
-    Dim p_wf_atma, t_wf_C, feed_json, construction_json, esp_json As String, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr
+    Dim p_wf_atma, t_wf_C, feed_json, construction_json, esp_json As String, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr
     
     p_wh_atma = CoeffA(0)
     
@@ -5816,14 +5783,14 @@ Private Function calc_well_calibr_esp(ByVal calibr_esp As Double, _
     calibr_grav = CoeffA(9)
     calibr_fric = CoeffA(10)
     ksep = CoeffA(11)
-    ipr_json = CoeffA(12)
+    IPR_json = CoeffA(12)
     t_crit_C = CoeffA(13)
     p_cas_atma = CoeffA(14)
     flow_corr = CoeffA(15)
     
     esp_json = update(esp_json, calibr_esp)
     
-    calc_well_calibr_esp = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr, fast:=True) - p_wh_atma
+    calc_well_calibr_esp = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr, fast:=True) - p_wh_atma
     
 End Function
 'description_to_manual      - для автогенерации
@@ -5842,7 +5809,7 @@ Public Function well_calc_from_pintake( _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
                           Optional ByVal ksep As Double = 0.5, _
-                          Optional ByVal ipr_json As String = "", _
+                          Optional ByVal IPR_json As String = "", _
                           Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal p_cas_atma = 0, _
                           Optional ByVal p_wh_atma As Double = 10, _
@@ -5887,9 +5854,9 @@ On Error GoTo er1:
     
     p_wf_max = 300
 ' 0. если задана IPR  то пытаемся оценить граничное забойное давление
-    If Len(ipr_json) > 0 Then
+    If Len(IPR_json) > 0 Then
         Dim d As Dictionary
-        Set d = ParseJson(ipr_json)
+        Set d = ParseJson(IPR_json)
         p_wf_max = d("p_res_atma")
     End If
         
@@ -5905,7 +5872,7 @@ On Error GoTo er1:
     CoeffA(6) = h_esp_m
     CoeffA(7) = calibr_grav
     CoeffA(8) = calibr_fric
-    CoeffA(9) = ipr_json
+    CoeffA(9) = IPR_json
     CoeffA(10) = flow_corr
     
     prm.y_tolerance = 0.01
@@ -5930,7 +5897,7 @@ On Error GoTo er1:
     CoeffB(9) = calibr_grav
     CoeffB(10) = calibr_fric
     CoeffB(11) = ksep
-    CoeffB(12) = ipr_json
+    CoeffB(12) = IPR_json
     CoeffB(13) = t_crit_C
     CoeffB(14) = p_cas_atma
     CoeffB(15) = flow_corr
@@ -5940,7 +5907,7 @@ On Error GoTo er1:
     If solve_equation_bisection("calc_well_calibr_esp", 0.01, 1.99, CoeffB, prm) Then
         ' если решение нашлось, пересчитаем распределение давления ради графиков и добавим в выходной json значение деградации
         esp_json = update(esp_json, prm.x_solution)
-        res = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, ipr_json, t_crit_C, p_cas_atma, flow_corr)
+        res = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr)
         Set dres = ParseJson(res)
         dres.Add "calibr_esp_head", prm.x_solution
         res = ConvertToJson(dres)

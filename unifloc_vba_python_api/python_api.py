@@ -67,18 +67,18 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
-    def MF_choke_calibr(self, d_choke_mm,feed,calibr_type=0,p_in_atma=-1,p_out_atma=-1,t_choke_C=20,calibr=1,d_pipe_mm=70,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_choke_calibr(self, choke_json,feed_json,calibr_type=0,p_in_atma=-1,p_out_atma=-1,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  медленный расчет - калибровка подбирается 
         
  ==========  arguments  ============== 
 
-     d_choke_mm - диаметр штуцера (эффективный), мм    
+     choke_json - параметры штуцера закодированные в строке    
 
-     feed - закодированная строка с параметрами потока.    
+     feed_json - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
 
-     calibr_type    
+     calibr_type тип калибровки: 0 - calibr, 1 - диаметра штуцера  2 - газовый фактор, 3 - обводненность, 4 - дебит жидкости  , 5 - дебита свободного газа    
 
      p_in_atma - давление на входе (высокой стороне)    
 
@@ -86,13 +86,7 @@ class API():
 
      t_choke_c - температура, с.    
 
-     calibr_type  p_in_atma - давление на входе (высокой стороне)  p_out_atma - давление на выходе (низкой стороне)  t_choke_c - температура, с.  calibr - параметр калибровки    
-
-     d_pipe_mm - диаметр трубы до и после штуцера, мм    
-
      param - параметры расчета json строка    
-
-     cdischarge - коэффициент совершенства штуцера    
 
      q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
@@ -105,42 +99,26 @@ class API():
         """
 
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
-        return self.f_MF_choke_calibr(d_choke_mm,feed,calibr_type,p_in_atma,p_out_atma,t_choke_C,calibr,d_pipe_mm,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_MF_choke_calibr(choke_json,feed_json,calibr_type,p_in_atma,p_out_atma,t_choke_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
         
  ==========  arguments  ============== 
 
-     p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+      p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
 
      t_calc_from_c - температура в точке где задано давление расчета    
 
-     construction - параметры конструкции json строка. используйте  функцию encode_pipe() для генерации    
+     pipe_object - параметры конструкции json строка. используйте  функцию encode_pipe_construction() для генерации    
 
      feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
 
-     t_model - параметры температурной модели json строка.  используйте функцию encode_t_model() для генерации    
-
      calc_along_coord - направление расчета относительно координат.    
 
-     flow_along_coord - направление потока относительно координат.    
-
-     flow_correlation - гидравлическая корреляция, номер    
-
-     calibr_grav - калибровка на гравитационную составляющую  градиента давления    
-
-     calibr_fric - калибровка на составляющую трения  градиента давления    
-
      param - дополнительные параметры расчета потока    
-
-     h_start_m - начало расчета по трубе, м    
-
-     h_end_m - конечная точка расчета по трубе, м    
-
-     znlf - флаг для режима барботажа    
 
      q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
@@ -153,42 +131,26 @@ class API():
         """
 
         self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
-        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,pipe_object,feed,calc_along_coord,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def json_pipe_calc(self, p_calc_from_atma,t_calc_from_C,construction="",feed="",t_model="",calc_along_coord=True,flow_along_coord=True,flow_correlation=0,calibr_grav=1,calibr_fric=1,param="",h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def json_pipe_calc(self, pipe_object,feed,p_in_atma=-1,p_out_atma=-1,t_in_C=30,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
         
  ==========  arguments  ============== 
 
-     p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+     pipe_object - параметры объекта труба - json строка. используйте  функцию encode_pipe_object() для генерации    
 
-     t_calc_from_c - температура в точке где задано давление расчета    
+     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
 
-     construction - параметры конструкции json строка. используйте  функцию encode_pipe() для генерации    
+     p_in_atma - давление на входе потока в трубу, атм  если задано, учитывается, иначе рассчитывается    
 
-     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()  construction - параметры конструкции json строка. используйте  функцию ..см.мануал   
+     p_out_atma - давление на выходе потока из трубы, атм  если задано, учитывается, иначе рассчитывается    
 
-     t_model - параметры температурной модели json строка.  используйте функцию encode_t_model() для генерации    
-
-     calc_along_coord - направление расчета относительно координат.    
-
-     flow_along_coord - направление потока относительно координат.  flow_correl ation - гидравлическая корреляция, номер    
-
-   flow_correlation   
-
-     calibr_grav - калибровка на гравитационную составляющую  градиента давления    
-
-     calibr_fric - калибровка на составляющую трения  градиента давления    
+     t_in_c - температура потока на входе в трубу, с  если возможно, учитывается в расчете    
 
      param - дополнительные параметры расчета потока    
-
-     h_start_m - начало расчета по трубе, м    
-
-     h_end_m - конечная точка расчета по трубе, м    
-
-     znlf - флаг для режима барботажа    
 
      q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
@@ -201,18 +163,18 @@ class API():
         """
 
         self.f_json_pipe_calc = self.book.macro("json_pipe_calc")
-        return self.f_json_pipe_calc(p_calc_from_atma,t_calc_from_C,construction,feed,t_model,calc_along_coord,flow_along_coord,flow_correlation,calibr_grav,calibr_fric,param,h_start_m,h_end_m,znlf,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_json_pipe_calc(pipe_object,feed,p_in_atma,p_out_atma,t_in_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_choke_q_sm3day(self, feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C=20,d_pipe_mm=70,calibr=1,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_choke_q_sm3day(self, choke_json,feed_json,p_in_atma,p_out_atma,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет давления в штуцере 
         
  ==========  arguments  ============== 
 
-     feed - закодированная строка с параметрами потока.    
+     choke_json - параметры штуцера закодированные в строке    
 
-     d_choke_mm - диаметр штуцера (эффективный)    
+     feed_json - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
 
      p_in_atma - давление на входе в штуцер, атм.  высокая сторона    
 
@@ -220,13 +182,7 @@ class API():
 
      t_choke_c - температура потока, с.    
 
-     d_pipe_mm - диаметр трубы до и после штуцера    
-
-     calibr - параметр калибровки штуцера    
-
      param - параметры расчета json строка    
-
-     cdischarge - коэффициент совершенства штуцера    
 
      q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
@@ -239,32 +195,26 @@ class API():
         """
 
         self.f_MF_choke_q_sm3day = self.book.macro("MF_choke_q_sm3day")
-        return self.f_MF_choke_q_sm3day(feed,d_choke_mm,p_in_atma,p_out_atma,t_choke_C,d_pipe_mm,calibr,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_MF_choke_q_sm3day(choke_json,feed_json,p_in_atma,p_out_atma,t_choke_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_choke_p_atma(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_choke_p_atma(self, choke_json,feed_json,p_calc_from_atma,t_choke_C=20,calc_along_flow=True,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет давления в штуцере (дросселе) 
         
  ==========  arguments  ============== 
 
-     d_choke_mm - диаметр штуцера (эффективный)    
+     choke_json - параметры штуцера закодированные в строке    
 
-     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
+     feed_json - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
 
      p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета  либо давление на входе, либо на выходе.  может быть списком.    
 
      t_choke_c - температура потока, с.  может быть списком.    
 
-     d_pipe_mm - диаметр трубы до и после штуцера    
-
      calc_along_flow - флаг направления расчета относительно потока    
 
-     calibr - параметр калибровки штуцера, множитель  перепад давления    
-
      param - параметры расчета json строка    
-
-     cdischarge - коэффициент совершенства штуцера    
 
      q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
@@ -277,30 +227,26 @@ class API():
         """
 
         self.f_MF_choke_p_atma = self.book.macro("MF_choke_p_atma")
-        return self.f_MF_choke_p_atma(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_MF_choke_p_atma(choke_json,feed_json,p_calc_from_atma,t_choke_C,calc_along_flow,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_choke_calibr_fast(self, feed,d_choke_mm,p_in_atma=-1,p_out_atma=-1,d_pipe_mm=70,t_choke_C=20,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_choke_calibr_fast(self, choke_json,feed_json,p_in_atma=-1,p_out_atma=-1,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет корректирующего фактора (множителя) модели штуцера под замеры  быстрый расчет - калибровка вычисляется 
         
  ==========  arguments  ============== 
 
-     feed - закодированная строка с параметрами потока.    
+     choke_json - параметры штуцера закодированные в строке    
 
-     d_choke_mm - диаметр штуцера (эффективный), мм    
+     feed_json - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
 
      p_in_atma - давление на входе (высокой стороне)    
 
      p_out_atma - давление на выходе (низкой стороне)    
 
-     d_pipe_mm - диаметр трубы до и после штуцера, мм    
-
      t_choke_c - температура, с.    
 
      param - параметры расчета json строка    
-
-     cdischarge - коэффициент совершенства штуцера    
 
      q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
 
@@ -313,7 +259,7 @@ class API():
         """
 
         self.f_MF_choke_calibr_fast = self.book.macro("MF_choke_calibr_fast")
-        return self.f_MF_choke_calibr_fast(feed,d_choke_mm,p_in_atma,p_out_atma,d_pipe_mm,t_choke_C,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_MF_choke_calibr_fast(choke_json,feed_json,p_in_atma,p_out_atma,t_choke_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def json_choke_pq_crv(self, d_choke_mm,feed,p_calc_from_atma,t_choke_C=20,d_pipe_mm=70,calc_along_flow=True,calibr=1,param="",CDischarge=0.826,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -356,7 +302,7 @@ class API():
     def json_PVT_calc(self, p_atma,t_C,PVT_prop,show_log=False):
         """
  ========== description ============== 
- function for calculating all PVT properties of oil at a given  pressure and temperature 
+ calculate all PVT properties of oil at a given  pressure and temperature 
         
  ==========  arguments  ============== 
 
@@ -376,7 +322,7 @@ class API():
     def PVT_bg_m3m3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
- функция расчета объемного коэффициента газа 
+ расчет объемного коэффициента газа 
         
  ==========  arguments  ============== 
 
@@ -628,7 +574,7 @@ class API():
     def PVT_rs_m3m3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
- расчет газосодержания 
+ расчет газосодержания при заданных p,t 
         
  ==========  arguments  ============== 
 
@@ -808,7 +754,7 @@ class API():
     def PVT_pb_atma(self, t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
- Расчет давления насыщения 
+ Расчет давления насыщения по известному  газосодержанию при давлении насыщения 
         
  ==========  arguments  ============== 
 
@@ -842,7 +788,7 @@ class API():
     def PVT_rsb_m3m3(self, pb_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
- Расчет газосодержания по давлению насыщения 
+ Расчет газосодержания при давлении насыщения  по известному давлению насыщения 
         
  ==========  arguments  ============== 
 
@@ -1036,7 +982,7 @@ class API():
     def PVT_cv_gas_JkgC(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
- расчет теплоемкости газа при постоянном давлении cp 
+ расчет теплоемкости газа при постоянном объеме cv 
         
  ==========  arguments  ============== 
 
@@ -1180,7 +1126,7 @@ class API():
     def PVT_compressibility_gas_1atm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
- расчет сжимаемости нефти 
+ расчет сжимаемости газа 
         
  ==========  arguments  ============== 
 
@@ -1216,7 +1162,7 @@ class API():
     def json_feed_calc(self, p_atma,t_C,feed,show_log=False):
         """
  ========== description ============== 
- функция расчета параметров потока 
+ расчет всех параметров потока с выводом в json 
         
  ==========  arguments  ============== 
 
@@ -1236,7 +1182,7 @@ class API():
     def feed_gas_fraction_d(self, p_atma,t_C,feed,ksep_add_fr=0):
         """
  ========== description ============== 
- функция расчета коэффициента Джоуля Томсона 
+ расчета доли газа в потоке (объемная, расходная доля газа) 
         
  ==========  arguments  ============== 
 
@@ -1457,7 +1403,7 @@ class API():
         self.f_feed_mu_liq_cP = self.book.macro("feed_mu_liq_cP")
         return self.f_feed_mu_liq_cP(p_atma,t_C,feed)
 
-    def feed_mod_separate_gas(self, k_sep,p_atma,t_C,feed,param=""):
+    def feed_mod_separate_gas(self, k_sep,p_atma,t_C,feed,sol_factor=0):
         """
  ========== description ============== 
  function for calculating flow properties after gas separation 
@@ -1472,14 +1418,14 @@ class API():
 
      feed - json encoded fluid flow parameters,  use encode_feed to generate    
 
-     feed - json encoded fluid flow parameters,  use encode_feed to generate  param - json encoded calculation and output parameters  result - json encoded feed string   
+     sol_factor - gas solution factor  result - json encoded feed string   
 
         """
 
         self.f_feed_mod_separate_gas = self.book.macro("feed_mod_separate_gas")
-        return self.f_feed_mod_separate_gas(k_sep,p_atma,t_C,feed,param)
+        return self.f_feed_mod_separate_gas(k_sep,p_atma,t_C,feed,sol_factor)
 
-    def feed_mod_split(self, k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed,param=""):
+    def feed_mod_split(self, k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed):
         """
  ========== description ============== 
  function for calculating the properties of the separated fluid flow 
@@ -1496,14 +1442,12 @@ class API():
 
      t_c - temperature, c.    
 
-     feed - fluid flow parameters, flow rate, watercut, etc.  use encode_feed for generation    
-
-     feed - fluid flow parameters, flow rate, watercut, etc.  use encode_feed for generation  param - json encoded parameters for calculation and output  result - array, gjs flow r..см.мануал  
+     feed - fluid flow parameters, flow rate, watercut, etc.  use encode_feed for generation  result - array, gjs flow rate in working conditions,  signature, and log of calculatio..см.мануал  
 
         """
 
         self.f_feed_mod_split = self.book.macro("feed_mod_split")
-        return self.f_feed_mod_split(k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed,param)
+        return self.f_feed_mod_split(k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed)
 
     def feed_mod_mix(self, feed_1,feed_2):
         """
@@ -1574,98 +1518,6 @@ class API():
 
         self.f_feed_m_wat_kgsec = self.book.macro("feed_m_wat_kgsec")
         return self.f_feed_m_wat_kgsec(p_atma,t_C,feed)
-
-    def IPR_q_liq_sm3day(self, pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc=0,pb_atma=-1,t_res_C=80):
-        """
- ========== description ============== 
- расчет дебита по давлению и продуктивности 
-        
- ==========  arguments  ============== 
-
-     pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     p_wf_atma - забойное давление, абс. атм.  можно задать список [],    
-
-     fw_perc - обводненность, %    
-
-     pb_atma - давление насыщения, абс. атм    
-
-     t_res_c - температура флюида в пласте, с   
-
-        """
-
-        self.f_IPR_q_liq_sm3day = self.book.macro("IPR_q_liq_sm3day")
-        return self.f_IPR_q_liq_sm3day(pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc,pb_atma,t_res_C)
-
-    def IPR_p_wf_atma(self, pi_sm3dayatm,p_res_atma,q_liq_sm3day,fw_perc=0,pb_atma=-1,t_res_C=80):
-        """
- ========== description ============== 
- расчет забойного давления по дебиту и продуктивности 
-        
- ==========  arguments  ============== 
-
-      pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     q_liq_sm3day - дебит жидкости скважины на поверхности, ст.м3/сут    
-
-     fw_perc - обводненность, %    
-
-     pb_atma - давление насыщения, абс. атм    
-
-     t_res_c - температура флюида в пласте, с   
-
-        """
-
-        self.f_IPR_p_wf_atma = self.book.macro("IPR_p_wf_atma")
-        return self.f_IPR_p_wf_atma(pi_sm3dayatm,p_res_atma,q_liq_sm3day,fw_perc,pb_atma,t_res_C)
-
-    def IPR_pi_sm3dayatm(self, Qtest_sm3day,pwf_test_atma,p_res_atma,fw_perc=0,pb_atma=-1):
-        """
- ========== description ============== 
- расчет коэффициента продуктивности пласта  по данным тестовой эксплуатации 
-        
- ==========  arguments  ============== 
-
-     qtest_sm3day - тестовый дебит скважины, ст.м3/сут    
-
-     pwf_test_atma - тестовое забойное давление, абс. атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     fw_perc - обводненность, %    
-
-     pb_atma - давление насыщения, абс. атм   
-
-        """
-
-        self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
-        return self.f_IPR_pi_sm3dayatm(Qtest_sm3day,pwf_test_atma,p_res_atma,fw_perc,pb_atma)
-
-    def IPR_pq_crv(self, pi_sm3dayatm,p_res_atma,fw_perc=0,pb_atma=-1,param=""):
-        """
- ========== description ============== 
- расчет кривой IPR в формате json  pq_crv - кривая давление температура 
-        
- ==========  arguments  ============== 
-
-     pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     fw_perc - обводненность, %    
-
-     pb_atma - давление насыщения, абс. атм    
-
-     param - дополнительные параметры построения   
-
-        """
-
-        self.f_IPR_pq_crv = self.book.macro("IPR_pq_crv")
-        return self.f_IPR_pq_crv(pi_sm3dayatm,p_res_atma,fw_perc,pb_atma,param)
 
     def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_head=1,calibr_rate=1,calibr_power=1):
         """
@@ -2379,7 +2231,7 @@ class API():
         self.f_well_ksep_total_d = self.book.macro("well_ksep_total_d")
         return self.f_well_ksep_total_d(SepNat,SepGasSep)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
+    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -2427,9 +2279,9 @@ class API():
         """
 
         self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,dcas_mm,dint_mm)
+        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,dcas_mm,dint_mm)
 
-    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,pkv_ratio=0,dcas_mm=130,dint_mm=102):
+    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,pkv_ratio=0,dcas_mm=130,dint_mm=102):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе устьевого (буферного) давления (расчет сверху вниз) 
@@ -2475,9 +2327,9 @@ class API():
         """
 
         self.f_well_calc_from_pwh = self.book.macro("well_calc_from_pwh")
-        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,flow_corr,pkv_ratio,dcas_mm,dint_mm)
+        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,flow_corr,pkv_ratio,dcas_mm,dint_mm)
 
-    def well_calc_from_pintake(self, p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,ipr_json="",t_crit_C=0,p_cas_atma=0,p_wh_atma=10,flow_corr=0):
+    def well_calc_from_pintake(self, p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,p_wh_atma=10,flow_corr=0):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе устьевого (буферного) и забойного давления модель калибруется деградацией ЭЦН 
@@ -2519,7 +2371,7 @@ class API():
         """
 
         self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
-        return self.f_well_calc_from_pintake(p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,ipr_json,t_crit_C,p_cas_atma,p_wh_atma,flow_corr)
+        return self.f_well_calc_from_pintake(p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,p_wh_atma,flow_corr)
 
     def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
         """
@@ -2650,7 +2502,7 @@ class API():
 
      safe_out - флаг заставляет выводить массив сторок,  что может работать лучше в офисе 2016 и ранее    
 
-   null_val  
+     null_val - символ для нулевого значения   
 
         """
 
@@ -3049,7 +2901,57 @@ class API():
         self.f_encode_table_json = self.book.macro("encode_table_json")
         return self.f_encode_table_json(keyrange,val_namerange,valrange)
 
-    def encode_pipe(self, h_list_m=1000,diam_list_mm=62,roughness_m=0,h_vert_m=-1):
+    def encode_pipe(self, construction="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
+        """
+ ========== description ============== 
+ задание объекта трубы для расчета 
+        
+ ==========  arguments  ============== 
+
+     construction - json кодирующий конструкцию скважины,  используйте encode_pipe_construction    
+
+     t_model - температурная модель,  используйте encode_t_model    
+
+     flow_correlation - корреляция многофазного потока    
+
+     flow_along_coord - флаг, определяющий направление потока    
+
+     calibr_grav - калибровка по гравитации (множитель)    
+
+     calibr_fric - калибровка по трению (множитель)    
+
+     h_start_m - измеренная глубина начала трубы, м    
+
+     h_end_m - измеренная глубина конца трубы, м    
+
+     znlf - флаг для включения барботажа   
+
+        """
+
+        self.f_encode_pipe = self.book.macro("encode_pipe")
+        return self.f_encode_pipe(construction,t_model,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
+
+    def encode_choke(self, d_choke_mm=10,d_pipe_mm=70,calibr=1,CDischarge=0.826):
+        """
+ ========== description ============== 
+кодирование параметров штуцера 
+        
+ ==========  arguments  ============== 
+
+     d_choke_mm - диаметр штуцера, мм    
+
+     d_pipe_mm - диаметр трубы прилегающей к штуцеру, мм    
+
+     calibr - калибровочный параметр штуцера    
+
+     cdischarge - настроечный параметр штуцера   
+
+        """
+
+        self.f_encode_choke = self.book.macro("encode_choke")
+        return self.f_encode_choke(d_choke_mm,d_pipe_mm,calibr,CDischarge)
+
+    def encode_pipe_construction(self, h_list_m=1000,diam_list_mm=62,roughness_m=0,h_vert_m=-1):
         """
  ========== description ============== 
  задание параметров траектории трубы в json строке 
@@ -3066,8 +2968,8 @@ class API():
 
         """
 
-        self.f_encode_pipe = self.book.macro("encode_pipe")
-        return self.f_encode_pipe(h_list_m,diam_list_mm,roughness_m,h_vert_m)
+        self.f_encode_pipe_construction = self.book.macro("encode_pipe_construction")
+        return self.f_encode_pipe_construction(h_list_m,diam_list_mm,roughness_m,h_vert_m)
 
     def encode_t_model(self, t_model=StartEndTemp,t_list_C=50,t_start_C=-100,t_end_C=-100,param=""):
         """
@@ -3172,6 +3074,176 @@ class API():
 
         self.f_list_concatenate = self.book.macro("list_concatenate")
         return self.f_list_concatenate(ParamArrayvar)
+
+    def encode_ipr(self, p_res_atma=250,pi_sm3dayatm=1,feed_json=""):
+        """
+ ========== description ============== 
+ кодирование параметров пласта в json строку 
+        
+ ==========  arguments  ============== 
+
+     p_res_atma - пластовое давление, атма    
+
+     pi_sm3dayatm - коэффициент продуктивности, м3/сут/атм    
+
+     feed_json - json c pvt свойствами, используйте encode_pvt() для генерации   
+
+        """
+
+        self.f_encode_ipr = self.book.macro("encode_ipr")
+        return self.f_encode_ipr(p_res_atma,pi_sm3dayatm,feed_json)
+
+    def IPR_calc_pi(self, IPR_json,q_liq_sm3day,pwf_test_atma):
+        """
+ ========== description ============== 
+ расчет коэффициента продуктивности по IPR заданной в виде json 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     q_liq_sm3day - тестовый дебит жидкости    
+
+     pwf_test_atma - тестовое забойное давление   
+
+        """
+
+        self.f_IPR_calc_pi = self.book.macro("IPR_calc_pi")
+        return self.f_IPR_calc_pi(IPR_json,q_liq_sm3day,pwf_test_atma)
+
+    def IPR_calc_pwf(self, IPR_json,q_liq_sm3day):
+        """
+ ========== description ============== 
+ расчет забойного давления по IPR заданной в виде json 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     q_liq_sm3day - дебит жидкости   
+
+        """
+
+        self.f_IPR_calc_pwf = self.book.macro("IPR_calc_pwf")
+        return self.f_IPR_calc_pwf(IPR_json,q_liq_sm3day)
+
+    def IPR_calc_qliq_sm3day(self, IPR_json,pwf_atma):
+        """
+ ========== description ============== 
+ расчет дебита по IPR заданной в виде json 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     pwf_atma - забойное давление   
+
+        """
+
+        self.f_IPR_calc_qliq_sm3day = self.book.macro("IPR_calc_qliq_sm3day")
+        return self.f_IPR_calc_qliq_sm3day(IPR_json,pwf_atma)
+
+    def IPR_json_crv(self, IPR_json,num_points=20):
+        """
+ ========== description ============== 
+ построение кривой IPR в json формате 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     num_points - количество точек в графике   
+
+        """
+
+        self.f_IPR_json_crv = self.book.macro("IPR_json_crv")
+        return self.f_IPR_json_crv(IPR_json,num_points)
+
+    def IPR_q_liq_sm3day(self, pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc=0,pb_atma=-1,t_res_C=80):
+        """
+ ========== description ============== 
+ расчет дебита по давлению и продуктивности 
+        
+ ==========  arguments  ============== 
+
+     pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
+
+     p_res_atma - пластовое давление, абс. атм    
+
+     p_wf_atma - забойное давление, абс. атм.  можно задать список [],    
+
+     fw_perc - обводненность, %    
+
+     pb_atma - давление насыщения, абс. атм    
+
+     t_res_c - температура флюида в пласте, с   
+
+        """
+
+        self.f_IPR_q_liq_sm3day = self.book.macro("IPR_q_liq_sm3day")
+        return self.f_IPR_q_liq_sm3day(pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc,pb_atma,t_res_C)
+
+    def IPR_pwf_atma(self, pi_sm3dayatm,p_res_atma,q_liq_sm3day=0#,feed_json=""):
+        """
+ ========== description ============== 
+ расчет забойного давления по дебиту и продуктивности 
+        
+ ==========  arguments  ============== 
+
+     pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
+
+     p_res_atma - пластовое давление, абс. атм    
+
+     q_liq_sm3day - дебит жидкости скважины на поверхности, ст.м3/сут, число или массив    
+
+     feed_json - параметры потока, включая обводненность и давление насыщения   
+
+        """
+
+        self.f_IPR_pwf_atma = self.book.macro("IPR_pwf_atma")
+        return self.f_IPR_pwf_atma(pi_sm3dayatm,p_res_atma,q_liq_sm3day,feed_json)
+
+    def IPR_pi_sm3dayatm(self, q_test_sm3day,pwf_test_atma,p_res_atma,feed_json=""):
+        """
+ ========== description ============== 
+ расчет коэффициента продуктивности пласта  по данным тестовой эксплуатации 
+        
+ ==========  arguments  ============== 
+
+     q_test_sm3day - тестовый дебит скважины, ст.м3/сут    
+
+     pwf_test_atma - тестовое забойное давление, абс. атм    
+
+     p_res_atma - пластовое давление, абс. атм    
+
+     feed_json - свойства флюида   
+
+        """
+
+        self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
+        return self.f_IPR_pi_sm3dayatm(q_test_sm3day,pwf_test_atma,p_res_atma,feed_json)
+
+    def IPR_pq_crv(self, ''pi_sm3dayatm,'p_res_atma,'fw_perc=0,'pb_atma=-1,'param=""):
+        """
+ ========== description ============== 
+ расчет кривой IPR в формате json  pq_crv - кривая давление температура 
+        
+ ==========  arguments  ============== 
+
+   pi_sm3dayatm   
+
+   p_res_atma   
+
+   fw_perc   
+
+   pb_atma   
+
+   param  
+
+        """
+
+        self.f_IPR_pq_crv = self.book.macro("IPR_pq_crv")
+        return self.f_IPR_pq_crv(''pi_sm3dayatm,'p_res_atma,'fw_perc,'pb_atma,'param)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """

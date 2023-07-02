@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
+'Unifloc 7.48 new strategy                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -476,28 +476,6 @@ End Function
 '=========================================================================================
 'types support functions
 '=========================================================================================
-' flow parameter setting function in the pipe or well
-Public Function set_calc_flow_param( _
-                Optional ByVal calc_along_coord As Boolean = False, _
-                Optional ByVal flow_along_coord As Boolean = False, _
-                Optional ByVal hcor As H_CORRELATION = Ansari, _
-                Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
-                Optional ByVal length_gas_m As Double = 0, _
-                Optional ByVal start_length_gas_m As Double = 0) As PARAMCALC
-' calc_along_coord - calculation direction flag
-' flow_along_coord - flow direction relative to coordinate
-' hcor             - hydraulic correlation selector
-' temp_method      - temperature method selector
-' length_gas_m     - boundary of gas correlation application in flow
-    Dim prm As PARAMCALC
-    prm.calc_along_coord = calc_along_coord
-    prm.flow_along_coord = flow_along_coord
-    prm.correlation = hcor
-    prm.temp_method = temp_method
-    prm.length_gas_m = length_gas_m
-    prm.start_length_gas_m = start_length_gas_m
-    set_calc_flow_param = prm
-End Function
 Public Function sum_PT(PT1 As PTtype, PT2 As PTtype) As PTtype
     sum_PT.p_atma = PT1.p_atma + PT2.p_atma
     sum_PT.t_C = PT1.t_C + PT2.t_C
@@ -583,7 +561,10 @@ err1:
 End Function
 '=============== array manipulation functions =========================
 Public Function array_from_range(var_input, _
-                                Optional transpose As Boolean = False)
+                            Optional transpose As Boolean = False, _
+                            Optional key_crv As String = "", _
+                            Optional key_x As String = "x", _
+                            Optional key_y As String = "y")
 ' return array from range or from array or from number
     Dim ar() As Variant
     Dim rng As range
@@ -598,7 +579,20 @@ On Error GoTo err1:
     done = False
     
     If VarType(var_input) = vbString Then
-        If Mid(var_input, 1, 1) = "[" Then Set var_input = ParseJson(var_input)
+        If Mid(var_input, 1, 1) = "[" Then
+            Set var_input = ParseJson(var_input)
+        ElseIf Mid(var_input, 1, 1) = "{" Then
+            Dim dict As Dictionary
+            Set dict = ParseJson(var_input)
+            Set dict = dict(key_crv)
+            ReDim ar(1 To dict(key_x).Count, 1 To 2)
+            For i = 1 To dict(key_x).Count
+                ar(i, 1) = dict(key_x).Item(i)
+                ar(i, 2) = dict(key_y).Item(i)
+            Next i
+            
+            var_input = ar
+        End If
     End If
     
     If (TypeOf var_input Is range) Then
@@ -698,14 +692,17 @@ End Function
 Public Function array_num_from_range(var_input, _
                             Optional remove_zeros As Boolean = False, _
                             Optional remove_only_rows As Boolean = False, _
-                            Optional transpose As Boolean = False)
+                            Optional transpose As Boolean = False, _
+                            Optional key_crv As String = "", _
+                            Optional key_x As String = "x", _
+                            Optional key_y As String = "y")
     Dim ar() As Variant
     Dim ard() As Double
     Dim ard2() As Double
     Dim val As Double
     Dim i As Integer, j As Integer
     
-    ar = array_from_range(var_input, transpose)
+    ar = array_from_range(var_input, transpose, key_crv, key_x, key_y)
     
 On Error GoTo err1:
     ReDim ard(1 To (UBound(ar, 1) - LBound(ar, 1) + 1), 1 To (UBound(ar, 2) - LBound(ar, 2) + 1))
@@ -881,16 +878,16 @@ Public Function array_join(arr_in As Variant)
     Dim arr_out As Variant
     Dim num_rows As Integer
     Dim num_cols As Integer
-    Dim L As Integer, U As Integer
+    Dim l As Integer, U As Integer
     Dim i As Integer, j As Integer
-    L = LBound(arr_in)
+    l = LBound(arr_in)
     U = UBound(arr_in)
-    num_cols = UBound(arr_in(L)) - LBound(arr_in(L)) + 1
+    num_cols = UBound(arr_in(l)) - LBound(arr_in(l)) + 1
     num_rows = UBound(arr_in) - LBound(arr_in) + 1
     ReDim arr_out(1 To num_rows, 1 To num_cols)
     For i = 1 To num_rows
         For j = 1 To num_cols
-            arr_out(i, j) = arr_in(i - 1 + L)(j - 1 + L)
+            arr_out(i, j) = arr_in(i - 1 + l)(j - 1 + l)
         Next j
     Next i
     array_join = arr_out
@@ -936,7 +933,7 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
                      ByVal q_gas_free_sm3day _
                     )
     Dim M As Integer
-    Dim N As Integer
+    Dim n As Integer
     Dim i As Integer
     Dim len_feed As Integer
     Dim len_p As Integer
@@ -987,67 +984,67 @@ Public Sub read_PTQ(ptq As PTQ_LIST, feed, p, t, log_, _
             M = MaxInt(M, len_qg)
             
             If len_feed < M Then
-                N = UBound(.feed)
-                If N > 1 Then log_.add_msg "warning: input list feed length > 1 but less that max length"
+                n = UBound(.feed)
+                If n > 1 Then log_.add_msg "warning: input list feed length > 1 but less that max length"
                 ReDim Preserve .feed(1 To M)
-                For i = N + 1 To M
-                    .feed(i) = .feed(N)
+                For i = n + 1 To M
+                    .feed(i) = .feed(n)
                 Next i
             End If
             If len_p < M Then
-                N = UBound(.p)
-                If N > 1 Then log_.add_msg "warning: input list p length > 1 but less that max length"
+                n = UBound(.p)
+                If n > 1 Then log_.add_msg "warning: input list p length > 1 but less that max length"
                 ReDim Preserve .p(1 To M)
-                For i = N + 1 To M
-                    .p(i) = .p(N)
+                For i = n + 1 To M
+                    .p(i) = .p(n)
                 Next i
             End If
             If len_t < M Then
-                N = UBound(.t)
-                If N > 1 Then log_.add_msg "warning: input list t length > 1 but less that max length"
+                n = UBound(.t)
+                If n > 1 Then log_.add_msg "warning: input list t length > 1 but less that max length"
                 ReDim Preserve .t(1 To M)
-                For i = N + 1 To M
-                    .t(i) = .t(N)
+                For i = n + 1 To M
+                    .t(i) = .t(n)
                 Next i
             End If
             If len_ksep < M Then
-                N = UBound(.val)
-                If N > 1 Then log_.add_msg "warning: input list ksep length > 1 but less that max length"
+                n = UBound(.val)
+                If n > 1 Then log_.add_msg "warning: input list ksep length > 1 but less that max length"
                 ReDim Preserve .val(1 To M)
-                For i = N + 1 To M
-                    .val(i) = .val(N)
+                For i = n + 1 To M
+                    .val(i) = .val(n)
                 Next i
             End If
             If len_ql < M Then
-                N = UBound(.ql)
-                If N > 1 Then log_.add_msg "warning: input list ql length > 1 but less that max length"
+                n = UBound(.ql)
+                If n > 1 Then log_.add_msg "warning: input list ql length > 1 but less that max length"
                 ReDim Preserve .ql(1 To M)
-                For i = N + 1 To M
-                    .ql(i) = .ql(N)
+                For i = n + 1 To M
+                    .ql(i) = .ql(n)
                 Next i
             End If
             If len_fw < M Then
-                N = UBound(.fw)
-                If N > 1 Then log_.add_msg "warning: input list fw length > 1 but less that max length"
+                n = UBound(.fw)
+                If n > 1 Then log_.add_msg "warning: input list fw length > 1 but less that max length"
                 ReDim Preserve .fw(1 To M)
-                For i = N + 1 To M
-                    .fw(i) = .fw(N)
+                For i = n + 1 To M
+                    .fw(i) = .fw(n)
                 Next i
             End If
             If len_rp < M Then
-                N = UBound(.rp)
-                If N > 1 Then log_.add_msg "warning: input list rp length > 1 but less that max length"
+                n = UBound(.rp)
+                If n > 1 Then log_.add_msg "warning: input list rp length > 1 but less that max length"
                 ReDim Preserve .rp(1 To M)
-                For i = N + 1 To M
-                    .rp(i) = .rp(N)
+                For i = n + 1 To M
+                    .rp(i) = .rp(n)
                 Next i
             End If
             If len_qg < M Then
-                N = UBound(.qg)
-                If N > 1 Then log_.add_msg "warning: input list qg length > 1 but less that max length"
+                n = UBound(.qg)
+                If n > 1 Then log_.add_msg "warning: input list qg length > 1 but less that max length"
                 ReDim Preserve .qg(1 To M)
-                For i = N + 1 To M
-                    .qg(i) = .qg(N)
+                For i = n + 1 To M
+                    .qg(i) = .qg(n)
                 Next i
             End If
         End If
@@ -1684,18 +1681,18 @@ Public Function solve_ode(ByVal func_name As String, _
 ' Eps
 ' Step
 ' MaxIts
-    Dim M As Long, N As Long, State As ODESolverState, _
+    Dim M As Long, n As Long, State As ODESolverState, _
     YA() As Double, i As Long, _
     Rtn As Boolean, Rep As ODESolverReport
     Dim R() As Double
   
-    N = UBound(y0) + 1
+    n = UBound(y0) + 1
     M = UBound(XA) + 1
     'Set up any required output arrays
-    ReDim YA(0 To M - 1, 0 To N - 1)
+    ReDim YA(0 To M - 1, 0 To n - 1)
     
     'Call the appropriate AlgLib routine to initialise the State object
-    Call ODESolverRKCK(y0(), N, XA, M, eps, step, State)
+    Call ODESolverRKCK(y0(), n, XA, M, eps, step, State)
     
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",

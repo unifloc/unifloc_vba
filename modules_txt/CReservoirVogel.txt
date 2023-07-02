@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
+'Unifloc 7.48 new strategy                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '                                                                      good (11/21/2019)
@@ -22,7 +22,7 @@ Public p_res_atma As Double
 Public fluid As CPVT    ' take bubble point pressure and watercut from fluid
 Private IPR_curve_ As CInterpolation
 Public Property Get pb_atma() As Double
-   pb_atma = fluid.pb_atma
+   pb_atma = fluid.pb_calc_atma
 End Property
 Public Property Get fw_perc() As Double
    fw_perc = fluid.fw_perc
@@ -32,39 +32,85 @@ End Property
 ' must be generated before access with proper sub
 Public Property Get IPRCurve() As CInterpolation
     IPRCurve = IPR_curve_
- End Property
+End Property
  
 ' ==================================================================
 ' main calculation functions and subroutines
 ' ==================================================================
 ' initialisation sub - set IPR properties from minimal data set
-Public Sub InitProp(p_res_atma, pb_atma, fw_perc)
+Public Sub InitProp(p_res_atma, pb_atma, fw_perc, _
+                    Optional rp_m3m3 As Double = -1, _
+                    Optional t_res_C As Double = 90)
 ' p_res_atma - reservoir pressure
 ' pb_atma   - bubble point pressure
 ' fw_perc   - fraction of water in flow (watercut)
     Me.p_res_atma = p_res_atma
-    Set fluid = New CPVT
     fluid.pb_atma = pb_atma
     fluid.fw_perc = fw_perc
+    fluid.t_res_C = t_res_C
+    If rp_m3m3 > 0 Then fluid.rp_m3m3 = rp_m3m3
+End Sub
+' initialisation sub - set IPR properties from minimal data set
+Public Sub init_from_feed(ByVal p_res_atma As Double, _
+                         ByVal feed_json As String, _
+                         Optional ByVal pi_sm3dayatm As Double = 1)
+' p_res_atma - reservoir pressure
+' feed_json  - feed_json includes pb, fw
+' pi_sm3dayatm   - productivity index acounted if given
+    If feed_json = "" Then feed_json = encode_feed()
+    Me.p_res_atma = p_res_atma
+    Me.pi_sm3dayatm = pi_sm3dayatm
+    'Set fluid = New CPVT
+    fluid.init_feed feed_json
 End Sub
 Public Sub init_json(json As String)
     Dim d As Dictionary
     Set d = ParseJson(json)
          
-    Call InitProp(d("p_res_atma"), d("pb_atma"), d("fw_perc"))
+    Call InitProp(d("p_res_atma"), d("pb_atma"), d("fw_perc"), d("rp_m3m3"), d("t_res_C"))
     
-    Me.pi_sm3dayatm = d("pi_m3dayatm")
+    Me.pi_sm3dayatm = d("pi_sm3dayatm")
     
 End Sub
+Public Function calc_t_fluid_C(pwf_atma As Double)
+    Dim dt As Double
+    Dim cJT_res As Double
+    Dim cJT_pwf As Double
+    Dim q As Double
+    q = calc_q_liq_sm3day(pwf_atma)
+    fluid.q_liq_sm3day = q
+    
+    Call fluid.calc_PVT(p_res_atma, fluid.t_res_C)
+    cJT_res = fluid.cJT_Katm
+    Call fluid.calc_PVT(pwf_atma, fluid.t_res_C)
+    cJT_pwf = fluid.cJT_Katm
+    dt = (p_res_atma - pwf_atma) * cJT_pwf ' (cJT_pwf + cJT_res) / 2
+    calc_t_fluid_C = fluid.t_res_C + dt
+End Function
 ' calculate liquid rate from BHP with IPR given
 Public Function calc_q_liq_sm3day(ByVal p_wf_atma As Double)
 ' p_wf_atma - bottom hole pressure
+    
     calc_q_liq_sm3day = calc_Q_IPR_m3Day(p_wf_atma, p_res_atma, pb_atma, pi_sm3dayatm, fw_perc)
 End Function
+'Public Function calc_pwf_json(q) As Double
+'    calc_pwf_json = calc_pwf_Ip_res_atma(q, p_res_atma, fluid.pb_atma, pi_sm3dayatm, fluid.fw_perc)
+'End Function
 ' calculate BHP  from liquid rate with IPR given
 Public Function calc_p_wf_atma(ByVal qtest As Double)
 ' qtest - liquid rate
     calc_p_wf_atma = calc_pwf_Ip_res_atma(qtest, p_res_atma, pb_atma, pi_sm3dayatm, fw_perc)
+End Function
+' calculate BHP  from liquid rate with IPR given
+Public Function calc_p_wf_from_feed_atma()
+' qtest - liquid rate
+    calc_p_wf_from_feed_atma = calc_pwf_Ip_res_atma(fluid.q_liq_sm3day, p_res_atma, pb_atma, pi_sm3dayatm, fw_perc)
+End Function
+' calculate productivity index by test rate and BHP
+Public Function calc_pi_from_feed_sm3dayatm(ByVal q_liq_sm3day As Double, ByVal Ptest As Double)
+' qtest  - test liquid rate
+' Ptest  - test bottom hole pressure
+    calc_pi_from_feed_sm3dayatm = calc_pi_sm3dayatm(q_liq_sm3day, Ptest)
 End Function
 ' calculate productivity index by test rate and BHP
 Public Function calc_pi_sm3dayatm(ByVal qtest As Double, ByVal Ptest As Double)
@@ -90,6 +136,22 @@ Public Function Build_IPRcurve() As CInterpolation
         IPR_curve_.AddPoint i * Qstep, p_wf
     Next i
     Set Build_IPRcurve = IPR_curve_
+End Function
+Public Function get_dict()
+    Dim dict As New Dictionary
+    
+    dict.Add "model", "Vogel"
+    dict.Add "p_res_atma", Round(p_res_atma, 5)
+    dict.Add "t_res_C", Round(fluid.t_res_C, 5)
+    dict.Add "pi_sm3dayatm", Round(pi_sm3dayatm, 5)
+    dict.Add "pb_atma", Round(fluid.pb_atma, 5)
+    dict.Add "fw_perc", Round(fluid.fw_perc, 5)
+    dict.Add "rp_m3m3", Round(fluid.rp_m3m3, 5)
+    
+    Set get_dict = dict
+End Function
+Public Function get_json()
+    get_json = ConvertToJson(get_dict)
 End Function
 '' ==============================================================================
 '' interface properties and functions implementation
@@ -362,4 +424,7 @@ Private Function calc_PIVogel_m3DayAtm(ByVal Q_test As Double, ByVal P_test As D
     calc_PIVogel_m3DayAtm = j
   
 End Function
+Private Sub Class_Initialize()
+    Set fluid = New CPVT
+End Sub
 

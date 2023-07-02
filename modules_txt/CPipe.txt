@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
+'Unifloc 7.48 new strategy                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -31,7 +31,6 @@ Private legth_total_m_ As Double                       ' общая длинна трубы
 Private depth_vert_total_m_ As Double                  ' общая глубина трубы
 ' расчетные параметры по трубе  (используются для вывода после проведения расчета)
 Private flow_params_out_() As PIPE_FLOW_PARAMS         ' расчетные параметры по трубе после расчета
-'Private dTdLinit_ As Double                            ' распределение градиента температуры по длине начальное
 ' набор расчетных параметров по стволу скважины
 ' Private num_points_curve_ As Integer                    ' количество точек которые должны быть сохранены для распределения давления в трубе в итоговых кривых
 Private step_hm_curve_ As Double                        ' шаг для формирования выходного массива по трубе. м
@@ -39,7 +38,7 @@ Private hm_curve_ As New CInterpolation                ' кривая для хранения наб
 ' поправочные коэффициенты для расчета распределения давления
 Private calibr_grav_ As Double
 Private calibr_fric_ As Double
-Public GLVin As CGLvalve  ' link to gas lift valve in pipe
+Private znlf_ As Boolean
 Public Sub add_log_msg(msg As String)
     Call log_.add_msg(msg)
 End Sub
@@ -49,7 +48,6 @@ End Sub
  ' конструктор класса
  ' вызывается при создании класса - гарантирует что все объекты будут созданы
 Private Sub Class_Initialize()
-   Set GLVin = Nothing
    ZeroCoordMes_m = 0
    ZeroCoordVert_m = 0
    legth_total_m_ = 100
@@ -60,18 +58,19 @@ Private Sub Class_Initialize()
    
    Set fluid = New CPVT
    
-   param_ = set_calc_flow_param(calc_along_coord:=True, _
-                                flow_along_coord:=True, _
-                                hcor:=Ansari, _
-                                temp_method:=StartEndTemp, _
-                                length_gas_m:=0)
-                                
+   Call set_calc_flow_param(calc_along_coord:=True, _
+                            flow_along_coord:=True, _
+                            hcor:=Ansari, _
+                            temp_method:=StartEndTemp, _
+                            length_gas_m:=0)
+                                     
    Set h_mes_insert_m_ = New CInterpolation
    Call h_mes_insert_m_.AddPoint(0, 0)
    Call h_mes_insert_m_.AddPoint(length_mes_m, 0)
    StepHmCurve = 1000    ' по умолчанию шаг 1000 м для сохранения кривых
    calibr_grav_ = 1
    calibr_fric_ = 1
+   znlf_ = False
 End Sub
 Public Property Get param() As PARAMCALC
    param = param_
@@ -145,24 +144,10 @@ End Property
 Public Property Get depth_vert_m() As Double
     depth_vert_m = depth_vert_total_m_
 End Property
-   
-'Public Sub InitTlinearSmart(ByVal t_from_C As Double, _
-'                            ByVal t_to_C As Double, _
-'                            ByVal calc_flow_direction As Integer)
-'
-'    If calc_flow_direction = 1 Or calc_flow_direction = 0 Then
-'        InitTlinear t_to_C, t_from_C
-'    Else
-'        InitTlinear t_from_C, t_to_C
-'    End If
-'
-'End Sub
-   
-'Public Sub InitTlinear(ByVal t_start_coord_C As Double, ByVal t_end_coord_C As Double)
-'' начальная инициализация распределения температуры в трубе
-'End Sub
-Public Sub init_t_model(Optional t_model As String, _
-                        Optional amb0 As CAmbientFormation)
+Public Sub init_t_model(t_model As String)
+    Call init_t_model_from_dict(ParseJson(t_model))
+End Sub
+Public Sub init_t_model_from_dict(t_model_dict As Dictionary)
     Dim t_calc_to_C As Double, t_calc_from_C As Double
     Dim dict As Dictionary
     Dim t_start_coord_C As Double
@@ -173,35 +158,44 @@ Public Sub init_t_model(Optional t_model As String, _
     Dim amb As New CAmbientFormation
     Dim prm As PARAMCALC
     
-    If Not amb0 Is Nothing Then
-        ' if ambient object given it will be used
-        Set amb = amb0
-    Else
-        ' else it will be constructed new
-        Set dict = ParseJson(t_model)
-        
-        Select Case dict(prm_t_model)
-            Case StartEndTemp
-                t_start_coord_C = dict(prm_t_start_C)
-                t_end_coord_C = dict(prm_t_end_C)
-                temperature_crv.AddPoint ZeroCoordMes_m, t_start_coord_C
-                temperature_crv.AddPoint ZeroCoordMes_m + length_mes_m, t_end_coord_C
-                temperature_crv.special = True
-                
-            Case GeoGradTemp, AmbientTemp, LengthTemp
-                ' here we expetc t_val to be dictionary
-                Set t_val = dict(const_name_t_list_C)
-                Call temperature_crv.load_from_dictionary(t_val, const_name_hvert_m, const_name_t_C)
-                
-            
-        End Select
+    Set dict = t_model_dict
     
-        Set amb.amb_temp_curve = temperature_crv
-    End If
+    Select Case dict(prm_t_model)
+        Case StartEndTemp
+            t_start_coord_C = dict(prm_t_start_C)
+            t_end_coord_C = dict(prm_t_end_C)
+            temperature_crv.AddPoint ZeroCoordMes_m, t_start_coord_C
+            temperature_crv.AddPoint ZeroCoordMes_m + length_mes_m, t_end_coord_C
+            temperature_crv.special = True
+            
+        Case GeoGradTemp, AmbientTemp, LengthTemp
+            ' here we expetc t_val to be dictionary
+            Set t_val = dict(const_name_t_list_C)
+            Call temperature_crv.load_from_dictionary(t_val, const_name_hvert_m, const_name_t_C)
+            
+        
+    End Select
+    Set amb.amb_temp_curve = temperature_crv
     Set ambient_formation_ = amb
+    
     prm = param
     prm.temp_method = dict(prm_t_model)
     param = prm
+End Sub
+Public Sub init_feed(ByVal json As String, _
+             Optional ByVal q_liq_sm3day = -10000000000#, _
+             Optional ByVal fw_perc = -1, _
+             Optional ByVal rp_m3m3 = -1, _
+             Optional ByVal q_gas_free_sm3day = -1, _
+             Optional ByVal allow_zero_qliq As Boolean = True)
+             
+    Call fluid.init_feed(json, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day, allow_zero_qliq)
+    If fluid.q_liq_sm3day < 0 Then
+        set_flow_along_coord (Not param.flow_along_coord)
+        fluid.q_liq_sm3day = -fluid.q_liq_sm3day
+    End If
+    
+    If znlf_ Then set_ZNLF
 End Sub
 Private Function t_amb_C(lmes_m As Double, _
                 Optional vertical As Boolean = True) As Double
@@ -335,51 +329,27 @@ Public Sub init_pipe_constr_by_trajectory( _
     StepHmCurve = srv_points_step
 End Sub
 Public Function init_from_json(construction_json As String, _
-                               feed_json As String, _
                                t_model_json As String, _
         Optional ByVal h_start_m As Double = -10000000000#, _
         Optional ByVal h_end_m As Double = 10000000000#)
         
     Dim tr As New CPipeTrajectory
-    Dim feed As New CPVT
     
     Call tr.init_from_json(construction_json)
     Call init_pipe_constr_by_trajectory(tr, h_start_m, h_end_m)
-    Call feed.init_feed(feed_json)
-    Set fluid = feed
     Call init_t_model(t_model_json)
 End Function
-Public Function init_pipe(ByVal d_mm, _
-                          ByVal length_m, _
-                          ByVal theta_deg, _
-                          Optional ByVal roughness_m = 0.00001, _
-                          Optional Hmes0_m As Double = 0)
-' простой метод инициализации трубы по двум точкам
-' используется для учебных примеров в функциях Excel
-    Dim arr_h(1 To 2, 1 To 2) As Double
-    Dim arr_d(1 To 2, 1 To 3) As Double
+Public Function init_from_dict(construction_dict As Dictionary, _
+                               t_model_dict As Dictionary, _
+        Optional ByVal h_start_m As Double = -10000000000#, _
+        Optional ByVal h_end_m As Double = 10000000000#)
+        
     Dim tr As New CPipeTrajectory
     
-    
-    arr_h(1, 1) = 0
-    arr_h(2, 1) = length_m
-    arr_h(1, 2) = 0
-    arr_h(2, 2) = length_m * (Sin(theta_deg / 180 * const_Pi))
-    
-    arr_d(1, 1) = 0
-    arr_d(2, 1) = length_m
-    arr_d(1, 2) = d_mm
-    arr_d(2, 2) = d_mm
-    arr_d(1, 3) = roughness_m
-    arr_d(2, 3) = roughness_m
-    Call tr.init_from_vert_range(arr_h, arr_d)
-    tr.roughness_m = roughness_m
-    
-    Call init_pipe_constr_by_trajectory(tr)
+    Call tr.init_from_dict(construction_dict)
+    Call init_pipe_constr_by_trajectory(tr, h_start_m, h_end_m)
+    Call init_t_model_from_dict(t_model_dict)
 End Function
-'=================================================================================================
-' новый подход - можно обойтись без разделение на прямой участок и кривой - расчет за один проход.
-'=================================================================================================
 Public Function calc_grad(l_m As Double, _
                          p_atma As Double, _
                          t_C As Double, _
@@ -555,7 +525,7 @@ endlab:
 End With
 End Function
 Public Sub set_ZNLF()
-    
+        znlf_ = True
         param_.correlation = Ansari
         If param_.temp_method = 2 Then param_.temp_method = 1
         Set fluid = fluid.clone
@@ -606,7 +576,7 @@ Private Function calc_dPipe_2d(p_atma As Double, t_C As Double, Optional saveCur
 ' t_other_C  - опциональное значение температуры на другом конце трубы, необходимо при линейном
 '             распределении температуры
 Dim y0(1) As Double   ' начальные значения для проведения расчета
-Dim N, M As Long
+Dim n, M As Long
 Dim X() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim step As Double
@@ -633,7 +603,7 @@ On Error GoTo err1:
   
     y0(0) = p_atma
     y0(1) = t_C
-    N = 2                   ' размер системы  - две переменные - давление и температура
+    n = 2                   ' размер системы  - две переменные - давление и температура
     M = hm_curve_.num_points ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
@@ -656,7 +626,7 @@ On Error GoTo err1:
         
  '   Y = solve_ode("calc_grad_2d", Y0, x, coeffA, Eps)
     
-    Call ODESolverRKCK(y0(), N, X, M, eps, step, State)
+    Call ODESolverRKCK(y0(), n, X, M, eps, step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
@@ -731,7 +701,7 @@ Private Function calc_dPipe_1d(p_atma As Double, Optional saveCurve As CALC_RESU
 ' основан на применении ODEsolver
 ' проверка работы одномерного решателя - ради скорости расчета
 Dim y0(0) As Double   ' начальные значения для проведения расчета
-Dim N As Long, M As Long
+Dim n As Long, M As Long
 Dim X() As Double, y() As Double     ' массив глубин для которых нужны значения
 Dim eps As Double
 Dim step As Double
@@ -744,7 +714,7 @@ Dim stPt As Boolean
 Dim crv_hl As CInterpolation
 Dim crv_fpat As CInterpolation
 On Error GoTo err1:
-    eps = const_pressure_tolerance  '0.001
+    eps = const_pressure_tolerance
     step = 10
     
     Dim tstart As Single
@@ -758,7 +728,7 @@ On Error GoTo err1:
     y0(0) = p_atma
     
 '    Y0(1) = PT.T_C
-    N = 1                   ' размер системы  - одна переменные - давление и температура
+    n = 1                   ' размер системы  - одна переменные - давление и температура
     M = hm_curve_.num_points ' количество точек для которых надо выдать ответ
     ' формируем массив глубин для расчета давления
     ' учитываем, что массив глубин зависит от направления в котором отсчитываем координаты
@@ -777,7 +747,7 @@ On Error GoTo err1:
 '    If fluid.q_liq_sm3day = 0 Then
 '        Y0(1) = ambient_formation.amb_temp_C(X(0))
 '    End If
-    Call ODESolverRKCK(y0(), N, X, M, eps, step, State)
+    Call ODESolverRKCK(y0(), n, X, M, eps, step, State)
     ' Loop through the AlgLib solver routine and the external ODE
     ' evaluation routine until the solver routine returns "False",
     ' which indicates that it has finished.
@@ -905,80 +875,6 @@ End Sub
 Public Property Get p_curve() As CInterpolation
     Set p_curve = curve("c_P")
 End Property
-'Public Function array_out_new(Optional ByVal name_value As String = "p_result_atma", _
-'                              Optional ByVal show_log As Boolean = False, _
-'                              Optional ByVal num_points As Integer = 20, _
-'                              Optional ByVal all_curves_out As Boolean = False)
-'' подготовка массива для вывода в Excel
-'' num_points - количество точек в выходных массивах для вывода
-'' all_curves_out - надо ли выводить все промежуточные массивы
-'' name_value
-'' show_log
-''
-''
-'Const nv = 4  ' output array dimension (number of columns)
-'
-'    Dim res(0 To 2, 0 To nv) As Variant
-'    Dim log_str As String
-'    Dim i As Integer
-'    Dim resd As New Dictionary
-'    Dim resd_crv1 As New Dictionary
-'    Dim resd_crv2 As New Dictionary
-'
-'    Dim M As Integer
-'    On Error Resume Next
-'
-'            ' prepare dict for result output
-'        Dim crv_P As CInterpolation
-'        Dim crv_T As CInterpolation
-'
-'        ' rearrange output curves one time here - will be used later
-'        Set crv_P = curve("c_P").ClonePointsToNum(num_points)
-'        Set crv_T = curve("c_T").ClonePointsToNum(num_points)
-'        M = crv_P.num_points
-'
-'        resd.Add "p_result_atma", p_result_atma
-'        resd.Add "t_result_C", t_result_C
-'        resd.Add "p_1, atma", crv_P.PointY(1)
-'        resd.Add "t_1, C", crv_T.PointY(1)
-'        resd.Add "p_2, atma", crv_P.PointY(M)
-'        resd.Add "t_2, C", crv_T.PointY(M)
-'        resd.Add "calibr_grav", calibr_grav_
-'        resd.Add "calibr_fric", calibr_fric_
-'        resd.Add "q_gas_sm3day", fluid.q_gas_sm3day
-'
-'        resd_crv1.Add "crv_P", crv_P.ClonePointsToNum(num_points).getDict
-'        resd_crv1.Add "crv_Н", curve("c_Hvert").ClonePointsToNum(num_points).getDict
-'        resd_crv1.Add "c_T", curve("c_T").ClonePointsToNum(num_points).getDict
-'        resd_crv1.Add "c_Hl", curve("c_Hl").ClonePointsToNum(num_points).getDict
-'        resd_crv1.Add "c_fpat", curve("c_fpat").ClonePointsToNum(num_points).getDict
-'        resd_crv1.Add "c_Tamb", curve("c_Tamb").ClonePointsToNum(num_points).getDict
-'        resd_crv1.Add "c_Diam", curve("c_Diam").ClonePointsToNum(num_points).getDict
-'
-'
-'        resd_crv2.Add "c_Roughness", curve("c_Roughness").getDict
-'
-'
-'
-'        ' from main output array
-'
-'        res(0, 0) = resd(name_value):      res(1, 0) = name_value
-'        res(0, 1) = ConvertToJson(resd):   res(1, 1) = "json"
-'        res(0, 2) = fluid.feed:                 res(1, 2) = "feed"
-'        res(0, 3) = ConvertToJson(resd_crv1):   res(1, 3) = "crv"
-'        res(0, 4) = ConvertToJson(resd_crv2):   res(1, 4) = "crv2"
-'
-'        If show_log Then
-'            log_str = log_.get_str_safe
-'        Else
-'            log_str = "[""set show_log=1 in param to show calc log""]"
-'        End If
-'        res(2, 0) = log_str
-'        For i = 1 To nv
-'            res(2, i) = ""
-'        Next i
-'        array_out_new = res
-'End Function
 Public Function get_result_dict(Optional ByVal num_points As Integer = 20, _
                                 Optional ByVal show_array As Boolean = False, _
                                 Optional ByVal show_log As Boolean = False)
@@ -1117,6 +1013,32 @@ Public Property Get ambient_formation() As CAmbientFormation
 End Property
 Public Property Set ambient_formation(vNewValue As CAmbientFormation)
     Set ambient_formation_ = vNewValue
-    Call init_t_model(amb0:=ambient_formation_)
+'    Call init_t_model(amb0:=ambient_formation_)
 End Property
+' flow parameter setting function in the pipe or well
+Public Sub set_calc_flow_param( _
+                Optional ByVal calc_along_coord As Boolean = False, _
+                Optional ByVal flow_along_coord As Boolean = False, _
+                Optional ByVal hcor As H_CORRELATION = Ansari, _
+                Optional ByVal temp_method As TEMP_CALC_METHOD = StartEndTemp, _
+                Optional ByVal length_gas_m As Double = 0, _
+                Optional ByVal start_length_gas_m As Double = 0)
+' calc_along_coord - calculation direction flag
+' flow_along_coord - flow direction relative to coordinate
+' hcor             - hydraulic correlation selector
+' temp_method      - temperature method selector
+' length_gas_m     - boundary of gas correlation application in flow
+    Dim prm As PARAMCALC
+    prm.calc_along_coord = calc_along_coord
+    prm.flow_along_coord = flow_along_coord
+    prm.correlation = hcor
+    prm.temp_method = temp_method
+    prm.length_gas_m = length_gas_m
+    prm.start_length_gas_m = start_length_gas_m
+    param = prm
+End Sub
+Public Sub set_flow_along_coord(ByVal flow_along_coord As Boolean)
+' flow_along_coord - flow direction relative to coordinate
+    param_.flow_along_coord = flow_along_coord
+End Sub
 

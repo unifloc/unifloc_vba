@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.47 motor update                                  khabibullinra@gmail.com
+'Unifloc 7.48 new strategy                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -666,42 +666,56 @@ End Function
         Optional ByVal fw_perc As Double = -1, _
         Optional ByVal rp_m3m3 As Double = -1, _
         Optional ByVal q_gas_free_sm3day As Double = -1)
-        
     If q_liq_sm3day > 0 Then Me.q_liq_sm3day = q_liq_sm3day
     If fw_perc > 0 Then Me.fw_perc = fw_perc
     If rp_m3m3 > 0 Then Me.rp_m3m3 = rp_m3m3
     If q_gas_free_sm3day > 0 Then Me.q_gas_free_sm3day = q_gas_free_sm3day
- 
  End Sub
  
  Public Sub init_feed(ByVal json As String, _
-            Optional ByVal allow_zero_qliq As Boolean = False)
+             Optional ByVal q_liq_sm3day = -10000000000#, _
+             Optional ByVal fw_perc = -1, _
+             Optional ByVal rp_m3m3 = -1, _
+             Optional ByVal q_gas_free_sm3day = -1, _
+             Optional ByVal allow_zero_qliq As Boolean = True)
+    
     Dim d As Dictionary
     
     Set d = ParseJson(json)
     Call init_dictionary(d)
     With d
-        If .Exists("q_liq_sm3day") Then
-            q_liq_sm3day = .Item("q_liq_sm3day")
-            ' нельзя дебит делать нулевым, чтобы не глючили расчеты
-            If Not allow_zero_qliq And q_liq_sm3day = 0 Then q_liq_sm3day = const_ZNLF_rate
+        If q_liq_sm3day > -1000000000# Then
+            Me.q_liq_sm3day = q_liq_sm3day
+        ElseIf .Exists("q_liq_sm3day") Then
+            Me.q_liq_sm3day = .Item("q_liq_sm3day")
+        End If
+        
+        ' нельзя дебит делать нулевым, чтобы не глючили расчеты
+        If Not allow_zero_qliq And Me.q_liq_sm3day = 0 Then Me.q_liq_sm3day = const_ZNLF_rate
+        
+        If fw_perc >= 0 Then
+            Me.fw_perc = fw_perc
+        ElseIf .Exists("fw_perc") Then
+            Me.fw_perc = .Item("fw_perc")
         Else
-            If allow_zero_qliq Then
-                q_liq_sm3day = 0
-            Else
-                q_liq_sm3day = const_ZNLF_rate
-            End If
+            Me.fw_perc = 0
         End If
-        If .Exists("fw_perc") Then
-            fw_perc = .Item("fw_perc")
-        Else
-            fw_perc = 0
+        
+        If rp_m3m3 > 0 Then
+            Me.rp_m3m3 = rp_m3m3
+        ElseIf .Exists("rp_m3m3") Then
+            Me.rp_m3m3 = .Item("rp_m3m3")
         End If
-        If .Exists("rp_m3m3") Then rp_m3m3 = .Item("rp_m3m3")
-        If .Exists("q_gas_free_sm3day") Then
-            q_gas_free_sm3day = .Item("q_gas_free_sm3day")
-            If q_gas_free_sm3day > 0 And q_liq_sm3day = 0 Then gas_only = True
+        
+        If q_gas_free_sm3day > 0 Then
+            Me.q_gas_free_sm3day = q_gas_free_sm3day
+        ElseIf .Exists("q_gas_free_sm3day") Then
+            Me.q_gas_free_sm3day = .Item("q_gas_free_sm3day")
         End If
+        If Me.q_gas_free_sm3day > 0 And Me.q_liq_sm3day = 0 Then gas_only = True
+        
+        ' if zero rates but high GOR assume gas flow
+        If Me.q_gas_free_sm3day = 0 And Me.q_liq_sm3day = 0 And Me.rp_m3m3 > 10000 Then gas_only = True
     End With
         
  End Sub
@@ -1298,9 +1312,7 @@ End Function
 Public Sub mod_after_separation(ByVal p_atma As Double, _
                                 ByVal t_C As Double, _
                                 ByVal ksep As Double, _
-                       Optional ByVal gas_goes_into_solution As Double = 1, _
-                       Optional ByVal ksep_liq As Double = 0, _
-                       Optional ByVal ksep_water As Double = 0)
+                       Optional ByVal gas_goes_into_solution As Double = 1)
                        
 ' функция модификации свойств нефти после сепарации
 ' удаление части газа меняет свойства нефти - причем добавление газа свойства не трогает
@@ -1316,7 +1328,7 @@ Public Sub mod_after_separation(ByVal p_atma As Double, _
     Dim pb_atma_tab As Double
     Dim Delta As Double
     Dim i As Integer
-    Const N = 10
+    Const n = 10
     Dim Rpnew_with_Ksep As Double   ' новый ГФ с учетом сепарации газа
     Dim Rpnew As Double
         ' найдем сколько газа осталось в растворе при условиях сепарации
@@ -1347,9 +1359,9 @@ On Error GoTo err1:
             ' найдем сколько всего газа осталось в потоке
                 
         If Rpnew < rsb_m3m3_ Then
-            Delta = (pb_calc_atma - 1) / N    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
+            Delta = (pb_calc_atma - 1) / n    ' считать будет только в диапазоне где определены Pb за ним будет линейно экстраполировать
             ' запишем зависимость газосодержания от давления насыщения на память
-            For i = 0 To N
+            For i = 0 To n
                 pb_atma_tab = 1 + Delta * i
                 Call calc_PVT(pb_atma_tab, t_res_C)
                 Pb_Rs_curve.AddPoint rs_m3m3_, pb_atma_tab
@@ -1367,7 +1379,7 @@ On Error GoTo err1:
         ' итоговый газовый фактор всегда с учетом сепараци
         rp_m3m3 = Rpnew_with_Ksep
     
-    q_liq_sm3day = q_liq_sm3day * (1 - ksep_liq)
+    q_liq_sm3day = q_liq_sm3day ' * (1 - ksep_liq)
     
     Exit Sub
 err1:
@@ -1376,44 +1388,44 @@ err1:
     add_log_msg errmsg
     Err.Raise kErrPVTcalc, "CPVT.mod_after_separation", errmsg
 End Sub
-' деление потока на две части по заданным коэффициентам сепарации
-Public Function divide_flux(psep_atma As Double, _
-                            tsep_C As Double, _
-                            ksep_gas As Double, _
-                            ksep_oil As Double, _
-                            ksep_wat As Double, _
-                            Optional tubing As Boolean = True) As CPVT
-    Dim fl As CPVT
-    Dim rs As Double
-    Dim Bo As Double
-    Dim pb As Double
-    Dim muo As Double
-    Dim qgf As Double
-     
-    Call calc_PVT(psep_atma, tsep_C)
-    rs = rs_m3m3
-    Bo = bo_m3m3
-    muo = mu_oil_cP
-    qgf = q_gas_free_sm3day
-    pb = calc_pb_atma(rs, tsep_C)
-    
-    Set fl = clone
-    fl.rsb_m3m3 = rs
-    fl.bob_m3m3 = Bo
-    fl.pb_atma = pb
-    fl.muob_cP = muo
-    
-    If Not tubing Then
-        ksep_gas = 1 - ksep_gas
-        ksep_oil = 1 - ksep_oil
-        ksep_wat = 1 - ksep_wat
-    End If
-    
-    fl.q_liq_sm3day = q_liq_sm3day * fw_fr * ksep_wat + q_liq_sm3day * (1 - fw_fr) * ksep_oil
-    fl.fw_fr = q_liq_sm3day * fw_fr * ksep_oil / (q_liq_sm3day * fw_fr * ksep_wat + q_liq_sm3day * (1 - fw_fr) * ksep_oil)
-    fl.rp_m3m3 = fl.rsb_m3m3 + (qgf * ksep_gas) / fl.q_oil_sm3day
-    
-    Set divide_flux = fl
-    
-End Function
+'' деление потока на две части по заданным коэффициентам сепарации
+'Public Function divide_flux(psep_atma As Double, _
+'                            tsep_C As Double, _
+'                            ksep_gas As Double, _
+'                            ksep_oil As Double, _
+'                            ksep_wat As Double, _
+'                            Optional tubing As Boolean = True) As CPVT
+'    Dim fl As CPVT
+'    Dim rs As Double
+'    Dim Bo As Double
+'    Dim pb As Double
+'    Dim muo As Double
+'    Dim qgf As Double
+'
+'    Call calc_PVT(psep_atma, tsep_C)
+'    rs = rs_m3m3
+'    Bo = bo_m3m3
+'    muo = mu_oil_cP
+'    qgf = q_gas_free_sm3day
+'    pb = calc_pb_atma(rs, tsep_C)
+'
+'    Set fl = clone
+'    fl.rsb_m3m3 = rs
+'    fl.bob_m3m3 = Bo
+'    fl.pb_atma = pb
+'    fl.muob_cP = muo
+'
+'    If Not tubing Then
+'        ksep_gas = 1 - ksep_gas
+'        ksep_oil = 1 - ksep_oil
+'        ksep_wat = 1 - ksep_wat
+'    End If
+'
+'    fl.q_liq_sm3day = q_liq_sm3day * fw_fr * ksep_wat + q_liq_sm3day * (1 - fw_fr) * ksep_oil
+'    fl.fw_fr = q_liq_sm3day * fw_fr * ksep_oil / (q_liq_sm3day * fw_fr * ksep_wat + q_liq_sm3day * (1 - fw_fr) * ksep_oil)
+'    fl.rp_m3m3 = fl.rsb_m3m3 + (qgf * ksep_gas) / fl.q_oil_sm3day
+'
+'    Set divide_flux = fl
+'
+'End Function
 
