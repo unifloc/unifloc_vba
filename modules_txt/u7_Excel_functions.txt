@@ -3663,7 +3663,7 @@ End Function
 ' оценка количества ступеней по напору с учетом номинальной частоты
 Public Function ESP_calc_stages_num(Optional ByVal pump_id As Long = 1006, _
                                     Optional ByVal head As Double = 1000, _
-                                    Optional ByVal f_nom_Hz As Double = 50, _
+                                    Optional ByVal f_nom_Hz As Double = 0, _
                                     Optional ByVal q_nom_sm3day As Double = -1)
 ' pump_id   - идентификатор насоса в базе данных
 ' head - номинальный напор установки
@@ -3673,16 +3673,16 @@ Public Function ESP_calc_stages_num(Optional ByVal pump_id As Long = 1006, _
 ' результат - количество ступеней
 On Error GoTo err1:
     Dim esp As New CESPpump
-    Dim f_ratio As Double
-    Call esp.set_ID(pump_id)
+    'Dim f_ratio As Double
+    Call esp.set_ID(pump_id, f_nom_Hz)
     If esp Is Nothing Then
         ESP_freq_nom = "no name"
         Exit Function
     End If
     With esp
-        f_ratio = .db.freq_Hz / f_nom_Hz
+'        f_ratio = .db.freq_Hz / f_nom_Hz
         If q_nom_sm3day <= 0 Then q_nom_sm3day = .db.rate_nom_sm3day
-        .freq_Hz = f_nom_Hz
+        .freq_Hz = esp.freq_nom_Hz
         ESP_calc_stages_num = Round(head / .get_ESP_head_m(q_nom_sm3day, 1, 1), 0)
     End With
     Exit Function
@@ -3787,6 +3787,7 @@ Public Function ESP_p_json_atma( _
         Optional ByVal t_dis_C = 50, _
         Optional ByVal feed As String = "", _
         Optional ByVal json_ESP_pump As String = "", _
+        Optional ByVal freq_Hz As Double = 50, _
         Optional ByVal calc_along_flow As Boolean = True, _
         Optional ByVal param As String = "", _
         Optional ByVal h_mes_top As Double = 1000, _
@@ -3804,6 +3805,7 @@ Public Function ESP_p_json_atma( _
 ' feed     - параметры потока флюидов json строка. Используйте
 '            функцию encode_feed() для генерации
 ' json_ESP_pump          - параметры насоса насоса
+' freq_Hz - частота тока
 ' calc_along_flow  - режим расчета снизу вверх или сверху вниз
 '          calc_along_flow = True => p_atma давление на приеме
 '          calc_along_flow = False => p_atma давление на выкиде
@@ -3839,7 +3841,7 @@ Public Function ESP_p_json_atma( _
             feed, _
             pump_id, _
             d("num_stages"), _
-            d("freq_nom_Hz"), _
+            freq_Hz, _
             calc_along_flow, _
             d("calibr_head"), _
             d("calibr_rate"), _
@@ -3851,7 +3853,8 @@ Public Function ESP_p_json_atma( _
             q_liq_sm3day, _
             fw_perc, _
             rp_m3m3, _
-            q_gas_free_sm3day)
+            q_gas_free_sm3day, _
+            d("freq_nom_Hz"))
     Exit Function
 er1:
     ESP_p_json_atma = "error:ESP_p_atma: " & Err.Description
@@ -3879,7 +3882,8 @@ Public Function ESP_p_atma( _
         Optional ByVal q_liq_sm3day = -1, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
-        Optional ByVal q_gas_free_sm3day = -1)
+        Optional ByVal q_gas_free_sm3day = -1, _
+        Optional ByVal freq_nom_Hz As Double = 0)
 ' p_calc_atma      - давление для которого делается расчет
 '                    либо давление на приеме насоса
 '                    либо давление на выкиде насоса
@@ -3931,7 +3935,7 @@ On Error GoTo er1:
     
     Call read_PTQ(ptq, feed, p_calc_atma, t_intake_C, esp.log_, t_dis_C, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     Call init_ptesp(ptq_out, ptq)
-    Call esp.set_ID(pump_id)    ' get ESP from database
+    Call esp.set_ID(pump_id, freq_nom_Hz)    ' get ESP from database
     
     If esp Is Nothing Then
         ESP_p_atma = "no ESP"

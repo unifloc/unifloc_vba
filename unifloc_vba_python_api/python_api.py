@@ -1631,7 +1631,7 @@ class API():
         self.f_ESP_freq_nom = self.book.macro("ESP_freq_nom")
         return self.f_ESP_freq_nom(pump_id)
 
-    def ESP_calc_stages_num(self, pump_id=1006,head=1000,f_nom_Hz=50,q_nom_sm3day=-1):
+    def ESP_calc_stages_num(self, pump_id=1006,head=1000,f_nom_Hz=0,q_nom_sm3day=-1):
         """
  ========== description ============== 
  оценка количества ступеней по напору с учетом номинальной частоты 
@@ -1707,7 +1707,7 @@ class API():
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
         return self.f_ESP_id_by_rate(q,f_nom_Hz)
 
-    def ESP_p_json_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",json_ESP_pump="",calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def ESP_p_json_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",json_ESP_pump="",freq_Hz=50,calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях большинство параметров задается явно 
@@ -1723,6 +1723,8 @@ class API():
      feed - параметры потока флюидов json строка. используйте  функцию encode_feed() для генерации    
 
      json_esp_pump - параметры насоса насоса    
+
+     freq_hz - частота тока    
 
      определяется параметром calc_along_flow  t_intake_c - температура на приеме насоcа  t_dis_c - температура на выкиде насоса.  если = 0 и calc_along_flow = 1 то рассчитывается ..см.мануал   
 
@@ -1741,9 +1743,9 @@ class API():
         """
 
         self.f_ESP_p_json_atma = self.book.macro("ESP_p_json_atma")
-        return self.f_ESP_p_json_atma(p_calc_atma,t_intake_C,t_dis_C,feed,json_ESP_pump,calc_along_flow,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_ESP_p_json_atma(p_calc_atma,t_intake_C,t_dis_C,feed,json_ESP_pump,freq_Hz,calc_along_flow,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",pump_id=737,num_stages=1,freq_Hz=50,calc_along_flow=True,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=1,gas_correct_stage_by_stage=1,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",pump_id=737,num_stages=1,freq_Hz=50,calc_along_flow=True,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=1,gas_correct_stage_by_stage=1,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1,freq_nom_Hz=0):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях большинство параметров задается явно 
@@ -1786,12 +1788,14 @@ class API():
 
      rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
 
-     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором    
+
+   freq_nom_hz  
 
         """
 
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(p_calc_atma,t_intake_C,t_dis_C,feed,pump_id,num_stages,freq_Hz,calc_along_flow,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+        return self.f_ESP_p_atma(p_calc_atma,t_intake_C,t_dis_C,feed,pump_id,num_stages,freq_Hz,calc_along_flow,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,freq_nom_Hz)
 
     def ESP_motor_calc_mom(self, mom_Nm,freq_Hz=50,U_V=-1,motor_json="",cable_json="",param=""):
         """
@@ -3258,7 +3262,7 @@ class API():
 
      x_val - аргумент для которого надо найти значение  одно значение в ячейке или диапазон значений  для диапазона аргументов будет найден диапазон значений  диапазоны могут быть ..см.мануал   
 
-     type_interpolation - тип интерполяции  0 - линейная интерполяция  1 - кубическая интерполяция  2 - интерполяция акима (выбросы)  www.en.wikipedia.org/wiki/akima_spline  3 - ..см.мануал  
+     type_interpolation - тип интерполяции  0 - линейная,  1 - кубическая,  2 - интерполяция акима (выбросы)  www.en.wikipedia.org/wiki/akima_spline,  3 - кубический сплайн катму..см.мануал  
 
         """
 
