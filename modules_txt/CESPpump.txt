@@ -26,8 +26,8 @@ Public calibr_power As Double        ' деградация по мощности (она же по КПД сис
 Public dnum_stages_integrate As Integer
 Public freq_Hz As Double               ' частота вращения вала насоса (используется для расчета)
 'Public freq_nom_Hz As Double           ' номинальная частота для которой задан номинальный напор
-Public head_nom_m As Double
-Public q_nom_sm3day As Double
+'Public head_nom_m As Double
+'Public q_nom_sm3day As Double
 Public curves As New CCurves           ' все кривые планируется прятать тут
 ' параметры конструкции ЭЦН
 Public stage_num As Integer            ' количество ступеней в насосе (используется для расчета характеристики насоса)
@@ -159,7 +159,7 @@ Private Function calc_ESP_head_nominal_m(ByVal q_m3day As Double, Optional ByVal
     Dim B As Double                  ' отношение частот
     With db_
         B = .freq_Hz / freq_Hz  ' определим отношение реальной частоты УЭЦН к номинальной для которой заданы характеристики
-        calc_ESP_head_nominal_m = B ^ (-2) * stage_num * crv_interpolation(.rate_points, .head_points, B * q_m3day, 2)(1, 1)
+        calc_ESP_head_nominal_m = B ^ (-2) * stage_num * crv_interpolation(.rate_points, .head_points, 1 / B * q_m3day, 2)(1, 1)
     End With
 End Function
 Private Sub corrections_clear()
@@ -1187,6 +1187,12 @@ End Sub
 Public Property Get freq_nom_Hz()
     freq_nom_Hz = db_.freq_Hz
 End Property
+Public Property Get q_nom_sm3day()
+    q_nom_sm3day = db_.rate_nom_sm3day
+End Property
+Public Property Get head_nom_m()
+    head_nom_m = calc_ESP_head_nominal_m(q_nom_sm3day)
+End Property
 Public Sub set_ID(ESP_ID As Long, _
                   Optional freq_nom_update As Double = 0)
 ' freq_nom_update позволяет подменить базовую частоту насоса из каталога на новую
@@ -1206,7 +1212,14 @@ Public Sub set_ID(ESP_ID As Long, _
     Set dict = ESP_base_dictionary(CStr(ESP_ID))
     '
     If freq_nom_update > 0 Then
+        If Not dict.Exists("freq_Hz_original") Then
+            dict("freq_Hz_original") = dict("freq_Hz")
+        End If
         dict("freq_Hz") = freq_nom_update
+    Else
+        If dict.Exists("freq_Hz_original") Then
+            dict("freq_Hz") = dict("freq_Hz_original")
+        End If
     End If
     db_json_string = ConvertToJson(dict)
   On Error GoTo err_load_pump:
@@ -1253,7 +1266,7 @@ Public Sub set_ID(ESP_ID As Long, _
     End With
     
     db_ = esp_db
-    
+    freq_Hz = freq_nom_Hz
     Exit Sub
     
 err_load_pump:
@@ -1276,7 +1289,11 @@ On Error GoTo err1:
     With dict
         If .Exists("ESP_ID") Then
             ESP_ID = .Item("ESP_ID")
-            Call set_ID(ESP_ID)
+            If .Exists("freq_nom_Hz") Then
+                Call set_ID(ESP_ID, .Item("freq_nom_Hz"))
+            Else
+                Call set_ID(ESP_ID)
+            End If
         Else
             msg = "CESPpump.init_dictionary error - wrong input. No ESP_ID key in pump json"
             Err.Raise kErrESPcalc, , msg
@@ -1291,7 +1308,7 @@ On Error GoTo err1:
             msg = "CESPpump.init_dictionary error - wrong input. No stages in ESP defined"
             Err.Raise kErrESPcalc, , msg
         End If
-        If .Exists("freq_nom_Hz") Then freq_nom_Hz = .Item("freq_nom_Hz")
+'        If .Exists("freq_nom_Hz") Then freq_nom_Hz = .Item("freq_nom_Hz")
         If .Exists("q_nom_sm3day") Then q_nom_sm3day = .Item("q_nom_sm3day")
         If .Exists("head_nom_m") Then head_nom_m = .Item("head_nom_m")
         If .Exists("gas_correct_model") Then gas_correct_model = .Item("gas_correct_model")
