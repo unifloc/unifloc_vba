@@ -3187,7 +3187,7 @@ class API():
         self.f_IPR_q_liq_sm3day = self.book.macro("IPR_q_liq_sm3day")
         return self.f_IPR_q_liq_sm3day(pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc,pb_atma,t_res_C)
 
-    def IPR_pwf_atma(self, pi_sm3dayatm,p_res_atma,q_liq_sm3day=0#,feed_json=""):
+    def IPR_pwf_atma(self, pi_sm3dayatm,p_res_atma,q_liq_sm3day=0,feed_json=""):
         """
  ========== description ============== 
  расчет забойного давления по дебиту и продуктивности 
@@ -3227,27 +3227,6 @@ class API():
         self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
         return self.f_IPR_pi_sm3dayatm(q_test_sm3day,pwf_test_atma,p_res_atma,feed_json)
 
-    def IPR_pq_crv(self, ''pi_sm3dayatm,'p_res_atma,'fw_perc=0,'pb_atma=-1,'param=""):
-        """
- ========== description ============== 
- расчет кривой IPR в формате json  pq_crv - кривая давление температура 
-        
- ==========  arguments  ============== 
-
-   pi_sm3dayatm   
-
-   p_res_atma   
-
-   fw_perc   
-
-   pb_atma   
-
-   param  
-
-        """
-
-        self.f_IPR_pq_crv = self.book.macro("IPR_pq_crv")
-        return self.f_IPR_pq_crv(''pi_sm3dayatm,'p_res_atma,'fw_perc,'pb_atma,'param)
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """
