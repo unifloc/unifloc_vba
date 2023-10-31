@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.48 new strategy                                  khabibullinra@gmail.com
+'Unifloc 7.49 no name                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
@@ -45,6 +45,8 @@ Private db_ As ESP_PARAMS            ' набор параметров насоса из базы данных
 Private db_json_string As String
 Private gas_frac_intake_ As Double
 Private gas_corr_ As Double
+Private gas_corr_min As Double
+Private gas_corr_max As Double
 Public gas_correct_model As Integer
                             ' gas_correct_model       - тип насоса по работе с газом
                             '      gas_correct_model = 0 нет коррекции
@@ -159,7 +161,7 @@ Private Function calc_ESP_head_nominal_m(ByVal q_m3day As Double, Optional ByVal
     Dim B As Double                  ' отношение частот
     With db_
         B = .freq_Hz / freq_Hz  ' определим отношение реальной частоты ”Ё÷Ќ к номинальной дл€ которой заданы характеристики
-        calc_ESP_head_nominal_m = B ^ (-2) * stage_num * crv_interpolation(.rate_points, .head_points, 1 / B * q_m3day, 2)(1, 1)
+        calc_ESP_head_nominal_m = B ^ (-2) * stage_num * crv_interpolation(.rate_points, .head_points, B * q_m3day, 2)(1, 1)
     End With
 End Function
 Private Sub corrections_clear()
@@ -386,6 +388,8 @@ On Error GoTo err1:
             gas_frac_intake_ = .gas_fraction_d
             q_rel = .q_mix_rc_m3day / rate_max_sm3day(1)
             gas_corr_ = calc_gas_correction(gas_frac_intake_, q_rel)   ' reinit gas correction
+            gas_corr_min = gas_corr_
+            gas_corr_max = gas_corr_
             log_.add_msg "{""gas_correct_intake"" :" & Format(gas_corr_, "0.000") & _
                         ", ""gas_frac_intake"" :" & Format(gas_frac_intake_, "0.000") & _
                         ", ""q_rel"" :" & Format(q_rel, "0.000") & _
@@ -462,6 +466,8 @@ On Error GoTo err1:
             If gas_correct_stage_by_stage Then
                 q_rel = .q_mix_rc_m3day / rate_max_sm3day(1)
                 gas_corr_ = calc_gas_correction(.gas_fraction_d, q_rel)
+                If gas_corr_min > gas_corr_ Then gas_corr_min = gas_corr_
+                If gas_corr_max < gas_corr_ Then gas_corr_max = gas_corr_
             End If
             q_mix_ = .q_mix_rc_m3day
             q_mix__degr = q_mix_ * calibr_rate
@@ -909,17 +915,11 @@ On Error Resume Next
         .Add "p_dis_atma", Round(p_dis_atma, const_decimal_output)
         .Add "t_dis_C", Round(t_dis_C, const_decimal_output)
         .Add "head_m", Round(head_m, const_decimal_output)
-        .Add "m_Nm", Round(M_Nm, const_decimal_output)
+        .Add "M_pump_Nm", Round(M_Nm, const_decimal_output)
         .Add "gas_frac_intake", Round(gas_frac_intake_, const_decimal_output)
         .Add "eff_ESP_d", Round(eff_ESP_d, const_decimal_output)
         .Add "power_fluid_W", Round(power_fluid_W, const_decimal_output)
         .Add "power_ESP_W", Round(power_ESP_W, const_decimal_output)
-        
-        .Add "length_pump_m", Round(length_m, const_decimal_output)
-        .Add "angle", Round(angle_deg, const_decimal_output)
-        .Add "d_od_m", Round(db.d_od_m, const_decimal_output)
-        .Add "d_cas_min_m", Round(db.d_cas_min_m, const_decimal_output)
-        .Add "d_motor_od_m", Round(db.d_motor_od_m, const_decimal_output)
         
         .Add "calc_from_dis", Round(calc_from_dis_, const_decimal_output)
         .Add "stage_num", stage_num
@@ -931,8 +931,12 @@ On Error Resume Next
         .Add "calibr_rate", Round(calibr_rate, const_decimal_output)
         .Add "calibr_power", Round(calibr_power, const_decimal_output)
         .Add "gas_correct_model", Round(gas_correct_model, const_decimal_output)
-        .Add "gas_corr_", Round(gas_corr_, const_decimal_output)
-        
+        .Add "gas_correct_stage_by_stage", gas_correct_stage_by_stage
+        If gas_correct_stage_by_stage Then
+            .Add "gas_corr_", "[" & str(Round(gas_corr_min, const_decimal_output)) & "," & str(Round(gas_corr_max, const_decimal_output)) & "]"
+        Else
+            .Add "gas_corr_", Round(gas_corr_, const_decimal_output)
+        End If
         
         If show_array Then
             If num_points > 5 Then
@@ -1308,9 +1312,6 @@ On Error GoTo err1:
             msg = "CESPpump.init_dictionary error - wrong input. No stages in ESP defined"
             Err.Raise kErrESPcalc, , msg
         End If
-'        If .Exists("freq_nom_Hz") Then freq_nom_Hz = .Item("freq_nom_Hz")
-        If .Exists("q_nom_sm3day") Then q_nom_sm3day = .Item("q_nom_sm3day")
-        If .Exists("head_nom_m") Then head_nom_m = .Item("head_nom_m")
         If .Exists("gas_correct_model") Then gas_correct_model = .Item("gas_correct_model")
         If .Exists("gas_correct_stage_by_stage") Then gas_correct_stage_by_stage = .Item("gas_correct_stage_by_stage")
         If .Exists("calibr_head") Then calibr_head = .Item("calibr_head")

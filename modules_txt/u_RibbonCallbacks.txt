@@ -1,23 +1,32 @@
 '=======================================================================================
-'Unifloc 7.48 new strategy                                  khabibullinra@gmail.com
+'Unifloc 7.49 no name                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2023
 '
 '=======================================================================================
 ' Functions for the Excel ribbon buttons
 Option Base 0
-Const clrGrayText = 14474460
-Const clrUserInput = vbYellow
-Const clrCalculated = 16448160
-Const clrIntermediateCalc = 10549980
-Public promt As Boolean
 Option Explicit
+' цвета для выделения ячеек при вставке сниппетов
+Const clrGrayText = 14474460   ' серые ячейки - описания переменных
+Const clrUserInput = vbYellow  ' желтые - ячейки для ввода данных пользователем
+Const clrCalculated = 16448160 ' синеватые - ячейки для вывода результатов расчета
+Const clrIntermediateCalc = 10549980 ' зеленоватые - ячейки для вывода промежуточных результатов расчета
+' глобальная переменная - флаг необходимости вывода запроса о замещении ячеек
+Public promt As Boolean
+Public comment As Boolean
+Public Function CheckBox_comment_Pressed(control As IRibbonControl, ByRef pressed)
+    pressed = comment
+End Function
+Public Sub CheckBox_comment_OnAction(ByRef control As IRibbonControl, _
+                                     ByRef pressed As Boolean)
+    comment = pressed
+End Sub
 Public Function CheckBox_Pressed(control As IRibbonControl, ByRef pressed)
     pressed = promt
 End Function
-Public Sub CheckBox_OnAction( _
-   ByRef control As IRibbonControl, _
-   ByRef pressed As Boolean)
+Public Sub CheckBox_OnAction(ByRef control As IRibbonControl, _
+                             ByRef pressed As Boolean)
     promt = pressed
 End Sub
 Sub btn_ribbon_json_encode(control As IRibbonControl)
@@ -31,65 +40,177 @@ Sub btn_ribbon_version(control As IRibbonControl)
 End Sub
 Sub btn_ribbon_links(control As IRibbonControl)
     Dim num As Integer
+    
     add_log_msg "Сработала функция onAction элемента " + control.ID
     num = correct_links
     add_log_msg "Выполнено замен " & CStr(num)
 End Sub
 Sub btn_ribbon_pvt(control As IRibbonControl)
 On Error Resume Next
-    Call insert_PVT
+    Dim arr(0 To 8, 0 To 1)
+    If promt_to_write(10, 2, "encode PVT") Then
+       arr(0, 0) = "gamma_gas":    arr(0, 1) = 0.6
+       arr(1, 0) = "gamma_oil":    arr(1, 1) = 0.86
+       arr(2, 0) = "gamma_wat":    arr(2, 1) = 1.1
+       arr(3, 0) = "rsb_m3m3":     arr(3, 1) = 120
+       arr(4, 0) = "pb_atma":      arr(4, 1) = 130
+       arr(5, 0) = "t_res_C":      arr(5, 1) = 80
+       arr(6, 0) = "bob_m3m3":     arr(6, 1) = 1.2
+       arr(7, 0) = "muob_cP":      arr(7, 1) = 0.6
+       arr(8, 0) = "pvt_corr_set": arr(8, 1) = 0
+       
+       With ActiveCell
+            .range("A1:B9") = arr
+            .range("A1:A10").Interior.Color = clrGrayText
+            .range("B1:B10").Interior.Color = clrUserInput
+            .range("A10").FormulaR1C1 = "PVT"
+            .range("B10").FormulaR1C1 = "=encode_PVT(R[-9]C,R[-8]C,R[-7]C,R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+            .range("B10").name = get_name("PVT_json")
+            .range("B10").Interior.Color = clrCalculated
+            
+            If comment Then
+                 .range("B1").AddComment ("Удельная плотность газа по воздуху")
+                 .range("B2").AddComment ("Удельная плотность нефти по воде")
+                 .range("B3").AddComment ("Удельная плотность воды (по воде)")
+                 .range("B4").AddComment ("Газосодержание при давлении насыщения, м3/м3")
+                 .range("B5").AddComment ("Давление насыщения при заданной температуре, атма")
+                 .range("B6").AddComment ("Температура пласта, при которой определено давление насыщения, С")
+                 .range("B7").AddComment ("Объемный коэффициент нефти при давлении насыщения и пластовой температуре, м3/м3")
+                 .range("B8").AddComment ("Вязкость нефти при давлении насыщения и пластовой температуре, сП")
+                 .range("B9").AddComment ("Набор PVT корреляций. 0 - на основе корреляции Стендинга для газосодержания, 1 - на основе корреляции Веларда Маккейна для газосодержания")
+            End If
+            
+            .range("B10").Select
+       End With
+    End If
 End Sub
 Sub btn_ribbon_feed(control As IRibbonControl)
 On Error Resume Next
-    Call insert_feed
+    Dim arr(0 To 3, 0 To 1)
+    Dim s As String
+    
+    arr(0, 0) = "q_liq_sm3day":      arr(0, 1) = 30
+    arr(1, 0) = "fw_perc":           arr(1, 1) = 10
+    arr(2, 0) = "rp_m3m3":           arr(2, 1) = 120
+    arr(3, 0) = "q_gas_free_sm3day": arr(3, 1) = 0
+      
+    s = ActiveCell.Formula
+    If Len(s) > 12 And Mid(s, 1, 12) = "=encode_PVT(" Then
+        ActiveCell.offset(1, -1).range("A1").Select
+        If promt_to_write(5, 2, "encode feed") Then
+            ActiveCell.range("A1:B4") = arr
+            If comment Then
+                With ActiveCell
+                    .range("B1").AddComment ("Дебит жидкости в стандартных условиях")
+                    .range("B2").AddComment ("Обводненность, %")
+                    .range("B3").AddComment ("Газовый фактор, м3/м3")
+                    .range("B4").AddComment ("Дебит свободного газа в потоке ст.м3/сут. Свободный газ в потоке дополняет газ выделившийся из нефти.")
+                End With
+            End If
+            ActiveCell.range("A1:B5").Interior.Color = clrUserInput
+            ActiveCell.range("A1:A5").Interior.Color = clrGrayText
+            ActiveCell.range("A5").Select
+            ActiveCell.FormulaR1C1 = "feed"
+            ActiveCell.range("B1").Select
+            ActiveCell.FormulaR1C1 = "=encode_feed(R[-4]C,R[-3]C,R[-2]C,R[-1]C,R[-5]C)"
+        Else
+            Exit Sub
+        End If
+    Else
+        If promt_to_write(6, 2, "encode feed") Then
+            ActiveCell.range("A1:B4") = arr
+            If comment Then
+                With ActiveCell
+                    .range("B1").AddComment ("Дебит жидкости в стандартных условиях")
+                    .range("B2").AddComment ("Обводненность, %")
+                    .range("B3").AddComment ("Газовый фактор, м3/м3")
+                    .range("B4").AddComment ("Дебит свободного газа в потоке ст.м3/сут. Свободный газ в потоке дополняет газ выделившийся из нефти.")
+                End With
+            End If
+            ActiveCell.range("A1:B6").Interior.Color = clrUserInput
+            ActiveCell.range("A1:A6").Interior.Color = clrGrayText
+            ActiveCell.range("A5").Select
+            ActiveCell.FormulaR1C1 = "fluid"
+            ActiveCell.range("B1").FormulaR1C1 = "=encode_pvt()"
+            ActiveCell.range("B1").Interior.Color = clrIntermediateCalc
+            ActiveCell.range("A2").Select
+            ActiveCell.FormulaR1C1 = "feed"
+            ActiveCell.range("B1").Select
+            ActiveCell.FormulaR1C1 = "=encode_feed(R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+        Else
+            Exit Sub
+        End If
+    End If
+    ActiveCell.name = get_name("feed_json")
+    ActiveCell.Interior.Color = clrCalculated
 End Sub
 Sub btn_ribbon_choke(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(5, 2, "encode choke") Then Exit Sub
     Dim arr(0 To 4, 0 To 1)
     
+    If Not promt_to_write(5, 2, "encode choke") Then Exit Sub
     arr(0, 0) = "d_choke_mm": arr(0, 1) = 10
-    arr(1, 0) = "d_pipe_mm": arr(1, 1) = 70
-    arr(2, 0) = "calibr": arr(2, 1) = 1
+    arr(1, 0) = "d_pipe_mm":  arr(1, 1) = 70
+    arr(2, 0) = "calibr":     arr(2, 1) = 1
     arr(3, 0) = "CDischarge": arr(3, 1) = 0.82
     arr(4, 0) = "choke json": arr(4, 1) = "=encode_choke(R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
     
     
     ActiveCell.range("A1:B5") = arr
+    If comment Then
+        With ActiveCell
+            .range("B1").AddComment ("Диаметр штуцера, мм")
+            .range("B2").AddComment ("Диаметр трубы, где установлен штуцер, мм")
+            .range("B3").AddComment ("Калибровочный коэффициент для штуцера, множитель на скорость флюида через штуцер.")
+            .range("B4").AddComment ("Настроечный коэффициент штуцера, множитель на скорость флюида через штуцер. Задается по данным экспериментов.")
+        End With
+    End If
     ActiveCell.range("B5").name = get_name("choke_json")
-    
-    ActiveCell.range("A1:B5").Interior.Color = vbYellow
+    ActiveCell.range("A1:A5").Interior.Color = clrGrayText
+    ActiveCell.range("B1:B4").Interior.Color = clrUserInput
     ActiveCell.range("B5").Interior.Color = clrCalculated
     ActiveCell.range("B5").Select
 End Sub
 Sub btn_ribbon_choke_p(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(13, 12, "calc MF_choke_p_atma") Then Exit Sub
     Dim arr(0 To 11, 0 To 1)
     
-    arr(0, 0) = "choke_json": arr(0, 1) = "=encode_choke()"
-    arr(1, 0) = "feed_json": arr(1, 1) = "=encode_feed()"
-    arr(2, 0) = "p_calc_from_atma": arr(2, 1) = 10
-    arr(3, 0) = "t_choke_C": arr(3, 1) = 30
-    arr(4, 0) = "calc_along_flow": arr(4, 1) = 0
-    arr(5, 0) = "show_array": arr(5, 1) = 1
-    arr(6, 0) = "param": arr(6, 1) = "=encode_json(R[-1]C[-1]:R[-1]C)"
-    arr(7, 0) = "q_liq_sm3day": arr(7, 1) = ""
-    arr(8, 0) = "fw_perc": arr(8, 1) = ""
-    arr(9, 0) = "rp_m3m3": arr(9, 1) = ""
+    If Not promt_to_write(13, 12, "calc MF_choke_p_atma") Then Exit Sub
+    
+    arr(0, 0) = "choke_json":         arr(0, 1) = "=encode_choke()"
+    arr(1, 0) = "feed_json":          arr(1, 1) = "=encode_feed()"
+    arr(2, 0) = "p_calc_from_atma":   arr(2, 1) = 10
+    arr(3, 0) = "t_choke_C":          arr(3, 1) = 30
+    arr(4, 0) = "calc_along_flow":    arr(4, 1) = 0
+    arr(5, 0) = "show_array":         arr(5, 1) = 1
+    arr(6, 0) = "param":              arr(6, 1) = "=encode_json(R[-1]C[-1]:R[-1]C)"
+    arr(7, 0) = "q_liq_sm3day":       arr(7, 1) = ""
+    arr(8, 0) = "fw_perc":            arr(8, 1) = ""
+    arr(9, 0) = "rp_m3m3":            arr(9, 1) = ""
     arr(10, 0) = "q_gas_free_sm3day": arr(10, 1) = ""
-    arr(11, 0) = "result": arr(11, 1) = "=MF_choke_p_atma(R[-11]C,R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    arr(11, 0) = "result":            arr(11, 1) = "=MF_choke_p_atma(R[-11]C,R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B12") = arr
-    
-    
-    
+    If comment Then
+        With ActiveCell
+            .range("B1").AddComment ("json с параметрами штуцера. используйте encode_choke() для генерации")
+            .range("B2").AddComment ("json с параметрами потока. используйте encode_feed() для генерации")
+            .range("B3").AddComment ("Давление для расчета перепада давления в штуцере, атма")
+            .range("B4").AddComment ("Температура потока в штуцера, С")
+            .range("B5").AddComment ("Флаг направления расчета. 0 - расчет против потока, 1 - расчет по потоку.")
+            .range("B6").AddComment ("Флаг отображения результатов. 0 - результат число, 1 - расширенный вывод результатов в виде массива")
+            .range("B7").AddComment ("json с параметрами расчета")
+            .range("B8").AddComment ("Дебит жидкости ст.м3/сут. Переопределяет данные заданные в feed_json")
+            .range("B9").AddComment ("Обводненность, %. Переопределяет данные заданные в feed_json")
+            .range("B10").AddComment ("Газовый фактор, м3/м3. Переопределяет данные заданные в feed_json")
+            .range("B11").AddComment ("Дебит свободного газа ст.м3/сут. Переопределяет данные заданные в feed_json")
+        End With
+    End If
     ActiveCell.range("A1:A12").Interior.Color = clrGrayText
     ActiveCell.range("B1:B2").Interior.Color = clrIntermediateCalc
-    ActiveCell.range("B12").Interior.Color = clrCalculated
+    ActiveCell.range("B12:L13").Interior.Color = clrCalculated
     ActiveCell.range("B3:B11").Interior.Color = clrUserInput
     ActiveCell.range("B7").Interior.Color = clrIntermediateCalc
-    
     ActiveCell.range("B12:L13").Select
     Selection.FormulaArray = "=MF_choke_p_atma(R[-11]C,R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     ActiveCell.range("A1").Select
@@ -97,108 +218,211 @@ On Error Resume Next
 End Sub
 Sub btn_ribbon_choke_qliq(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(13, 12, "calc MF_choke_q_sm3day") Then Exit Sub
     Dim arr(0 To 11, 0 To 1)
     
-    arr(0, 0) = "choke_json": arr(0, 1) = "=encode_choke()"
-    arr(1, 0) = "feed_json": arr(1, 1) = "=encode_feed()"
-    arr(2, 0) = "p_in_atma": arr(2, 1) = 12
-    arr(3, 0) = "p_out_atma": arr(3, 1) = 10
-    arr(4, 0) = "t_choke_C": arr(4, 1) = 30
-    arr(5, 0) = "show_array": arr(5, 1) = 1
-    arr(6, 0) = "param": arr(6, 1) = "=encode_json(R[-1]C[-1]:R[-1]C)"
-    arr(7, 0) = "q_liq_sm3day": arr(7, 1) = ""
-    arr(8, 0) = "fw_perc": arr(8, 1) = ""
-    arr(9, 0) = "rp_m3m3": arr(9, 1) = ""
-    arr(10, 0) = "q_gas_free_sm3day": arr(10, 1) = ""
-    arr(11, 0) = "result": arr(11, 1) = ""
+    If Not promt_to_write(13, 12, "calc MF_choke_q_sm3day") Then Exit Sub
+    arr(0, 0) = "choke_json":           arr(0, 1) = "=encode_choke()"
+    arr(1, 0) = "feed_json":            arr(1, 1) = "=encode_feed()"
+    arr(2, 0) = "p_in_atma":            arr(2, 1) = 12
+    arr(3, 0) = "p_out_atma":           arr(3, 1) = 10
+    arr(4, 0) = "t_choke_C":            arr(4, 1) = 30
+    arr(5, 0) = "show_array":           arr(5, 1) = 1
+    arr(6, 0) = "param":                arr(6, 1) = "=encode_json(R[-1]C[-1]:R[-1]C)"
+    arr(7, 0) = "q_liq_sm3day":         arr(7, 1) = ""
+    arr(8, 0) = "fw_perc":              arr(8, 1) = ""
+    arr(9, 0) = "rp_m3m3":              arr(9, 1) = ""
+    arr(10, 0) = "q_gas_free_sm3day":   arr(10, 1) = ""
+    arr(11, 0) = "result":              arr(11, 1) = ""
     
     ActiveCell.range("A1:B12") = arr
-    
-    
-    
+    If comment Then
+        With ActiveCell
+            .range("B1").AddComment ("json с параметрами штуцера. используйте encode_choke() для генерации")
+            .range("B2").AddComment ("json с параметрами потока. используйте encode_feed() для генерации")
+            .range("B3").AddComment ("Давление на входе в штуцер, атма")
+            .range("B4").AddComment ("Давление на выходе из штуцера, атма")
+            .range("B5").AddComment ("Температура потока в штуцера, С")
+            .range("B6").AddComment ("Флаг отображения результатов. 0 - результат число, 1 - расширенный вывод результатов в виде массива")
+            .range("B7").AddComment ("json с параметрами расчета")
+            .range("B8").AddComment ("Дебит жидкости ст.м3/сут. Переопределяет данные заданные в feed_json")
+            .range("B9").AddComment ("Обводненность, %. Переопределяет данные заданные в feed_json")
+            .range("B10").AddComment ("Газовый фактор, м3/м3. Переопределяет данные заданные в feed_json")
+            .range("B11").AddComment ("Дебит свободного газа ст.м3/сут. Переопределяет данные заданные в feed_json")
+        End With
+    End If
     ActiveCell.range("A1:A12").Interior.Color = clrGrayText
     ActiveCell.range("B1:B2").Interior.Color = clrIntermediateCalc
-    ActiveCell.range("B12").Interior.Color = clrCalculated
+    ActiveCell.range("B12:L13").Interior.Color = clrCalculated
     ActiveCell.range("B3:B11").Interior.Color = clrUserInput
     ActiveCell.range("B7").Interior.Color = clrIntermediateCalc
-    
     ActiveCell.range("B12:L13").Select
     Selection.FormulaArray = "=MF_choke_q_sm3day(R[-11]C,R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     ActiveCell.range("A1").Select
     ActiveCell.name = get_name("choke_q")
 End Sub
+Sub btn_ribbon_choke_plot(control As IRibbonControl)
+On Error Resume Next
+    Dim top_rng As range
+    Dim arr(0 To 11, 0 To 1)
+    Dim diag
+    
+    Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
+    
+    If Not promt_to_write(33, 5, "calc MF_choke_q_sm3day") Then Exit Sub
+    arr(0, 0) = "choke_json":           arr(0, 1) = "=encode_choke()"
+    arr(1, 0) = "feed_json":            arr(1, 1) = "=encode_feed()"
+    arr(2, 0) = "p_atma":               arr(2, 1) = 25
+    arr(3, 0) = "t_choke_C":            arr(3, 1) = 30
+    arr(4, 0) = "q_min":                arr(4, 1) = 1
+    arr(5, 0) = "q_max":                arr(5, 1) = "=round(MF_choke_q_sm3day(R[-5]C,R[-4]C,R[-3]C,1,R[-2]C)-0.01,3)"
+    arr(6, 0) = "q_list":               arr(6, 1) = "=list_concatenate(encode_linspace(R[-2]C,R[-1]C,20), R[-1]C+0.02, R[-1]C*1.1)"
+    arr(7, 0) = "p_down_list":          arr(7, 1) = "=MF_choke_p_atma(R[-7]C,R[-6]C,R[-5]C,R[-4]C,0,,R[-1]C)"
+    arr(8, 0) = "p_up_list":            arr(8, 1) = "=MF_choke_p_atma(R[-8]C,R[-7]C,R[-6]C,R[-5]C,1,,R[-2]C)"
+    arr(9, 0) = "q_values":             arr(9, 1) = ""
+    
+    Set top_rng = ActiveCell
+    ActiveCell.range("A1:B10") = arr
+    If comment Then
+        With ActiveCell
+            .range("B1").AddComment ("json с параметрами штуцера. используйте encode_choke() для генерации")
+            .range("B2").AddComment ("json с параметрами потока. используйте encode_feed() для генерации")
+            .range("B3").AddComment ("Давление на входе/выходе в/из штуцер, атма")
+            .range("B4").AddComment ("Температура потока в штуцера, С")
+            .range("B5").AddComment ("Дебит минимальный для построения графиков")
+            .range("B6").AddComment ("Дебит максимальный для построения графиков")
+            .range("B7").AddComment ("Список значений дебита для построения графиков")
+        End With
+    End If
+    ActiveCell.range("A1:A10").Interior.Color = clrGrayText
+    ActiveCell.range("B1:B2").Interior.Color = clrIntermediateCalc
+    ActiveCell.range("B3:B5").Interior.Color = clrUserInput
+    ActiveCell.range("B6:B9").Interior.Color = clrCalculated
+    ActiveCell.range("A10:E33").Interior.Color = clrGrayText
+    
+    top_rng.range("A11:A33").FormulaArray = "=decode_json(R[-4]C[1])"
+    
+    top_rng.range("B10:C33").FormulaArray = "=decode_json_crv(R[-2]C)"
+    top_rng.range("D10:E33").FormulaArray = "=decode_json_crv(R[-1]C[-2])"
+    
+    With diag.Chart
+         Application.CutCopyMode = False
+         .ChartType = xlXYScatterLines
+        With .SeriesCollection.NewSeries
+            .name = "pressure down"
+            .XValues = top_rng.range("A11:A33")
+            .Values = top_rng.range("D11:D33")
+        End With
+        With .SeriesCollection.NewSeries
+            .name = "pressure up"
+            .XValues = top_rng.range("A11:A33")
+            .Values = top_rng.range("B11:B33")
+        End With
+        '.SetSourceData source:=range(ActiveCell.range("A2:B21").Address)
+        .SetElement (msoElementLegendBottom)
+        .HasTitle = True
+        .ChartTitle.Text = "Choke curves"
+        .Axes(xlValue).MinimumScale = 0
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "P, atma"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
+        .Parent.top = ActiveCell.Cells(1, 5).top
+        .Parent.Left = ActiveCell.Cells(1, 5).Left
+        .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P15").Height
+        .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
+    End With
+End Sub
 Sub btn_ribbon_choke_calibr(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(14, 5, "calc MF_choke_q_sm3day") Then Exit Sub
     Dim arr(0 To 12, 0 To 1)
     
-    arr(0, 0) = "choke_json": arr(0, 1) = "=encode_choke()"
-    arr(1, 0) = "feed_json": arr(1, 1) = "=encode_feed()"
-    arr(2, 0) = "calibr_type": arr(2, 1) = 1
-    arr(3, 0) = "p_in_atma": arr(3, 1) = 12
-    arr(4, 0) = "p_out_atma": arr(4, 1) = 10
-    arr(5, 0) = "t_choke_C": arr(5, 1) = 30
-    arr(6, 0) = "show_array": arr(6, 1) = 1
-    arr(7, 0) = "param": arr(7, 1) = "=encode_json(R[-1]C[-1]:R[-1]C)"
-    arr(8, 0) = "q_liq_sm3day": arr(8, 1) = ""
-    arr(9, 0) = "fw_perc": arr(9, 1) = ""
-    arr(10, 0) = "rp_m3m3": arr(10, 1) = ""
-    arr(11, 0) = "q_gas_free_sm3day": arr(11, 1) = ""
-    arr(12, 0) = "result": arr(12, 1) = ""
+    If Not promt_to_write(19, 5, "calc MF_choke_q_sm3day") Then Exit Sub
+    arr(0, 0) = "choke_json":           arr(0, 1) = "=encode_choke()"
+    arr(1, 0) = "feed_json":            arr(1, 1) = "=encode_feed()"
+    arr(2, 0) = "calibr_type":          arr(2, 1) = 1
+    arr(3, 0) = "p_in_atma":            arr(3, 1) = 12
+    arr(4, 0) = "p_out_atma":           arr(4, 1) = 10
+    arr(5, 0) = "t_choke_C":            arr(5, 1) = 30
+    arr(6, 0) = "show_array":           arr(6, 1) = 1
+    arr(7, 0) = "param":                arr(7, 1) = "=encode_json(R[-1]C[-1]:R[-1]C)"
+    arr(8, 0) = "q_liq_sm3day":         arr(8, 1) = ""
+    arr(9, 0) = "fw_perc":              arr(9, 1) = ""
+    arr(10, 0) = "rp_m3m3":             arr(10, 1) = ""
+    arr(11, 0) = "q_gas_free_sm3day":   arr(11, 1) = ""
+    arr(12, 0) = "result":              arr(12, 1) = ""
     
     ActiveCell.range("A1:B13") = arr
-    
-    
-    
+    If comment Then
+        With ActiveCell
+            .range("B1").AddComment ("json с параметрами штуцера. используйте encode_choke() для генерации")
+            .range("B2").AddComment ("json с параметрами потока. используйте encode_feed() для генерации")
+            .range("B3").AddComment ("Флаг - тип калибровки штуцера. 0 - calibr, 1 - диаметра штуцера, 2 - газовый фактор, 3 - обводненность, 4 - дебит жидкости, 5 - дебита свободного газа")
+            .range("B15").AddComment ("результат - значение подстроечного параметра")
+        End With
+    End If
     ActiveCell.range("A1:A13").Interior.Color = clrGrayText
     ActiveCell.range("B1:B2").Interior.Color = clrIntermediateCalc
-    ActiveCell.range("B13").Interior.Color = clrCalculated
+    ActiveCell.range("B13:E14").Interior.Color = clrCalculated
     ActiveCell.range("B3:B12").Interior.Color = clrUserInput
     ActiveCell.range("B8").Interior.Color = clrIntermediateCalc
-    
     ActiveCell.range("B13:E14").Select
     Selection.FormulaArray = "=MF_choke_calibr(R[-12]C,R[-11]C,R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     ActiveCell.range("A1").Select
     ActiveCell.name = get_name("choke_calibr")
     ActiveCell.offset(2, -1).range("A1:B5").Select
     Selection.FormulaArray = "=decode_json(R[-2]C[1])"
-    
     ActiveCell.range("B1").Interior.Color = clrCalculated
     ActiveCell.range("B1").Select
 End Sub
 Sub btn_ribbon_ipr(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(6, 2, "encode IPR") Then Exit Sub
     Dim arr(0 To 5, 0 To 1)
     
-    arr(0, 0) = "p_res_atma": arr(0, 1) = 250
-    arr(1, 0) = "q_liq_test_sm3day": arr(1, 1) = 30
-    arr(2, 0) = "p_wf_test_atma": arr(2, 1) = 75
-    arr(3, 0) = "feed json": arr(3, 1) = "=encode_feed()"
-    arr(4, 0) = "PI": arr(4, 1) = "=IPR_pi_sm3dayatm(R[-3]C, R[-2]C, R[-4]C, R[-1]C)"
-    arr(5, 0) = "IPR": arr(5, 1) = "=encode_ipr(R[-5]C, R[-1]C, R[-2]C)"
-    
+    If Not promt_to_write(6, 2, "encode IPR") Then Exit Sub
+    arr(0, 0) = "p_res_atma":           arr(0, 1) = 250
+    arr(1, 0) = "q_liq_test_sm3day":    arr(1, 1) = 30
+    arr(2, 0) = "p_wf_test_atma":       arr(2, 1) = 75
+    arr(3, 0) = "feed json":            arr(3, 1) = "=encode_feed()"
+    arr(4, 0) = "PI":                   arr(4, 1) = "=IPR_pi_sm3dayatm(R[1]C, R[-3]C, R[-2]C)"
+    arr(5, 0) = "IPR":                  arr(5, 1) = "=encode_ipr(R[-5]C, R[-4]C, R[-3]C,,R[-2]C)"
     
     ActiveCell.range("A1:B6") = arr
     ActiveCell.range("B5").name = get_name("prod_index")
     ActiveCell.range("B6").name = get_name("IPR_json")
+    ActiveCell.range("A1:B6").Interior.Color = clrGrayText
+    ActiveCell.range("B1:B3").Interior.Color = clrUserInput
     
-    ActiveCell.range("A1:B6").Interior.Color = vbYellow
     ActiveCell.range("B4").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B5").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B6").Interior.Color = clrCalculated
+    
+    If comment Then
+        ActiveCell.range("B1").AddComment ("Пластовое давление, атм" & _
+                                           " ")
+        ActiveCell.range("B2").AddComment ("Тестовый дебит жидкости на поверхности, ст.м3/сут " & _
+                                           " ")
+        ActiveCell.range("B3").AddComment ("Тестовое забойное давление, атм. " & _
+                                           "Должно быть меньше чем пластовое. " & _
+                                           " ")
+        ActiveCell.range("B4").AddComment ("json с параметрами флюида и потока. " & _
+                                           "Из параметров потока берется давление насыщения и температура пласта")
+        ActiveCell.range("B5").AddComment ("Коэффициент продуктивности.  " & _
+                                           "Рассчитывается из тестовых дебита и давления." & _
+                                           " ")
+        ActiveCell.range("B6").AddComment ("json с параметрами индикаторной кривой. " & _
+                                           "необходим для расчетов индикаторной кривой. " & _
+                                           " ")
+    End If
     ActiveCell.range("B6").Select
 End Sub
 Sub btn_ribbon_ipr_chart(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(23, 4, "encode feed_mod_separate_gas") Then Exit Sub
     Dim arr(0 To 0, 0 To 1)
- 
     Dim s As String
     Dim adress As String
     Dim diag
     
+    If Not promt_to_write(23, 4, "encode feed_mod_separate_gas") Then Exit Sub
     s = ActiveCell.Formula
     adress = ActiveCell.Cells(1, 2).Address
     
@@ -211,25 +435,16 @@ On Error Resume Next
         adress = ActiveCell.Address
         ActiveCell.offset(0, -1).range("A1").Select
     End If
-    
-    
     ActiveCell.offset(1, 0).range("A1").Select
-    ActiveCell.range("A1").Interior.Color = vbYellow
+    ActiveCell.range("A1").Interior.Color = clrGrayText
     ActiveCell.range("B1").Interior.Color = clrIntermediateCalc
-              
-    arr(0, 0) = "ipr_curve": arr(0, 1) = "=IPR_json_crv(" & adress & ")"
-    
+    arr(0, 0) = "ipr_curve":                arr(0, 1) = "=IPR_crv(" & adress & ")"
     ActiveCell.range("A1:B1") = arr
-    
     ActiveCell.range("A2:B22").Clear
     ActiveCell.range("A2:B22").Select
-    ActiveCell.range("A1:B21").Interior.Color = vbYellow
-    ActiveCell.range("A2:B21").Interior.Color = clrGrayText
-    Selection.FormulaArray = "=decode_json_crv(decode_json(" & range(adress).Cells(2, 1).Address & ",,""pcrv"",1))" ' decode_json_crv(" & range(adress).Cells(2, 1).Address & ")"
-    
+    ActiveCell.range("A1:B21").Interior.Color = clrGrayText
+    Selection.FormulaArray = "=decode_json_crv(decode_json(" & range(adress).Cells(2, 1).Address & ",,""pcrv"",1))"
     Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
-    
-    
     With diag.Chart
         .SetSourceData source:=range(ActiveCell.range("A2:B21").Address)
         .HasTitle = True
@@ -238,8 +453,7 @@ On Error Resume Next
         .Axes(xlValue, xlPrimary).AxisTitle.Text = "Pwf, atma"
         .Axes(xlCategory, xlPrimary).HasTitle = True
         .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
-        
-        .Parent.Top = ActiveCell.Cells(1, 5).Top
+        .Parent.top = ActiveCell.Cells(1, 5).top
         .Parent.Left = ActiveCell.Cells(1, 5).Left
         .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P15").Height
         .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
@@ -249,7 +463,6 @@ On Error Resume Next
     ActiveCell.range("A1:B21").Interior.Color = vbYellow
     ActiveCell.range("A1:B21").Interior.Color = clrGrayText
     Selection.FormulaArray = "=decode_json_crv(decode_json(" & range(adress).Cells(2, 1).Address & ",,""tcrv"",1))" ' decode_json_crv(" & range(adress).Cells(2, 1).Address & ")"
-    
     Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
     With diag.Chart
         .SetSourceData source:=range(ActiveCell.range("A2:B21").Address)
@@ -259,8 +472,7 @@ On Error Resume Next
         .Axes(xlValue, xlPrimary).AxisTitle.Text = "t fluid, C"
         .Axes(xlCategory, xlPrimary).HasTitle = True
         .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
-        
-        .Parent.Top = ActiveCell.Cells(1, 5).Top
+        .Parent.top = ActiveCell.Cells(1, 5).top
         .Parent.Left = ActiveCell.Cells(1, 11).Left
         .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P15").Height
         .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
@@ -269,75 +481,78 @@ On Error Resume Next
     range(adress).Select
     ChangeCharts
 End Sub
-Sub btn_ribbon_pipe_diams(control As IRibbonControl)
-On Error Resume Next
-    If Not promt_to_write(7, 2, "encode diam") Then Exit Sub
-    Dim arr(0 To 5, 0 To 1)
-    
-    
-    arr(0, 0) = "hmes, m": arr(0, 1) = "diam ID, mm"
-    arr(1, 0) = 0: arr(1, 1) = 62
-    arr(2, 0) = 500: arr(2, 1) = 72
-    arr(3, 0) = 2000: arr(3, 1) = 125
-    
-    
-    ActiveCell.range("A2:B7") = arr
-    ActiveCell.range("A1:B2").Interior.Color = clrGrayText
-    ActiveCell.range("A3:B7").Interior.Color = clrUserInput
-    ActiveCell.range("B1").Interior.Color = RGB(160, 250, 250)
-    
-    ActiveCell = "diams"
-    ActiveCell.range("B1").FormulaR1C1 = "=encode_crv(R[2]C[-1]:R[6]C,""hmes_m"",""diam_int_mm"",""diam_list_mm"")"
-    ActiveCell.range("B1").name = get_name("pipe_trajectory")
-    ActiveCell.range("B1").Select
-End Sub
-Sub btn_ribbon_pipe_trajectory(control As IRibbonControl)
-On Error Resume Next
-    If Not promt_to_write(7, 2, "encode trajectory") Then Exit Sub
-    Dim arr(0 To 5, 0 To 1)
-    
-    
-    arr(0, 0) = "hmes, m": arr(0, 1) = "hvert, m"
-    arr(1, 0) = 0: arr(1, 1) = 0
-    arr(2, 0) = 500: arr(2, 1) = 500
-    arr(3, 0) = 1000: arr(3, 1) = 1000
-    arr(4, 0) = 2000: arr(4, 1) = 1900
-    arr(5, 0) = 2500: arr(5, 1) = 2300
-    
-    
-    ActiveCell.range("A2:B7") = arr
-    ActiveCell.range("A1:B2").Interior.Color = clrGrayText
-    ActiveCell.range("A3:B7").Interior.Color = clrUserInput
-    ActiveCell.range("B1").Interior.Color = RGB(160, 250, 250)
-    
-    ActiveCell = "trajectory"
-    ActiveCell.range("B1").FormulaR1C1 = "=encode_crv(R[2]C[-1]:R[6]C,""hmes_m"",""hvert_m"",""h_list_m"")"
-    ActiveCell.range("B1").name = get_name("pipe_trajectory")
-    ActiveCell.range("B1").Select
-End Sub
+'Sub btn_ribbon_pipe_diams(control As IRibbonControl)
+'On Error Resume Next
+'    Dim arr(0 To 5, 0 To 1)
+'
+'    If Not promt_to_write(7, 2, "encode diam") Then Exit Sub
+'
+'    arr(0, 0) = "hmes, m":      arr(0, 1) = "diam ID, mm"
+'    arr(1, 0) = 0:              arr(1, 1) = 62
+'    arr(2, 0) = 500:            arr(2, 1) = 72
+'    arr(3, 0) = 2000:           arr(3, 1) = 125
+'
+'    ActiveCell.range("A2:B7") = arr
+'    ActiveCell.range("A1:B2").Interior.Color = clrGrayText
+'    ActiveCell.range("A3:B7").Interior.Color = clrUserInput
+'    ActiveCell.range("B1").Interior.Color = RGB(160, 250, 250)
+'    ActiveCell = "diams"
+'    ActiveCell.range("B1").FormulaR1C1 = "=encode_crv(R[2]C[-1]:R[6]C,""hmes_m"",""diam_int_mm"",""diam_list_mm"")"
+'    ActiveCell.range("B1").name = get_name("pipe_trajectory")
+'    ActiveCell.range("B1").Select
+'End Sub
+'
+'Sub btn_ribbon_pipe_trajectory(control As IRibbonControl)
+'On Error Resume Next
+'    Dim arr(0 To 5, 0 To 1)
+'
+'    If Not promt_to_write(7, 2, "encode trajectory") Then Exit Sub
+'
+'    arr(0, 0) = "hmes, m":      arr(0, 1) = "hvert, m"
+'    arr(1, 0) = 0:              arr(1, 1) = 0
+'    arr(2, 0) = 500:            arr(2, 1) = 500
+'    arr(3, 0) = 1000:           arr(3, 1) = 1000
+'    arr(4, 0) = 2000:           arr(4, 1) = 1900
+'    arr(5, 0) = 2500:           arr(5, 1) = 2300
+'
+'    ActiveCell.range("A2:B7") = arr
+'    ActiveCell.range("A1:B2").Interior.Color = clrGrayText
+'    ActiveCell.range("A3:B7").Interior.Color = clrUserInput
+'    ActiveCell.range("B1").Interior.Color = RGB(160, 250, 250)
+'    ActiveCell = "trajectory"
+'    ActiveCell.range("B1").FormulaR1C1 = "=encode_crv(R[2]C[-1]:R[6]C,""hmes_m"",""hvert_m"",""h_list_m"")"
+'    ActiveCell.range("B1").name = get_name("pipe_trajectory")
+'    ActiveCell.range("B1").Select
+'End Sub
 Sub btn_ribbon_constr(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(7, 4, "encode trajectory") Then Exit Sub
     Dim arr(0 To 5, 0 To 3)
     
+    If Not promt_to_write(7, 4, "encode trajectory") Then Exit Sub
+    
     arr(0, 0) = "trajectory"
-    arr(1, 0) = "hmes, m": arr(1, 1) = "hvert, m"
-    arr(2, 0) = 0: arr(2, 1) = 0
-    arr(3, 0) = 1000: arr(3, 1) = 1000
-    arr(4, 0) = 2000: arr(4, 1) = 1900
-    arr(5, 0) = 2500: arr(5, 1) = 2300
-    
-    
+    arr(1, 0) = "hmes, m":      arr(1, 1) = "hvert, m"
+    arr(2, 0) = 0:              arr(2, 1) = 0
+    arr(3, 0) = 1000:           arr(3, 1) = 1000
+    arr(4, 0) = 2000:           arr(4, 1) = 1900
+    arr(5, 0) = 2500:           arr(5, 1) = 2300
     arr(0, 2) = "diameter"
-    arr(1, 2) = "hmes, m": arr(1, 3) = "diam, mm"
-    arr(2, 2) = 0: arr(2, 3) = 62
-    arr(3, 2) = 500: arr(3, 3) = 72
-    arr(4, 2) = 2100: arr(4, 3) = 125
+    arr(1, 2) = "hmes, m":      arr(1, 3) = "diam, mm"
+    arr(2, 2) = 0:              arr(2, 3) = 62
+    arr(3, 2) = 500:            arr(3, 3) = 72
+    arr(4, 2) = 2100:           arr(4, 3) = 125
     
     ActiveCell.range("A2:D7") = arr
-    ActiveCell.range("A1:D7").Interior.Color = clrUserInput
-    ActiveCell.range("B1").Interior.Color = clrCalculated
-    ActiveCell.range("C2:D7").Interior.Color = RGB(230, 250, 100)
+    If comment Then
+        With ActiveCell
+            .range("A2").AddComment ("Траектория/инклинометрия. Зависимость вертикльной глубины от измеренной длины.")
+            .range("C2").AddComment ("Диаметры трубы в зависимости от измеренной длины. На указанной длине диаметр меняется скачком.")
+        End With
+    End If
+    ActiveCell.range("A1:D3").Interior.Color = clrGrayText
+    ActiveCell.range("A4:D7").Interior.Color = clrUserInput
+    ActiveCell.range("B1:D1").Interior.Color = clrCalculated
+    ActiveCell.range("C4:D7").Interior.Color = RGB(230, 250, 100)
     ActiveCell = "construction"
     ActiveCell.range("B1").FormulaR1C1 = "=encode_pipe_construction(R[3]C[-1]:R[6]C,R[3]C[1]:R[6]C[2])"
     ActiveCell.range("B1").name = get_name("pipe_construction")
@@ -345,9 +560,9 @@ On Error Resume Next
 End Sub
 Sub btn_ribbon_calc_pipe(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(33, 8, "encode trajectory") Then Exit Sub
-    
     Dim arr(0 To 17, 0 To 1)
+    
+    If Not promt_to_write(33, 8, "encode trajectory") Then Exit Sub
     
     arr(0, 0) = "p_atma":              arr(0, 1) = 25
     arr(1, 0) = "t_C":                 arr(1, 1) = 30
@@ -361,10 +576,23 @@ On Error Resume Next
     arr(9, 0) = "q_gas_free_sm3day":   arr(9, 1) = ""
     
     ActiveCell.range("A1:B10") = arr
+    If comment Then
+        With ActiveCell
+            .range("B1").AddComment ("Давление на конце трубы, атма")
+            .range("B2").AddComment ("Температура флюида на конце трубы, где задано давление. Учитывается только для температурной модели 2")
+            .range("B3").AddComment ("json с параметрами трубы. Используйте encode_pipe() для генерации")
+            .range("B4").AddComment ("json с параметрами потока флюидов. Используйте encode_feed() для генерации")
+            .range("B5").AddComment ("Флаг для задания направления расчета относительно координат. 0 - расчет против координаты, 1 - расчет по координате.")
+            .range("B6").AddComment ("json с параметрами расчета")
+            .range("B7").AddComment ("Дебит жидкости ст.м3/сут. Переопределяет данные заданные в feed_json")
+            .range("B8").AddComment ("Обводненность, %. Переопределяет данные заданные в feed_json")
+            .range("B9").AddComment ("Газовый фактор, м3/м3. Переопределяет данные заданные в feed_json")
+            .range("B10").AddComment ("Дебит свободного газа ст.м3/сут. Переопределяет данные заданные в feed_json")
+        End With
+    End If
     ActiveCell.range("B1:B10").Interior.Color = clrUserInput
     ActiveCell.range("A1:A10").Interior.Color = clrGrayText
     ActiveCell.range("B3:B4").Interior.Color = clrIntermediateCalc
-    
     ActiveCell.range("A11:H33").Select
     Selection.FormulaArray = "=MF_pipe_p_atma(R[-10]C[1], R[-9]C[1], R[-8]C[1], R[-7]C[1], R[-6]C[1], R[-5]C[1], R[-4]C[1], R[-3]C[1], R[-2]C[1], R[-1]C[1])"
     With Selection.Interior
@@ -400,17 +628,14 @@ On Error Resume Next
         .SeriesCollection(1).XValues = ActiveCell.range("C4:C23")
         .SeriesCollection(1).Values = ActiveCell.range("A4:A23")
         .Axes(xlValue).ReversePlotOrder = True
-        
-        .Parent.Top = ActiveCell.Cells(1, 9).Top
+        .Parent.top = ActiveCell.Cells(1, 9).top
         .Parent.Left = ActiveCell.Cells(1, 9).Left
         .Parent.Height = ActiveCell.Cells(1, 9).range("L1:P23").Height
         .Parent.WIDTH = ActiveCell.Cells(1, 9).range("L1:P23").WIDTH
-        
         .Axes(xlValue, xlPrimary).HasTitle = True
         .Axes(xlValue, xlPrimary).AxisTitle.Text = "Hmes, m"
         .Axes(xlCategory, xlPrimary).HasTitle = True
         .Axes(xlCategory, xlPrimary).AxisTitle.Text = "P, atma"
-        
     End With
     
     Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
@@ -419,23 +644,19 @@ On Error Resume Next
         .ChartArea.ClearContents
         .ChartType = xlXYScatterLines
         .ChartTitle.Text = "Temperature"
-        
         .SeriesCollection.NewSeries
         .SeriesCollection(1).name = "=""Temperature"""
         .SeriesCollection(1).XValues = ActiveCell.range("D4:D23")
         .SeriesCollection(1).Values = ActiveCell.range("B4:B23")
-        
         .SeriesCollection.NewSeries
         .SeriesCollection(2).name = "=""Ambient Temperature"""
         .SeriesCollection(2).XValues = ActiveCell.range("E4:E23")
         .SeriesCollection(2).Values = ActiveCell.range("B4:B23")
         .Axes(xlValue).ReversePlotOrder = True
-        
-        .Parent.Top = ActiveCell.Cells(1, 9).Top
+        .Parent.top = ActiveCell.Cells(1, 9).top
         .Parent.Left = ActiveCell.Cells(1, 14).Left
         .Parent.Height = ActiveCell.Cells(1, 9).range("L1:P23").Height
         .Parent.WIDTH = ActiveCell.Cells(1, 9).range("L1:P23").WIDTH
-        
         .Axes(xlValue, xlPrimary).HasTitle = True
         .Axes(xlValue, xlPrimary).AxisTitle.Text = "Hvert, m"
         .Axes(xlCategory, xlPrimary).HasTitle = True
@@ -444,50 +665,249 @@ On Error Resume Next
 End Sub
 Sub btn_ribbon_tmodel(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(7, 2, "encode trajectory") Then Exit Sub
     Dim arr(0 To 5, 0 To 1)
     
-    arr(0, 0) = "ambient temperature"
-    arr(1, 0) = "hvert, m": arr(1, 1) = "t amb, C"
-    arr(2, 0) = 0: arr(2, 1) = 10
-    arr(3, 0) = 1000: arr(3, 1) = 35
-    arr(4, 0) = 2000: arr(4, 1) = 80
-    arr(5, 0) = 2500: arr(5, 1) = 90
+    If Not promt_to_write(7, 2, "encode trajectory") Then Exit Sub
     
+    arr(0, 0) = "ambient temperature"
+    arr(1, 0) = "hvert, m":     arr(1, 1) = "t amb, C"
+    arr(2, 0) = 0:              arr(2, 1) = 10
+    arr(3, 0) = 1000:           arr(3, 1) = 35
+    arr(4, 0) = 2000:           arr(4, 1) = 80
+    arr(5, 0) = 2500:           arr(5, 1) = 90
     
     ActiveCell.range("A2:B7") = arr
-    ActiveCell.range("A1:B7").Interior.Color = vbYellow
-    ActiveCell.range("B1").Interior.Color = RGB(160, 250, 250)
+    ActiveCell.range("A1:B3").Interior.Color = clrGrayText
+    ActiveCell.range("A4:B7").Interior.Color = clrUserInput
+    ActiveCell.range("B1").Interior.Color = clrCalculated
     ActiveCell = "t model"
-    
     ActiveCell.range("B1").FormulaR1C1 = "=encode_t_model(1,R[3]C[-1]:R[6]C)"
     ActiveCell.range("B1").name = get_name("t_model")
     ActiveCell.range("B1").Select
 End Sub
 Sub btn_ribbon_esp_pump(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(14, 2, "encode trajectory") Then Exit Sub
     Dim arr(0 To 17, 0 To 1)
     
-    arr(0, 0) = "ESP q nom": arr(0, 1) = 80
-    arr(1, 0) = "ESP head nom": arr(1, 1) = 1500
-    arr(2, 0) = "freq_nom": arr(2, 1) = 50
-    arr(3, 0) = "ESP ID": arr(3, 1) = "=ESP_id_by_rate(R[-3]C, R[-1]C)"
-    arr(4, 0) = "ESP name": arr(4, 1) = "=ESP_name(R[-1]C)"
-    arr(5, 0) = "ESP q max": arr(5, 1) = "=ESP_rate_max_sm3day(R[-3]C,R[-2]C)"
-    arr(6, 0) = "num stages": arr(6, 1) = "=ESP_calc_stages_num(R[-3]C,R[-5]C,R[-4]C,R[-6]C)"
-    arr(7, 0) = "calibr_head": arr(7, 1) = 1
-    arr(8, 0) = "calibr_rate": arr(8, 1) = 1
-    arr(9, 0) = "calibr_power": arr(9, 1) = 1
-    arr(10, 0) = "gas_correct_model": arr(10, 1) = 1
-    arr(11, 0) = "gas_correct_stage_by_stage": arr(11, 1) = 0
-    arr(12, 0) = "dnum_stages_integrate": arr(12, 1) = 1
-    arr(13, 0) = "encode_esp_pump": arr(13, 1) = "=encode_ESP_pump(R[-13]C, R[-12]C,R[-11]C, , , R[-6]C, R[-5]C, R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
-    ActiveCell.range("A1:B14") = arr
-    ActiveCell.range("B1:B14").Interior.Color = clrUserInput
-    ActiveCell.range("A1:A14").Interior.Color = clrGrayText
-    ActiveCell.range("B14").Interior.Color = clrCalculated
-    ActiveCell.range("B4:B7").Interior.Color = clrIntermediateCalc
+    If Not promt_to_write(14, 2, "encode trajectory") Then Exit Sub
+    
+    arr(0, 0) = "ESP_q_nom":                arr(0, 1) = 80
+    arr(1, 0) = "ESP_head_nom":             arr(1, 1) = 1500
+    arr(2, 0) = "freq_nom":                 arr(2, 1) = 50
+    arr(3, 0) = "ESP_ID":                   arr(3, 1) = "=ESP_id_by_rate(R[-3]C, R[-1]C)"
+    arr(4, 0) = "num_stages":               arr(4, 1) = "=ESP_calc_stages_num(R[-1]C,R[-3]C,R[-2]C,R[-4]C)"
+    arr(5, 0) = "calibr_head":              arr(5, 1) = 1
+    arr(6, 0) = "calibr_rate":              arr(6, 1) = 1
+    arr(7, 0) = "calibr_power":             arr(7, 1) = 1
+    arr(8, 0) = "gas_correct_model":        arr(8, 1) = 1
+    arr(9, 0) = "gas_correct_stage_by_stage": arr(9, 1) = 0
+    arr(10, 0) = "dnum_stages_integrate":   arr(10, 1) = 1
+    arr(11, 0) = "encode_esp_pump":         arr(11, 1) = "=encode_ESP_pump(, , R[-9]C, R[-8]C , R[-7]C , R[-6]C, R[-5]C, R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B12") = arr
+    ActiveCell.range("B1:B12").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A12").Interior.Color = clrGrayText
+    ActiveCell.range("B12").Interior.Color = clrCalculated
+    ActiveCell.range("B12").name = get_name("esp_json")
+    ActiveCell.range("B4:B5").Interior.Color = clrIntermediateCalc
+    
+    If comment Then
+        ActiveCell.range("B1").AddComment ("Номинальная подача ЭЦН, для которой задается номинальный напор." & _
+                                           "Нужна для определения ID насоса. Если ID задать непосредственно, " & _
+                                           "то можно не указывать")
+        ActiveCell.range("B2").AddComment ("Номинальный напор ЭЦН. " & _
+                                           "Нужен для определения количества ступеней насоса. " & _
+                                           "Если кол-во ступеней задать явно, то можно не указывать")
+        ActiveCell.range("B3").AddComment ("Номинальная частота питающего тока. Обычно 50 Гц. " & _
+                                           "Для зарубежных ЭЦН может быть 60 Гц. " & _
+                                           "Для ПЭД с двумя парами полюсов может быть 100 Гц. ")
+        ActiveCell.range("B4").AddComment ("ID (номер) насоса в базе данных. Вычисляется по номинальной подаче. " & _
+                                           "Может быть задан явно, тогда номинальная подача игнорируется. " & _
+                                           "ID и номинальная частота определяют модель насоса. ")
+        ActiveCell.range("B5").AddComment ("Количество ступеней ЭЦН. Вычисляется по номинальному напору. " & _
+                                           "Может быть задано явно, тогда номинальный напор игнорируется. " & _
+                                           " ")
+        ActiveCell.range("B6").AddComment ("Калибровочный множитель на напор ступени. " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B7").AddComment ("Калибровочный множитель на подачу ступени. " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B8").AddComment ("Калибровочный множитель на мощностную характеристику ступени. " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B9").AddComment ("Модель корректировки РНХ из за влияния газа. 0 - нет корректировки. " & _
+                                           "1 - стандратный ЭЦН с пределом по газу 25%. 2 - ЭЦН с газостабилизирующими модулями с пределом по газу 50% " & _
+                                           "4 - ЭЦН с осевым модулем с пределом по газу 75%, 5 - ЭЦН с пределом 25% на основе стендовых испытаний Горидько К.А. ")
+        ActiveCell.range("B10").AddComment ("Экспериментальная опция. Определяет будет ли корректировка по газу применяться " & _
+                                            "ко всем ступеням ЭЦН одинаково (0), или к каждой ступени индивидуально (1). " & _
+                                            " ")
+        ActiveCell.range("B11").AddComment ("Шаг интегрирования перепада давления в ЭЦН. 1 значит интегрирование по отдельным ступеням " & _
+                                            "Целое число более 1 определяет шаг интегрирования. 10 - расчет пакетами по 10 ступеней. " & _
+                                            "Большой шаг ускоряет расчет, но вносит численную ошибку интегрирования ")
+        ActiveCell.range("B12").AddComment ("закодированные в json параметры ЭЦН. Могут быть заданы " & _
+                                            "с использованием ID насоса и количества ступеней или " & _
+                                            "на основе номинальной подачи и номинального напора")
+    End If
+End Sub
+Sub btn_ribbon_esp_nom_plot(control As IRibbonControl)
+'Sub btn_ribbon_esp_power()
+On Error Resume Next
+    Dim arr(0 To 5, 0 To 3)
+    Dim i As Integer
+    Dim top_rng As range
+    
+    If Not promt_to_write(5, 2, "esp power") Then Exit Sub
+    
+    arr(0, 0) = "esp_json":             arr(0, 1) = "=encode_ESP_pump()"
+    arr(1, 0) = "freq_Hz":              arr(1, 1) = 50
+    arr(2, 0) = "mu_cSt":               arr(2, 1) = 1
+    arr(3, 0) = "qmax":                 arr(3, 1) = "=ESP_rate_max_sm3day(R[-3]C, R[-2]C, R[-1]C)"
+    arr(4, 0) = "qlist":                arr(4, 1) = "=encode_linspace(1, R[-1]C*1.2, 20)"
+    
+    arr(5, 0) = "q":  arr(5, 1) = "head":   arr(5, 2) = "power":  arr(5, 3) = "eff":
+    
+    Dim diag, diag1
+    Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
+    Set diag1 = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
+    
+    ActiveCell.range("A1:D6") = arr
+    
+    Set top_rng = ActiveCell
+    
+    Dim s1 As String, s2 As String, s3 As String
+    s1 = top_rng.range("B1").Address
+    s2 = top_rng.range("B2").Address
+    s3 = top_rng.range("B3").Address
+    Dim si As String
+    top_rng.range("A7:A27").FormulaArray = "=decode_json(R[-2]C[1])"
+    For i = 1 To 21
+        si = top_rng.Cells(6 + i, 1).Address
+        top_rng.range("B7:D27").Cells(i, 1) = "=ESP_head_m(" & si & "," & s1 & "," & s2 & "," & s3 & ")"
+        top_rng.range("B7:D27").Cells(i, 2) = "=ESP_power_W(" & si & "," & s1 & "," & s2 & "," & s3 & ")"
+        top_rng.range("B7:D27").Cells(i, 3) = "=ESP_eff_fr(" & si & "," & s1 & "," & s2 & "," & s3 & ")"
+    Next i
+    
+    
+    With diag.Chart
+         Application.CutCopyMode = False
+         .ChartType = xlXYScatterLines
+        With .SeriesCollection.NewSeries
+            .name = "head"
+            .XValues = top_rng.range("A7:A27")
+            .Values = top_rng.range("B7:B27")
+        End With
+        With .SeriesCollection.NewSeries
+            .name = "power"
+            .XValues = top_rng.range("A7:A27")
+            .Values = top_rng.range("C7:C27")
+            .AxisGroup = 2
+        End With
+       
+        '.SetSourceData source:=range(ActiveCell.range("A2:B21").Address)
+        .SetElement (msoElementLegendBottom)
+        .HasTitle = True
+        .ChartTitle.Text = "ESP curves"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Head, m"
+        .Axes(xlValue, xlSecondary).HasTitle = True
+        .Axes(xlValue, xlSecondary).AxisTitle.Text = "Power, W"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
+        .Parent.top = ActiveCell.Cells(1, 5).top
+        .Parent.Left = ActiveCell.Cells(1, 5).Left
+        .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P25").Height
+        .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
+    End With
+    With diag1.Chart
+         Application.CutCopyMode = False
+         .ChartType = xlXYScatterLines
+        With .SeriesCollection.NewSeries
+            .name = "head"
+            .XValues = top_rng.range("A7:A27")
+            .Values = top_rng.range("B7:B27")
+        End With
+        With .SeriesCollection.NewSeries
+            .name = "efficiency"
+            .XValues = top_rng.range("A7:A27")
+            .Values = top_rng.range("D7:D27")
+            .AxisGroup = 2
+        End With
+       
+        '.SetSourceData source:=range(ActiveCell.range("A2:B21").Address)
+        .SetElement (msoElementLegendBottom)
+        .HasTitle = True
+        .ChartTitle.Text = "ESP curves"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Head, m"
+        .Axes(xlValue, xlSecondary).HasTitle = True
+        .Axes(xlValue, xlSecondary).AxisTitle.Text = "Efficiency, W"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
+        .Parent.top = ActiveCell.Cells(1, 5).top
+        .Parent.Left = ActiveCell.Cells(1, 5).range("I1:O33").Left
+        .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P25").Height
+        .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
+    End With
+'
+'
+'    ActiveCell.range("B1:B5").Interior.Color = clrUserInput
+'    ActiveCell.range("A1:A5").Interior.Color = clrGrayText
+'    ActiveCell.range("B5").Interior.Color = clrCalculated
+'    ActiveCell.range("B2").Interior.Color = clrIntermediateCalc
+End Sub
+Sub btn_ribbon_esp_head(control As IRibbonControl)
+'Sub btn_ribbon_esp_head()
+On Error Resume Next
+    Dim arr(0 To 4, 0 To 1)
+    
+    If Not promt_to_write(5, 2, "esp head") Then Exit Sub
+    
+    arr(0, 0) = "qliq_m3day":           arr(0, 1) = 30
+    arr(1, 0) = "esp_json":             arr(1, 1) = "=encode_ESP_pump()"
+    arr(2, 0) = "freq_Hz":              arr(2, 1) = 50
+    arr(3, 0) = "mu_cSt":               arr(3, 1) = 1
+    arr(4, 0) = "esp nom head":        arr(4, 1) = "=ESP_head_m(R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B5") = arr
+    ActiveCell.range("B1:B5").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A5").Interior.Color = clrGrayText
+    ActiveCell.range("B5").Interior.Color = clrCalculated
+    ActiveCell.range("B2").Interior.Color = clrIntermediateCalc
+End Sub
+Sub btn_ribbon_esp_power(control As IRibbonControl)
+'Sub btn_ribbon_esp_power()
+On Error Resume Next
+    Dim arr(0 To 4, 0 To 1)
+    
+    If Not promt_to_write(5, 2, "esp power") Then Exit Sub
+    
+    arr(0, 0) = "qliq_m3day":           arr(0, 1) = 30
+    arr(1, 0) = "esp_json":             arr(1, 1) = "=encode_ESP_pump()"
+    arr(2, 0) = "freq_Hz":              arr(2, 1) = 50
+    arr(3, 0) = "mu_cSt":               arr(3, 1) = 1
+    arr(4, 0) = "esp nom power":        arr(4, 1) = "=ESP_power_W(R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B5") = arr
+    ActiveCell.range("B1:B5").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A5").Interior.Color = clrGrayText
+    ActiveCell.range("B5").Interior.Color = clrCalculated
+    ActiveCell.range("B2").Interior.Color = clrIntermediateCalc
+End Sub
+Sub btn_ribbon_esp_eff(control As IRibbonControl)
+'Sub btn_ribbon_esp_eff()
+On Error Resume Next
+    Dim arr(0 To 4, 0 To 1)
+    
+    If Not promt_to_write(5, 2, "esp efficiency") Then Exit Sub
+    
+    arr(0, 0) = "qliq_m3day":           arr(0, 1) = 30
+    arr(1, 0) = "esp_json":             arr(1, 1) = "=encode_ESP_pump()"
+    arr(2, 0) = "freq_Hz":              arr(2, 1) = 50
+    arr(3, 0) = "mu_cSt":               arr(3, 1) = 1
+    arr(4, 0) = "esp nom eff":        arr(4, 1) = "=ESP_eff_fr(R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B5") = arr
+    ActiveCell.range("B1:B5").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A5").Interior.Color = clrGrayText
+    ActiveCell.range("B5").Interior.Color = clrCalculated
+    ActiveCell.range("B2").Interior.Color = clrIntermediateCalc
 End Sub
 Sub btn_ribbon_esp_pump_calc(control As IRibbonControl)
 On Error Resume Next
@@ -514,7 +934,7 @@ On Error Resume Next
     ActiveCell.range("B1:B13").Interior.Color = clrUserInput
     ActiveCell.range("B4:B5").Interior.Color = clrIntermediateCalc
     ActiveCell.range("A14:H36").Select
-    Selection.FormulaArray = "=ESP_p_json_atma(R[-13]C[1], R[-12]C[1], R[-11]C[1], R[-10]C[1], R[-9]C[1],  R[-8]C[1], R[-7]C[1], R[-6]C[1], R[-5]C[1], R[-4]C[1], R[-3]C[1], R[-2]C[1], R[-1]C[1])"
+    Selection.FormulaArray = "=ESP_p_atma(R[-13]C[1], R[-12]C[1], R[-11]C[1], R[-10]C[1], R[-9]C[1],  R[-8]C[1], R[-7]C[1], R[-6]C[1], R[-5]C[1], R[-4]C[1], R[-3]C[1], R[-2]C[1], R[-1]C[1])"
     With Selection.Interior
         .Pattern = xlSolid
         .PatternColorIndex = xlAutomatic
@@ -548,34 +968,55 @@ On Error Resume Next
         .SeriesCollection(1).XValues = ActiveCell.range("C4:C23")
         .SeriesCollection(1).Values = ActiveCell.range("A4:A23")
         .Axes(xlValue).ReversePlotOrder = True
-        
-        .Parent.Top = ActiveCell.Cells(1, 9).Top
+        .Parent.top = ActiveCell.Cells(1, 9).top
         .Parent.Left = ActiveCell.Cells(1, 9).Left
         .Parent.Height = ActiveCell.Cells(1, 9).range("L1:P23").Height
         .Parent.WIDTH = ActiveCell.Cells(1, 9).range("L1:P23").WIDTH
-        
         .Axes(xlValue, xlPrimary).HasTitle = True
         .Axes(xlValue, xlPrimary).AxisTitle.Text = "stage number"
         .Axes(xlCategory, xlPrimary).HasTitle = True
         .Axes(xlCategory, xlPrimary).AxisTitle.Text = "P, atma"
-        
     End With
-    
 End Sub
-' Units converter from Leonid Igrevsky
-Sub btn_units_converter(control As IRibbonControl)
+Sub btn_ribbon_esp_system_calc(control As IRibbonControl)
 On Error Resume Next
-    Call RunThis
+    Dim arr(0 To 17, 0 To 1)
+    If Not promt_to_write(18, 2, "encode esp system") Then Exit Sub
+    arr(0, 0) = "p_calc_atma":          arr(0, 1) = 100
+    arr(1, 0) = "U_surf_high_lin_V":    arr(1, 1) = 1000
+    arr(2, 0) = "f_surf_Hz":            arr(2, 1) = 50
+    arr(3, 0) = "power_fact_kW":        arr(3, 1) = 35
+    arr(4, 0) = "t_intake_C":           arr(4, 1) = 50
+    arr(5, 0) = "t_dis_C":              arr(5, 1) = 50
+    arr(6, 0) = "feed":                 arr(6, 1) = "=encode_feed()"
+    arr(7, 0) = "pump_json":            arr(7, 1) = "=encode_ESP_pump()"
+    arr(8, 0) = "motor_json":           arr(8, 1) = "=encode_ESP_motor()"
+    arr(9, 0) = "cable_json":           arr(9, 1) = "=encode_ESP_cable()"
+    arr(10, 0) = "gassep_json":         arr(10, 1) = "=encode_ESP_separation()"
+    arr(11, 0) = "calc_along_flow":     arr(11, 1) = 1
+    arr(12, 0) = "param":               arr(12, 1) = ""
+    arr(13, 0) = "q_liq_sm3day":        arr(13, 1) = ""
+    arr(14, 0) = "fw_perc":             arr(14, 1) = ""
+    arr(15, 0) = "rp_m3m3":             arr(15, 1) = ""
+    arr(16, 0) = "q_gas_free_sm3day":   arr(16, 1) = ""
+    arr(17, 0) = "esp_system":          arr(17, 1) = "=ESP_system_calc(R[-17]C,R[-16]C,R[-15]C,R[-14]C,R[-13]C,R[-12]C,R[-11]C,R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    ActiveCell.range("A1:B18") = arr
+    ActiveCell.range("A1:A18").Interior.Color = clrGrayText
+    ActiveCell.range("B1:B6").Interior.Color = clrUserInput
+    ActiveCell.range("B7:B11").Interior.Color = clrIntermediateCalc
+    ActiveCell.range("B12:B17").Interior.Color = clrUserInput
+    ActiveCell.range("B18").Interior.Color = clrCalculated
 End Sub
 Sub btn_json_linspace(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode linspace") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "val_from": arr(0, 1) = 1
-    arr(1, 0) = "val_to": arr(1, 1) = 250
-    arr(2, 0) = "num": arr(2, 1) = 25
-    arr(3, 0) = "linspace": arr(3, 1) = "=encode_linspace(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode linspace") Then Exit Sub
+    
+    arr(0, 0) = "val_from":     arr(0, 1) = 1
+    arr(1, 0) = "val_to":       arr(1, 1) = 250
+    arr(2, 0) = "num":          arr(2, 1) = 25
+    arr(3, 0) = "linspace":     arr(3, 1) = "=encode_linspace(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -586,13 +1027,14 @@ On Error Resume Next
 End Sub
 Sub btn_json_logspace(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode logspace") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "val_from": arr(0, 1) = 1
-    arr(1, 0) = "val_to": arr(1, 1) = 250
-    arr(2, 0) = "num": arr(2, 1) = 25
-    arr(3, 0) = "logspace": arr(3, 1) = "=encode_logspace(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode logspace") Then Exit Sub
+    
+    arr(0, 0) = "val_from":     arr(0, 1) = 1
+    arr(1, 0) = "val_to":       arr(1, 1) = 250
+    arr(2, 0) = "num":          arr(2, 1) = 25
+    arr(3, 0) = "logspace":     arr(3, 1) = "=encode_logspace(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -603,13 +1045,14 @@ On Error Resume Next
 End Sub
 Sub btn_json_arange(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode arange") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "val_from": arr(0, 1) = 1
-    arr(1, 0) = "val_to": arr(1, 1) = 250
-    arr(2, 0) = "num": arr(2, 1) = 10
-    arr(3, 0) = "arange": arr(3, 1) = "=encode_arange(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode arange") Then Exit Sub
+    
+    arr(0, 0) = "val_from":     arr(0, 1) = 1
+    arr(1, 0) = "val_to":       arr(1, 1) = 250
+    arr(2, 0) = "num":          arr(2, 1) = 10
+    arr(3, 0) = "arange":       arr(3, 1) = "=encode_arange(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -620,13 +1063,14 @@ On Error Resume Next
 End Sub
 Sub btn_PVT_rs_m3m3(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode rs") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "P, atma": arr(0, 1) = 80
-    arr(1, 0) = "T, C": arr(1, 1) = 80
-    arr(2, 0) = "pvt json": arr(2, 1) = "=encode_PVT()"
-    arr(3, 0) = "rs m3m3": arr(3, 1) = "=PVT_rs_m3m3(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode rs") Then Exit Sub
+    
+    arr(0, 0) = "P, atma":      arr(0, 1) = 80
+    arr(1, 0) = "T, C":         arr(1, 1) = 80
+    arr(2, 0) = "pvt json":     arr(2, 1) = "=encode_PVT()"
+    arr(3, 0) = "rs m3m3":      arr(3, 1) = "=PVT_rs_m3m3(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -638,13 +1082,14 @@ On Error Resume Next
 End Sub
 Sub btn_PVT_muo_cP(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode muo") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "P, atma": arr(0, 1) = 80
-    arr(1, 0) = "T, C": arr(1, 1) = 80
-    arr(2, 0) = "pvt json": arr(2, 1) = "=encode_PVT()"
-    arr(3, 0) = "mu oil cP": arr(3, 1) = "=PVT_mu_oil_cP(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode muo") Then Exit Sub
+    
+    arr(0, 0) = "P, atma":      arr(0, 1) = 80
+    arr(1, 0) = "T, C":         arr(1, 1) = 80
+    arr(2, 0) = "pvt json":     arr(2, 1) = "=encode_PVT()"
+    arr(3, 0) = "mu oil cP":    arr(3, 1) = "=PVT_mu_oil_cP(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -656,13 +1101,14 @@ On Error Resume Next
 End Sub
 Sub btn_PVT_bo_m3m3(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode bo") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "P, atma": arr(0, 1) = 80
-    arr(1, 0) = "T, C": arr(1, 1) = 80
-    arr(2, 0) = "pvt json": arr(2, 1) = "=encode_PVT()"
-    arr(3, 0) = "bo m3m3": arr(3, 1) = "=PVT_bo_m3m3(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode bo") Then Exit Sub
+    
+    arr(0, 0) = "P, atma":      arr(0, 1) = 80
+    arr(1, 0) = "T, C":         arr(1, 1) = 80
+    arr(2, 0) = "pvt json":     arr(2, 1) = "=encode_PVT()"
+    arr(3, 0) = "bo m3m3":      arr(3, 1) = "=PVT_bo_m3m3(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -674,13 +1120,14 @@ On Error Resume Next
 End Sub
 Sub btn_feed_gas_fraction_d(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(5, 2, "encode gas_fraction") Then Exit Sub
     Dim arr(0 To 4, 0 To 1)
     
-    arr(0, 0) = "P, atma": arr(0, 1) = 10
-    arr(1, 0) = "T, C": arr(1, 1) = 80
-    arr(2, 0) = "feed json": arr(2, 1) = "=encode_feed()"
-    arr(3, 0) = "k sep": arr(3, 1) = 0
+    If Not promt_to_write(5, 2, "encode gas_fraction") Then Exit Sub
+    
+    arr(0, 0) = "P, atma":      arr(0, 1) = 10
+    arr(1, 0) = "T, C":         arr(1, 1) = 80
+    arr(2, 0) = "feed json":    arr(2, 1) = "=encode_feed()"
+    arr(3, 0) = "k sep":        arr(3, 1) = 0
     arr(4, 0) = "gas fraction": arr(4, 1) = "=feed_gas_fraction_d(R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B5") = arr
@@ -693,13 +1140,14 @@ On Error Resume Next
 End Sub
 Sub btn_feed_qmix(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "encode gas_fraction") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "P, atma": arr(0, 1) = 10
-    arr(1, 0) = "T, C": arr(1, 1) = 80
-    arr(2, 0) = "feed json": arr(2, 1) = "=encode_feed()"
-    arr(3, 0) = "q_mix_rc_m3day": arr(3, 1) = "=feed_q_mix_rc_m3day(R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(4, 2, "encode gas_fraction") Then Exit Sub
+    
+    arr(0, 0) = "P, atma":          arr(0, 1) = 10
+    arr(1, 0) = "T, C":             arr(1, 1) = 80
+    arr(2, 0) = "feed json":        arr(2, 1) = "=encode_feed()"
+    arr(3, 0) = "q_mix_rc_m3day":   arr(3, 1) = "=feed_q_mix_rc_m3day(R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
@@ -711,15 +1159,16 @@ On Error Resume Next
 End Sub
 Sub btn_feed_separation(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(6, 2, "encode feed_mod_separate_gas") Then Exit Sub
     Dim arr(0 To 5, 0 To 1)
     
-    arr(0, 0) = "k_sep": arr(0, 1) = 0.2
-    arr(1, 0) = "p_atma": arr(1, 1) = 40
-    arr(2, 0) = "t_C": arr(2, 1) = 20
-    arr(3, 0) = "feed": arr(3, 1) = "=encode_feed()"
-    arr(4, 0) = "sol_factor": arr(4, 1) = 1
-    arr(5, 0) = "new feed": arr(5, 1) = "=feed_mod_separate_gas(R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(6, 2, "encode feed_mod_separate_gas") Then Exit Sub
+    
+    arr(0, 0) = "k_sep":        arr(0, 1) = 0.2
+    arr(1, 0) = "p_atma":       arr(1, 1) = 40
+    arr(2, 0) = "t_C":          arr(2, 1) = 20
+    arr(3, 0) = "feed":         arr(3, 1) = "=encode_feed()"
+    arr(4, 0) = "sol_factor":   arr(4, 1) = 1
+    arr(5, 0) = "new feed":     arr(5, 1) = "=feed_mod_separate_gas(R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B6") = arr
     ActiveCell.range("A1:A6").Interior.Color = clrGrayText
@@ -728,35 +1177,49 @@ On Error Resume Next
     ActiveCell.range("B4").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B6").Select
     ActiveCell.name = get_name("feed_sep_gas")
-  
 End Sub
 Sub btn_ribbon_ipr_pi(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(4, 2, "calc IPR_pi_sm3dayatm") Then Exit Sub
     Dim arr(0 To 3, 0 To 1)
     
-    arr(0, 0) = "Qtest_sm3day": arr(0, 1) = 30
-    arr(1, 0) = "pwf_test_atma": arr(1, 1) = 40
-    arr(2, 0) = "ipr json": arr(2, 1) = "=encode_ipr()"
-    arr(3, 0) = "pi_sm3dayatm": arr(3, 1) = "=IPR_calc_pi(R[-1]C,R[-3]C,R[-2]C)"
+    If Not promt_to_write(4, 2, "calc IPR_pi_sm3dayatm") Then Exit Sub
+    
+    arr(0, 0) = "Qtest_sm3day":     arr(0, 1) = 30
+    arr(1, 0) = "pwf_test_atma":    arr(1, 1) = 40
+    arr(2, 0) = "ipr json":         arr(2, 1) = "=encode_ipr()"
+    arr(3, 0) = "pi_sm3dayatm":     arr(3, 1) = "=IPR_pi_sm3dayatm(R[-1]C,R[-3]C,R[-2]C)"
     
     ActiveCell.range("A1:B4") = arr
     ActiveCell.range("A1:A4").Interior.Color = clrGrayText
     ActiveCell.range("B3").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B4").Interior.Color = clrCalculated
     ActiveCell.range("B1:B2").Interior.Color = clrUserInput
+    
+    If comment Then
+        ActiveCell.range("B1").AddComment ("Тестовый дебит жидкости на поверхности, ст.м3/сут " & _
+                                           " ")
+        ActiveCell.range("B2").AddComment ("Тестовое забойное давление, атм. " & _
+                                           "Должно быть меньше чем пластовое. " & _
+                                           " ")
+        ActiveCell.range("B3").AddComment ("json с параметрами флюида и потока. " & _
+                                           "Из параметров потока берется пластовое давление, давление насыщения и температура пласта")
+        ActiveCell.range("B4").AddComment ("Коэффициент продуктивности.  " & _
+                                           "Рассчитывается из тестовых дебита и давления." & _
+                                           " ")
+    End If
+    
     ActiveCell.range("B4").Select
     ActiveCell.name = get_name("pi_sm3dayatm")
-  
 End Sub
 Sub btn_ribbon_ipr__qliq(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(3, 2, "calc IPR_q_liq_sm3day") Then Exit Sub
     Dim arr(0 To 2, 0 To 1)
     
-    arr(0, 0) = "pwf_test_atma": arr(0, 1) = 40
-    arr(1, 0) = "ipr json": arr(1, 1) = "=encode_ipr()"
-    arr(2, 0) = "q_liq_sm3day": arr(2, 1) = "=IPR_calc_qliq_sm3day(R[-1]C,R[-2]C)"
+    If Not promt_to_write(3, 2, "calc IPR_q_liq_sm3day") Then Exit Sub
+    
+    arr(0, 0) = "pwf_test_atma":    arr(0, 1) = 40
+    arr(1, 0) = "ipr json":         arr(1, 1) = "=encode_ipr()"
+    arr(2, 0) = "q_liq_sm3day":     arr(2, 1) = "=IPR_q_liq_sm3day(R[-1]C,R[-2]C)"
     
     ActiveCell.range("A1:B3") = arr
     ActiveCell.range("A1:A3").Interior.Color = clrGrayText
@@ -765,16 +1228,16 @@ On Error Resume Next
     ActiveCell.range("B1").Interior.Color = clrUserInput
     ActiveCell.range("B3").Select
     ActiveCell.name = get_name("q_liq_sm3day")
-  
 End Sub
 Sub btn_ribbon_ipr_pwf(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(3, 2, "calc IPR_p_wf_atma") Then Exit Sub
     Dim arr(0 To 2, 0 To 1)
     
+    If Not promt_to_write(3, 2, "calc IPR_p_wf_atma") Then Exit Sub
+    
     arr(0, 0) = "q_liq_sm3day": arr(0, 1) = 40
-    arr(1, 0) = "ipr json": arr(1, 1) = "=encode_ipr()"
-    arr(2, 0) = "pwf_atma": arr(2, 1) = "=IPR_calc_pwf(R[-1]C,R[-2]C)"
+    arr(1, 0) = "ipr json":     arr(1, 1) = "=encode_ipr()"
+    arr(2, 0) = "pwf_atma":     arr(2, 1) = "=IPR_pwf_atma(R[-1]C,R[-2]C)"
     
     ActiveCell.range("A1:B3") = arr
     ActiveCell.range("A1:A3").Interior.Color = clrGrayText
@@ -783,20 +1246,20 @@ On Error Resume Next
     ActiveCell.range("B1").Interior.Color = clrUserInput
     ActiveCell.range("B3").Select
     ActiveCell.name = get_name("p_wf_atma")
-  
 End Sub
 Sub btn_feed_split(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(7, 2, "encode feed_mod_split") Then Exit Sub
     Dim arr(0 To 6, 0 To 1)
     
-    arr(0, 0) = "k_sep_gas": arr(0, 1) = 0.2
-    arr(1, 0) = "k_sep_oil": arr(1, 1) = 0.2
-    arr(2, 0) = "k_sep_wat": arr(2, 1) = 0.2
-    arr(3, 0) = "p_atma": arr(3, 1) = 40
-    arr(4, 0) = "t_C": arr(4, 1) = 20
-    arr(5, 0) = "feed": arr(5, 1) = "=encode_feed()"
-    arr(6, 0) = "new feeds": arr(6, 1) = "=feed_mod_split(R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    If Not promt_to_write(7, 2, "encode feed_mod_split") Then Exit Sub
+    
+    arr(0, 0) = "k_sep_gas":    arr(0, 1) = 0.2
+    arr(1, 0) = "k_sep_oil":    arr(1, 1) = 0.2
+    arr(2, 0) = "k_sep_wat":    arr(2, 1) = 0.2
+    arr(3, 0) = "p_atma":       arr(3, 1) = 40
+    arr(4, 0) = "t_C":          arr(4, 1) = 20
+    arr(5, 0) = "feed":         arr(5, 1) = "=encode_feed()"
+    arr(6, 0) = "new feeds":    arr(6, 1) = "=feed_mod_split(R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B7") = arr
     ActiveCell.range("A1:A7").Interior.Color = clrGrayText
@@ -805,16 +1268,33 @@ On Error Resume Next
     ActiveCell.range("B6").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B7").Select
     ActiveCell.name = get_name("feeds_split")
-  
+End Sub
+Sub btn_json_combine(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 2, 0 To 1)
+    
+    If Not promt_to_write(3, 2, "encode list_concatenate") Then Exit Sub
+    
+    arr(0, 0) = "list 1":    arr(0, 1) = 1
+    arr(1, 0) = "list 2":    arr(1, 1) = 2
+    arr(2, 0) = "new feeds":    arr(2, 1) = "=list_concatenate(R[-2]C,R[-1]C)"
+    
+    ActiveCell.range("A1:B3") = arr
+    ActiveCell.range("A1:A3").Interior.Color = clrGrayText
+    ActiveCell.range("B3").Interior.Color = clrCalculated
+    ActiveCell.range("B1:B2").Interior.Color = clrUserInput
+    ActiveCell.range("B3").Select
+    ActiveCell.name = get_name("combine")
 End Sub
 Sub btn_feed_mix(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(3, 2, "encode feed_mod_mix") Then Exit Sub
     Dim arr(0 To 2, 0 To 1)
     
-    arr(0, 0) = "feed 1": arr(0, 1) = "=encode_feed()"
-    arr(1, 0) = "feed 2": arr(1, 1) = "=encode_feed()"
-    arr(2, 0) = "new feeds": arr(2, 1) = "=feed_mod_mix(R[-2]C,R[-1]C)"
+    If Not promt_to_write(3, 2, "encode feed_mod_mix") Then Exit Sub
+    
+    arr(0, 0) = "feed 1":       arr(0, 1) = "=encode_feed()"
+    arr(1, 0) = "feed 2":       arr(1, 1) = "=encode_feed()"
+    arr(2, 0) = "new feeds":    arr(2, 1) = "=feed_mod_mix(R[-2]C,R[-1]C)"
     
     ActiveCell.range("A1:B3") = arr
     ActiveCell.range("A1:A3").Interior.Color = clrGrayText
@@ -822,101 +1302,66 @@ On Error Resume Next
     ActiveCell.range("B3").Interior.Color = clrCalculated
     ActiveCell.range("B3").Select
     ActiveCell.name = get_name("feed_mix")
-  
-End Sub
-Sub insert_esp_pump()
 End Sub
 ' A solution to fix the problem with add-on paths
 ' https://www.planetaexcel.ru/forum/index.php?PAGE_NAME=message&FID=8&TID=10450&TITLE_SEO=10450&MID=91949#message91949
 ' Called by pressing a button on the ribbon
- Function correct_links()
- Dim wb As Workbook
- Dim MyAddIn, Lnk, sh
- Dim MyAddInNameFull
- Dim aLinks
- Dim wname As String
- Dim i As Integer
- i = 0
- wname = "unknown"
- 
- On Error GoTo exit_
- 
-  ' Define the name of the add-in
- MyAddIn = UCase(ThisWorkbook.name)
- MyAddInNameFull = ThisWorkbook.Path & "\" & ThisWorkbook.name
- Set wb = ActiveWorkbook ' work with the active workbook
- If Not wb Is Nothing Then
-    With wb
-       wname = wb.name
-       aLinks = wb.LinkSources()
-       If Not IsEmpty(aLinks) Then
-            For Each Lnk In .LinkSources(Type:=xlExcelLinks)
-                Debug.Print Lnk
-                 Debug.Print UCase(Lnk), "*" & MyAddIn
-              If UCase(Lnk) Like "*" & MyAddIn Then
-                add_log_msg "an add-in reference " & wb.name & " was found in the book " & Lnk
-                If UCase(Lnk) <> UCase(MyAddInNameFull) Then
-                    add_log_msg "in the book " & wb.name & " trying to correct the link " & Lnk & " to the correct " & MyAddInNameFull
-                    .ChangeLink name:=Lnk, NewName:=MyAddIn
-                    i = i + 1
-                    For Each sh In .Worksheets
-                      sh.Calculate
-                    Next
-                Else
-                    add_log_msg "in book " & wb.name & " reference " & Lnk & " correct, no correction needed"
-                End If
-              End If
-            Next
-        End If
-    End With
-    correct_links = i
- Else
-    GoTo exit_
- End If
- Exit Function
- 
+Function correct_links()
+     Dim wb As Workbook
+     Dim MyAddIn, Lnk, sh
+     Dim MyAddInNameFull
+     Dim aLinks
+     Dim wname As String
+     Dim i As Integer
+     
+     i = 0
+     wname = "unknown"
+     
+On Error GoTo exit_
+     
+      ' Define the name of the add-in
+    MyAddIn = UCase(ThisWorkbook.name)
+    MyAddInNameFull = ThisWorkbook.Path & "\" & ThisWorkbook.name
+    Set wb = ActiveWorkbook ' work with the active workbook
+    If Not wb Is Nothing Then
+       With wb
+          wname = wb.name
+          aLinks = wb.LinkSources()
+          If Not IsEmpty(aLinks) Then
+                For Each Lnk In .LinkSources(Type:=xlExcelLinks)
+                    Debug.Print Lnk
+                     Debug.Print UCase(Lnk), "*" & MyAddIn
+                  If UCase(Lnk) Like "*" & MyAddIn Then
+                    add_log_msg "an add-in reference " & wb.name & " was found in the book " & Lnk
+                    If UCase(Lnk) <> UCase(MyAddInNameFull) Then
+                        add_log_msg "in the book " & wb.name & " trying to correct the link " & Lnk & " to the correct " & MyAddInNameFull
+                        .ChangeLink name:=Lnk, NewName:=MyAddIn
+                        i = i + 1
+                        For Each sh In .Worksheets
+                          sh.Calculate
+                        Next
+                    Else
+                        add_log_msg "in book " & wb.name & " reference " & Lnk & " correct, no correction needed"
+                    End If
+                  End If
+                Next
+            End If
+       End With
+       correct_links = i
+    Else
+       GoTo exit_
+    End If
+    Exit Function
+     
 exit_:
-    MsgBox "Error. Something went wrong when fixing the add-in links."
-    add_log_msg "Error. In the book " & wname & " something went wrong when fixing the add-in links."
+        MsgBox "Error. Something went wrong when fixing the add-in links."
+        add_log_msg "Error. In the book " & wname & " something went wrong when fixing the add-in links."
 End Function
-Sub insert_esp_pump_calc()
-    
-End Sub
-Sub insert_pipe_calc()
-End Sub
-Sub insert_pipe_data()
-    Dim arr(0 To 5, 0 To 3)
-    
-    arr(0, 0) = "trajectory"
-    arr(1, 0) = "hmes, m": arr(1, 1) = "hvert, m"
-    arr(2, 0) = 0: arr(2, 1) = 0
-    arr(3, 0) = 1000: arr(3, 1) = 1000
-    arr(4, 0) = 2000: arr(4, 1) = 1900
-    arr(5, 0) = 2500: arr(5, 1) = 2300
-    
-    
-    arr(0, 2) = "diameter"
-    arr(1, 2) = "hmes, m": arr(1, 3) = "diam, mm"
-    arr(2, 2) = 0: arr(2, 3) = 62
-    arr(3, 2) = 500: arr(3, 3) = 72
-    arr(4, 2) = 2100: arr(4, 3) = 125
-    
-    
-    
-    ActiveCell.range("A2:D7") = arr
-    ActiveCell.range("A1:D7").Interior.Color = vbYellow
-    ActiveCell.range("B1").Interior.Color = RGB(160, 250, 250)
-    ActiveCell.range("C2:D7").Interior.Color = RGB(230, 250, 100)
-    ActiveCell = "construction"
-    ActiveCell.range("B1").FormulaR1C1 = "=encode_pipe_construction(R[3]C[-1]:R[6]C,R[3]C[1]:R[6]C[2])"
-    ActiveCell.range("B1").name = get_name("pipe_construction")
-    ActiveCell.range("B1").Select
-End Sub
 Sub btn_ribbon_pipe_object(control As IRibbonControl)
 On Error Resume Next
-    If Not promt_to_write(10, 2, "pipe object") Then Exit Sub
     Dim arr(0 To 9, 0 To 3)
     
+    If Not promt_to_write(10, 2, "pipe object") Then Exit Sub
     
     arr(0, 0) = "construction":     arr(0, 1) = "=encode_pipe_construction()"
     arr(1, 0) = "t_model":          arr(1, 1) = "=encode_t_model()"
@@ -929,14 +1374,12 @@ On Error Resume Next
     arr(8, 0) = "znlf":             arr(8, 1) = ""
     arr(9, 0) = "pipe":             arr(9, 1) = "=encode_pipe()"
        
-    
     ActiveCell.range("A1:B10") = arr
     ActiveCell.range("B1:B10").Interior.Color = clrUserInput
     ActiveCell.range("A1:A10").Interior.Color = clrGrayText
     ActiveCell.range("B1").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B2").Interior.Color = clrIntermediateCalc
     ActiveCell.range("B10").Interior.Color = clrCalculated
-    
     ActiveCell.range("B10").FormulaR1C1 = "=encode_pipe(R[-9]C,R[-8]C,R[-7]C,R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
     ActiveCell.range("B10").name = get_name("pipe_object")
     ActiveCell.range("B10").Select
@@ -954,9 +1397,8 @@ Function get_name(base_name As String) As String
     iname = 1
     isafe = 1
     Set nms = ActiveWorkbook.Names
-    
-    Do
-        If nms.Count > 0 Then
+    If nms.Count > 0 Then
+        Do
             For i = 1 To nms.Count
                 If nms(i).name = set_name Then
                     set_name = base_name & "_" & CStr(iname)
@@ -970,102 +1412,17 @@ Function get_name(base_name As String) As String
                 set_name = base_name & "_error_" & CStr(iname)
                 Exit Do
             End If
-        End If
-    Loop Until name_done
-    
+        Loop Until name_done
+    End If
     get_name = set_name
 End Function
 Sub ChangeCharts()
-Application.ScreenUpdating = False 'This line disable the on screen update for better performance, the blink you see, you could delete both lanes but it will run slower
-Dim myChart As ChartObject
-For Each myChart In ActiveSheet.ChartObjects
-    myChart.Chart.Refresh
-Next myChart
-Application.ScreenUpdating = True 'This line reenable the on screen update for better performance, the blink you see, you could delete both lanes but it will run slower
-End Sub
-Sub insert_PVT()
-'
-' insert_PVT Макрос
-'
-' macros recorded with relative links on
-' 28/09/2021  rnt
-    If promt_to_write(10, 2, "encode PVT") Then
-       Dim arr(0 To 8, 0 To 1)
-       arr(0, 0) = "gamma_gas": arr(0, 1) = 0.6
-       arr(1, 0) = "gamma_oil": arr(1, 1) = 0.86
-       arr(2, 0) = "gamma_wat": arr(2, 1) = 1.1
-       arr(3, 0) = "rsb_m3m3": arr(3, 1) = 120
-       arr(4, 0) = "pb_atma": arr(4, 1) = 130
-       arr(5, 0) = "t_res_C": arr(5, 1) = 80
-       arr(6, 0) = "bob_m3m3": arr(6, 1) = 1.2
-       arr(7, 0) = "muob_cP": arr(7, 1) = 0.6
-       arr(8, 0) = "pvt_corr_set": arr(8, 1) = 0
-       
-       ActiveCell.range("A1:B9") = arr
-       ActiveCell.range("A1:A10").Interior.Color = clrGrayText
-       ActiveCell.range("B1:B10").Interior.Color = clrUserInput
-       
-       ActiveCell.range("A10").Select
-       ActiveCell.FormulaR1C1 = "PVT"
-       ActiveCell.range("B1").Select
-       ActiveCell.FormulaR1C1 = "=encode_PVT(R[-9]C,R[-8]C,R[-7]C,R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
-       ActiveCell.name = get_name("PVT_json")
-       
-       ActiveCell.Interior.Color = clrCalculated
-    End If
-End Sub
-Sub insert_feed()
-'
-' insert_PVT Макрос
-'
-' macros recorded with relative links on
-' 28/09/2021  rnt
-    Dim arr(0 To 3, 0 To 1)
-    arr(0, 0) = "q_liq_sm3day": arr(0, 1) = 30
-    arr(1, 0) = "fw_perc": arr(1, 1) = 10
-    arr(2, 0) = "rp_m3m3": arr(2, 1) = 120
-    arr(3, 0) = "q_gas_free_sm3day": arr(3, 1) = 0
-                      
-            
-            
-    Dim s As String
-    s = ActiveCell.Formula
-    If Len(s) > 12 And Mid(s, 1, 12) = "=encode_PVT(" Then
-        ActiveCell.offset(1, -1).range("A1").Select
-        If promt_to_write(5, 2, "encode feed") Then
-            ActiveCell.range("A1:B4") = arr
-            ActiveCell.range("A1:B5").Interior.Color = clrUserInput
-            ActiveCell.range("A1:A5").Interior.Color = clrGrayText
-            
-            ActiveCell.range("A5").Select
-            ActiveCell.FormulaR1C1 = "feed"
-            ActiveCell.range("B1").Select
-            ActiveCell.FormulaR1C1 = "=encode_feed(R[-4]C,R[-3]C,R[-2]C,R[-1]C,R[-5]C)"
-        Else
-            Exit Sub
-        End If
-    Else
-        If promt_to_write(6, 2, "encode feed") Then
-        
-            ActiveCell.range("A1:B4") = arr
-            ActiveCell.range("A1:B6").Interior.Color = clrUserInput
-            ActiveCell.range("A1:A6").Interior.Color = clrGrayText
-            
-            ActiveCell.range("A5").Select
-            ActiveCell.FormulaR1C1 = "fluid"
-            ActiveCell.range("B1").Formula2R1C1 = "=encode_pvt()"
-            ActiveCell.range("B1").Interior.Color = clrIntermediateCalc
-            ActiveCell.range("A2").Select
-            ActiveCell.FormulaR1C1 = "feed"
-            ActiveCell.range("B1").Select
-            ActiveCell.FormulaR1C1 = "=encode_feed(R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
-        Else
-            Exit Sub
-        End If
-    End If
-    ActiveCell.name = get_name("feed_json")
-    ActiveCell.Interior.Color = RGB(160, 250, 250)
-    
+    Application.ScreenUpdating = False 'This line disable the on screen update for better performance, the blink you see, you could delete both lanes but it will run slower
+    Dim myChart As ChartObject
+    For Each myChart In ActiveSheet.ChartObjects
+        myChart.Chart.Refresh
+    Next myChart
+    Application.ScreenUpdating = True 'This line reenable the on screen update for better performance, the blink you see, you could delete both lanes but it will run slower
 End Sub
 Private Sub MakeParameter( _
         Dst As range, _
@@ -1128,19 +1485,15 @@ Private Sub MakeParameter( _
     Dst.Cells(1, 6).Validation.Delete ' Выпадающий список размерностей
     Dst.Cells(1, 6).Validation.Add Type:=xlValidateList, Formula1:=sOutD
     Dst.Cells(1, 6).Value = DefaultDimensionR ' Размерность по умолчанию
-    
 End Sub
 Public Function promt_to_write(nrows As Integer, ncols As Integer, ttl As String) As Boolean
-    
     Dim Place
     
     If Not promt Then
         promt_to_write = True
         Exit Function
     End If
-    
     Set Place = ActiveCell
-    
     Place.Resize(nrows, ncols).Select
     If MsgBox("Выделенная область будет изменена." & vbNewLine & "Продолжить?", vbYesNo + vbQuestion, ttl) = vbNo Then
         promt_to_write = False
@@ -1149,20 +1502,23 @@ Public Function promt_to_write(nrows As Integer, ncols As Integer, ttl As String
     End If
     ActiveCell.Select
 End Function
-Public Sub RunThis()
-    
+' Units converter from Leonid Igrevsky
+Sub btn_units_converter(control As IRibbonControl)
+On Error Resume Next
 ' Действие описано в функции MakeParameter
     
     Dim d() As Variant
     Dim Place
     
     Set Place = ActiveCell
-    ' Set Place = [A1] ' В отладочных целях
+    
     
     Place.Resize(8, 6).Select
-    If MsgBox("Выделенная область будет изменена." & vbNewLine & "Продолжить?", vbYesNo + vbQuestion, "Units Converter") = vbNo Then
-        Place.Select
-        Exit Sub
+    If promt Then
+        If MsgBox("Выделенная область будет изменена." & vbNewLine & "Продолжить?", vbYesNo + vbQuestion, "Units Converter") = vbNo Then
+            Place.Select
+            Exit Sub
+        End If
     End If
     Selection.Clear
     
@@ -1219,5 +1575,390 @@ Public Sub RunThis()
         "lb/ft" & ChrW(179) & "|x*16.01846|x/16.01846", _
         ChrW(176) & "API|141.5*1000/(131.5+x)|141.5*1000/x-131.5|R")
     MakeParameter Place.offset(7, 0), "Плотность нефти", d, 850
+End Sub
+Sub btn_ribbon_motor_slip(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 6, 0 To 1)
+    
+    If Not promt_to_write(7, 2, "esp motor slip") Then Exit Sub
+    
+    arr(0, 0) = "s":             arr(0, 1) = 0.05
+    arr(1, 0) = "f_Hz":          arr(1, 1) = 50
+    arr(2, 0) = "U_lin_V":       arr(2, 1) = 1000
+    arr(3, 0) = "motor_json":    arr(3, 1) = "=encode_ESP_motor(2)"
+    arr(4, 0) = "cable_json":    arr(4, 1) = "=encode_ESP_cable()"
+    arr(5, 0) = "param":         arr(5, 1) = ""
+    arr(6, 0) = "motor mom":     arr(6, 1) = "=ESP_motor_calc_slip(R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    
+    ActiveCell.range("A1:B7") = arr
+    ActiveCell.range("B1:B3").Interior.Color = clrUserInput
+    ActiveCell.range("B4:B5").Interior.Color = clrIntermediateCalc
+    ActiveCell.range("B6:B6").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A7").Interior.Color = clrGrayText
+    ActiveCell.range("B7").Interior.Color = clrCalculated
+    ActiveCell.range("B7").name = get_name("motor_slip")
+    
+End Sub
+Sub btn_ribbon_motor_mom(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 6, 0 To 1)
+    
+    If Not promt_to_write(7, 2, "esp motor mom") Then Exit Sub
+    
+    arr(0, 0) = "M_Nm":          arr(0, 1) = 30
+    arr(1, 0) = "f_Hz":          arr(1, 1) = 50
+    arr(2, 0) = "U_lin_V":       arr(2, 1) = 1000
+    arr(3, 0) = "motor_json":    arr(3, 1) = "=encode_ESP_motor()"
+    arr(4, 0) = "cable_json":    arr(4, 1) = "=encode_ESP_cable()"
+    arr(5, 0) = "param":         arr(5, 1) = ""
+    arr(6, 0) = "motor mom":     arr(6, 1) = "=ESP_motor_calc_mom(R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    
+    ActiveCell.range("A1:B7") = arr
+    ActiveCell.range("B1:B3").Interior.Color = clrUserInput
+    ActiveCell.range("B4:B5").Interior.Color = clrIntermediateCalc
+    ActiveCell.range("B6:B6").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A7").Interior.Color = clrGrayText
+    ActiveCell.range("B7").Interior.Color = clrCalculated
+    ActiveCell.range("B7").name = get_name("motor_mom")
+    
+End Sub
+Sub btn_ribbon_motor_json(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 15, 0 To 1)
+    
+    If Not promt_to_write(15, 2, "esp cable json") Then Exit Sub
+    
+    arr(0, 0) = "motor_ID":          arr(0, 1) = 0
+    arr(1, 0) = "power_nom_kW":      arr(1, 1) = 30
+    arr(2, 0) = "U_nom_lin_V":       arr(2, 1) = 1000
+    arr(3, 0) = "f_nom_Hz":          arr(3, 1) = 50
+    arr(4, 0) = "eff_nom_fr":        arr(4, 1) = 0.82
+    arr(5, 0) = "cosphi_nom_fr":     arr(5, 1) = 0.88
+    arr(6, 0) = "slip_nom_fr":       arr(6, 1) = 0.053
+    arr(7, 0) = "f_surf_Hz":         arr(7, 1) = 50
+    arr(8, 0) = "power_fact_kW":     arr(8, 1) = 40
+    arr(9, 0) = "d_od_mm":           arr(9, 1) = 117
+    arr(10, 0) = "lambda_":          arr(10, 1) = 2.8
+    arr(11, 0) = "alpha0":           arr(11, 1) = 0.5
+    arr(12, 0) = "xi0":              arr(12, 1) = 1.05
+    arr(13, 0) = "Ixcf":             arr(13, 1) = 0.4
+    arr(14, 0) = "motor_json":       arr(14, 1) = "=encode_ESP_motor(R[-14]C, R[-13]C, R[-12]C, R[-11]C , R[-10]C , R[-9]C, R[-8]C, R[-7]C, R[-6]C, R[-5]C, R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B15") = arr
+    ActiveCell.range("B1:B14").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A15").Interior.Color = clrGrayText
+    ActiveCell.range("B15").Interior.Color = clrCalculated
+    ActiveCell.range("B15").name = get_name("motor_json")
+    
+    If comment Then
+        ActiveCell.range("B1").AddComment ("Тип погружного электрического двигателя УЭЦН (ПЭД):" & _
+                                           "0 - постоянные значения параметров для разных мощностей," & _
+                                           "1 - параметры задаются по каталожным кривым, ассинхронный, " & _
+                                           "2 - параметры задаются по схеме замещения, ассинхронный")
+        ActiveCell.range("B2").AddComment ("номинальная мощность двигателя кВт " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B3").AddComment ("номинальное напряжение двигателя, линейное, В" & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B4").AddComment ("номинальная частота тока, Гц" & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B5").AddComment ("КПД при номинальном режиме работы. " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B6").AddComment ("коэффициент мощности при номинальной мощности " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B7").AddComment ("скольжение при номинальном режиме работы " & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B8").AddComment ("частота тока на поверхности, фактическая" & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B9").AddComment ("фактическая потребляемая мощность" & _
+                                           " " & _
+                                           " ")
+        ActiveCell.range("B10").AddComment ("внешний диаметр - габарит ПЭД" & _
+                                            " " & _
+                                            " ")
+        ActiveCell.range("B11").AddComment ("перегрузочный коэффициент отношение макс момента к номинальному для motor_ID = 2 ")
+        ActiveCell.range("B12").AddComment ("параметр. влияет на положение макс КПД.для motor_ID = 2")
+        ActiveCell.range("B13").AddComment ("параметр. определяет потери момента при холостом ходе. для motor_ID = 2")
+        ActiveCell.range("B14").AddComment ("поправка на поправку тока холостого хода при изменении напряжения и частоты от минимальной. для motor_ID = 2")
+    End If
+End Sub
+Sub btn_ribbon_cable_json(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 7, 0 To 1)
+    
+    If Not promt_to_write(8, 2, "esp motor json") Then Exit Sub
+    
+    arr(0, 0) = "length_m":          arr(0, 1) = 1000
+    arr(1, 0) = "cable_R_Omkm":      arr(1, 1) = 1.18
+    arr(2, 0) = "cable_X_Omkm":      arr(2, 1) = 0.01
+    arr(3, 0) = "cable_t_max_C":     arr(3, 1) = 120
+    arr(4, 0) = "manufacturer":      arr(4, 1) = "default"
+    arr(5, 0) = "name":              arr(5, 1) = "default"
+    arr(6, 0) = "d_mm":              arr(6, 1) = 16
+    arr(7, 0) = "motor_json":        arr(7, 1) = "=encode_ESP_cable( R[-7]C, R[-6]C, R[-5]C, R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B8") = arr
+    ActiveCell.range("B1:B7").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A8").Interior.Color = clrGrayText
+    ActiveCell.range("B8").Interior.Color = clrCalculated
+    ActiveCell.range("B8").name = get_name("cable_json")
+    
+    If comment Then
+        ActiveCell.range("B1").AddComment ("длина кабельной линии, м")
+        ActiveCell.range("B2").AddComment ("удельное активное сопротивление")
+        ActiveCell.range("B3").AddComment ("удельное реактивное сопротивление")
+        ActiveCell.range("B4").AddComment ("максимально допустимая температура")
+        ActiveCell.range("B5").AddComment ("производитель, для справки")
+        ActiveCell.range("B6").AddComment ("название кабеля, для справки")
+        ActiveCell.range("B7").AddComment ("диаметр жилы")
+    End If
+End Sub
+Sub btn_ribbon_gassep_json(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 12, 0 To 1)
+    
+    If Not promt_to_write(13, 2, "esp motor json") Then Exit Sub
+    
+    arr(0, 0) = "separation_mode":   arr(0, 1) = 0
+    arr(1, 0) = "gassep_type":       arr(1, 1) = 0
+    arr(2, 0) = "natsep_type":       arr(2, 1) = 0
+    arr(3, 0) = "psep_man_atma":     arr(3, 1) = 50
+    arr(4, 0) = "tsep_man_C":        arr(4, 1) = 30
+    arr(5, 0) = "ksep_gassep_man_d": arr(5, 1) = 0.5
+    arr(6, 0) = "ksep_nat_man_d":    arr(6, 1) = 0.5
+    arr(7, 0) = "ksep_liquid_man_d": arr(7, 1) = 0.5
+    arr(8, 0) = "M_Nm":              arr(9, 1) = 0
+    arr(9, 0) = "manufacturer":      arr(9, 1) = ""
+    arr(10, 0) = "name":             arr(10, 1) = ""
+    arr(11, 0) = "length_m":         arr(11, 1) = 1
+    arr(12, 0) = "ESP_separation":   arr(12, 1) = "=encode_ESP_separation(R[-12]C, R[-11]C, R[-10]C, R[-9]C, R[-8]C,  R[-7]C, R[-6]C, R[-5]C, R[-4]C, R[-3]C, R[-2]C, R[-1]C)"
+    ActiveCell.range("A1:B13") = arr
+    ActiveCell.range("B1:B12").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A13").Interior.Color = clrGrayText
+    ActiveCell.range("B13").Interior.Color = clrCalculated
+    ActiveCell.range("B13").name = get_name("separation_json")
+    
+    If comment Then
+        Call ActiveCell.range("B1").AddComment("режим расчета сепарации:" & _
+                                               "0 - расчет по корреляции;" & _
+                                               "1 - давление сепарации задается явно, величины рассчитываются по корреляции;" & _
+                                               "2 - давление и величина задается явно;" & _
+                                               "3 - давление и величина задается полностью явно;" & _
+                                               " ")
+        ActiveCell.range("B2").AddComment ("тип газосепаратора - номер из базы")
+        ActiveCell.range("B3").AddComment ("модель расчета естественной сепарации")
+        ActiveCell.range("B4").AddComment ("давление для расчета коэффициента сепарации заданного вручную")
+        ActiveCell.range("B5").AddComment ("температура для расчета коэффициента сепарации заданного вручную")
+        ActiveCell.range("B6").AddComment ("коэффициент сепарации ГС заданный вручную")
+        ActiveCell.range("B7").AddComment ("коэффициент сепарации натуральной заданный вручную")
+        ActiveCell.range("B8").AddComment ("коэффициент сепарации жидкости для режима потока через затруб")
+        ActiveCell.range("B9").AddComment ("момент на валу")
+        ActiveCell.range("B10").AddComment ("---")
+        ActiveCell.range("B11").AddComment ("---")
+    End If
+End Sub
+Sub btn_ribbon_gassep_calc(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 5, 0 To 1)
+    
+    If Not promt_to_write(6, 2, "esp gassep calc") Then Exit Sub
+    
+    arr(0, 0) = "gassep_type":       arr(0, 1) = 1
+    arr(1, 0) = "gas_fraction":      arr(1, 1) = 0.4
+    arr(2, 0) = "q_liq_sm3day":      arr(2, 1) = 50
+    arr(3, 0) = "freq_Hz":           arr(3, 1) = 50
+    arr(4, 0) = "gassep_name":       arr(4, 1) = "=ESP_gassep_name(R[-4]C)"
+    arr(5, 0) = "ksep_gassep_d":     arr(5, 1) = "=ESP_gassep_ksep_d(R[-5]C,R[-4]C,R[-3]C,R[-2]C)"
+    ActiveCell.range("A1:B6") = arr
+    ActiveCell.range("B1:B6").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A6").Interior.Color = clrGrayText
+    ActiveCell.range("B5").Interior.Color = clrIntermediateCalc
+    ActiveCell.range("B6").Interior.Color = clrCalculated
+    ActiveCell.range("B6").name = get_name("ksep_gassep")
+    If comment Then
+        Call ActiveCell.range("B1").AddComment("Тип газосепаратора:" & _
+                                               "Целое число от 1 до 29." & _
+                                               "Параметры на основе стендовых испытаний в РГУ нефти и газа имени И.М.Губкина" & _
+                                               " ")
+        ActiveCell.range("B2").AddComment ("Доля газа в потоке на входе в газосепаратор. Расходная, объемная.")
+        ActiveCell.range("B3").AddComment ("Дебит жидкости на входе в газосепаратор")
+        ActiveCell.range("B4").AddComment ("Частота вращения газосепаратора от 40 до 60 Гц")
+        ActiveCell.range("B5").AddComment ("Название газосепаратора из базы результатов")
+        ActiveCell.range("B6").AddComment ("коэффициент сепарации ГС расчетный")
+    End If
+End Sub
+Sub btn_ribbon_natsep_calc(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 10, 0 To 1)
+    
+    If Not promt_to_write(11, 2, "esp gassep calc") Then Exit Sub
+    
+    arr(0, 0) = "feed":                  arr(0, 1) = "=encode_feed()"
+    arr(1, 0) = "p_intake_atma":         arr(1, 1) = 50
+    arr(2, 0) = "t_intake_C":            arr(2, 1) = 50
+    arr(3, 0) = "d_intake_mm":           arr(3, 1) = 92
+    arr(4, 0) = "d_casing_mm":           arr(4, 1) = 125
+    arr(5, 0) = "model":                 arr(5, 1) = 0
+    arr(6, 0) = "pkv_prod_period_ratio": arr(6, 1) = 0.5
+    arr(7, 0) = "h_intake_m":            arr(7, 1) = 0.1
+    arr(8, 0) = "h_perf_m":              arr(8, 1) = 1
+    arr(9, 0) = "param":                 arr(9, 1) = "{""show_array"":1,""gas_goes_into_solution"":1,""calibr_li"":2}"
+    arr(10, 0) = "ksep_nat":
+    ActiveCell.range("A1:B11") = arr
+    ActiveCell.range("B1:B11").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A11").Interior.Color = clrGrayText
+    ActiveCell.range("B1").Interior.Color = clrIntermediateCalc
+    ActiveCell.range("B11").Interior.Color = clrCalculated
+    ActiveCell.range("B11:E12").FormulaArray = "=well_ksep_natural_d(R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    
+    ActiveCell.range("B11").name = get_name("ksep_natsep")
+    If comment Then
+        Call ActiveCell.range("B1").AddComment("Параметры потока перед приемом насоса")
+        ActiveCell.range("B2").AddComment ("Давление на приеме ЭЦН.")
+        ActiveCell.range("B3").AddComment ("Температура на приеме ЭЦН")
+        ActiveCell.range("B4").AddComment ("Диаметр приемной сетки насоса")
+        ActiveCell.range("B5").AddComment ("Диаметр эксплуатационной колонны в зоне приема ЭЦН")
+        ActiveCell.range("B6").AddComment ("тип модели: 0 - упрощенная Маркеса для ЭЦН, 1 - механистическая Маркеса для ЭЦН," & _
+                                            "2  - механистическая с ЭЦН ниже перфорации," & _
+                                            "3  - механистическая для скважин ПКВ.")
+        ActiveCell.range("B6").AddComment ("Для модели ПКВ отношение времени работы ЭЦН к периоду")
+        ActiveCell.range("B7").AddComment ("Для механистической модели - высота приемной сетки ЭЦН")
+        ActiveCell.range("B8").AddComment ("Для модели ниже перфорации - длина перфорации")
+    End If
+End Sub
+Sub btn_ribbon_gassep_plot(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 11, 0 To 3)
+    Dim top_rng As range
+    Dim i As Integer
+    
+    Set top_rng = ActiveCell
+    
+    If Not promt_to_write(12, 4, "esp gassep calc") Then Exit Sub
+    
+    arr(0, 0) = "gassep_type":       arr(0, 1) = 1
+    arr(1, 0) = "gas_fraction":      arr(1, 1) = 0.4
+    arr(2, 0) = "q_liq_sm3day":      arr(2, 1) = 50
+    arr(3, 0) = "freq_Hz":           arr(3, 1) = 50
+    arr(4, 0) = "gassep_name":       arr(4, 1) = "=ESP_gassep_name(R[-4]C)"
+    arr(5, 0) = "q_liq_min":         arr(5, 1) = 1
+    arr(6, 0) = "q_liq_max":         arr(6, 1) = 500
+    arr(7, 0) = "gas_fraction_min":  arr(7, 1) = 0
+    arr(8, 0) = "gas_fraction_max":  arr(8, 1) = 1
+    arr(9, 0) = "q_liq_list":        arr(9, 1) = "=encode_linspace(R[-4]C,R[-3]C,20)"
+    arr(10, 0) = "gas_frac_list":    arr(10, 1) = "=encode_linspace(R[-3]C,R[-2]C,20)"
+    arr(11, 0) = "qliq":     arr(11, 1) = "ksep gassep":       arr(11, 2) = "gas frac": arr(11, 3) = "ksep gassep":
+    
+    
+    ActiveCell.range("A1:D12") = arr
+    ActiveCell.range("B1:B12").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A12").Interior.Color = clrGrayText
+'    ActiveCell.range("B5").Interior.Color = clrIntermediateCalc
+'    ActiveCell.range("B6").Interior.Color = clrCalculated
+'    ActiveCell.range("B6").name = get_name("ksep_gassep")
+    top_rng.range("A13:A33").FormulaArray = "=decode_json(R[-3]C[1])"
+    top_rng.range("C13:C33").FormulaArray = "=decode_json(R[-2]C[-1])"
+    
+    Dim s(1 To 4) As String
+    Dim si As String, sii As String
+    s(1) = top_rng.range("B1").Address
+    s(2) = top_rng.range("B2").Address
+    s(3) = top_rng.range("B3").Address
+    s(4) = top_rng.range("B4").Address
+    For i = 1 To 21
+        si = top_rng.Cells(12 + i, 1).Address
+        sii = top_rng.Cells(12 + i, 3).Address
+        top_rng.range("B13:B33").Cells(i, 1) = "=ESP_gassep_ksep_d(" & s(1) & "," & s(2) & "," & si & "," & s(4) & ")"
+        top_rng.range("B13:B33").Cells(i, 3) = "=ESP_gassep_ksep_d(" & s(1) & "," & sii & "," & s(3) & "," & s(4) & ")"
+    Next i
+    Dim diag
+    Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
+    With diag.Chart
+        .SetSourceData source:=range(ActiveCell.range("A13:B33").Address)
+         Application.CutCopyMode = False
+        .SetElement (msoElementLegendBottom)
+        .HasTitle = True
+        .ChartTitle.Text = "gassep curve"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Ksep"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
+        .Parent.top = ActiveCell.Cells(1, 5).top
+        .Parent.Left = ActiveCell.Cells(1, 5).Left
+        .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P25").Height
+        .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
+    End With
+    
+    Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
+    With diag.Chart
+        .SetSourceData source:=range(ActiveCell.range("C13:D33").Address)
+         Application.CutCopyMode = False
+        .SetElement (msoElementLegendBottom)
+        .HasTitle = True
+        .ChartTitle.Text = "gassep curve"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Ksep"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "gas fraction"
+        .Parent.top = ActiveCell.Cells(1, 5).top
+        .Parent.Left = ActiveCell.Cells(1, 5).range("I1:O33").Left
+        .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P25").Height
+        .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
+    End With
+End Sub
+Sub btn_ribbon_natsep_plot(control As IRibbonControl)
+On Error Resume Next
+    Dim arr(0 To 14, 0 To 3)
+    Dim top_rng As range
+    Dim i As Integer
+    
+    Set top_rng = ActiveCell
+    
+    If Not promt_to_write(12, 4, "esp gassep calc") Then Exit Sub
+    
+    
+    arr(0, 0) = "q_max":                 arr(0, 1) = 200
+    arr(1, 0) = "q_list":                arr(1, 1) = "=encode_linspace(1,R[-1]C,20)"
+    arr(2, 0) = "feed":                  arr(2, 1) = "=encode_feed_list(R[-1]C)"
+    arr(3, 0) = "p_intake_atma":         arr(3, 1) = 50
+    arr(4, 0) = "t_intake_C":            arr(4, 1) = 50
+    arr(5, 0) = "d_intake_mm":           arr(5, 1) = 92
+    arr(6, 0) = "d_casing_mm":           arr(6, 1) = 125
+    arr(7, 0) = "model":                 arr(7, 1) = 0
+    arr(8, 0) = "pkv_prod_period_ratio": arr(8, 1) = 0.5
+    arr(9, 0) = "h_intake_m":            arr(9, 1) = 0.1
+    arr(10, 0) = "h_perf_m":             arr(10, 1) = 1
+    arr(11, 0) = "param":                arr(11, 1) = "{""show_array"":1,""gas_goes_into_solution"":1,""calibr_li"":2}"
+    arr(12, 0) = "ksep_nat":             arr(12, 1) = "=well_ksep_natural_d(R[-10]C,R[-9]C,R[-8]C,R[-7]C,R[-6]C,R[-5]C,R[-4]C,R[-3]C,R[-2]C,R[-1]C)"
+    arr(13, 0) = "qliq":     arr(13, 1) = "ksep natsep":     arr(13, 1) = "feed in pump"
+    ActiveCell.range("A1:B14") = arr
+    ActiveCell.range("B1:B14").Interior.Color = clrUserInput
+    ActiveCell.range("A1:A14").Interior.Color = clrGrayText
+    top_rng.range("A15:A35").FormulaArray = "=decode_json(R[-13]C[1])"
+    top_rng.range("B15:B35").FormulaArray = "=decode_json(decode_json(R[-2]C,,""k_sep"",1))"
+    top_rng.range("C15:C35").FormulaArray = "=decode_json(decode_json(R[-2]C[-1],,""feed"",1))"
+    
+    Dim diag
+    Set diag = ActiveSheet.Shapes.AddChart2(240, xlXYScatterSmooth)
+    With diag.Chart
+        .SetSourceData source:=range(ActiveCell.range("A15:B35").Address)
+         Application.CutCopyMode = False
+        .SetElement (msoElementLegendBottom)
+        .HasTitle = True
+        .ChartTitle.Text = "gassep curve"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Ksep"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Qliq, sm3/day"
+        .Parent.top = ActiveCell.Cells(1, 5).top
+        .Parent.Left = ActiveCell.Cells(1, 5).Left
+        .Parent.Height = ActiveCell.Cells(1, 5).range("I1:P25").Height
+        .Parent.WIDTH = ActiveCell.Cells(1, 5).range("I1:P33").WIDTH
+    End With
+    
 End Sub
 
