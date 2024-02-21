@@ -1,6 +1,6 @@
 H_CORRELATION = 0 # 0 - BeggsBrill, 1 - Ansari and so on 
 PVT_CORRELATION = 0 # 0 -Standing, 1 -McCain, 2 - linear 
-PVT_DEFAULT = "gamma_gas:0,900;gamma_oil:0,750;gamma_wat:1,000;rsb_m3m3:100,000;rp_m3m3:-1,000;pb_atma:-1,000;tres_C:90,000;bob_m3m3:-1,000;muob_cP:-1,000;PVTcorr:0;ksep_fr:0,000;pksep_atma:-1,000;tksep_C:-1,000; " 
+PVT_DEFAULT = "{gamma_gas:0,900;gamma_oil:0,750;gamma_wat:1,000;rsb_m3m3:100,000;rp_m3m3:-1,000;pb_atma:-1,000;tres_C:90,000;bob_m3m3:-1,000;muob_cP:-1,000;PVTcorr:0;ksep_fr:0,000;pksep_atma:-1,000;tksep_C:-1,000;} " 
 ESP_DEFAULT = "ESP_ID:1006.00000;HeadNom_m:2000.00000;ESPfreq_Hz:50.00000;ESP_U_V:1000.00000;MotorPowerNom_kW:30.00000;Tintake_C:85.00000;t_dis_C:25.00000;KsepGS_fr:0.00000;ESP_energy_fact_Whday:0.00000;ESP_cable_type:0;ESP_Hmes_m:0.00000;ESP_gas_degradation_type:0;c_calibr_head:0.00000;PKV_work_min:-1,00000;PKV_stop_min:-1,00000;"
 WELL_DEFAULT = "hperf_m:2000,00000;hpump_m:1800,00000;udl_m:0,00000;d_cas_mm:150,00000;dtub_mm:72,00000;dchoke_mm:15,00000;roughness_m:0,00010;tbh_C:85,00000;twh_C:25,00000;"
 WELL_GL_DEFAULT = "hperf_m:2500,00000;htub_m:2000,00000;udl_m:0,00000;d_cas_mm:125,00000;dtub_mm:62,00000;dchoke_mm:15,00000;roughness_m:0,00010;tbh_C:100,00000;twh_C:50,00000;GLV:1;H_glv_m:1500,000;d_glv_mm:5,000;p_glv_atma:50,000;"
@@ -132,38 +132,6 @@ class API():
 
         self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
         return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,pipe_object,feed,calc_along_coord,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
-
-    def json_pipe_calc(self, pipe_object,feed,p_in_atma=-1,p_out_atma=-1,t_in_C=30,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
-        """
- ========== description ============== 
- расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
-        
- ==========  arguments  ============== 
-
-     pipe_object - параметры объекта труба - json строка. используйте  функцию encode_pipe_object() для генерации    
-
-     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
-
-     p_in_atma - давление на входе потока в трубу, атм  если задано, учитывается, иначе рассчитывается    
-
-     p_out_atma - давление на выходе потока из трубы, атм  если задано, учитывается, иначе рассчитывается    
-
-     t_in_c - температура потока на входе в трубу, с  если возможно, учитывается в расчете    
-
-     param - дополнительные параметры расчета потока    
-
-     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
-
-     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
-
-     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
-
-     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
-
-        """
-
-        self.f_json_pipe_calc = self.book.macro("json_pipe_calc")
-        return self.f_json_pipe_calc(pipe_object,feed,p_in_atma,p_out_atma,t_in_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def MF_choke_q_sm3day(self, choke_json,feed_json,p_in_atma,p_out_atma,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -299,7 +267,37 @@ class API():
         self.f_json_choke_pq_crv = self.book.macro("json_choke_pq_crv")
         return self.f_json_choke_pq_crv(d_choke_mm,feed,p_calc_from_atma,t_choke_C,d_pipe_mm,calc_along_flow,calibr,param,CDischarge,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def json_PVT_calc(self, p_atma,t_C,PVT_prop,show_log=False):
+    def encode_PVT(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+        """
+ ========== description ============== 
+ Функция кодирования параметров PVT в строку,  для передачи PVT свойств в прикладные функции Унифлок. 
+        
+ ==========  arguments  ============== 
+
+     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
+
+     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
+
+     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
+
+     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
+
+     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
+
+     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
+
+     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
+
+     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
+
+     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+
+        """
+
+        self.f_encode_PVT = self.book.macro("encode_PVT")
+        return self.f_encode_PVT(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+
+    def PVT_calc(self, p_atma,t_C,PVT_prop,show_log=False):
         """
  ========== description ============== 
  calculate all PVT properties of oil at a given  pressure and temperature 
@@ -316,10 +314,10 @@ class API():
 
         """
 
-        self.f_json_PVT_calc = self.book.macro("json_PVT_calc")
-        return self.f_json_PVT_calc(p_atma,t_C,PVT_prop,show_log)
+        self.f_PVT_calc = self.book.macro("PVT_calc")
+        return self.f_PVT_calc(p_atma,t_C,PVT_prop,show_log)
 
-    def PVT_bg_m3m3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_bg_m3m3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет объемного коэффициента газа 
@@ -330,32 +328,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_bg_m3m3 = self.book.macro("PVT_bg_m3m3")
-        return self.f_PVT_bg_m3m3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_bg_m3m3(p_atma,t_C,PVT_prop)
 
-    def PVT_bo_m3m3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_bo_m3m3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет объемного коэффициента нефти 
@@ -366,32 +346,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_bo_m3m3 = self.book.macro("PVT_bo_m3m3")
-        return self.f_PVT_bo_m3m3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_bo_m3m3(p_atma,t_C,PVT_prop)
 
-    def PVT_bw_m3m3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_bw_m3m3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет объемного коэффициента воды 
@@ -402,32 +364,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_bw_m3m3 = self.book.macro("PVT_bw_m3m3")
-        return self.f_PVT_bw_m3m3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_bw_m3m3(p_atma,t_C,PVT_prop)
 
-    def PVT_salinity_ppm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_salinity_ppm(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет солености воды 
@@ -438,32 +382,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_salinity_ppm = self.book.macro("PVT_salinity_ppm")
-        return self.f_PVT_salinity_ppm(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_salinity_ppm(p_atma,t_C,PVT_prop)
 
-    def PVT_mu_oil_cP(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_mu_oil_cP(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет вязкости нефти 
@@ -474,32 +400,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_mu_oil_cP = self.book.macro("PVT_mu_oil_cP")
-        return self.f_PVT_mu_oil_cP(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_mu_oil_cP(p_atma,t_C,PVT_prop)
 
-    def PVT_mu_gas_cP(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_mu_gas_cP(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет вязкости газа 
@@ -510,32 +418,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_mu_gas_cP = self.book.macro("PVT_mu_gas_cP")
-        return self.f_PVT_mu_gas_cP(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_mu_gas_cP(p_atma,t_C,PVT_prop)
 
-    def PVT_mu_wat_cP(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_mu_wat_cP(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет вязкости воды 
@@ -546,32 +436,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_mu_wat_cP = self.book.macro("PVT_mu_wat_cP")
-        return self.f_PVT_mu_wat_cP(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_mu_wat_cP(p_atma,t_C,PVT_prop)
 
-    def PVT_rs_m3m3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_rs_m3m3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет газосодержания при заданных p,t 
@@ -582,32 +454,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rs_m3m3 = self.book.macro("PVT_rs_m3m3")
-        return self.f_PVT_rs_m3m3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_rs_m3m3(p_atma,t_C,PVT_prop)
 
-    def PVT_z(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_z(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет коэффициента сверхсжимаемости газа 
@@ -618,32 +472,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_z = self.book.macro("PVT_z")
-        return self.f_PVT_z(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_z(p_atma,t_C,PVT_prop)
 
-    def PVT_rho_oil_kgm3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_rho_oil_kgm3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет плотности нефти в рабочих условиях 
@@ -654,32 +490,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rho_oil_kgm3 = self.book.macro("PVT_rho_oil_kgm3")
-        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,PVT_prop)
 
-    def PVT_rho_gas_kgm3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_rho_gas_kgm3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет плотности газа в рабочих условиях 
@@ -690,32 +508,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rho_gas_kgm3 = self.book.macro("PVT_rho_gas_kgm3")
-        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,PVT_prop)
 
-    def PVT_rho_wat_kgm3(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_rho_wat_kgm3(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет плотности воды в рабочих условиях 
@@ -726,32 +526,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rho_wat_kgm3 = self.book.macro("PVT_rho_wat_kgm3")
-        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,PVT_prop)
 
-    def PVT_pb_atma(self, t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_pb_atma(self, t_C,PVT_prop=""):
         """
  ========== description ============== 
  Расчет давления насыщения по известному  газосодержанию при давлении насыщения 
@@ -760,32 +542,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_pb_atma = self.book.macro("PVT_pb_atma")
-        return self.f_PVT_pb_atma(t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_pb_atma(t_C,PVT_prop)
 
-    def PVT_rsb_m3m3(self, pb_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_rsb_m3m3(self, pb_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  Расчет газосодержания при давлении насыщения  по известному давлению насыщения 
@@ -796,28 +560,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rsb_m3m3 = self.book.macro("PVT_rsb_m3m3")
-        return self.f_PVT_rsb_m3m3(pb_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_rsb_m3m3(pb_atma,t_C,PVT_prop)
 
-    def PVT_ST_oilgas_Nm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_ST_oilgas_Nm(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения нефть - газ 
@@ -828,32 +578,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_ST_oilgas_Nm = self.book.macro("PVT_ST_oilgas_Nm")
-        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,PVT_prop)
 
-    def PVT_ST_watgas_Nm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_ST_watgas_Nm(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения вода - газ 
@@ -864,30 +596,12 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_ST_watgas_Nm = self.book.macro("PVT_ST_watgas_Nm")
-        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,PVT_prop)
 
     def feed_ST_liqgas_Nm(self, p_atma,t_C,feed):
         """
@@ -907,7 +621,7 @@ class API():
         self.f_feed_ST_liqgas_Nm = self.book.macro("feed_ST_liqgas_Nm")
         return self.f_feed_ST_liqgas_Nm(p_atma,t_C,feed)
 
-    def PVT_cp_oil_JkgC(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_cp_oil_JkgC(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет теплоемкости нефти при постоянном давлении cp 
@@ -918,30 +632,12 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_cp_oil_JkgC = self.book.macro("PVT_cp_oil_JkgC")
-        return self.f_PVT_cp_oil_JkgC(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_cp_oil_JkgC(p_atma,t_C,PVT_prop)
 
     def PVT_cp_gas_JkgC(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
@@ -979,7 +675,7 @@ class API():
         self.f_PVT_cp_gas_JkgC = self.book.macro("PVT_cp_gas_JkgC")
         return self.f_PVT_cp_gas_JkgC(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
 
-    def PVT_cv_gas_JkgC(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_cv_gas_JkgC(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет теплоемкости газа при постоянном объеме cv 
@@ -990,32 +686,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_cv_gas_JkgC = self.book.macro("PVT_cv_gas_JkgC")
-        return self.f_PVT_cv_gas_JkgC(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_cv_gas_JkgC(p_atma,t_C,PVT_prop)
 
-    def PVT_cp_wat_JkgC(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_cp_wat_JkgC(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет теплоемкости воды при постоянном давлении cp 
@@ -1026,32 +704,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_cp_wat_JkgC = self.book.macro("PVT_cp_wat_JkgC")
-        return self.f_PVT_cp_wat_JkgC(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_cp_wat_JkgC(p_atma,t_C,PVT_prop)
 
-    def PVT_compressibility_wat_1atm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_compressibility_wat_1atm(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет сжимаемости воды 
@@ -1062,32 +722,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_compressibility_wat_1atm = self.book.macro("PVT_compressibility_wat_1atm")
-        return self.f_PVT_compressibility_wat_1atm(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_compressibility_wat_1atm(p_atma,t_C,PVT_prop)
 
-    def PVT_compressibility_oil_1atm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_compressibility_oil_1atm(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет сжимаемости нефти 
@@ -1098,32 +740,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_compressibility_oil_1atm = self.book.macro("PVT_compressibility_oil_1atm")
-        return self.f_PVT_compressibility_oil_1atm(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_compressibility_oil_1atm(p_atma,t_C,PVT_prop)
 
-    def PVT_compressibility_gas_1atm(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_compressibility_gas_1atm(self, p_atma,t_C,PVT_prop=""):
         """
  ========== description ============== 
  расчет сжимаемости газа 
@@ -1134,32 +758,36 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
+     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_compressibility_gas_1atm = self.book.macro("PVT_compressibility_gas_1atm")
-        return self.f_PVT_compressibility_gas_1atm(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_compressibility_gas_1atm(p_atma,t_C,PVT_prop)
 
-    def json_feed_calc(self, p_atma,t_C,feed,show_log=False):
+    def encode_feed(self, q_liq_sm3day=10,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1,fluid=PVT_DEFAULT):
+        """
+ ========== description ============== 
+Функция кодирования параметров потока флюидов в строку, 
+        
+ ==========  arguments  ============== 
+
+     q_liq_sm3day - дебит жидкости в ст.условиях.    
+
+     fw_perc - ободненность, %    
+
+     rp_m3m3 - газовый фактор, м3/м3:    
+
+     q_gas_free_sm3day - расход свободного газа, ст. м3/сут    
+
+     fluid - закодированная pvt строка  с параметрами флюида   
+
+        """
+
+        self.f_encode_feed = self.book.macro("encode_feed")
+        return self.f_encode_feed(q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,fluid)
+
+    def feed_calc(self, p_atma,t_C,feed,show_log=False):
         """
  ========== description ============== 
  расчет всех параметров потока с выводом в json 
@@ -1176,8 +804,8 @@ class API():
 
         """
 
-        self.f_json_feed_calc = self.book.macro("json_feed_calc")
-        return self.f_json_feed_calc(p_atma,t_C,feed,show_log)
+        self.f_feed_calc = self.book.macro("feed_calc")
+        return self.f_feed_calc(p_atma,t_C,feed,show_log)
 
     def feed_gas_fraction_d(self, p_atma,t_C,feed,ksep_add_fr=0):
         """
@@ -1519,7 +1147,95 @@ class API():
         self.f_feed_m_wat_kgsec = self.book.macro("feed_m_wat_kgsec")
         return self.f_feed_m_wat_kgsec(p_atma,t_C,feed)
 
-    def ESP_head_m(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_head=1,calibr_rate=1,calibr_power=1):
+    def encode_ipr(self, p_res_atma=250,q_test_sm3day=50,pwf_test_atma=100,pi_sm3dayatm=-1,feed_json=""):
+        """
+ ========== description ============== 
+ кодирование параметров пласта в json строку 
+        
+ ==========  arguments  ============== 
+
+     p_res_atma - пластовое давление, атма    
+
+     q_test_sm3day - тестовый дебит, ст.м3/сут    
+
+     pwf_test_atma - тестовое забойное давление, атм    
+
+     pi_sm3dayatm - коэффициент продуктивности, м3/сут/атм  если не задан, то рассчитывается из тестовых замеров    
+
+     feed_json - json c pvt свойствами, используйте encode_pvt() для генерации   
+
+        """
+
+        self.f_encode_ipr = self.book.macro("encode_ipr")
+        return self.f_encode_ipr(p_res_atma,q_test_sm3day,pwf_test_atma,pi_sm3dayatm,feed_json)
+
+    def IPR_pi_sm3dayatm(self, IPR_json,q_liq_sm3day,pwf_test_atma):
+        """
+ ========== description ============== 
+ расчет коэффициента продуктивности пласта  по данным тестовой эксплуатации 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     q_liq_sm3day - тестовый дебит жидкости    
+
+     pwf_test_atma - тестовое забойное давление   
+
+        """
+
+        self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
+        return self.f_IPR_pi_sm3dayatm(IPR_json,q_liq_sm3day,pwf_test_atma)
+
+    def IPR_pwf_atma(self, IPR_json,q_liq_sm3day=0):
+        """
+ ========== description ============== 
+ расчет забойного давления по дебиту и продуктивности 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr p_res_atma - пластовое давление, абс. атм    
+
+     q_liq_sm3day - дебит жидкости скважины на поверхности, ст.м3/сут, число или массив   
+
+        """
+
+        self.f_IPR_pwf_atma = self.book.macro("IPR_pwf_atma")
+        return self.f_IPR_pwf_atma(IPR_json,q_liq_sm3day)
+
+    def IPR_q_liq_sm3day(self, IPR_json,p_wf_atma):
+        """
+ ========== description ============== 
+ расчет дебита по давлению и продуктивности 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     p_wf_atma - забойное давление, абс. атм.  можно задать список [],   
+
+        """
+
+        self.f_IPR_q_liq_sm3day = self.book.macro("IPR_q_liq_sm3day")
+        return self.f_IPR_q_liq_sm3day(IPR_json,p_wf_atma)
+
+    def IPR_crv(self, IPR_json,num_points=20):
+        """
+ ========== description ============== 
+ построение кривой IPR в json формате 
+        
+ ==========  arguments  ============== 
+
+     ipr_json - json строка кодирующая ipr    
+
+     num_points - количество точек в графике   
+
+        """
+
+        self.f_IPR_crv = self.book.macro("IPR_crv")
+        return self.f_IPR_crv(IPR_json,num_points)
+
+    def ESP_head_m(self, qliq_m3day,esp_json,freq_Hz=50,mu_cSt=-1):
         """
  ========== description ============== 
  номинальный напор ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость и калибровки 
@@ -1528,26 +1244,18 @@ class API():
 
      qliq_m3day - дебит жидкости в условиях насоса (стенд)    
 
-     num_stages - количество ступеней    
+     esp_json - параметры эцн    
 
      freq_hz - частота вращения насоса    
 
-     pump_id - номер насоса в базе данных    
-
-     mu_cst - вязкость жидкости, сст;    
-
-     calibr_head - калибровка (множитель) на напор    
-
-     calibr_rate - калибровка (множитель) на расход    
-
-     calibr_power - калибровка (множитель) на мощность   
+     mu_cst - вязкость жидкости, сст;   
 
         """
 
         self.f_ESP_head_m = self.book.macro("ESP_head_m")
-        return self.f_ESP_head_m(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,calibr_head,calibr_rate,calibr_power)
+        return self.f_ESP_head_m(qliq_m3day,esp_json,freq_Hz,mu_cSt)
 
-    def ESP_power_W(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_head=1,calibr_rate=1,calibr_power=1):
+    def ESP_power_W(self, qliq_m3day,esp_json,freq_Hz=50,mu_cSt=-1):
         """
  ========== description ============== 
  номинальная мощность потребляемая ЭЦН с вала (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1556,26 +1264,18 @@ class API():
 
      qliq_m3day - дебит жидкости в условиях насоса (стенд)    
 
-     num_stages - количество ступеней    
+     esp_json - параметры эцн    
 
      freq_hz - частота вращения насоса    
 
-     pump_id - номер насоса в базе данных    
-
-     mu_cst - вязкость жидкости, сст;    
-
-     calibr_head - калибровка (множитель) на напор    
-
-     calibr_rate - калибровка (множитель) на расход    
-
-     calibr_power - калибровка (множитель) на мощность   
+     mu_cst - вязкость жидкости, сст;   
 
         """
 
         self.f_ESP_power_W = self.book.macro("ESP_power_W")
-        return self.f_ESP_power_W(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,calibr_head,calibr_rate,calibr_power)
+        return self.f_ESP_power_W(qliq_m3day,esp_json,freq_Hz,mu_cSt)
 
-    def ESP_eff_fr(self, qliq_m3day,num_stages=1,freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_head=1,calibr_rate=1,calibr_power=1):
+    def ESP_eff_fr(self, qliq_m3day,esp_json,freq_Hz=50,mu_cSt=-1):
         """
  ========== description ============== 
  номинальный КПД ЭЦН (на основе каталога ЭЦН)  учитывается поправка на вязкость 
@@ -1584,24 +1284,16 @@ class API():
 
      qliq_m3day - дебит жидкости в условиях насоса (стенд)    
 
-     num_stages - количество ступеней    
+     esp_json - параметры эцн    
 
      freq_hz - частота вращения насоса    
 
-     pump_id - номер насоса в базе данных    
-
-     mu_cst - вязкость жидкости, сст;    
-
-     calibr_head - калибровка (множитель) на напор    
-
-     calibr_rate - калибровка (множитель) на расход    
-
-     calibr_power - калибровка (множитель) на мощность   
+     mu_cst - вязкость жидкости, сст;   
 
         """
 
         self.f_ESP_eff_fr = self.book.macro("ESP_eff_fr")
-        return self.f_ESP_eff_fr(qliq_m3day,num_stages,freq_Hz,pump_id,mu_cSt,calibr_head,calibr_rate,calibr_power)
+        return self.f_ESP_eff_fr(qliq_m3day,esp_json,freq_Hz,mu_cSt)
 
     def ESP_name(self, pump_id):
         """
@@ -1616,20 +1308,6 @@ class API():
 
         self.f_ESP_name = self.book.macro("ESP_name")
         return self.f_ESP_name(pump_id)
-
-    def ESP_freq_nom(self, pump_id):
-        """
- ========== description ============== 
- номинальная частота УЭЦН 
-        
- ==========  arguments  ============== 
-
-     pump_id - идентификатор насоса в базе данных   
-
-        """
-
-        self.f_ESP_freq_nom = self.book.macro("ESP_freq_nom")
-        return self.f_ESP_freq_nom(pump_id)
 
     def ESP_calc_stages_num(self, pump_id=1006,head=1000,f_nom_Hz=0,q_nom_sm3day=-1):
         """
@@ -1651,63 +1329,59 @@ class API():
         self.f_ESP_calc_stages_num = self.book.macro("ESP_calc_stages_num")
         return self.f_ESP_calc_stages_num(pump_id,head,f_nom_Hz,q_nom_sm3day)
 
-    def ESP_rate_max_sm3day(self, freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_rate=1):
+    def ESP_rate_max_sm3day(self, esp_json,freq_Hz=50,mu_cSt=-1):
         """
  ========== description ============== 
  максимальный дебит ЭЦН для заданной частоты  по номинальной кривой РНХ 
         
  ==========  arguments  ============== 
 
-     freq_hz - частота вращения эцн    
+   esp_json   
 
-     pump_id - идентификатор насоса в базе данных    
+     freq_hz - частота вращения эцн  pump_id - идентификатор насоса в базе данных    
 
-     mu_cst - вязкость для расчета поправок    
-
-     calibr_rate - калибровка на расход   
+     mu_cst - вязкость для расчета поправок  calibr_rate - калибровка на расход   
 
         """
 
         self.f_ESP_rate_max_sm3day = self.book.macro("ESP_rate_max_sm3day")
-        return self.f_ESP_rate_max_sm3day(freq_Hz,pump_id,mu_cSt,calibr_rate)
+        return self.f_ESP_rate_max_sm3day(esp_json,freq_Hz,mu_cSt)
 
-    def ESP_optRate_m3day(self, freq_Hz=50,pump_id=737,mu_cSt=-1,calibr_rate=1):
+    def ESP_optRate_m3day(self, esp_json,freq_Hz=50,mu_cSt=-1):
         """
  ========== description ============== 
  оптимальный дебит ЭЦН для заданной частоты  по номинальной кривой РНХ 
         
  ==========  arguments  ============== 
 
-     freq_hz - частота вращения эцн    
+   esp_json   
 
-     pump_id - идентификатор насоса в базе данных    
+     freq_hz - частота вращения эцн  pump_id - идентификатор насоса в базе данных    
 
-   mu_cst   
-
-   calibr_rate  
+   mu_cst  
 
         """
 
         self.f_ESP_optRate_m3day = self.book.macro("ESP_optRate_m3day")
-        return self.f_ESP_optRate_m3day(freq_Hz,pump_id,mu_cSt,calibr_rate)
+        return self.f_ESP_optRate_m3day(esp_json,freq_Hz,mu_cSt)
 
-    def ESP_id_by_rate(self, q,f_nom_Hz=50):
+    def ESP_id_by_rate(self, q,size5=True):
         """
  ========== description ============== 
  функция возвращает идентификатор типового насоса по значению  номинального дебита 
         
  ==========  arguments  ============== 
 
-     q - номинальный дебит    
+     q - номинальный дебит  f_nom_hz - номинальная частота для нестандартных насосов    
 
-     f_nom_hz - номинальная частота для нестандартных насосов   
+     size5 - габарит, 5 если да, 5а если нет   
 
         """
 
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
-        return self.f_ESP_id_by_rate(q,f_nom_Hz)
+        return self.f_ESP_id_by_rate(q,size5)
 
-    def ESP_p_json_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",json_ESP_pump="",freq_Hz=50,calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",esp_json="",freq_Hz=50,calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
 функция расчета давления на выходе/входе ЭЦН в рабочих условиях большинство параметров задается явно 
@@ -1722,7 +1396,7 @@ class API():
 
      feed - параметры потока флюидов json строка. используйте  функцию encode_feed() для генерации    
 
-     json_esp_pump - параметры насоса насоса    
+     esp_json - параметры насоса насоса    
 
      freq_hz - частота тока    
 
@@ -1742,60 +1416,8 @@ class API():
 
         """
 
-        self.f_ESP_p_json_atma = self.book.macro("ESP_p_json_atma")
-        return self.f_ESP_p_json_atma(p_calc_atma,t_intake_C,t_dis_C,feed,json_ESP_pump,freq_Hz,calc_along_flow,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
-
-    def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",pump_id=737,num_stages=1,freq_Hz=50,calc_along_flow=True,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=1,gas_correct_stage_by_stage=1,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1,freq_nom_Hz=0):
-        """
- ========== description ============== 
-функция расчета давления на выходе/входе ЭЦН в рабочих условиях большинство параметров задается явно 
-        
- ==========  arguments  ============== 
-
-     p_calc_atma - давление для которого делается расчет  либо давление на приеме насоса  либо давление на выкиде насоса    
-
-     t_intake_c - температура на приеме насоcа    
-
-     t_dis_c - температура на выкиде насоса.    
-
-     feed - параметры потока флюидов json строка. используйте  функцию encode_feed() для генерации    
-
-     pump_id - идентификатор насоса    
-
-     num_stages - количество ступеней    
-
-     freq_hz - частота вращения вала эцн, гц    
-
-     определяется параметром calc_along_flow  t_intake_c - температура на приеме насоcа  t_dis_c - температура на выкиде насоса.  если = 0 и calc_along_flow = 1 то рассчитывается ..см.мануал   
-
-     calibr_head - калибровка (множитель) на напор    
-
-     calibr_rate - калибровка (множитель) на расход    
-
-     calibr_power - калибровка (множитель) на мощность    
-
-     gas_correct_model - модель калибровки по газу, 1 - стандартный эцн  25% предел, 2 - предел 50%, 3 - предел 75%, 4 - предел 35%, 5 - 25%    
-
-     gas_correct_stage_by_stage - модель применятеся  для всех ступеней сразу или для каждой по отдельности    
-
-     param - дополнительные параметры расчета потока    
-
-     h_mes_top - глубина установки эцн (верх эцн)    
-
-     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
-
-     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
-
-     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
-
-     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором    
-
-   freq_nom_hz  
-
-        """
-
         self.f_ESP_p_atma = self.book.macro("ESP_p_atma")
-        return self.f_ESP_p_atma(p_calc_atma,t_intake_C,t_dis_C,feed,pump_id,num_stages,freq_Hz,calc_along_flow,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,freq_nom_Hz)
+        return self.f_ESP_p_atma(p_calc_atma,t_intake_C,t_dis_C,feed,esp_json,freq_Hz,calc_along_flow,param,h_mes_top,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def ESP_motor_calc_mom(self, mom_Nm,freq_Hz=50,U_V=-1,motor_json="",cable_json="",param=""):
         """
@@ -1864,6 +1486,20 @@ class API():
 
         self.f_ESP_motor_calc_slip = self.book.macro("ESP_motor_calc_slip")
         return self.f_ESP_motor_calc_slip(s,freq_Hz,U_V,motor_json,cable_json,param)
+
+    def ESP_gassep_name(self, gsep_type_TYPE):
+        """
+ ========== description ============== 
+ расчет коэффициента сепарации газосепаратора  по результатам стендовых испытаний РГУ нефти и газа 
+        
+ ==========  arguments  ============== 
+
+     gsep_type_type - тип сепаратора (номер от 1 до 29)   
+
+        """
+
+        self.f_ESP_gassep_name = self.book.macro("ESP_gassep_name")
+        return self.f_ESP_gassep_name(gsep_type_TYPE)
 
     def ESP_gassep_ksep_d(self, gsep_type_TYPE,gas_frac_d,qliq_sm3day,freq_Hz=50):
         """
@@ -2603,58 +2239,6 @@ class API():
         self.f_decode_json_crv = self.book.macro("decode_json_crv")
         return self.f_decode_json_crv(json,transpose,key_x,key_y)
 
-    def encode_PVT(self, gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
-        """
- ========== description ============== 
- Функция кодирования параметров PVT в строку,  для передачи PVT свойств в прикладные функции Унифлок. 
-        
- ==========  arguments  ============== 
-
-     gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
-
-     gamma_oil - удельная плотность нефти, по воде.  по умолчанию const_go_ = 0.86    
-
-     gamma_wat - удельная плотность воды, по воде.  по умолчанию const_gw_ = 1    
-
-     rsb_m3m3 - газосодержание при давлении насыщения, м3/м3.  по умолчанию const_rsb_default = 100    
-
-     pb_atma - давление насыщения при заданной температуре, атма.  опциональный калибровочный параметр,  если не задан или = 0, то рассчитается по корреляции.    
-
-     t_res_c - пластовая температура, с.  учитывается при расчете давления насыщения.  по умолчанию const_tres_default = 90    
-
-     bob_m3m3 - объемный коэффициент нефти при давлении насыщения  и пластовой температуре, м3/м3.  по умолчанию рассчитывается по корреляции.    
-
-     muob_cp - вязкость нефти при давлении насыщения.  и пластовой температуре, сп.  по умолчанию рассчитывается по корреляции.    
-
-     pvt_corr_set - номер набора pvt корреляций для расчета:  0 - на основе корреляции стендинга;  1 - на основе кор-ии маккейна;  2 - на основе упрощенных зависимостей.   
-
-        """
-
-        self.f_encode_PVT = self.book.macro("encode_PVT")
-        return self.f_encode_PVT(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
-
-    def encode_feed(self, q_liq_sm3day=10,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1,fluid=PVT_DEFAULT):
-        """
- ========== description ============== 
-Функция кодирования параметров потока флюидов в строку, 
-        
- ==========  arguments  ============== 
-
-     q_liq_sm3day - дебит жидкости в ст.условиях.    
-
-     fw_perc - ободненность, %    
-
-     rp_m3m3 - газовый фактор, м3/м3:    
-
-     q_gas_free_sm3day - расход свободного газа, ст. м3/сут    
-
-     fluid - закодированная pvt строка  с параметрами флюида   
-
-        """
-
-        self.f_encode_feed = self.book.macro("encode_feed")
-        return self.f_encode_feed(q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,fluid)
-
     def encode_feed_list(self, q_liq_sm3day=10,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1,fluid=PVT_DEFAULT):
         """
  ========== description ============== 
@@ -2730,7 +2314,7 @@ class API():
 
     cosphi_nom_fr - коэффициент мощности при номинальный    
 
-    slip_nom_fr - скольжение при номинальном режиме работы u_surf_high_lin_v - напряжение на поверхности    
+    slip_nom_fr - скольжение при номинальном режиме работы    
 
     f_surf_hz - частота тока на поверхности    
 
@@ -2777,7 +2361,7 @@ class API():
         self.f_encode_ESP_cable = self.book.macro("encode_ESP_cable")
         return self.f_encode_ESP_cable(length_m,cable_R_Omkm,cable_X_Omkm,cable_t_max_C,manufacturer,name,d_mm)
 
-    def encode_ESP_separation(self, separation_mode,gassep_type,natsep_type=0,psep_man_atma=0,tsep_man_C=0,ksep_gassep_man_d=0,ksep_nat_man_d=0,ksep_liquid_man_d=0,M_Nm=0,manufacturer="no",name="no",length_m=0):
+    def encode_ESP_separation(self, separation_mode=0,gassep_type=1,natsep_type=0,psep_man_atma=0,tsep_man_C=0,ksep_gassep_man_d=0,ksep_nat_man_d=0,ksep_liquid_man_d=0,M_Nm=0,manufacturer="no",name="no",length_m=0):
         """
  ========== description ============== 
  функция кодирования газосепаратора 
@@ -3078,155 +2662,6 @@ class API():
 
         self.f_list_concatenate = self.book.macro("list_concatenate")
         return self.f_list_concatenate(ParamArrayvar)
-
-    def encode_ipr(self, p_res_atma=250,pi_sm3dayatm=1,feed_json=""):
-        """
- ========== description ============== 
- кодирование параметров пласта в json строку 
-        
- ==========  arguments  ============== 
-
-     p_res_atma - пластовое давление, атма    
-
-     pi_sm3dayatm - коэффициент продуктивности, м3/сут/атм    
-
-     feed_json - json c pvt свойствами, используйте encode_pvt() для генерации   
-
-        """
-
-        self.f_encode_ipr = self.book.macro("encode_ipr")
-        return self.f_encode_ipr(p_res_atma,pi_sm3dayatm,feed_json)
-
-    def IPR_calc_pi(self, IPR_json,q_liq_sm3day,pwf_test_atma):
-        """
- ========== description ============== 
- расчет коэффициента продуктивности по IPR заданной в виде json 
-        
- ==========  arguments  ============== 
-
-     ipr_json - json строка кодирующая ipr    
-
-     q_liq_sm3day - тестовый дебит жидкости    
-
-     pwf_test_atma - тестовое забойное давление   
-
-        """
-
-        self.f_IPR_calc_pi = self.book.macro("IPR_calc_pi")
-        return self.f_IPR_calc_pi(IPR_json,q_liq_sm3day,pwf_test_atma)
-
-    def IPR_calc_pwf(self, IPR_json,q_liq_sm3day):
-        """
- ========== description ============== 
- расчет забойного давления по IPR заданной в виде json 
-        
- ==========  arguments  ============== 
-
-     ipr_json - json строка кодирующая ipr    
-
-     q_liq_sm3day - дебит жидкости   
-
-        """
-
-        self.f_IPR_calc_pwf = self.book.macro("IPR_calc_pwf")
-        return self.f_IPR_calc_pwf(IPR_json,q_liq_sm3day)
-
-    def IPR_calc_qliq_sm3day(self, IPR_json,pwf_atma):
-        """
- ========== description ============== 
- расчет дебита по IPR заданной в виде json 
-        
- ==========  arguments  ============== 
-
-     ipr_json - json строка кодирующая ipr    
-
-     pwf_atma - забойное давление   
-
-        """
-
-        self.f_IPR_calc_qliq_sm3day = self.book.macro("IPR_calc_qliq_sm3day")
-        return self.f_IPR_calc_qliq_sm3day(IPR_json,pwf_atma)
-
-    def IPR_json_crv(self, IPR_json,num_points=20):
-        """
- ========== description ============== 
- построение кривой IPR в json формате 
-        
- ==========  arguments  ============== 
-
-     ipr_json - json строка кодирующая ipr    
-
-     num_points - количество точек в графике   
-
-        """
-
-        self.f_IPR_json_crv = self.book.macro("IPR_json_crv")
-        return self.f_IPR_json_crv(IPR_json,num_points)
-
-    def IPR_q_liq_sm3day(self, pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc=0,pb_atma=-1,t_res_C=80):
-        """
- ========== description ============== 
- расчет дебита по давлению и продуктивности 
-        
- ==========  arguments  ============== 
-
-     pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     p_wf_atma - забойное давление, абс. атм.  можно задать список [],    
-
-     fw_perc - обводненность, %    
-
-     pb_atma - давление насыщения, абс. атм    
-
-     t_res_c - температура флюида в пласте, с   
-
-        """
-
-        self.f_IPR_q_liq_sm3day = self.book.macro("IPR_q_liq_sm3day")
-        return self.f_IPR_q_liq_sm3day(pi_sm3dayatm,p_res_atma,p_wf_atma,fw_perc,pb_atma,t_res_C)
-
-    def IPR_pwf_atma(self, pi_sm3dayatm,p_res_atma,q_liq_sm3day=0,feed_json=""):
-        """
- ========== description ============== 
- расчет забойного давления по дебиту и продуктивности 
-        
- ==========  arguments  ============== 
-
-     pi_sm3dayatm - коэффициент продуктивности, ст.м3/сут/атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     q_liq_sm3day - дебит жидкости скважины на поверхности, ст.м3/сут, число или массив    
-
-     feed_json - параметры потока, включая обводненность и давление насыщения   
-
-        """
-
-        self.f_IPR_pwf_atma = self.book.macro("IPR_pwf_atma")
-        return self.f_IPR_pwf_atma(pi_sm3dayatm,p_res_atma,q_liq_sm3day,feed_json)
-
-    def IPR_pi_sm3dayatm(self, q_test_sm3day,pwf_test_atma,p_res_atma,feed_json=""):
-        """
- ========== description ============== 
- расчет коэффициента продуктивности пласта  по данным тестовой эксплуатации 
-        
- ==========  arguments  ============== 
-
-     q_test_sm3day - тестовый дебит скважины, ст.м3/сут    
-
-     pwf_test_atma - тестовое забойное давление, абс. атм    
-
-     p_res_atma - пластовое давление, абс. атм    
-
-     feed_json - свойства флюида   
-
-        """
-
-        self.f_IPR_pi_sm3dayatm = self.book.macro("IPR_pi_sm3dayatm")
-        return self.f_IPR_pi_sm3dayatm(q_test_sm3day,pwf_test_atma,p_res_atma,feed_json)
-
 
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """
