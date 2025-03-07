@@ -25,7 +25,7 @@ addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
-    def MF_dpdl_atmm(self, d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,rho_lrc_kgm3=const_go_*1000,rho_grc_kgm3=const_gg_*const_rho_air,eps_m=0.0001,theta_deg=90,hcorr=1,param_out=0,calibr_grav=1,calibr_fric=1):
+    def MF_dpdl_atmm(self, d_m,p_atma,ql_rc_m3day,qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,rho_lrc_kgm3=const_go_*1000,rho_grc_kgm3=const_gg_*const_rho_air,eps_m=0.0001,theta_deg=90,hcorr=1,param_out=0,calibr_grav=1,calibr_fric=1):
         """
  ========== description ============== 
 расчет градиента давления с использованием многофазных корреляций 
@@ -65,7 +65,7 @@ class API():
         """
 
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
-        return self.f_MF_dpdl_atmm(d_m,p_atma,Ql_rc_m3day,Qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
+        return self.f_MF_dpdl_atmm(d_m,p_atma,ql_rc_m3day,qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
     def MF_choke_calibr(self, choke_json,feed_json,calibr_type=0,p_in_atma=-1,p_out_atma=-1,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -101,7 +101,7 @@ class API():
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
         return self.f_MF_choke_calibr(choke_json,feed_json,calibr_type,p_in_atma,p_out_atma,t_choke_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
-    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-10000000000#,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
