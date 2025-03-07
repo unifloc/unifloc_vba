@@ -12,8 +12,8 @@ Option Explicit
 'с использованием многофазных корреляций
 Public Function MF_dpdl_atmm(ByVal d_m As Double, _
              ByVal p_atma As Double, _
-             ByVal Ql_rc_m3day As Double, _
-             ByVal Qg_rc_m3day As Double, _
+             ByVal ql_rc_m3day As Double, _
+             ByVal qg_rc_m3day As Double, _
     Optional ByVal mu_oil_cP As Double = const_mu_o, _
     Optional ByVal mu_gas_cP As Double = const_mu_g, _
     Optional ByVal sigma_oil_gas_Nm As Double = const_sigma_oil_Nm, _
@@ -51,7 +51,7 @@ On Error GoTo er1:
         Case 0
         
                 PrGrad = unf_BegsBrillGradient(d_m, theta_deg, eps_m, _
-                                Ql_rc_m3day, Qg_rc_m3day, _
+                                ql_rc_m3day, qg_rc_m3day, _
                                 mu_oil_cP, mu_gas_cP, _
                                 sigma_oil_gas_Nm, _
                                 rho_lrc_kgm3, _
@@ -59,7 +59,7 @@ On Error GoTo er1:
         Case 1
         
                 PrGrad = unf_AnsariGradient(d_m, theta_deg, eps_m, _
-                                Ql_rc_m3day, Qg_rc_m3day, _
+                                ql_rc_m3day, qg_rc_m3day, _
                                 mu_oil_cP, mu_gas_cP, _
                                 sigma_oil_gas_Nm, _
                                 rho_lrc_kgm3, _
@@ -68,7 +68,7 @@ On Error GoTo er1:
        Case 2
         
                 PrGrad = unf_UnifiedTUFFPGradient(d_m, theta_deg, eps_m, _
-                                Ql_rc_m3day, Qg_rc_m3day, _
+                                ql_rc_m3day, qg_rc_m3day, _
                                 mu_oil_cP, mu_gas_cP, _
                                 sigma_oil_gas_Nm, _
                                 rho_lrc_kgm3, _
@@ -77,7 +77,7 @@ On Error GoTo er1:
        Case 3
         
                 PrGrad = unf_GrayModifiedGradient(d_m, theta_deg, eps_m, _
-                                Ql_rc_m3day, Qg_rc_m3day, _
+                                ql_rc_m3day, qg_rc_m3day, _
                                 mu_oil_cP, mu_gas_cP, _
                                 sigma_oil_gas_Nm, _
                                 rho_lrc_kgm3, _
@@ -86,7 +86,7 @@ On Error GoTo er1:
        Case 4
         
                 PrGrad = unf_HagedornandBrawnmodified(d_m, theta_deg, eps_m, _
-                                Ql_rc_m3day, Qg_rc_m3day, _
+                                ql_rc_m3day, qg_rc_m3day, _
                                 mu_oil_cP, mu_gas_cP, _
                                 sigma_oil_gas_Nm, _
                                 rho_lrc_kgm3, _
@@ -369,7 +369,7 @@ Public Function MF_pipe_p_atma( _
         Optional ByVal feed As String = "", _
         Optional ByVal calc_along_coord As Boolean = True, _
         Optional ByVal param As String = "", _
-        Optional ByVal q_liq_sm3day = -1, _
+        Optional ByVal q_liq_sm3day = -10000000000#, _
         Optional ByVal fw_perc = -1, _
         Optional ByVal rp_m3m3 = -1, _
         Optional ByVal q_gas_free_sm3day = -1)
@@ -756,7 +756,7 @@ On Error GoTo err1:
             MF_choke_calibr_fast = res
             
         Else
-            MF_choke_calibr_fast = out
+            MF_choke_calibr_fast = Cdbl_(out)
         End If
     End If
     
@@ -1383,7 +1383,7 @@ Public Function PVT_rsb_m3m3( _
             ByVal pb_atma As Double, _
             ByVal t_C As Double, _
    Optional ByVal PVT_prop As String = "")
-                    
+   
 ' pb_atma  - давление насыщения, атм
 ' t_C     - температура, С.
 ' PVT_prop - строка с параметрами флюида,
@@ -1392,13 +1392,40 @@ Public Function PVT_rsb_m3m3( _
 'description_end
 On Error GoTo er1:
     Dim fluid As New CPVT
+    Dim crv As New CInterpolation
+    Dim i As Integer
+    Dim pb_calc As Double
+    Dim rsb_calc As Double
+    
     Call fluid.init_feed(PVT_prop)
     
-    fluid.set_rp_rsb 500, 500
-    fluid.pb_atma = -1
-    Call fluid.calc_PVT(pb_atma, t_C)
-    PVT_rsb_m3m3 = fluid.rs_m3m3
+    rsb_calc = 1
+    i = 0
     
+    Select Case fluid.PVT_correlation
+    
+        Case 0
+            Do
+                pb_calc = unf_pvt_pb_Standing_MPa(rsb_calc, fluid.gamma_g, t_C + 273, fluid.gamma_o) * 10 / 1.01325
+                crv.AddPoint pb_calc, rsb_calc
+                i = i + 1
+                rsb_calc = rsb_calc + 10
+            Loop Until (pb_calc > pb_atma And crv.num_points > 1) Or (i = 100)
+            
+            
+            
+        Case 1
+            Do
+                pb_calc = unf_pvt_pb_Valko_McCain_MPa(rsb_calc, fluid.gamma_g, t_C + 273, fluid.gamma_o) * 10 / 1.01325
+                crv.AddPoint pb_calc, rsb_calc
+                i = i + 1
+                rsb_calc = rsb_calc + 10
+            Loop Until (pb_calc > pb_atma And crv.num_points > 1) Or (i = 100)
+    
+    End Select
+    
+    
+    PVT_rsb_m3m3 = crv.getPoint(pb_atma)
     Exit Function
 er1:
 On Error GoTo er2:
@@ -1406,7 +1433,6 @@ On Error GoTo er2:
     Exit Function
 er2:
     PVT_rsb_m3m3 = "error " & Err.Description
-    
 End Function
 'description_to_manual      - для автогенерации
 ' расчет коэффициента поверхностного натяжения нефть - газ
@@ -2648,13 +2674,11 @@ On Error GoTo err1:
     Dim i As Integer
     Dim crvp As New CInterpolation
     Dim crvt As New CInterpolation
-    
     Dim p As Double
     Dim t As Double
     Dim q As Double
     
     Call res.init_json(IPR_json)
-    
     
     For i = 1 To num_points
         p = 1 + res.p_res_atma / (num_points - 1) * (i - 1)
@@ -2672,10 +2696,10 @@ On Error GoTo err1:
     d.Add "tcrv", crvt.getDict
     IPR_crv = ConvertToJson(d)
     
-    
     Exit Function
 err1:
     IPR_crv = "Error:IPR_crv:" & Err.Description
+    
 End Function
 ''=======================================================
 ''--------------------- ЭЦН -----------------------
@@ -3009,7 +3033,7 @@ Public Function ESP_p_atma( _
     Dim i As Integer
     
  On Error GoTo er1:
-    
+    If feed = "" Then feed = encode_feed()
     Call read_PTQ(ptq, feed, p_calc_atma, t_intake_C, esp.log_, t_dis_C, q_liq_sm3day, fw_perc, rp_m3m3, q_gas_free_sm3day)
     Call init_ptesp(ptq_out, ptq)
     If Len(feed) < 2 Then feed = encode_feed()
