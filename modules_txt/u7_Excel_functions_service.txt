@@ -1036,6 +1036,57 @@ Public Function encode_pipe( _
     encode_pipe = ConvertToJson(dict)
 End Function
 'description_to_manual      - для автогенерации
+' задание объекта трубы для расчета
+Public Function encode_pipe_object( _
+        Optional ByVal trajectory_json As String = "", _
+        Optional ByVal diam_json As String = "", _
+        Optional ByVal t_model_json As String = "", _
+        Optional ByVal flow_correlation As Integer = 0, _
+        Optional ByVal flow_along_coord As Boolean = True, _
+        Optional ByVal calibr_grav As Double = 1, _
+        Optional ByVal calibr_fric As Double = 1, _
+        Optional ByVal h_start_m As Double = -10000000000.1, _
+        Optional ByVal h_end_m As Double = 10000000000.1, _
+        Optional ByVal znlf As Boolean = False)
+' construction - json кодирующий конструкцию скважины,
+' используйте encode_pipe_construction
+' t_model - температурная модель,
+' используйте encode_t_model
+' flow_correlation - корреляция многофазного потока
+' flow_along_coord - флаг, определяющий направление потока
+' calibr_grav - калибровка по гравитации (множитель)
+' calibr_fric - калибровка по трению (множитель)
+' h_start_m - измеренная глубина начала трубы, м
+' h_end_m - измеренная глубина конца трубы, м
+' znlf - флаг для включения барботажа
+'description_end
+    Dim dict As New Dictionary
+    Dim dict_constr As New Dictionary
+    
+    If trajectory_json = "" Then trajectory_json = encode_pipe_trajectory()
+    dict_constr.Add const_name_h_list_m, ParseJson(trajectory_json)
+    
+    If diam_json = "" Then diam_json = encode_pipe_diam()
+    Dim key As Variant
+    For Each key In ParseJson(diam_json).keys
+        dict_constr.Add key, ParseJson(diam_json)(key)
+    Next key
+    'dict_constr.Add "diam_json", ParseJson(diam_json)
+    dict.Add "construction", dict_constr
+     
+    If t_model_json = "" Then t_model_json = encode_t_model()
+    dict.Add "t_model", ParseJson(t_model_json)
+    dict.Add "flow_correlation", flow_correlation
+    dict.Add "flow_along_coord", flow_along_coord
+    dict.Add "calibr_grav", calibr_grav
+    dict.Add "calibr_fric", calibr_fric
+    If h_start_m > -1000000000 Then dict.Add "h_start_m", h_start_m
+    If h_end_m < 1000000000 Then dict.Add "h_end_m", h_end_m
+    dict.Add "znlf", znlf
+    
+    encode_pipe_object = ConvertToJson(dict)
+End Function
+'description_to_manual      - для автогенерации
 'кодирование параметров штуцера
 Public Function encode_choke( _
             Optional ByVal d_choke_mm As Double = 10, _
@@ -1137,6 +1188,115 @@ er1:
     Exit Function
 er2:
     encode_pipe_construction = "error encode_pipe_construction. zero length"
+    Exit Function
+End Function
+'description_to_manual      - для автогенерации
+' задание параметров траектории трубы в json строке
+Public Function encode_pipe_diam(Optional diam_list_mm As Variant = 62, _
+                                 Optional roughness_m As Double = 0 _
+                                )
+'diam_list_mm - число-внутренний диаметр трубы или массив или range
+'         содержащий зависимость внутреннего от измеренной глубины
+'roughness_m - число - шероховатость, одна для всей трубы
+'результат - json строка с описанием трубы - диаметры
+'description_end
+    
+    Dim dict As New Dictionary
+    'Dim h_curve As New CInterpolation
+    'Dim h_raw() As Double
+    'Dim h_vert() As Double
+    Dim d_curve As New CInterpolation
+    Dim d_raw() As Double
+    Dim h_default As Double
+    
+    h_default = 1000
+    
+    Dim i As Integer
+On Error GoTo er1:
+    
+    d_raw = array_num_from_range(diam_list_mm, remove_zeros:=True, key_crv:="diam_list_mm", key_x:="hmes_m", key_y:="diam_int_mm")
+    
+    If UBound(d_raw, 2) = 1 Then
+        d_curve.AddPoint 0, d_raw(1, 1)
+        d_curve.AddPoint h_default, d_raw(1, 1)
+    ElseIf UBound(d_raw, 2) > 1 Then
+        For i = LBound(d_raw, 1) To UBound(d_raw, 1)
+                d_curve.AddPoint d_raw(i, 1), d_raw(i, 2)
+        Next
+    End If
+    d_curve.xName = const_name_hmes_m
+    d_curve.yName = const_name_diam_int_mm
+    dict.Add const_name_diam_list_mm, d_curve.getDictShort
+    
+    If roughness_m > 0 Then
+        dict.Add "roughness_m", roughness_m
+    End If
+    
+    encode_pipe_diam = ConvertToJson(dict)
+    
+    Exit Function
+    
+er1:
+    encode_pipe_diam = "error encode_pipe_diam " & Err.Description
+    Exit Function
+er2:
+    encode_pipe_diam = "error encode_pipe_diam. zero length"
+    Exit Function
+End Function
+'description_to_manual      - для автогенерации
+' задание параметров траектории трубы в json строке
+Public Function encode_pipe_trajectory(Optional h_list_m As Variant = 1000, _
+                                       Optional h_vert_m As Variant = -1)
+'h_list_m - число - длина вертикальной трубы или массив или range
+'         содержащий зависимость вертикальной глубины от измеренной
+'h_vert_m - число или массив вертикальных глубин
+'           если задано то инклинометрия задается двумя векторами
+'результат - json строка с описанием траектории трубы
+'description_end
+    
+    'Dim dict As New Dictionary
+    Dim h_curve As New CInterpolation
+    Dim h_raw() As Double
+    Dim h_vert() As Double
+    
+    Dim i As Integer
+On Error GoTo er1:
+    h_raw = array_num_from_range(h_list_m, remove_zeros:=True, key_crv:="h_list_m", key_x:="hmes_m", key_y:="hvert_m")
+    h_vert = array_num_from_range(h_vert_m, remove_zeros:=True)
+    
+    If UBound(h_vert, 1) = UBound(h_raw, 1) And h_vert(UBound(h_vert, 1), 1) > 0 Then
+    
+        For i = LBound(h_raw, 1) To UBound(h_raw, 1)
+            h_curve.AddPoint h_raw(i, 1), h_vert(i, 1)
+        Next i
+        
+    Else
+        For i = LBound(h_raw, 1) To UBound(h_raw, 1)
+            If UBound(h_raw, 2) = 1 Then
+                h_curve.AddPoint h_raw(i, 1), h_raw(i, 1)
+            Else
+                h_curve.AddPoint h_raw(i, 1), h_raw(i, 2)
+            End If
+        Next i
+    
+    End If
+    If h_curve.num_points = 1 Then
+        h_curve.AddPoint 0, 0
+        If h_curve.num_points = 1 Then GoTo er2
+    End If
+    h_curve.xName = const_name_hmes_m
+    h_curve.yName = const_name_hvert_m
+    'dict.Add const_name_h_list_m, h_curve.getDictShort
+    
+    encode_pipe_trajectory = ConvertToJson(h_curve.getDictShort)
+    
+    Exit Function
+    
+er1:
+    encode_pipe_trajectory = "error encode_pipe_trajectory " & Err.Description
+    Exit Function
+er2:
+    encode_pipe_trajectory = "error encode_pipe_trajectory. zero length"
     Exit Function
 End Function
 Public Function encode_crv(crv_tab, _
