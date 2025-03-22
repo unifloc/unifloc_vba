@@ -1641,7 +1641,7 @@ class API():
         self.f_GLV_p_vkr_atma = self.book.macro("GLV_p_vkr_atma")
         return self.f_GLV_p_vkr_atma(d_port_mm,d_vkr_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow)
 
-    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,p_open_atma=0,c_calibr=1):
+    def GLV_p_atma(self, d_mm,p_calc_atma,q_gas_sm3day,gamma_g=0.6,t_C=25,calc_along_flow=False,c_calibr=1):
         """
  ========== description ============== 
  функция расчета давления на входе или на выходе  газлифтного клапана (простого) при закачке газа.  результат массив значений и подписей 
@@ -1660,14 +1660,12 @@ class API():
 
      calc_along_flow - направление расчета:  0 - против потока (расчет давления на входе);  1 - по потоку (расчет давления на выходе).    
 
-     p_open_atma - давление открытия/закрытия клапана, атм    
-
-   c_calibr  
+     c_calibr - калибровочный коэффициент   
 
         """
 
         self.f_GLV_p_atma = self.book.macro("GLV_p_atma")
-        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,p_open_atma,c_calibr)
+        return self.f_GLV_p_atma(d_mm,p_calc_atma,q_gas_sm3day,gamma_g,t_C,calc_along_flow,c_calibr)
 
     def GLV_p_bellow_atma(self, p_atma,t_C):
         """
@@ -1871,7 +1869,7 @@ class API():
         self.f_well_ksep_total_d = self.book.macro("well_ksep_total_d")
         return self.f_well_ksep_total_d(SepNat,SepGasSep)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
+    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub,diam_cas,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -1884,7 +1882,11 @@ class API():
 
     feed_json - параметры потока в скважине (с забоя)    
 
-    construction_json - конструкция скважины (как для трубы)    
+     trajectory_json - json кодирующий траекторию скважины,  diam_json - json кодирующий диаметры скважины,    
+
+   diam_tub   
+
+   diam_cas   
 
     esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
 
@@ -1919,7 +1921,7 @@ class API():
         """
 
         self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,dcas_mm,dint_mm)
+        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub,diam_cas,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,dcas_mm,dint_mm)
 
     def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,pkv_ratio=0,dcas_mm=130,dint_mm=102):
         """
@@ -2012,6 +2014,68 @@ class API():
 
         self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
         return self.f_well_calc_from_pintake(p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,p_wh_atma,flow_corr)
+
+    def encode_pipe(self, construction="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
+        """
+ ========== description ============== 
+ задание объекта трубы для расчета 
+        
+ ==========  arguments  ============== 
+
+     construction - json кодирующий конструкцию скважины,  используйте encode_pipe_construction    
+
+     t_model - температурная модель,  используйте encode_t_model    
+
+     flow_correlation - корреляция многофазного потока    
+
+     flow_along_coord - флаг, определяющий направление потока    
+
+     calibr_grav - калибровка по гравитации (множитель)    
+
+     calibr_fric - калибровка по трению (множитель)    
+
+     h_start_m - измеренная глубина начала трубы, м    
+
+     h_end_m - измеренная глубина конца трубы, м    
+
+     znlf - флаг для включения барботажа   
+
+        """
+
+        self.f_encode_pipe = self.book.macro("encode_pipe")
+        return self.f_encode_pipe(construction,t_model,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
+
+    def encode_pipe_object(self, trajectory_json="",diam_json="",t_model_json="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
+        """
+ ========== description ============== 
+ задание объекта трубы для расчета 
+        
+ ==========  arguments  ============== 
+
+     trajectory_json - json кодирующий траекторию скважины,    
+
+     diam_json - json кодирующий диаметры скважины,  t_model - температурная модель,  используйте encode_t_model    
+
+   t_model_json   
+
+     flow_correlation - корреляция многофазного потока    
+
+     flow_along_coord - флаг, определяющий направление потока    
+
+     calibr_grav - калибровка по гравитации (множитель)    
+
+     calibr_fric - калибровка по трению (множитель)    
+
+     h_start_m - измеренная глубина начала трубы, м    
+
+     h_end_m - измеренная глубина конца трубы, м    
+
+     znlf - флаг для включения барботажа   
+
+        """
+
+        self.f_encode_pipe_object = self.book.macro("encode_pipe_object")
+        return self.f_encode_pipe_object(trajectory_json,diam_json,t_model_json,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
 
     def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
         """
@@ -2295,7 +2359,7 @@ class API():
         self.f_encode_ESP_pump = self.book.macro("encode_ESP_pump")
         return self.f_encode_ESP_pump(q_nom_sm3day,head_nom_m,freq_nom_Hz,ESP_ID,num_stages,calibr_head,calibr_rate,calibr_power,gas_correct_model,gas_correct_stage_by_stage,dnum_stages_integrate)
 
-    def encode_ESP_motor(self, motor_ID=0,P_nom_kW=30,U_nom_lin_V=1000,f_nom_Hz=50,eff_nom_fr=0.82,cosphi_nom_fr=0.88,slip_nom_fr=0.053,f_surf_Hz=50,power_fact_kW=30,d_od_mm=0,lambda_=0,alpha0=0,xi0=0,Ixcf=0):
+    def encode_ESP_motor(self, motor_ID=0,P_nom_kW=30,U_nom_lin_V=1000,f_nom_Hz=50,eff_nom_fr=0.82,cosphi_nom_fr=0.88,slip_nom_fr=0.053,d_od_mm=0,lambda_=0,alpha0=0,xi0=0,Ixcf=0):
         """
  ========== description ============== 
  функция кодирования параметров ПЭД в строку 
@@ -2314,11 +2378,7 @@ class API():
 
     cosphi_nom_fr - коэффициент мощности при номинальный    
 
-    slip_nom_fr - скольжение при номинальном режиме работы    
-
-    f_surf_hz - частота тока на поверхности    
-
-    power_fact_kw - фактическая потребляемая мощность    
+    slip_nom_fr - скольжение при номинальном режиме работы f_surf_hz - частота тока на поверхности power_fact_kw - фактическая потребляемая мощность    
 
     d_od_mm - внешний диаметр - габарит пэд    
 
@@ -2333,7 +2393,7 @@ class API():
         """
 
         self.f_encode_ESP_motor = self.book.macro("encode_ESP_motor")
-        return self.f_encode_ESP_motor(motor_ID,P_nom_kW,U_nom_lin_V,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,f_surf_Hz,power_fact_kW,d_od_mm,lambda_,alpha0,xi0,Ixcf)
+        return self.f_encode_ESP_motor(motor_ID,P_nom_kW,U_nom_lin_V,f_nom_Hz,eff_nom_fr,cosphi_nom_fr,slip_nom_fr,d_od_mm,lambda_,alpha0,xi0,Ixcf)
 
     def encode_ESP_cable(self, length_m=1000,cable_R_Omkm=1.18,cable_X_Omkm=0.01,cable_t_max_C=120,manufacturer="default",name="default_name",d_mm=16):
         """
@@ -2361,22 +2421,26 @@ class API():
         self.f_encode_ESP_cable = self.book.macro("encode_ESP_cable")
         return self.f_encode_ESP_cable(length_m,cable_R_Omkm,cable_X_Omkm,cable_t_max_C,manufacturer,name,d_mm)
 
-    def encode_ESP_separation(self, separation_mode=0,gassep_type=1,natsep_type=0,psep_man_atma=0,tsep_man_C=0,ksep_gassep_man_d=0,ksep_nat_man_d=0,ksep_liquid_man_d=0,M_Nm=0,manufacturer="no",name="no",length_m=0):
+    def encode_ESP_separation(self, calc_mode=0,p_sep_manual_atma="",t_sep_manual_C="",natsep_model="",d_intake_mm="",d_cas_mm="",pkv_period_ratio="",ksep_gassep_man_d="",ksep_nat_man_d="",ksep_liquid_man_d="",h_intake_m="",h_perf_m="",gassep_type="",gassep_qnom_sm3day="",param=""):
         """
  ========== description ============== 
  функция кодирования газосепаратора 
         
  ==========  arguments  ============== 
 
-     separation_mode - режим расчета сепарации    
+     calc_mode - режим расчета сепарации  0, bycorrealation  1, pressuremanual  2, valuemanual  2, fullymanual    
 
-     gassep_type - тип - номер из базы    
+     p_sep_manual_atma - давление для расчета  коэффициента сепарации заданного вручную    
 
-     natsep_type - модель расчета естественной сепарации    
+     t_sep_manual_c - температура для расчета  коэффициента сепарации заданного вручную    
 
-     psep_man_atma - давление для расчета  коэффициента сепарации заданного вручную    
+     natsep_model - тип модели для естественной сепарации:  0 - упрощенная маркеса для эцн,  1 - механистическая маркеса для эцн,  2 - механистическая с эцн ниже перфорации,  3 - ..см.мануал   
 
-     tsep_man_c - температура для расчета  коэффициента сепарации заданного вручную    
+     d_intake_mm - диаметр приемной сетки эцн    
+
+     d_cas_mm - диаметр эксплуатационной колонны    
+
+     pkv_period_ratio - для пкв отношение времени работы к времени цикла    
 
      ksep_gassep_man_d - коэффициент сепарации гс заданный вручную    
 
@@ -2384,18 +2448,20 @@ class API():
 
      ksep_liquid_man_d - коэффициент сепарации жидкости для режима  потока через затруб    
 
-     m_nm - момент на валу    
+   h_intake_m   
 
-     manufacturer - производитель, для справки    
+   h_perf_m   
 
-     name - название кабеля, для справки    
+     gassep_type - тип - номер газосепаратора из базы    
 
-     length_m - длина кабельной линии, м   
+     gassep_qnom_sm3day - номинальная подача газосепаратора    
+
+     param - дополнительные параметры расчета сепарации   
 
         """
 
         self.f_encode_ESP_separation = self.book.macro("encode_ESP_separation")
-        return self.f_encode_ESP_separation(separation_mode,gassep_type,natsep_type,psep_man_atma,tsep_man_C,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,M_Nm,manufacturer,name,length_m)
+        return self.f_encode_ESP_separation(calc_mode,p_sep_manual_atma,t_sep_manual_C,natsep_model,d_intake_mm,d_cas_mm,pkv_period_ratio,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,h_intake_m,h_perf_m,gassep_type,gassep_qnom_sm3day,param)
 
     def encode_ambient_formation_string(self, therm_cond_form_WmC=2.4252,sp_heat_capacity_form_JkgC=200,therm_cond_cement_WmC=6.965,therm_cond_tubing_WmC=32,therm_cond_casing_WmC=32,heat_transfer_casing_liquid_Wm2C=200,heat_transfer_casing_gas_Wm2C=10,heat_transfer_fluid_convection_Wm2C=200,t_calc_hr=240):
         """
@@ -2489,36 +2555,6 @@ class API():
         self.f_encode_table_json = self.book.macro("encode_table_json")
         return self.f_encode_table_json(keyrange,val_namerange,valrange)
 
-    def encode_pipe(self, construction="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
-        """
- ========== description ============== 
- задание объекта трубы для расчета 
-        
- ==========  arguments  ============== 
-
-     construction - json кодирующий конструкцию скважины,  используйте encode_pipe_construction    
-
-     t_model - температурная модель,  используйте encode_t_model    
-
-     flow_correlation - корреляция многофазного потока    
-
-     flow_along_coord - флаг, определяющий направление потока    
-
-     calibr_grav - калибровка по гравитации (множитель)    
-
-     calibr_fric - калибровка по трению (множитель)    
-
-     h_start_m - измеренная глубина начала трубы, м    
-
-     h_end_m - измеренная глубина конца трубы, м    
-
-     znlf - флаг для включения барботажа   
-
-        """
-
-        self.f_encode_pipe = self.book.macro("encode_pipe")
-        return self.f_encode_pipe(construction,t_model,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
-
     def encode_choke(self, d_choke_mm=10,d_pipe_mm=70,calibr=1,CDischarge=0.826):
         """
  ========== description ============== 
@@ -2558,6 +2594,38 @@ class API():
 
         self.f_encode_pipe_construction = self.book.macro("encode_pipe_construction")
         return self.f_encode_pipe_construction(h_list_m,diam_list_mm,roughness_m,h_vert_m)
+
+    def encode_pipe_diam(self, diam_list_mm=62,roughness_m=0):
+        """
+ ========== description ============== 
+ задание параметров траектории трубы в json строке 
+        
+ ==========  arguments  ============== 
+
+    diam_list_mm - число-внутренний диаметр трубы или массив или range  содержащий зависимость внутреннего от измеренной глубины    
+
+    roughness_m - число - шероховатость, одна для всей трубы   
+
+        """
+
+        self.f_encode_pipe_diam = self.book.macro("encode_pipe_diam")
+        return self.f_encode_pipe_diam(diam_list_mm,roughness_m)
+
+    def encode_pipe_trajectory(self, h_list_m=1000,h_vert_m=-1):
+        """
+ ========== description ============== 
+ задание параметров траектории трубы в json строке 
+        
+ ==========  arguments  ============== 
+
+    h_list_m - число - длина вертикальной трубы или массив или range  содержащий зависимость вертикальной глубины от измеренной    
+
+    h_vert_m - число или массив вертикальных глубин  если задано то инклинометрия задается двумя векторами   
+
+        """
+
+        self.f_encode_pipe_trajectory = self.book.macro("encode_pipe_trajectory")
+        return self.f_encode_pipe_trajectory(h_list_m,h_vert_m)
 
     def encode_t_model(self, t_model=StartEndTemp,t_list_C=50,t_start_C=-100,t_end_C=-100,param=""):
         """
