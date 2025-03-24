@@ -4345,11 +4345,22 @@ Public Function well_ksep_total_d( _
     End If
 End Function
 'description_end
+'description_to_manual      - для автогенерации
+'расчет сепарации газа на приеме ЭЦН с учетом как натуральной
+'сепарации так и газосепаратора
 Public Function well_ksep_full_d(p_sep_atma As Double, _
                                  t_sep_C As Double, _
                                  feed As String, _
                                  gassep_json As String, _
-                                 Optional f_Hz As Double = 50)
+                                 Optional f_Hz As Double = 50, _
+                                 Optional out As Integer = 0)
+'p_sep_atma - давление сепарации, атма
+'t_sep_C - температура сепарации, С
+'feed - json с параметрами потока
+'gassep_json - json с параметрами сепарации encode_ESP_separation
+'f_Hz - частота вращения вала ЭЦН
+'out - настройка вывода результатов
+'description_end
     Dim separ As New CWellSeparation
     Dim fluid As New CPVT
     
@@ -4359,20 +4370,12 @@ Public Function well_ksep_full_d(p_sep_atma As Double, _
     Set separ.fluid = fluid
     
     Call separ.calc_separation(p_sep_atma, t_sep_C)
-    
-    Dim dout As New Dictionary
-    dout("ksep_total_fr") = separ.ksep_total_fr
-    dout("ksep_nat_fr") = separ.ksep_nat_fr
-    dout("ksep_gassep_fr") = separ.ksep_gassep_fr
-    dout("q_gas_annulus_after_nat_sep_sm3day") = separ.q_gas_annulus_after_nat_sep_sm3day
-    dout("fluid") = ParseJson(separ.fluid.feed)
-    dout("fluid_gs") = ParseJson(separ.fluid_gs.feed)
-    dout("fluid_tub") = ParseJson(separ.fluid_tub.feed)
-    dout("fluid_cas") = ParseJson(separ.fluid_cas.feed)
-    
-    
-    well_ksep_full_d = ConvertToJson(dout)
-    
+     
+    If out = 1 Then
+        well_ksep_full_d = ConvertToJson(separ.get_result_dict)
+    Else
+        well_ksep_full_d = separ.get_result_array
+    End If
 End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
@@ -5259,6 +5262,7 @@ Private Function make_construction_dict(Optional ByVal trajectory_json As String
                                         
     Dim dict_constr As New Dictionary
     Dim key As Variant
+    Dim diamd As Dictionary
     
     If trajectory_json = "" Then
         trajectory_json = encode_pipe_trajectory()
@@ -5277,7 +5281,8 @@ Private Function make_construction_dict(Optional ByVal trajectory_json As String
             diam_json = encode_pipe_diam(diam_json)
         End If
     End If
-    For Each key In ParseJson(diam_json).keys
+    Set diamd = ParseJson(diam_json)
+    For Each key In diamd.keys
         dict_constr.Add key, ParseJson(diam_json)(key)
     Next key
     Set make_construction_dict = dict_constr

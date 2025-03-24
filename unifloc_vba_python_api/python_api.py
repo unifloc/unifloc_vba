@@ -1869,6 +1869,30 @@ class API():
         self.f_well_ksep_total_d = self.book.macro("well_ksep_total_d")
         return self.f_well_ksep_total_d(SepNat,SepGasSep)
 
+    def well_ksep_full_d(self, p_sep_atma,t_sep_C,feed,gassep_json,f_Hz=50,out=0):
+        """
+ ========== description ============== 
+расчет сепарации газа на приеме ЭЦН с учетом как натуральной сепарации так и газосепаратора 
+        
+ ==========  arguments  ============== 
+
+    p_sep_atma - давление сепарации, атма    
+
+    t_sep_c - температура сепарации, с    
+
+    feed - json с параметрами потока    
+
+    gassep_json - json с параметрами сепарации encode_esp_separation    
+
+    f_hz - частота вращения вала эцн    
+
+    out - настройка вывода результатов   
+
+        """
+
+        self.f_well_ksep_full_d = self.book.macro("well_ksep_full_d")
+        return self.f_well_ksep_full_d(p_sep_atma,t_sep_C,feed,gassep_json,f_Hz,out)
+
     def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub,diam_cas,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
         """
  ========== description ============== 
@@ -2421,7 +2445,7 @@ class API():
         self.f_encode_ESP_cable = self.book.macro("encode_ESP_cable")
         return self.f_encode_ESP_cable(length_m,cable_R_Omkm,cable_X_Omkm,cable_t_max_C,manufacturer,name,d_mm)
 
-    def encode_ESP_separation(self, calc_mode=0,p_sep_manual_atma="",t_sep_manual_C="",natsep_model="",d_intake_mm="",d_cas_mm="",pkv_period_ratio="",ksep_gassep_man_d="",ksep_nat_man_d="",ksep_liquid_man_d="",h_intake_m="",h_perf_m="",gassep_type="",gassep_qnom_sm3day="",param=""):
+    def encode_ESP_separation(self, calc_mode=0,p_sep_manual_atma="",t_sep_manual_C="",natsep_model="",d_intake_mm="",d_cas_mm="",d_tub_mm="",pkv_period_ratio="",ksep_gassep_man_d="",ksep_nat_man_d="",ksep_liquid_man_d="",h_intake_m="",h_perf_m="",gassep_type="",gassep_qnom_sm3day="",param=""):
         """
  ========== description ============== 
  функция кодирования газосепаратора 
@@ -2434,11 +2458,13 @@ class API():
 
      t_sep_manual_c - температура для расчета  коэффициента сепарации заданного вручную    
 
-     natsep_model - тип модели для естественной сепарации:  0 - упрощенная маркеса для эцн,  1 - механистическая маркеса для эцн,  2 - механистическая с эцн ниже перфорации,  3 - ..см.мануал   
+     natsep_model - тип модели для естественной сепарации:  0 - упрощенная маркеса для эцн,  1 - механистическая маркеса для эцн,  2 - механистическая с эцн ниже перфорации,    
 
      d_intake_mm - диаметр приемной сетки эцн    
 
      d_cas_mm - диаметр эксплуатационной колонны    
+
+     d_tub_mm - диаметр нкт    
 
      pkv_period_ratio - для пкв отношение времени работы к времени цикла    
 
@@ -2452,7 +2478,7 @@ class API():
 
    h_perf_m   
 
-     gassep_type - тип - номер газосепаратора из базы    
+     gassep_type - тип - номер газосепаратора из базы,  -1 или нет значения - газосепаратор не рассчитывается,  0 - упрощенная модель, 1 - номер гс из базы испытаний (от 1 до 29)    
 
      gassep_qnom_sm3day - номинальная подача газосепаратора    
 
@@ -2461,7 +2487,7 @@ class API():
         """
 
         self.f_encode_ESP_separation = self.book.macro("encode_ESP_separation")
-        return self.f_encode_ESP_separation(calc_mode,p_sep_manual_atma,t_sep_manual_C,natsep_model,d_intake_mm,d_cas_mm,pkv_period_ratio,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,h_intake_m,h_perf_m,gassep_type,gassep_qnom_sm3day,param)
+        return self.f_encode_ESP_separation(calc_mode,p_sep_manual_atma,t_sep_manual_C,natsep_model,d_intake_mm,d_cas_mm,d_tub_mm,pkv_period_ratio,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,h_intake_m,h_perf_m,gassep_type,gassep_qnom_sm3day,param)
 
     def encode_ambient_formation_string(self, therm_cond_form_WmC=2.4252,sp_heat_capacity_form_JkgC=200,therm_cond_cement_WmC=6.965,therm_cond_tubing_WmC=32,therm_cond_casing_WmC=32,heat_transfer_casing_liquid_Wm2C=200,heat_transfer_casing_gas_Wm2C=10,heat_transfer_fluid_convection_Wm2C=200,t_calc_hr=240):
         """

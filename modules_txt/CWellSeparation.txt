@@ -11,17 +11,20 @@ Option Explicit
 Public natsep As New CWellNaturalSeparation   ' отвечает за расчет натуральной сепарации
 Public gassep As New CESPGasSep
 ' описание газосепаратора
-Public isGasSep As Boolean                ' флаг того, что ГС работает
 Public ksep_gassep_fr As Double           ' коэффициент сепарации газосепаратора, расчетный
 Public ksep_nat_fr As Double              ' коэффициент естественной сепарации, расчетный
 Public ksep_nat_average_fr As Double      ' коэффициент сепарации естественный, осредненный за время работы и простоя
-Public ksep_liquid_d As Double
-Public ksep_water_d As Double
+Public ksep_ann As Double                 ' ПКВ ксеп для потока забираемого из затруба
 Public p_ksep_atma As Double              ' давление сепарации, расчетное
 Public t_ksep_C As Double                 ' температура сепарации расчетная
+' вручную заданные параметры для соответствующего режима расчета
+Public psep_man_atma As Double
+Public tsep_man_C As Double
+Public ksep_gassep_man_d As Double
+Public ksep_nat_man_d As Double
 Public q_gas_annulus_after_nat_sep_sm3day As Double
 Public q_gas_annulus_after_full_sep_sm3day As Double
-Public q_free_gas_annulus_sm3day As Double
+Public q_cas_rc_m3day As Double     ' оценка баланса газа в затрубе в ПКВ
 Public separation_mode As String ' флаг для ручного задания параметров сепарации
                                 ' 0 - byCorrealation = 0
                                 '   расчет по корреляциям для заданных p, t
@@ -41,42 +44,24 @@ Public natsep_type As Long      ' выбор моделей расчета естественной сепарации
                                 '  0 -  расчет по упрощенной модели Маркеса
                                 '  1 - расчет по механистической модели Маркеса
                                 '  2 - расчет по механистической модели Михайлова Маркеса для ЭЦН ниже перфорации
-                                '  3 - расчет по механистической модели на основе Михайлова Маркеса для ПКВ режима
-' вручную заданные параметры для соответствующего режима расчета
-Public psep_man_atma As Double
-Public tsep_man_C As Double
-Public ksep_gassep_man_d As Double
-Public ksep_nat_man_d As Double
-Public ksep_ann As Double
-'Public ksep_liquid_man_d As Double
-'Public ksep_water_man_d As Double
-'Public manufacturer As String
-'Public name As String
-'Public length_m As Double
+                                '  3 - (устарело) расчет по механистической модели на основе Михайлова Маркеса для ПКВ режима
 ' геометрические параметры насоса
-'Private length_m_ As Double                ' длина должна быть не нулевая, для того чтобы корректно строились графики по скважине
-'Private h_mes_top_ As Double               ' глубина установки газосепаратора по верхней части
 Private d_od_mm_ As Double                 ' внешний диаметр
 Public d_cas_m As Double                   ' диаметр эксплуатационной колонны в месте установки сепаратора
 Public d_tub_m As Double                   ' диаметр НКТ для расчета на ПКВ режиме может пригодиться
-Public angle_deg As Double                 ' угол установки УЭЦН (предполагается, что по глубине угол не меняется)
 ' общие параметры
 Public fluid As CPVT                     ' флюид исходный
 Public fluid_gs As CPVT                  ' флюид в газосепараторе, после естественной сепарации
 Public fluid_tub As CPVT                 ' флюид после сепарации
 Public fluid_cas As CPVT                 ' флюид после сепарации - то что идет в затруб
-Public fluid_from_annular As CPVT
+Public fluid_from_annular As CPVT        ' флюид забираемый из затруба на пкв цикле работы
 '  параметры для задания упрощенной модели сепаратора
 Private ksep_gassep_max_d_  As Double
 Private ksep_q_max_m3day_    As Double     ' максимальный дебит для газосепаратора для упрощенной характеристики
 Public pkv_period_ratio As Double
 Public h_intake_m As Double
 Public h_perf_m As Double
-'
-'Public calibr_li As Double
-'Public calibr_st As Double
 Public gas_goes_into_solution As Double
- 
 Public Property Get ksep_total_fr() As Double
 ' общая сепарация УЭЦН параметр только для чтения
 ' для задания вручную надо задать естественную сепарацию и сепарацию газосепаратора
@@ -88,7 +73,7 @@ Private Sub Class_Initialize()
                           h_mes_top_m:=0, _
                           d_cas_mm:=0, _
                           angle_deg:=90)
-    isGasSep = True
+'    isGasSep = True
     separation_mode = byCorrealation
     ksep_nat_fr = 0.5
     ksep_gassep_fr = 0.5
@@ -143,33 +128,24 @@ Public Function calc_separation(p_atma As Double, t_C As Double)
     
     Select Case separation_mode
         Case "by_correlation"
-                   
             ksep_gassep_fr = estimate_GS_separation_d(p_ksep_atma, t_ksep_C)
-            
         Case "by_correlation_pressure_manual"
-            ' берем значение ручное, давления как есть
+                ' берем значение ручное, давления как есть
                 ' оценим коэффициент сепарации газосепаратора
                 ksep_gassep_fr = estimate_GS_separation_d(p_ksep_atma, t_ksep_C)
         Case "value_manual"
-            ' берем и коэффициенты и давления как было задано при установке значений
+                ' берем и коэффициенты и давления как было задано при установке значений
             ksep_gassep_fr = ksep_gassep_man_d
         Case "fully_manual"
-            ' берем и коэффициенты и давления как было задано при установке значений
+                ' берем и коэффициенты и давления как было задано при установке значений
             ksep_gassep_fr = ksep_gassep_man_d
-'            ksep_liquid_d = ksep_liquid_man_d
-'            ksep_water_d = ksep_water_man_d
     End Select
     
     ksep_gassep_fr = ksep_gassep_fr * ksep_ann
     
-    ' потом, когда будет расчет газосепаратора - то надо будет разделить алгоритмы
-    ' ручного задания и задания с использованием газосепаратора
-    
-    ksep_liquid_d = 0
-    ksep_water_d = 0
-    
     Set fluid_tub = fluid_gs.clone()
     Call fluid_tub.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_gassep_fr, True)
+    Call fluid_tub.calc_PVT(p_atma, t_C)
     q_gas_annulus_after_full_sep_sm3day = fluid.q_gas_insitu_sm3day - fluid_tub.q_gas_insitu_sm3day
     
     Set fluid_cas = fluid.clone() ' тут надо будет доделать чтобы считать затруб с газом
@@ -178,6 +154,25 @@ Public Function calc_separation(p_atma As Double, t_C As Double)
     
     calc_separation = ksep_total_fr
     
+    If pkv_period_ratio > 0 And pkv_period_ratio < 1 Then
+        Dim ql_from_cas As Double
+        Dim qg_to_cas As Double
+        
+        Call fluid_from_annular.calc_PVT(p_atma, t_C)
+        Call fluid_cas.calc_PVT(p_atma, t_C)
+        
+        If q_gas_annulus_after_full_sep_sm3day > 0 Then
+            ' тут жидкость вниз газ вверх в затрубе
+            ql_from_cas = fluid_from_annular.qliq_rc_m3day  ' дебит жидкости который мы забираем из затруба в момент работы
+            qg_to_cas = fluid_cas.q_gas_rc_m3day
+            q_cas_rc_m3day = qg_to_cas - ql_from_cas
+        Else
+            q_cas_rc_m3day = -fluid_from_annular.q_mix_rc_m3day
+        End If
+    Else
+        Call fluid_cas.calc_PVT(p_atma, t_C)
+        q_cas_rc_m3day = q_gas_annulus_after_full_sep_sm3day * fluid_cas.bg_m3m3
+    End If
 End Function
 Public Sub set_gassep_param(Optional OD_mm As Double = 125, _
                        Optional Qnom_m3day As Double = 250, _
@@ -192,7 +187,7 @@ Public Sub set_gassep_param(Optional OD_mm As Double = 125, _
 ' Angle_deg - угол установки к горизонтали 90 - вертикально
 ' d_cas_mm   - диаметр эксплуатационной колоны в месте установки
     d_od_mm_ = OD_mm
-    Me.angle_deg = angle_deg
+'    Me.angle_deg = angle_deg
     If d_cas_mm = 0 Then
         Me.d_cas_m = (OD_mm + 10) / 1000
     Else
@@ -227,7 +222,7 @@ On Error GoTo err1:
             gassep_type = -1
         End If
         
-        isGasSep = gassep_type > -1
+'        isGasSep = gassep_type > -1
         
         If .Exists("natsep_model") Then
             natsep_type = .Item("natsep_model")
@@ -244,6 +239,7 @@ On Error GoTo err1:
         
         If .Exists("d_intake_mm") Then d_od_mm_ = .Item("d_intake_mm")
         If .Exists("d_cas_mm") Then d_cas_m = .Item("d_cas_mm") / 1000
+        If .Exists("d_tub_mm") Then d_tub_m = .Item("d_tub_mm") / 1000
         If .Exists("h_intake_m") Then h_intake_m = .Item("h_intake_m")
         If .Exists("h_perf_m") Then h_perf_m = .Item("h_perf_m")
         If .Exists("pkv_period_ratio") Then pkv_period_ratio = .Item("pkv_period_ratio")
@@ -291,126 +287,87 @@ Public Property Get angle_vert_deg() As Double
 ' угол задается извне системой скважиной при установке системы в скважину
    angle_vert_deg = angle_vert_deg - 90
 End Property
-Private Sub make_feed_from_annulus(p_atma As Double, t_C As Double, ksep_ann As Double)
-               Set fluid_from_annular = fluid.clone
-               ' для флюида из затруба уберем весь газ из потока (ксеп = 1)
-               Call fluid_from_annular.mod_after_separation(p_atma, t_C, ksep_ann, gas_goes_into_solution)
-               ' учтем, что из затруба объем жидкости определяется пкв отношением
-               fluid_from_annular.q_liq_sm3day = fluid.q_liq_sm3day * 1 / (pkv_period_ratio) * (1 - pkv_period_ratio)
-               ' может быть можно было бы учесть, что поменяется обводненность - но пока не будем
-               fluid_from_annular.rp_m3m3 = fluid_from_annular.rsb_m3m3
-End Sub
+Private Function make_feed_from_annulus(p_atma As Double, t_C As Double, ksep_ann As Double) As CPVT
+    Dim fl As CPVT
+    Set fl = fluid.clone
+    ' для флюида из затруба уберем весь газ из потока (ксеп = 1)
+    Call fl.mod_after_separation(p_atma, t_C, ksep_ann, gas_goes_into_solution)
+    ' учтем, что из затруба объем жидкости определяется пкв отношением
+    fl.q_liq_sm3day = fluid.q_liq_sm3day * 1 / (pkv_period_ratio) * (1 - pkv_period_ratio)
+    ' может быть можно было бы учесть, что поменяется обводненность - но пока не будем
+    fl.rp_m3m3 = fl.rsb_m3m3
+    Set make_feed_from_annulus = fl
+End Function
 Private Sub estimate_feeds_after_separation_calc(p_atma As Double, t_C As Double)
-    
+    ' оценка параметров потока в том числе для ПКВ режима
+    Dim qliq_from_res As Double
+    Dim qliq_from_annulus As Double
+    Dim vg_downflow_eps As Double
+    Dim vg_downflow_limit As Double
+    Dim ksep_ann2 As Double
     
     Set fluid_gs = fluid.clone
-     If pkv_period_ratio > 0 And pkv_period_ratio < 1 Then
+    If pkv_period_ratio > 0 And pkv_period_ratio < 1 Then
         ' если тут значит работаем в ПКВ режиме и надо посчитать ксеп дополнительно
-'         If ksep_nat_fr > 0 Then
-               Dim qliq_from_res As Double
-               Dim qliq_from_annulus As Double
-               
-               qliq_from_res = fluid.q_liq_sm3day
-               qliq_from_annulus = qliq_from_res * 1 / (pkv_period_ratio) * (1 - pkv_period_ratio)
-               
-               ' для начала предположим, что из затруба только жидкость идет вниз (без учета изменения обводненности)
-               ksep_ann = 0.99
-               Call make_feed_from_annulus(p_atma, t_C, ksep_ann)
-               ' уточним сепарацию жидкости из затруба
-               Call natsep.init_pvt(fluid_from_annular, p_atma, t_C)
-               If natsep.vg_downflow_msec > 0 Then
-                    ' скорость газа положительная значит газ может убежать от нисходящей жидкости
-                    ' и тогда из затруба будет идти чистая жидкость
-                   ksep_ann = 0.99
-               Else
-                    ' скорость газа ноль или отрицательная - значит весь газ пойдет в насос (почти)
-                    If natsep.vg_downflow_tub_msec > 0 Then
-                        ' если выше насоса в зазоре между НКТ и э/к скорость газа отрицательная - сепарации точно не будет
-                        ksep_ann = 0.1
-                    Else
-                        ' тут можно оценить количество газа в зазоре между ЭЦН и э\к и транслировать в ксеп
-                        ' но для этого может потребоваться длительность периода абсолютная
-                        ksep_ann = 0.01
-                    End If
-               End If
-                
-'           Else
-'               ksep_nat_fr = 0
-'               ksep_ann = 0.99
-'           End If
-           
-           Call make_feed_from_annulus(p_atma, t_C, ksep_ann)
-            
-           ksep_nat_fr = ksep_nat_fr * (ksep_ann)
-           Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
-           
-           Set fluid_gs = feed_mod_mix_obj(fluid_gs, fluid_from_annular)
-                   
-'           Set fluid_gs = fluid.clone
-'           Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
-'           Call fluid.calc_PVT(p_atma, t_C)
-'           Call fluid_gs.calc_PVT(p_atma, t_C)
-    Else
+        ' в ПКВ возможно резкое изменение коэффициента сепарации при переходе границы по дебиту
+        ' при которой газ в противотоке может подниматься или не может
+        ' резкая граница неудобна для расчетов и вряд ли реализуется на практике
+        ' поэтому сгладим ее в расчете задав позицию границы (limit) и ее размытие (eps)
+        '    эти параметры можно настроить на реальные данные если такие будут
+        vg_downflow_eps = 0.1
+        vg_downflow_limit = -0.05
+        ' оценим дебиты жидкости из пласта и затруба при работе ПКВ
+        qliq_from_res = fluid.q_liq_sm3day
+        qliq_from_annulus = qliq_from_res * 1 / (pkv_period_ratio) * (1 - pkv_period_ratio)
         
+        ' для начала предположим, что из затруба только жидкость идет вниз (без учета изменения обводненности)
+        ksep_ann = 0.99
+        Set fluid_from_annular = make_feed_from_annulus(p_atma, t_C, ksep_ann)
+        ' уточним сепарацию жидкости из затруба
+        Call natsep.init_pvt(fluid_from_annular, p_atma, t_C)
+        If natsep.vg_downflow_msec > vg_downflow_limit + vg_downflow_eps Then
+             ' скорость газа положительная значит газ может убежать от нисходящей жидкости
+             ' и тогда из затруба будет идти чистая жидкость
+            ksep_ann = 0.99
+        Else
+             ' скорость газа ноль или отрицательная - значит весь газ пойдет в насос (почти)
+             If natsep.vg_downflow_tub_msec > vg_downflow_limit Then
+                 ' если выше насоса в зазоре между НКТ и э/к скорость газа отрицательная - сепарации точно не будет
+                 ksep_ann2 = 0.1
+             Else
+                 ' тут можно оценить количество газа в зазоре между ЭЦН и э\к и транслировать в ксеп
+                 ' но для этого может потребоваться длительность периода абсолютная
+                 ksep_ann2 = 0.01
+             End If
+             ' далее сгладим ксеп чтобы не было резкого скачка
+             If natsep.vg_downflow_msec > vg_downflow_limit Then
+                 ksep_ann = (0.99 - ksep_ann2) * (1 - (vg_downflow_limit + vg_downflow_eps - natsep.vg_downflow_msec) / (vg_downflow_eps - vg_downflow_limit)) + ksep_ann2
+             Else
+                 ksep_ann = ksep_ann2
+             End If
+        End If
+        ' пересчитаем потоке с новой оценкой ксеп
+        Set fluid_from_annular = make_feed_from_annulus(p_atma, t_C, ksep_ann)
+        ' поправим ранее рассчитанный коэффициент натуральной сепарации
+        ' используем оценку сепарации нисходящего потока как множитель для естественной сепарации
+        ' помним, что если в противотоке газ всплыть не может, то натуральной сепарации не будет
+        ksep_nat_fr = ksep_nat_fr * ksep_ann
         Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
-        
+        ' смешаем флюиды из затруба и из пласта в один который пойдет в приемную сетку насоса
+        Set fluid_gs = feed_mod_mix_obj(fluid_gs, fluid_from_annular)
+    Else
+        ' если ПКВ не то просто учитываем сепарацию
+        Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
         Call fluid.calc_PVT(p_atma, t_C)
         Call fluid_gs.calc_PVT(p_atma, t_C)
         ksep_ann = 1
+        Set fluid_from_annular = fluid.clone
+        fluid_from_annular.q_liq_sm3day = 0
+        fluid_from_annular.q_gas_free_sm3day = 0
     End If
     
     q_gas_annulus_after_nat_sep_sm3day = fluid.q_gas_insitu_sm3day - fluid_gs.q_gas_insitu_sm3day
 End Sub
-'                 Dim ksep_av As Double
-'                 Dim ksep_ann As Double
-'                 Dim fluid_annular As CPVT
-'                 Dim fluid_pump As CPVT
-'
-'                 Set fluid_pump = fluid_.clone
-'
-'                 ksep_av = natsep.ksep_average_cycle
-'
-'                 If ksep_av > 0 Then
-'
-'                       If estimate_nat_separation_d < 0.01 And ksep_av < 0.1 Then
-'                           ksep_ann = 0.1
-'                       Else
-'                           ksep_ann = 0.99
-'                       End If
-'
-'                       Set fluid_annular = fluid_.clone
-'
-'                       ' для флюида из затруба уберем весь газ из потока (ксеп = 1)
-'                       Call fluid_annular.mod_after_separation(p_atma, t_C, ksep_ann, gas_goes_into_solution:=gas_goes_into_solution)
-'                       ' учтем, что из затруба объем жидкости определяется пкв отношением
-'                       fluid_annular.q_liq_sm3day = fluid_.q_liq_sm3day * 1 / (pkv_period_ratio) * (1 - pkv_period_ratio)
-'                       ' может быть можно было бы учесть, что поменяется обводненность - но пока не будем
-'
-'                       fluid_annular.rp_m3m3 = fluid_annular.rsb_m3m3
-'
-'                       Call fluid_annular.calc_PVT(p_atma, t_C)
-'                       Call fluid_pump.calc_PVT(p_atma, t_C)
-'
-'                       Dim qgf1 As Double, qgf2 As Double
-'
-'                       qgf1 = fluid_annular.q_gas_rc_m3day
-'                       qgf2 = fluid_pump.q_gas_rc_m3day
-'
-'                       Call fluid_pump.mod_after_separation(p_atma, t_C, estimate_nat_separation_d, gas_goes_into_solution:=gas_goes_into_solution)
-'
-'
-'                       'Call fluid_annular.calc_PVT(ptq.p(i), ptq.t(i))
-'                       Call fluid_pump.calc_PVT(p_atma, t_C)
-'
-'                       'qgf1 = fluid_annular.q_gas_rc_m3day
-'                       qgf2 = fluid_pump.q_gas_rc_m3day
-'
-'                       Set fluid_pump = feed_mod_mix_obj(fluid_pump, fluid_annular)
-'                   Else
-'                       estimate_nat_separation_d = 0
-'                       Call fluid_pump.mod_after_separation(p_atma, t_C, estimate_nat_separation_d, gas_goes_into_solution:=1)
-'                   End If
-'
 Private Function estimate_GS_separation_d(p_atma As Double, t_C As Double, Optional f_Hz As Double = 50)
 ' расчет коэффициента сепарации газосепаратора
 ' предполагается линейная зависимость от дебита
@@ -477,5 +434,35 @@ Private Function estimate_nat_separation_d(p_atma As Double, t_C As Double) As D
              Call natsep.ksep_mechanistic_pkv(fluid.qliq_rc_m3day, fluid.q_gas_rc_m3day)
              estimate_nat_separation_d = natsep.ksep_work
      End Select
+End Function
+Public Function get_result_dict()
+    Dim dout As New Dictionary
+    dout("ksep_total_fr") = ksep_total_fr
+    dout("ksep_nat_fr") = ksep_nat_fr
+    dout("ksep_gassep_fr") = ksep_gassep_fr
+    dout("q_gas_annulus_after_nat_sep_sm3day") = q_gas_annulus_after_nat_sep_sm3day
+    dout("q_gas_annulus_after_full_sep_sm3day") = q_gas_annulus_after_full_sep_sm3day
+    dout("fluid") = ParseJson(fluid.feed)
+    dout("fluid_gs") = ParseJson(fluid_gs.feed)
+    dout("fluid_tub") = ParseJson(fluid_tub.feed)
+    dout("fluid_cas") = ParseJson(fluid_cas.feed)
+    Set get_result_dict = dout
+    
+End Function
+Public Function get_result_array()
+    Dim arr()
+    
+    ReDim arr(1, 8)
+    arr(0, 0) = Round(ksep_total_fr, const_num_decimal_out):    arr(1, 0) = "ksep_total_fr"
+    arr(0, 1) = Round(ksep_nat_fr, const_num_decimal_out):      arr(1, 1) = "ksep_nat_fr"
+    arr(0, 2) = Round(ksep_gassep_fr, const_num_decimal_out):   arr(1, 2) = "ksep_gassep_fr"
+    arr(0, 3) = fluid.feed:                                     arr(1, 3) = "fluid"
+    arr(0, 4) = fluid_tub.feed:                                 arr(1, 4) = "fluid_tub"
+    arr(0, 5) = fluid_cas.feed:                                 arr(1, 5) = "fluid_cas"
+    arr(0, 6) = Round(q_gas_annulus_after_full_sep_sm3day, const_num_decimal_out):    arr(1, 6) = "q_gas_annulus_after_full_sep_sm3day"
+    arr(0, 7) = Round(q_cas_rc_m3day, const_num_decimal_out):     arr(1, 7) = "q_cas_rc_m3day"
+    
+    arr(0, 8) = fluid_gs.feed:                                  arr(1, 8) = "fluid_gs"
+    get_result_array = arr
 End Function
 
