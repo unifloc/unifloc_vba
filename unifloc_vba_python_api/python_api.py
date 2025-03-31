@@ -25,6 +25,68 @@ addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
+    def encode_pipe_object(self, trajectory_json="",diam_json="",t_model_json="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
+        """
+ ========== description ============== 
+ задание объекта трубы для расчета 
+        
+ ==========  arguments  ============== 
+
+     trajectory_json - json кодирующий траекторию скважины,    
+
+     diam_json - json кодирующий диаметры скважины,  t_model - температурная модель,  используйте encode_t_model    
+
+   t_model_json   
+
+     flow_correlation - корреляция многофазного потока    
+
+     flow_along_coord - флаг, определяющий направление потока    
+
+     calibr_grav - калибровка по гравитации (множитель)    
+
+     calibr_fric - калибровка по трению (множитель)    
+
+     h_start_m - измеренная глубина начала трубы, м    
+
+     h_end_m - измеренная глубина конца трубы, м    
+
+     znlf - флаг для включения барботажа   
+
+        """
+
+        self.f_encode_pipe_object = self.book.macro("encode_pipe_object")
+        return self.f_encode_pipe_object(trajectory_json,diam_json,t_model_json,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
+
+    def encode_pipe(self, construction="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
+        """
+ ========== description ============== 
+ задание объекта трубы для расчета 
+        
+ ==========  arguments  ============== 
+
+     construction - json кодирующий конструкцию скважины,  используйте encode_pipe_construction    
+
+     t_model - температурная модель,  используйте encode_t_model    
+
+     flow_correlation - корреляция многофазного потока    
+
+     flow_along_coord - флаг, определяющий направление потока    
+
+     calibr_grav - калибровка по гравитации (множитель)    
+
+     calibr_fric - калибровка по трению (множитель)    
+
+     h_start_m - измеренная глубина начала трубы, м    
+
+     h_end_m - измеренная глубина конца трубы, м    
+
+     znlf - флаг для включения барботажа   
+
+        """
+
+        self.f_encode_pipe = self.book.macro("encode_pipe")
+        return self.f_encode_pipe(construction,t_model,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
+
     def MF_dpdl_atmm(self, d_m,p_atma,ql_rc_m3day,qg_rc_m3day,mu_oil_cP=const_mu_o,mu_gas_cP=const_mu_g,sigma_oil_gas_Nm=const_sigma_oil_Nm,rho_lrc_kgm3=const_go_*1000,rho_grc_kgm3=const_gg_*const_rho_air,eps_m=0.0001,theta_deg=90,hcorr=1,param_out=0,calibr_grav=1,calibr_fric=1):
         """
  ========== description ============== 
@@ -67,6 +129,38 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,ql_rc_m3day,qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
+    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-10000000000#,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+        """
+ ========== description ============== 
+ расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
+        
+ ==========  arguments  ============== 
+
+     p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
+
+     t_calc_from_c - температура в точке где задано давление расчета    
+
+     pipe_object - параметры конструкции json строка. используйте  функцию encode_pipe_construction() для генерации    
+
+     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
+
+     calc_along_coord - направление расчета относительно координат.    
+
+     param - дополнительные параметры расчета потока    
+
+     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
+
+     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
+
+     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
+
+     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
+
+        """
+
+        self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
+        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,pipe_object,feed,calc_along_coord,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
+
     def MF_choke_calibr(self, choke_json,feed_json,calibr_type=0,p_in_atma=-1,p_out_atma=-1,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
@@ -100,38 +194,6 @@ class API():
 
         self.f_MF_choke_calibr = self.book.macro("MF_choke_calibr")
         return self.f_MF_choke_calibr(choke_json,feed_json,calibr_type,p_in_atma,p_out_atma,t_choke_C,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
-
-    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-10000000000#,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
-        """
- ========== description ============== 
- расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
-        
- ==========  arguments  ============== 
-
-      p_calc_from_atma - давление с которого начинается расчет, атм  граничное значение для проведения расчета    
-
-     t_calc_from_c - температура в точке где задано давление расчета    
-
-     pipe_object - параметры конструкции json строка. используйте  функцию encode_pipe_construction() для генерации    
-
-     feed - параметры потока флюидов json строка. используйте  функции encode_feed() или encode_feed_list()    
-
-     calc_along_coord - направление расчета относительно координат.    
-
-     param - дополнительные параметры расчета потока    
-
-     q_liq_sm3day - дебит жидкости, перекрывает feed если задан,  может быть вектором    
-
-     fw_perc - обводненность, перекрывает feed если задан,  может быть вектором    
-
-     rp_m3m3 - газовый фактор, перекрывает feed если задан,  может быть вектором    
-
-     q_gas_free_sm3day - доп дебит газа, перекрывает feed если задан,  может быть вектором   
-
-        """
-
-        self.f_MF_pipe_p_atma = self.book.macro("MF_pipe_p_atma")
-        return self.f_MF_pipe_p_atma(p_calc_from_atma,t_calc_from_C,pipe_object,feed,calc_along_coord,param,q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day)
 
     def MF_choke_q_sm3day(self, choke_json,feed_json,p_in_atma,p_out_atma,t_choke_C=20,param="",q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -297,7 +359,7 @@ class API():
         self.f_encode_PVT = self.book.macro("encode_PVT")
         return self.f_encode_PVT(gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
 
-    def PVT_calc(self, p_atma,t_C,PVT_prop,show_log=False):
+    def PVT_calc(self, p_atma,t_C,PVT_json,show_log=False):
         """
  ========== description ============== 
  calculate all PVT properties of oil at a given  pressure and temperature 
@@ -308,16 +370,16 @@ class API():
 
      t_c - temperature, c.    
 
-     pvt_prop - static fluid properties - densities rsb, etc.  use encode_pvt to generate    
+     pvt_json - static fluid properties - densities rsb, etc.  use encode_pvt to generate    
 
    show_log  
 
         """
 
         self.f_PVT_calc = self.book.macro("PVT_calc")
-        return self.f_PVT_calc(p_atma,t_C,PVT_prop,show_log)
+        return self.f_PVT_calc(p_atma,t_C,PVT_json,show_log)
 
-    def PVT_bg_m3m3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_bg_m3m3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет объемного коэффициента газа 
@@ -328,14 +390,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_bg_m3m3 = self.book.macro("PVT_bg_m3m3")
-        return self.f_PVT_bg_m3m3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_bg_m3m3(p_atma,t_C,PVT_json)
 
-    def PVT_bo_m3m3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_bo_m3m3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет объемного коэффициента нефти 
@@ -346,14 +408,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_bo_m3m3 = self.book.macro("PVT_bo_m3m3")
-        return self.f_PVT_bo_m3m3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_bo_m3m3(p_atma,t_C,PVT_json)
 
-    def PVT_bw_m3m3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_bw_m3m3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет объемного коэффициента воды 
@@ -364,14 +426,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_bw_m3m3 = self.book.macro("PVT_bw_m3m3")
-        return self.f_PVT_bw_m3m3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_bw_m3m3(p_atma,t_C,PVT_json)
 
-    def PVT_salinity_ppm(self, p_atma,t_C,PVT_prop=""):
+    def PVT_salinity_ppm(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет солености воды 
@@ -382,14 +444,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_salinity_ppm = self.book.macro("PVT_salinity_ppm")
-        return self.f_PVT_salinity_ppm(p_atma,t_C,PVT_prop)
+        return self.f_PVT_salinity_ppm(p_atma,t_C,PVT_json)
 
-    def PVT_mu_oil_cP(self, p_atma,t_C,PVT_prop=""):
+    def PVT_mu_oil_cP(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет вязкости нефти 
@@ -400,14 +462,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_mu_oil_cP = self.book.macro("PVT_mu_oil_cP")
-        return self.f_PVT_mu_oil_cP(p_atma,t_C,PVT_prop)
+        return self.f_PVT_mu_oil_cP(p_atma,t_C,PVT_json)
 
-    def PVT_mu_gas_cP(self, p_atma,t_C,PVT_prop=""):
+    def PVT_mu_gas_cP(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет вязкости газа 
@@ -418,14 +480,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_mu_gas_cP = self.book.macro("PVT_mu_gas_cP")
-        return self.f_PVT_mu_gas_cP(p_atma,t_C,PVT_prop)
+        return self.f_PVT_mu_gas_cP(p_atma,t_C,PVT_json)
 
-    def PVT_mu_wat_cP(self, p_atma,t_C,PVT_prop=""):
+    def PVT_mu_wat_cP(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет вязкости воды 
@@ -436,14 +498,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_mu_wat_cP = self.book.macro("PVT_mu_wat_cP")
-        return self.f_PVT_mu_wat_cP(p_atma,t_C,PVT_prop)
+        return self.f_PVT_mu_wat_cP(p_atma,t_C,PVT_json)
 
-    def PVT_rs_m3m3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_rs_m3m3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет газосодержания при заданных p,t 
@@ -454,14 +516,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rs_m3m3 = self.book.macro("PVT_rs_m3m3")
-        return self.f_PVT_rs_m3m3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_rs_m3m3(p_atma,t_C,PVT_json)
 
-    def PVT_z(self, p_atma,t_C,PVT_prop=""):
+    def PVT_z(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет коэффициента сверхсжимаемости газа 
@@ -472,14 +534,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_z = self.book.macro("PVT_z")
-        return self.f_PVT_z(p_atma,t_C,PVT_prop)
+        return self.f_PVT_z(p_atma,t_C,PVT_json)
 
-    def PVT_rho_oil_kgm3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_rho_oil_kgm3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет плотности нефти в рабочих условиях 
@@ -490,14 +552,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rho_oil_kgm3 = self.book.macro("PVT_rho_oil_kgm3")
-        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_rho_oil_kgm3(p_atma,t_C,PVT_json)
 
-    def PVT_rho_gas_kgm3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_rho_gas_kgm3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет плотности газа в рабочих условиях 
@@ -508,14 +570,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rho_gas_kgm3 = self.book.macro("PVT_rho_gas_kgm3")
-        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_rho_gas_kgm3(p_atma,t_C,PVT_json)
 
-    def PVT_rho_wat_kgm3(self, p_atma,t_C,PVT_prop=""):
+    def PVT_rho_wat_kgm3(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет плотности воды в рабочих условиях 
@@ -526,14 +588,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rho_wat_kgm3 = self.book.macro("PVT_rho_wat_kgm3")
-        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,PVT_prop)
+        return self.f_PVT_rho_wat_kgm3(p_atma,t_C,PVT_json)
 
-    def PVT_pb_atma(self, t_C,PVT_prop=""):
+    def PVT_pb_atma(self, t_C,PVT_json=""):
         """
  ========== description ============== 
  Расчет давления насыщения по известному  газосодержанию при давлении насыщения 
@@ -542,14 +604,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_pb_atma = self.book.macro("PVT_pb_atma")
-        return self.f_PVT_pb_atma(t_C,PVT_prop)
+        return self.f_PVT_pb_atma(t_C,PVT_json)
 
-    def PVT_rsb_m3m3(self, pb_atma,t_C,PVT_prop=""):
+    def PVT_rsb_m3m3(self, pb_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  Расчет газосодержания при давлении насыщения  по известному давлению насыщения 
@@ -560,14 +622,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_rsb_m3m3 = self.book.macro("PVT_rsb_m3m3")
-        return self.f_PVT_rsb_m3m3(pb_atma,t_C,PVT_prop)
+        return self.f_PVT_rsb_m3m3(pb_atma,t_C,PVT_json)
 
-    def PVT_ST_oilgas_Nm(self, p_atma,t_C,PVT_prop=""):
+    def PVT_ST_oilgas_Nm(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения нефть - газ 
@@ -578,14 +640,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_ST_oilgas_Nm = self.book.macro("PVT_ST_oilgas_Nm")
-        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,PVT_prop)
+        return self.f_PVT_ST_oilgas_Nm(p_atma,t_C,PVT_json)
 
-    def PVT_ST_watgas_Nm(self, p_atma,t_C,PVT_prop=""):
+    def PVT_ST_watgas_Nm(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет коэффициента поверхностного натяжения вода - газ 
@@ -596,12 +658,12 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_ST_watgas_Nm = self.book.macro("PVT_ST_watgas_Nm")
-        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,PVT_prop)
+        return self.f_PVT_ST_watgas_Nm(p_atma,t_C,PVT_json)
 
     def feed_ST_liqgas_Nm(self, p_atma,t_C,feed):
         """
@@ -621,7 +683,7 @@ class API():
         self.f_feed_ST_liqgas_Nm = self.book.macro("feed_ST_liqgas_Nm")
         return self.f_feed_ST_liqgas_Nm(p_atma,t_C,feed)
 
-    def PVT_cp_oil_JkgC(self, p_atma,t_C,PVT_prop=""):
+    def PVT_cp_oil_JkgC(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет теплоемкости нефти при постоянном давлении cp 
@@ -632,14 +694,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_cp_oil_JkgC = self.book.macro("PVT_cp_oil_JkgC")
-        return self.f_PVT_cp_oil_JkgC(p_atma,t_C,PVT_prop)
+        return self.f_PVT_cp_oil_JkgC(p_atma,t_C,PVT_json)
 
-    def PVT_cp_gas_JkgC(self, p_atma,t_C,PVT_prop="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
+    def PVT_cp_gas_JkgC(self, p_atma,t_C,PVT_json="",gamma_gas=const_gg_,gamma_oil=const_go_,gamma_wat=const_gw_,rsb_m3m3=const_rsb_default,pb_atma=0,t_res_C=80,bob_m3m3=0,muob_cP=0,PVT_corr_set=0):
         """
  ========== description ============== 
  расчет теплоемкости газа при постоянном давлении cp 
@@ -650,7 +712,7 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры    
 
      gamma_gas - удельная плотность газа, по воздуху.  по умолчанию const_gg_ = 0.6    
 
@@ -673,9 +735,9 @@ class API():
         """
 
         self.f_PVT_cp_gas_JkgC = self.book.macro("PVT_cp_gas_JkgC")
-        return self.f_PVT_cp_gas_JkgC(p_atma,t_C,PVT_prop,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
+        return self.f_PVT_cp_gas_JkgC(p_atma,t_C,PVT_json,gamma_gas,gamma_oil,gamma_wat,rsb_m3m3,pb_atma,t_res_C,bob_m3m3,muob_cP,PVT_corr_set)
 
-    def PVT_cv_gas_JkgC(self, p_atma,t_C,PVT_prop=""):
+    def PVT_cv_gas_JkgC(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет теплоемкости газа при постоянном объеме cv 
@@ -686,14 +748,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_cv_gas_JkgC = self.book.macro("PVT_cv_gas_JkgC")
-        return self.f_PVT_cv_gas_JkgC(p_atma,t_C,PVT_prop)
+        return self.f_PVT_cv_gas_JkgC(p_atma,t_C,PVT_json)
 
-    def PVT_cp_wat_JkgC(self, p_atma,t_C,PVT_prop=""):
+    def PVT_cp_wat_JkgC(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет теплоемкости воды при постоянном давлении cp 
@@ -704,14 +766,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_cp_wat_JkgC = self.book.macro("PVT_cp_wat_JkgC")
-        return self.f_PVT_cp_wat_JkgC(p_atma,t_C,PVT_prop)
+        return self.f_PVT_cp_wat_JkgC(p_atma,t_C,PVT_json)
 
-    def PVT_compressibility_wat_1atm(self, p_atma,t_C,PVT_prop=""):
+    def PVT_compressibility_wat_1atm(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет сжимаемости воды 
@@ -722,14 +784,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_compressibility_wat_1atm = self.book.macro("PVT_compressibility_wat_1atm")
-        return self.f_PVT_compressibility_wat_1atm(p_atma,t_C,PVT_prop)
+        return self.f_PVT_compressibility_wat_1atm(p_atma,t_C,PVT_json)
 
-    def PVT_compressibility_oil_1atm(self, p_atma,t_C,PVT_prop=""):
+    def PVT_compressibility_oil_1atm(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет сжимаемости нефти 
@@ -740,14 +802,14 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_compressibility_oil_1atm = self.book.macro("PVT_compressibility_oil_1atm")
-        return self.f_PVT_compressibility_oil_1atm(p_atma,t_C,PVT_prop)
+        return self.f_PVT_compressibility_oil_1atm(p_atma,t_C,PVT_json)
 
-    def PVT_compressibility_gas_1atm(self, p_atma,t_C,PVT_prop=""):
+    def PVT_compressibility_gas_1atm(self, p_atma,t_C,PVT_json=""):
         """
  ========== description ============== 
  расчет сжимаемости газа 
@@ -758,12 +820,12 @@ class API():
 
      t_c - температура, с.    
 
-     pvt_prop - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
+     pvt_json - строка с параметрами флюида,  используйте encode_pvt для ее генерации,  если задана перекрывает остальные параметры   
 
         """
 
         self.f_PVT_compressibility_gas_1atm = self.book.macro("PVT_compressibility_gas_1atm")
-        return self.f_PVT_compressibility_gas_1atm(p_atma,t_C,PVT_prop)
+        return self.f_PVT_compressibility_gas_1atm(p_atma,t_C,PVT_json)
 
     def encode_feed(self, q_liq_sm3day=10,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1,fluid=PVT_DEFAULT):
         """
@@ -1034,19 +1096,19 @@ class API():
     def feed_mod_separate_gas(self, k_sep,p_atma,t_C,feed,sol_factor=0):
         """
  ========== description ============== 
- function for calculating flow properties after gas separation 
+ функция расчета свойств потока флюидов после сепарации части  свободного газа из потока 
         
  ==========  arguments  ============== 
 
-     k_sep - gas separation factor, fraction, number or list    
+     k_sep - коэффициент сепарации газа, fraction, number or list    
 
-     p_atma - pressure, atm, number or list    
+     p_atma - давление сепарации, atm, number or list    
 
-     t_c - temperature, c, number or list    
+     t_c - температура сепарации, c, number or list    
 
-     feed - json encoded fluid flow parameters,  use encode_feed to generate    
+     feed - json с закодированными параметрами исходного потока,  используйте encode_feed для генерации    
 
-     sol_factor - gas solution factor  result - json encoded feed string   
+     sol_factor - коэффициент фазной неравновесности  доля газа который успеет раствориться  при повышении давления  result - json строка свойств потока флюидов   
 
         """
 
@@ -1056,21 +1118,21 @@ class API():
     def feed_mod_split(self, k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed):
         """
  ========== description ============== 
- function for calculating the properties of the separated fluid flow 
+ функция разделения потока флюидов на два  с заданными коэффициентами сепарации 
         
  ==========  arguments  ============== 
 
-     k_sep_gas - gas separation factor    
+     k_sep_gas - коэффициент разделения газа    
 
-     k_sep_oil - oil separation factor    
+     k_sep_oil - коэффициент разделения нефти    
 
-     k_sep_wat - water separation factor    
+     k_sep_wat - коэффициент разделения воды    
 
-     p_atma - pressure, atm    
+     p_atma - давление разделения, atm    
 
-     t_c - temperature, c.    
+     t_c - температура разделения, c.    
 
-     feed - fluid flow parameters, flow rate, watercut, etc.  use encode_feed for generation  result - array, gjs flow rate in working conditions,  signature, and log of calculatio..см.мануал  
+     feed - json с закодированными параметрами исходного потока,  используйте encode_feed для генерации   
 
         """
 
@@ -1080,13 +1142,13 @@ class API():
     def feed_mod_mix(self, feed_1,feed_2):
         """
  ========== description ============== 
- calculates two feeds mixture properties 
+ функция расчета свойств смешанного потока  состоящего из двух потоков флюидов 
         
  ==========  arguments  ============== 
 
-     feed_1 - feed 1 encoded string    
+     feed_1 - первый поток для смешения, json строка    
 
-     feed_2 - feed 2 encoded string  result - json encoded feed string   
+     feed_2 - второй поток для смешения, json строка  result - json encoded feed string   
 
         """
 
@@ -1893,38 +1955,38 @@ class API():
         self.f_well_ksep_full_d = self.book.macro("well_ksep_full_d")
         return self.f_well_ksep_full_d(p_sep_atma,t_sep_C,feed,gassep_json,f_Hz,out)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub,diam_cas,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0.5,dcas_mm=125,dint_mm=110):
+    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep_json="",IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0,d_int_mm=102):
         """
  ========== description ============== 
-расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
+расчет распределения давления и температуры в скважине на основе устьевого (буферного) давления (расчет сверху вниз) 
         
  ==========  arguments  ============== 
 
-    p_wf_atma - забойное давление    
+    p_wh_atma - устьевое (буферное) давление    
 
-    t_wf_c - температура флюида на забое скважины    
+    t_wf_c - температура флюида на забое скважины, с    
 
     feed_json - параметры потока в скважине (с забоя)    
 
-     trajectory_json - json кодирующий траекторию скважины,  diam_json - json кодирующий диаметры скважины,    
+    trajectory_json - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
 
-   diam_tub   
+    diam_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
 
-   diam_cas   
+    diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
 
     esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
 
-    t_model_json - температурная модель, рекомендуется модель 2    
+    t_model_json - температурная модель, используйте encode_t_model    
 
     h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
 
-    h_esp_m - глубина спуска эцн. длина эцн игнорируется  в конструкции диаметры должны учитывать глубину спуска эцн    
+    h_esp_m - глубина спуска эцн. верх нкт    
 
     calibr_grav - калибровка для гидравлической корреляции по гравитации    
 
     calibr_fric - калибровка для гидравлической корреляции по трению    
 
-    ksep - общий коэффициент сепарации газа на приеме эцн, если 0 то  будет рассчитываться    
+    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
 
     ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
 
@@ -1938,43 +2000,99 @@ class API():
 
     pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
 
-   dcas_mm   
-
-   dint_mm  
+    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.   
 
         """
 
-        self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub,diam_cas,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,dcas_mm,dint_mm)
+        self.f_well_calc_from_pwh = self.book.macro("well_calc_from_pwh")
+        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep_json,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,d_int_mm)
 
-    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,pkv_ratio=0,dcas_mm=130,dint_mm=102):
+    def well_calc_from_pintake(self, p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep_json="",IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0,d_int_mm=110):
         """
  ========== description ============== 
-расчет распределения давления и температуры в скважине на основе устьевого (буферного) давления (расчет сверху вниз) 
+расчет распределения давления и температуры в скважине на основе устьевого (буферного) и забойного давления модель калибруется деградацией ЭЦН 
         
  ==========  arguments  ============== 
 
-    p_wh_atma - устьевое (буферное) давление    
+   p_wh_atma   
 
-    t_wf_c - температура флюида на забое скважины    
+    p_intake_atma - давление на приеме насоса    
+
+   t_wf_c   
+
+   feed_json   
+
+   trajectory_json   
+
+   diam_tub_mm   
+
+   diam_cas_mm   
+
+   esp_json   
+
+   t_model_json   
+
+   h_perf_m   
+
+   h_esp_m   
+
+   calibr_grav   
+
+   calibr_fric   
+
+   ksep_json   
+
+   ipr_json   
+
+   t_crit_c   
+
+   p_cas_atma   
+
+   flow_corr   
+
+   fast   
+
+   pkv_ratio   
+
+   d_int_mm  
+
+        """
+
+        self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
+        return self.f_well_calc_from_pintake(p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep_json,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,d_int_mm)
+
+    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep_json="",IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0,d_int_mm=110):
+        """
+ ========== description ============== 
+расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
+        
+ ==========  arguments  ============== 
+
+    p_wf_atma - забойное давление, атма    
+
+    t_wf_c - температура флюида на забое скважины, с    
 
     feed_json - параметры потока в скважине (с забоя)    
 
-    construction_json - конструкция скважины (как для трубы)    
+    trajectory_json - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
+
+    diam_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
+
+    diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
 
     esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
 
-    t_model_json - температурная модель, рекомендуется модель 2    
+    t_model_json - температурная модель, используйте encode_t_model    
 
     h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
 
-    h_esp_m - глубина спуска эцн. длина эцн игнорируется  в конструкции диаметры должны учитывать глубину спуска эцн    
+    h_esp_m - глубина спуска эцн. верх нкт    
 
     calibr_grav - калибровка для гидравлической корреляции по гравитации    
 
     calibr_fric - калибровка для гидравлической корреляции по трению    
 
-    ksep - общий коэффициент сепарации газа на приеме эцн    
+    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
 
     ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
 
@@ -1984,122 +2102,16 @@ class API():
 
     flow_corr - номер гидравлической корреляции, как для трубы    
 
+    fast - флаг, если 1 то будет рассчитано только давление,    
+
     pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
 
-   dcas_mm   
-
-   dint_mm  
+    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.   
 
         """
 
-        self.f_well_calc_from_pwh = self.book.macro("well_calc_from_pwh")
-        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,flow_corr,pkv_ratio,dcas_mm,dint_mm)
-
-    def well_calc_from_pintake(self, p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep=0.5,IPR_json="",t_crit_C=0,p_cas_atma=0,p_wh_atma=10,flow_corr=0):
-        """
- ========== description ============== 
-расчет распределения давления и температуры в скважине на основе устьевого (буферного) и забойного давления модель калибруется деградацией ЭЦН 
-        
- ==========  arguments  ============== 
-
-    p_intake_atma - давление на приеме насоса    
-
-    t_wf_c - температура флюида на забое скважины    
-
-    feed_json - параметры потока в скважине (с забоя)    
-
-    construction_json - конструкция скважины (как для трубы)    
-
-    esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
-
-    t_model_json - температурная модель, рекомендуется модель 2    
-
-    h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
-
-    h_esp_m - глубина спуска эцн. длина эцн игнорируется  в конструкции диаметры должны учитывать глубину спуска эцн    
-
-    calibr_grav - калибровка для гидравлической корреляции по гравитации    
-
-    calibr_fric - калибровка для гидравлической корреляции по трению    
-
-    ksep - общий коэффициент сепарации газа на приеме эцн    
-
-    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
-
-    t_crit_c - критическая температура для аспо    
-
-    p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
-
-    p_wh_atma - устьевое (буферное) давление    
-
-    flow_corr - номер гидравлической корреляции, как для трубы   
-
-        """
-
-        self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
-        return self.f_well_calc_from_pintake(p_intake_atma,t_wf_C,feed_json,construction_json,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep,IPR_json,t_crit_C,p_cas_atma,p_wh_atma,flow_corr)
-
-    def encode_pipe(self, construction="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
-        """
- ========== description ============== 
- задание объекта трубы для расчета 
-        
- ==========  arguments  ============== 
-
-     construction - json кодирующий конструкцию скважины,  используйте encode_pipe_construction    
-
-     t_model - температурная модель,  используйте encode_t_model    
-
-     flow_correlation - корреляция многофазного потока    
-
-     flow_along_coord - флаг, определяющий направление потока    
-
-     calibr_grav - калибровка по гравитации (множитель)    
-
-     calibr_fric - калибровка по трению (множитель)    
-
-     h_start_m - измеренная глубина начала трубы, м    
-
-     h_end_m - измеренная глубина конца трубы, м    
-
-     znlf - флаг для включения барботажа   
-
-        """
-
-        self.f_encode_pipe = self.book.macro("encode_pipe")
-        return self.f_encode_pipe(construction,t_model,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
-
-    def encode_pipe_object(self, trajectory_json="",diam_json="",t_model_json="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
-        """
- ========== description ============== 
- задание объекта трубы для расчета 
-        
- ==========  arguments  ============== 
-
-     trajectory_json - json кодирующий траекторию скважины,    
-
-     diam_json - json кодирующий диаметры скважины,  t_model - температурная модель,  используйте encode_t_model    
-
-   t_model_json   
-
-     flow_correlation - корреляция многофазного потока    
-
-     flow_along_coord - флаг, определяющий направление потока    
-
-     calibr_grav - калибровка по гравитации (множитель)    
-
-     calibr_fric - калибровка по трению (множитель)    
-
-     h_start_m - измеренная глубина начала трубы, м    
-
-     h_end_m - измеренная глубина конца трубы, м    
-
-     znlf - флаг для включения барботажа   
-
-        """
-
-        self.f_encode_pipe_object = self.book.macro("encode_pipe_object")
-        return self.f_encode_pipe_object(trajectory_json,diam_json,t_model_json,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
+        self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
+        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep_json,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,d_int_mm)
 
     def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
         """
@@ -2452,7 +2464,7 @@ class API():
         
  ==========  arguments  ============== 
 
-     calc_mode - режим расчета сепарации  0, bycorrealation  1, pressuremanual  2, valuemanual  2, fullymanual    
+     calc_mode - режим расчета сепарации  0, bycorrealation  1, pressuremanual  2, valuemanual  3, fullymanual    
 
      p_sep_manual_atma - давление для расчета  коэффициента сепарации заданного вручную    
 
@@ -3172,153 +3184,5 @@ class API():
 
         self.f_transient_p_from_pd_atma = self.book.macro("transient_p_from_pd_atma")
         return self.f_transient_p_from_pd_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
-
-    def unf_ksep_ESP_natural_simplified_Marquez(self, d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,out=1,calibr_st=1):
-        """
- ========== description ============== 
- Расчет естественной сепарации по Маркезу на основе упрощенной модели.  рабочая функция для тестирования корреляции. 
-        
- ==========  arguments  ============== 
-
-    d_intake_m - диаметр приемной сетки насоса эцн (m)    
-
-    d_cas_m - диаметр эксплуатационной колонны напротив приема эцн (m)    
-
-    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
-
-    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
-
-    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
-
-    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
-
-    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
-
-    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
-
-    calibr_st - множитель для коэффициента поверхностного натяжения  для проведения анализа чувствительности   
-
-        """
-
-        self.f_unf_ksep_ESP_natural_simplified_Marquez = self.book.macro("unf_ksep_ESP_natural_simplified_Marquez")
-        return self.f_unf_ksep_ESP_natural_simplified_Marquez(d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,out,calibr_st)
-
-    def unf_ksep_ESP_natural_mechanistic_Marquez(self, d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out=1,hintake_m=0.1,calibr_li=2,calibr_st=1):
-        """
- ========== description ============== 
- Расчет естественной сепарации по Маркезу на основе механистической модели.  рабочая функция для тестирования корреляции. 
-        
- ==========  arguments  ============== 
-
-    d_intake_m - диаметр приемной сетки насоса эцн (m)    
-
-    d_cas_m - диаметр эксплуатационной колонны напротив приема эцн (m)    
-
-    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
-
-    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
-
-    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
-
-    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
-
-    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
-
-    mu_liq_rc_cp - вязкость жидкости в рабочих условиях сп    
-
-    mu_gas_rc_cp - вязкость газа в рабочих условиях, сп    
-
-    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
-
-    hintake_m - высота приемной сети насоса, м    
-
-    calibr_li - множитель на параметр характеризующий размеры пузырьков газа,  для проведения анализа чувствительности    
-
-    calibr_st - множитель для коэффициента поверхностного натяжения,  для проведения анализа чувствительности   
-
-        """
-
-        self.f_unf_ksep_ESP_natural_mechanistic_Marquez = self.book.macro("unf_ksep_ESP_natural_mechanistic_Marquez")
-        return self.f_unf_ksep_ESP_natural_mechanistic_Marquez(d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out,hintake_m,calibr_li,calibr_st)
-
-    def unf_ksep_ESP_natural_mechanistic_pkv(self, d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out=1,hintake_m=0.1,calibr_li=2,calibr_st=1,pkv_ratio=0.5,d_tub_m=0.073):
-        """
- ========== description ============== 
- Расчет естественной сепарации для ПКВ по Михайлову Маркесу на основе механистической модели.  рабочая функция для тестирования корреляции. 
-        
- ==========  arguments  ============== 
-
-    d_intake_m - диаметр приемной сетки насоса эцн (m)    
-
-    d_cas_m - диаметр эксплуатационной колонны напротив приема эцн (m)    
-
-    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
-
-    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
-
-    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
-
-    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
-
-    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
-
-    mu_liq_rc_cp - вязкость жидкости в рабочих условиях сп    
-
-    mu_gas_rc_cp - вязкость газа в рабочих условиях, сп    
-
-    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
-
-    hintake_m - высота приемной сети насоса, м    
-
-    calibr_li - множитель на параметр характеризующий размеры пузырьков газа,  для проведения анализа чувствительности    
-
-    calibr_st - множитель для коэффициента поверхностного натяжения,  для проведения анализа чувствительности    
-
-    pkv_ratio - пкв отношение (работа к общему времени цикла)    
-
-    d_tub_m - внешний диаметр нкт   
-
-        """
-
-        self.f_unf_ksep_ESP_natural_mechanistic_pkv = self.book.macro("unf_ksep_ESP_natural_mechanistic_pkv")
-        return self.f_unf_ksep_ESP_natural_mechanistic_pkv(d_intake_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out,hintake_m,calibr_li,calibr_st,pkv_ratio,d_tub_m)
-
-    def unf_ksep_ESP_natural_mechanistic_pump_below_perf(self, d_tub_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out=1,hperf_m=0.1,calibr_li=2,calibr_st=1):
-        """
- ========== description ============== 
- Расчет естественной сепарации для ПКВ по Михайлову Маркесу на основе механистической модели.  рабочая функция для тестирования корреляции. 
-        
- ==========  arguments  ============== 
-
-    d_tub_m - диаметр нкт (или насоса) напротив перфорации (m)    
-
-    d_cas_m - диаметр эксплуатационной колонны напротив перфорации (m)    
-
-    q_liq_rc_m3day - дебит жидкости из пласта в рабочих условиях (m3/day)    
-
-    q_gas_rc_m3day - дебит газа из пласта в рабочих условиях (m3/day)    
-
-    sigma_liq_nm - коэффициент поверхностного натяжения газ - жидкость (newton/m)    
-
-    rho_liq_rc_kgm3 - плотность жидкости из пласта в рабочих условиях (kg/m3)    
-
-    rho_gas_rc_kgm3 - плотность газа из пласта в рабочих условиях (kg/m3)    
-
-    mu_liq_rc_cp - вязкость жидкости в рабочих условиях сп    
-
-    mu_gas_rc_cp - вязкость газа в рабочих условиях, сп    
-
-    out - номер параметра для вывода, 0 - array, 1 - value, 2 - json    
-
-    hperf_m - высота интервала перфорации, м    
-
-    calibr_li - множитель на параметр характеризующий размеры пузырьков газа,  для проведения анализа чувствительности    
-
-    calibr_st - множитель для коэффициента поверхностного натяжения,  для проведения анализа чувствительности   
-
-        """
-
-        self.f_unf_ksep_ESP_natural_mechanistic_pump_below_perf = self.book.macro("unf_ksep_ESP_natural_mechanistic_pump_below_perf")
-        return self.f_unf_ksep_ESP_natural_mechanistic_pump_below_perf(d_tub_m,d_cas_m,q_liq_rc_m3day,q_gas_rc_m3day,sigma_liq_Nm,rho_liq_rc_kgm3,rho_gas_rc_kgm3,mu_liq_rc_cP,mu_gas_rc_cP,out,hperf_m,calibr_li,calibr_st)
 
 #UniflocVBA = API(addin_name_str)
