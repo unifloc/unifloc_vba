@@ -43,11 +43,13 @@ string for specific VBA format of description
 """
 start_string = "    Application.MacroOptions _\n"
 almost_end_string = ", _\n"
+
 macro_string                 = "        Macro:="
 description_string           = "        Description:="
 category_string              = "        Category:=\"u7\", _\n"
 argument_descriptions_string = "        ArgumentDescriptions:=Array("
 connect_to_next_string_in_array = ", _\n"
+connect_to_next_string_in_array_2 = ","
 """
 strings for python API
 """
@@ -321,7 +323,7 @@ class VBA_Func_Header:
                 lower_name = i.lower()
 
                 if current_string_number == last_number + 1:
-                    current_addition = "\"" + lower_name +"\"" + connect_to_next_string_in_array
+                    current_addition = "\"" + lower_name +"\"" + connect_to_next_string_in_array_2
                     argument_descriptions_string_with_stuff += current_addition
                     parametr_writed = True
                     string_of_not_writed_parametrs += lower_name + '  '
@@ -411,7 +413,11 @@ class VBA_Func_Header:
         replace end in last addition - from & to )
         """
         last_addition_with_end = current_addition
-        last_addition_with_end = last_addition_with_end.replace(connect_to_next_string_in_array, ") \n")
+        if last_addition_with_end[-1] == ",":
+            
+            last_addition_with_end = last_addition_with_end[:-1] + ")\n"
+        else:
+            last_addition_with_end = last_addition_with_end.replace(connect_to_next_string_in_array, ") \n")
 
         """
         create finished 5th line 

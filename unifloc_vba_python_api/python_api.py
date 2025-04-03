@@ -25,18 +25,18 @@ addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
-    def encode_pipe_object(self, trajectory_json="",diam_json="",t_model_json="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
+    def encode_pipe_object(self, trajectory="",diam_json="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
         """
  ========== description ============== 
  задание объекта трубы для расчета 
         
  ==========  arguments  ============== 
 
-     trajectory_json - json кодирующий траекторию скважины,    
+     trajectory - json кодирующий траекторию скважины,    
 
-     diam_json - json кодирующий диаметры скважины,  t_model - температурная модель,  используйте encode_t_model    
+     diam_json - json кодирующий диаметры скважины,    
 
-   t_model_json   
+     t_model - температурная модель,  используйте encode_t_model    
 
      flow_correlation - корреляция многофазного потока    
 
@@ -55,7 +55,7 @@ class API():
         """
 
         self.f_encode_pipe_object = self.book.macro("encode_pipe_object")
-        return self.f_encode_pipe_object(trajectory_json,diam_json,t_model_json,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
+        return self.f_encode_pipe_object(trajectory,diam_json,t_model,flow_correlation,flow_along_coord,calibr_grav,calibr_fric,h_start_m,h_end_m,znlf)
 
     def encode_pipe(self, construction="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
         """
@@ -129,7 +129,7 @@ class API():
         self.f_MF_dpdl_atmm = self.book.macro("MF_dpdl_atmm")
         return self.f_MF_dpdl_atmm(d_m,p_atma,ql_rc_m3day,qg_rc_m3day,mu_oil_cP,mu_gas_cP,sigma_oil_gas_Nm,rho_lrc_kgm3,rho_grc_kgm3,eps_m,theta_deg,hcorr,param_out,calibr_grav,calibr_fric)
 
-    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-10000000000#,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
+    def MF_pipe_p_atma(self, p_calc_from_atma,t_calc_from_C,pipe_object="",feed="",calc_along_coord=True,param="",q_liq_sm3day=-100000000,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
  ========== description ============== 
  расчет распределения давления и температуры в трубопроводе  выводит результат в виде таблицы значений 
@@ -310,9 +310,7 @@ class API():
 
      calc_along_flow - флаг направления расчета относительно потока    
 
-   calibr   
-
-     param - параметры расчета json строка    
+   calibr   ,     param - параметры расчета json строка    
 
      cdischarge - коэффициент совершенства штуцера    
 
@@ -370,9 +368,9 @@ class API():
 
      t_c - temperature, c.    
 
-     pvt_json - static fluid properties - densities rsb, etc.  use encode_pvt to generate    
+     pvt_json - static fluid properties - densities rsb, etc.    
 
-   show_log  
+     show_log - флаг вывода лога  use encode_pvt to generate   
 
         """
 
@@ -918,9 +916,7 @@ class API():
 
      free_gas_d - допустимая доля газа в потоке;    
 
-   p_atma   
-
-     t_c - температура, с.    
+   p_atma   ,     t_c - температура, с.    
 
      feed - параметры потока флюидов, дебит, обводненность и пр  используйте encode_feed для генерации    
 
@@ -1398,9 +1394,7 @@ class API():
         
  ==========  arguments  ============== 
 
-   esp_json   
-
-     freq_hz - частота вращения эцн  pump_id - идентификатор насоса в базе данных    
+   esp_json   ,     freq_hz - частота вращения эцн  pump_id - идентификатор насоса в базе данных    
 
      mu_cst - вязкость для расчета поправок  calibr_rate - калибровка на расход   
 
@@ -1416,11 +1410,9 @@ class API():
         
  ==========  arguments  ============== 
 
-   esp_json   
+   esp_json   ,     freq_hz - частота вращения эцн  pump_id - идентификатор насоса в базе данных    
 
-     freq_hz - частота вращения эцн  pump_id - идентификатор насоса в базе данных    
-
-   mu_cst  
+     mu_cst - вязкость   
 
         """
 
@@ -1616,13 +1608,13 @@ class API():
 
      param - дополнительные параметры расчета потока    
 
-   q_liq_sm3day   
+     q_liq_sm3day - дебит жидкости, если задан переопределить feed    
 
-   fw_perc   
+     fw_perc - обводненность, если задан переопределить feed    
 
-   rp_m3m3   
+     rp_m3m3 - газовый фактор, если задан переопределить feed    
 
-   q_gas_free_sm3day  
+     q_gas_free_sm3day - дебит свободного газа,  если задан переопределить feed   
 
         """
 
@@ -1646,7 +1638,7 @@ class API():
 
      t_c - температура клапана, с    
 
-   c_calibr  
+     c_calibr - калибровочный параметр   
 
         """
 
@@ -1955,7 +1947,7 @@ class API():
         self.f_well_ksep_full_d = self.book.macro("well_ksep_full_d")
         return self.f_well_ksep_full_d(p_sep_atma,t_sep_C,feed,gassep_json,f_Hz,out)
 
-    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep_json="",IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0,d_int_mm=102):
+    def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе устьевого (буферного) давления (расчет сверху вниз) 
@@ -1968,100 +1960,100 @@ class API():
 
     feed_json - параметры потока в скважине (с забоя)    
 
-    trajectory_json - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
+    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
 
-    diam_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
+    d_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
 
-    diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
+    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
 
-    esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
-
-    t_model_json - температурная модель, используйте encode_t_model    
+    t_model - температурная модель, используйте encode_t_model    
 
     h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
 
     h_esp_m - глубина спуска эцн. верх нкт    
 
+    esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
+
+    esp_freq_hz - частота вращения эцн гц    
+
+    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
+
+    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
+
+    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.    
+
+    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
+
+    p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
+
+    t_crit_c - критическая температура для аспо    
+
     calibr_grav - калибровка для гидравлической корреляции по гравитации    
 
     calibr_fric - калибровка для гидравлической корреляции по трению    
 
-    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
-
-    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
-
-    t_crit_c - критическая температура для аспо    
-
-    p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
-
     flow_corr - номер гидравлической корреляции, как для трубы    
 
-    fast - флаг, если 1 то будет рассчитано только давление,    
-
-    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
-
-    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.   
+    fast - флаг, если 1 то будет рассчитано только давление,   
 
         """
 
         self.f_well_calc_from_pwh = self.book.macro("well_calc_from_pwh")
-        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep_json,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,d_int_mm)
+        return self.f_well_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast)
 
-    def well_calc_from_pintake(self, p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep_json="",IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0,d_int_mm=110):
+    def well_calc_from_pintake(self, p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
         """
  ========== description ============== 
-расчет распределения давления и температуры в скважине на основе устьевого (буферного) и забойного давления модель калибруется деградацией ЭЦН 
+расчет распределения давления и температуры в скважине на основе устьевого (буферного) и давления на приеме модель калибруется деградацией ЭЦН и забойным давлением 
         
  ==========  arguments  ============== 
 
-   p_wh_atma   
+    p_wh_atma - устьевое (буферное) давление    
 
     p_intake_atma - давление на приеме насоса    
 
-   t_wf_c   
+    t_wf_c - температура флюида на забое скважины, с    
 
-   feed_json   
+    feed_json - параметры потока в скважине (с забоя)    
 
-   trajectory_json   
+    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
 
-   diam_tub_mm   
+    d_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
 
-   diam_cas_mm   
+    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
 
-   esp_json   
+    t_model - температурная модель, используйте encode_t_model    
 
-   t_model_json   
+   h_perf_m   ,   h_esp_m   ,    esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
 
-   h_perf_m   
+    esp_freq_hz - частота вращения эцн гц    
 
-   h_esp_m   
+    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
 
-   calibr_grav   
+    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
 
-   calibr_fric   
+    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.    
 
-   ksep_json   
+    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
 
-   ipr_json   
+    p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
 
-   t_crit_c   
+    t_crit_c - критическая температура для аспо    
 
-   p_cas_atma   
+    calibr_grav - калибровка для гидравлической корреляции по гравитации    
 
-   flow_corr   
+    calibr_fric - калибровка для гидравлической корреляции по трению    
 
-   fast   
+    flow_corr - номер гидравлической корреляции, как для трубы    
 
-   pkv_ratio   
-
-   d_int_mm  
+    fast - флаг, если 1 то будет рассчитано только давление,   
 
         """
 
         self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
-        return self.f_well_calc_from_pintake(p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep_json,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,d_int_mm)
+        return self.f_well_calc_from_pintake(p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,ksep_json="",IPR_json="",t_crit_C=0,p_cas_atma=0,flow_corr=0,fast=False,pkv_ratio=0,d_int_mm=110):
+    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -2074,15 +2066,67 @@ class API():
 
     feed_json - параметры потока в скважине (с забоя)    
 
-    trajectory_json - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
+    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
 
-    diam_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
+    d_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
 
-    diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
+    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
+
+    t_model - температурная модель, используйте encode_t_model    
+
+    h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
+
+    h_esp_m - глубина спуска эцн. верх нкт    
 
     esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
 
-    t_model_json - температурная модель, используйте encode_t_model    
+    esp_freq_hz - частота вращения эцн гц    
+
+    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
+
+    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
+
+    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.    
+
+    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
+
+    p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
+
+    t_crit_c - критическая температура для аспо    
+
+    calibr_grav - калибровка для гидравлической корреляции по гравитации    
+
+    calibr_fric - калибровка для гидравлической корреляции по трению    
+
+    flow_corr - номер гидравлической корреляции, как для трубы    
+
+    fast - флаг, если 1 то будет рассчитано только давление,   
+
+        """
+
+        self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
+        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast)
+
+    def well_calc_below_esp(self, p_atma,t_C,feed_json,trajectory,d_cas_mm,esp_json,t_model,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,IPR_json="",flow_corr=0,calc_along_coord=False):
+        """
+ ========== description ============== 
+расчет распределения давления и температуры в скважине ниже глубины установки ЭЦН 
+        
+ ==========  arguments  ============== 
+
+    p_atma - забойное давление или давление на приеме, атма    
+
+    t_c - температура флюида на забое или на приеме, с    
+
+    feed_json - параметры потока в скважине (с забоя)    
+
+    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
+
+    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
+
+    esp_json - параметры эцн, используйте encode_esp_pump  используется тольок для оценки длины эцн    
+
+    t_model - температурная модель, используйте encode_t_model    
 
     h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
 
@@ -2092,26 +2136,14 @@ class API():
 
     calibr_fric - калибровка для гидравлической корреляции по трению    
 
-    ksep_json - общий коэффициент сепарации газа на приеме эцн, если задано число  или json - используйте encode_esp_separation для кодирования    
+   ipr_json   ,    flow_corr - номер гидравлической корреляции, как для трубы    
 
-    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
-
-    t_crit_c - критическая температура для аспо    
-
-    p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m    
-
-    flow_corr - номер гидравлической корреляции, как для трубы    
-
-    fast - флаг, если 1 то будет рассчитано только давление,    
-
-    pkv_ratio - отношение пкв (работа на цикл). если больше 0 будет учитываться    
-
-    d_int_mm - диаметр приемной сетки эцн для расчета сепарации, число мм.   
+    calc_along_coord - направление расчета   
 
         """
 
-        self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory_json,diam_tub_mm,diam_cas_mm,esp_json,t_model_json,h_perf_m,h_esp_m,calibr_grav,calibr_fric,ksep_json,IPR_json,t_crit_C,p_cas_atma,flow_corr,fast,pkv_ratio,d_int_mm)
+        self.f_well_calc_below_esp = self.book.macro("well_calc_below_esp")
+        return self.f_well_calc_below_esp(p_atma,t_C,feed_json,trajectory,d_cas_mm,esp_json,t_model,h_perf_m,h_esp_m,calibr_grav,calibr_fric,IPR_json,flow_corr,calc_along_coord)
 
     def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
         """
@@ -2132,11 +2164,7 @@ class API():
 
      param - дополнительные параметры расчета    
 
-   type_q   
-
-   kchoke   
-
-   d_throat_mm  
+   type_q   ,   kchoke   ,   d_throat_mm 
 
         """
 
@@ -2166,15 +2194,7 @@ class API():
 
      param - дополнительные параметры расчета    
 
-   type_q   
-
-   model   
-
-   k_n   
-
-   k_td   
-
-   kchoke  
+   type_q   ,   model   ,   k_n   ,   k_td   ,   kchoke 
 
         """
 
@@ -2196,15 +2216,11 @@ class API():
 
      d_throat_mm - диаметр камеры смешения, мм  p_act_atma - давление активного потока, высокое, атм  p_in_atma - давление входного потока, низкое, атм    
 
-   p_out_atma   
-
-     t_c - температура потоков в струйном насосе, с.    
+   p_out_atma   ,     t_c - температура потоков в струйном насосе, с.    
 
      param - дополнительные параметры расчета    
 
-   type_q   
-
-   model  
+   type_q   ,   model 
 
         """
 
@@ -2218,7 +2234,7 @@ class API():
         
  ==========  arguments  ============== 
 
-     
+    
 
         """
 
@@ -2330,9 +2346,7 @@ class API():
 
      transpose - выбор вывода в строки или в столбцы    
 
-   key_x   
-
-   key_y  
+   key_x   ,   key_y 
 
         """
 
@@ -2354,7 +2368,7 @@ class API():
 
      q_gas_free_sm3day - расход свободного газа, ст. м3/сут    
 
-   fluid  
+   fluid 
 
         """
 
@@ -2486,11 +2500,7 @@ class API():
 
      ksep_liquid_man_d - коэффициент сепарации жидкости для режима  потока через затруб    
 
-   h_intake_m   
-
-   h_perf_m   
-
-     gassep_type - тип - номер газосепаратора из базы,  -1 или нет значения - газосепаратор не рассчитывается,  0 - упрощенная модель, 1 - номер гс из базы испытаний (от 1 до 29)    
+   h_intake_m   ,   h_perf_m   ,     gassep_type - тип - номер газосепаратора из базы,  -1 или нет значения - газосепаратор не рассчитывается,  0 - упрощенная модель, 1 - номер гс из базы испытаний (от 1 до 29)    
 
      gassep_qnom_sm3day - номинальная подача газосепаратора    
 
@@ -2516,9 +2526,7 @@ class API():
 
      therm_cond_tubing_wmc - теплопроводность стенок нкт    
 
-   therm_cond_casing_wmc   
-
-     heat_transfer_casing_liquid_wm2c - теплопередача через затруб с жидкостью    
+   therm_cond_casing_wmc   ,     heat_transfer_casing_liquid_wm2c - теплопередача через затруб с жидкостью    
 
      heat_transfer_casing_gas_wm2c - теплопередача через затруб с газом    
 
@@ -2582,11 +2590,7 @@ class API():
         
  ==========  arguments  ============== 
 
-   keyrange   
-
-   val_namerange   
-
-   valrange  
+   keyrange   ,   val_namerange   ,   valrange 
 
         """
 
@@ -2748,7 +2752,7 @@ class API():
         
  ==========  arguments  ============== 
 
-   paramarrayvar  
+   paramarrayvar 
 
         """
 
@@ -2762,7 +2766,7 @@ class API():
         
  ==========  arguments  ============== 
 
-   paramarrayvar  
+   paramarrayvar 
 
         """
 
@@ -2944,7 +2948,7 @@ class API():
 
      type_interpolation - тип интерполяции  0 - линейная интерполяция  1 - кубическая интерполяция  2 - интерполяция акима (выбросы)  www.en.wikipedia.org/wiki/akima_spline  3 - ..см.мануал   
 
-   param_points  
+   param_points 
 
         """
 
@@ -2988,9 +2992,7 @@ class API():
 
      td - безразмерное время для которого проводится расчет  сd - безразмерный коэффициент влияния ствола скважины    
 
-   cd   
-
-     skin - скин-фактор, безразмерный skin>0.  для skin<0 используйте эффективный радиус скважины    
+   cd   ,     skin - скин-фактор, безразмерный skin>0.  для skin<0 используйте эффективный радиус скважины    
 
      rd - безразмерное расстояние для которого проводится расчет  rd=1 соответвует забою скважины    
 
@@ -3166,9 +3168,7 @@ class API():
         
  ==========  arguments  ============== 
 
-   pd   
-
-     q_liq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+   pd   ,     q_liq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
 
      pi_atma - начальное пластовое давление, атма    
 

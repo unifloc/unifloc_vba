@@ -14,9 +14,9 @@ Option Explicit
 'description_to_manual      - для автогенерации
 ' задание объекта трубы для расчета
 Public Function encode_pipe_object( _
-        Optional ByVal trajectory_json As String = "", _
+        Optional ByVal trajectory As String = "", _
         Optional ByVal diam_json As String = "", _
-        Optional ByVal t_model_json As String = "", _
+        Optional ByVal t_model As String = "", _
         Optional ByVal flow_correlation As Integer = 0, _
         Optional ByVal flow_along_coord As Boolean = True, _
         Optional ByVal calibr_grav As Double = 1, _
@@ -24,7 +24,7 @@ Public Function encode_pipe_object( _
         Optional ByVal h_start_m As Double = -10000000000.1, _
         Optional ByVal h_end_m As Double = 10000000000.1, _
         Optional ByVal znlf As Boolean = False)
-' trajectory_json - json кодирующий траекторию скважины,
+' trajectory - json кодирующий траекторию скважины,
 ' diam_json - json кодирующий диаметры скважины,
 ' t_model - температурная модель,
 ' используйте encode_t_model
@@ -38,8 +38,8 @@ Public Function encode_pipe_object( _
 'description_end
     Dim dict As New Dictionary
     
-    dict.Add "construction", make_construction_dict(trajectory_json, diam_json)
-    dict.Add "t_model", make_t_model_dict(t_model_json)
+    dict.Add "construction", make_construction_dict(trajectory, diam_json)
+    dict.Add "t_model", make_t_model_dict(t_model)
     dict.Add "flow_correlation", flow_correlation
     dict.Add "flow_along_coord", flow_along_coord
     dict.Add "calibr_grav", calibr_grav
@@ -236,8 +236,8 @@ On Error GoTo err1:
     h_start_m = piped("h_start_m")
     h_end_m = piped("h_end_m")
     If h_start_m = 0 And h_end_m = 0 Then
-        h_start_m = -10000000000#
-        h_end_m = 10000000000#
+        h_start_m = -100000000#
+        h_end_m = 100000000#
     End If
     Call pipe.init_from_dict(piped("construction"), piped("t_model"), h_start_m, h_end_m)
     
@@ -259,20 +259,22 @@ End Function
 ' includes and parameters of the flow in the pipe
 ' needed to simplify user functions
 Private Function new_pipeline3( _
-        Optional ByVal trajectory_json As String = "", _
+        Optional ByVal trajectory As String = "", _
         Optional ByVal diam_json As String = "", _
-        Optional ByVal t_model_json As String = "", _
+        Optional ByVal t_model As String = "", _
         Optional ByVal calc_along_coord As Boolean = True, _
         Optional ByVal flow_along_coord As Boolean = True, _
         Optional ByVal flow_correlation As Integer = 0, _
         Optional ByVal calibr_grav As Double = 1, _
         Optional ByVal calibr_fric As Double = 1, _
         Optional ByVal h_start_m As Double = -10000000000.1, _
-        Optional ByVal h_end_m As Double = 10000000000.1 _
+        Optional ByVal h_end_m As Double = 10000000000.1, _
+        Optional ByVal h_pump_mes_m As Double = -1, _
+        Optional ByVal h_dyn_mes_m As Double = -1 _
         ) As CPipe
     Dim pipe As New CPipe
 On Error GoTo err1:
-    Call pipe.init_from_dict(make_construction_dict(trajectory_json, diam_json), make_t_model_dict(t_model_json), h_start_m, h_end_m)
+    Call pipe.init_from_dict(make_construction_dict(trajectory, diam_json), make_t_model_dict(t_model), h_start_m, h_end_m, h_pump_mes_m, h_dyn_mes_m)
     Call pipe.set_calc_flow_param(calc_along_coord:=calc_along_coord, _
                                   flow_along_coord:=flow_along_coord, _
                                   hcor:=flow_correlation, _
@@ -285,22 +287,22 @@ err1:
     new_pipeline3 = Array(-1, "error")
     add_log_msg "Error:new_pipeline3:" & Err.Description
 End Function
-Private Function make_construction_dict(Optional ByVal trajectory_json As String = "", _
+Private Function make_construction_dict(Optional ByVal trajectory As String = "", _
                                         Optional ByVal diam_json As String = "")
                                         
     Dim dict_constr As New Dictionary
     Dim key As Variant
     Dim diamd As Dictionary
     
-    If trajectory_json = "" Then
-        trajectory_json = encode_pipe_trajectory()
+    If trajectory = "" Then
+        trajectory = encode_pipe_trajectory()
     Else
-        If VBA.Mid(trajectory_json, 1, 1) <> "{" Then
-            trajectory_json = encode_pipe_trajectory(trajectory_json)
+        If VBA.Mid(trajectory, 1, 1) <> "{" Then
+            trajectory = encode_pipe_trajectory(trajectory)
         End If
     End If
     
-    dict_constr.Add const_name_h_list_m, ParseJson(trajectory_json)
+    dict_constr.Add const_name_h_list_m, ParseJson(trajectory)
     
     If diam_json = "" Then
         diam_json = encode_pipe_diam()
@@ -315,16 +317,16 @@ Private Function make_construction_dict(Optional ByVal trajectory_json As String
     Next key
     Set make_construction_dict = dict_constr
 End Function
-Private Function make_t_model_dict(Optional ByVal t_model_json As String = "")
-    If t_model_json = "" Then
-        t_model_json = encode_t_model()
+Private Function make_t_model_dict(Optional ByVal t_model As String = "")
+    If t_model = "" Then
+        t_model = encode_t_model()
     Else
-        If VBA.Mid(t_model_json, 1, 1) <> "{" Then
-            t_model_json = encode_t_model(0, t_model_json, t_model_json, t_model_json)
+        If VBA.Mid(t_model, 1, 1) <> "{" Then
+            t_model = encode_t_model(0, t_model, t_model, t_model)
         End If
     End If
     
-    Set make_t_model_dict = ParseJson(t_model_json)
+    Set make_t_model_dict = ParseJson(t_model)
 End Function
 'description_to_manual      - для автогенерации
 '  расчет распределения давления и температуры в трубопроводе
@@ -336,10 +338,10 @@ Public Function MF_pipe_p_atma( _
         Optional ByVal feed As String = "", _
         Optional ByVal calc_along_coord As Boolean = True, _
         Optional ByVal param As String = "", _
-        Optional ByVal q_liq_sm3day = -10000000000#, _
-        Optional ByVal fw_perc = -1, _
-        Optional ByVal rp_m3m3 = -1, _
-        Optional ByVal q_gas_free_sm3day = -1)
+        Optional ByVal q_liq_sm3day As Double = -100000000, _
+        Optional ByVal fw_perc As Double = -1, _
+        Optional ByVal rp_m3m3 As Double = -1, _
+        Optional ByVal q_gas_free_sm3day As Double = -1)
 ' p_calc_from_atma  - давление с которого начинается расчет, атм
 '           граничное значение для проведения расчета
 ' t_calc_from_C - температура в точке где задано давление расчета
@@ -1194,6 +1196,7 @@ Public Function PVT_calc( _
 ' p_atma - pressure, atm
 ' t_C - temperature, C.
 ' PVT_json - static fluid properties - densities rsb, etc.
+' show_log - флаг вывода лога
 ' use encode_PVT to generate
 '
 ' Returns values of all PVT properties in json string
@@ -3018,7 +3021,8 @@ Public Function ESP_optRate_m3day( _
     Optional ByVal freq_Hz As Double = 50, _
     Optional ByVal mu_cSt As Double = -1) As Double
 ' freq_Hz   - частота вращения ЭЦН
-' pump_id    - идентификатор насоса в базе данных
+' pump_id   - идентификатор насоса в базе данных
+' mu_cSt    - вязкость
 'description_end
 On Error GoTo err1:
     Dim esp As New CESPpump
@@ -3493,6 +3497,12 @@ Public Function ESP_system_calc( _
 '          calc_along_flow = True => p_atma давление на приеме
 '          calc_along_flow = False => p_atma давление на выкиде
 ' param     - дополнительные параметры расчета потока
+' q_liq_sm3day - дебит жидкости, если задан переопределить feed
+' fw_perc - обводненность, если задан переопределить feed
+' rp_m3m3 - газовый фактор, если задан переопределить feed
+' q_gas_free_sm3day - дебит свободного газа,
+'              если задан переопределить feed
+'description_end
 ' результат   - массив значений включающий
 '            перепад давления
 '            перепад температур
@@ -3500,7 +3510,6 @@ Public Function ESP_system_calc( _
 '            мощность гидравлическая по перекачке жидкости, Вт
 '            КПД ЭЦН
 '            список неполон
-'description_end
     Dim i As Integer
     Dim ptq As PTQ_LIST
     Dim ptq_out As PTESP_LIST
@@ -3547,6 +3556,7 @@ Public Function GLV_q_gas_sm3day(ByVal d_mm As Double, _
 ' p_out_atma  - давление на выходе клапана (НКТ), атма
 ' gamma_g     - удельная плотность газа
 ' t_C         - температура клапана, С
+' c_calibr    - калибровочный параметр
 'description_end
 On Error GoTo err1:
     Dim k As Double
@@ -4224,58 +4234,62 @@ Public Function well_ksep_full_d(p_sep_atma As Double, _
         well_ksep_full_d = separ.get_result_array
     End If
 End Function
-' функция расчета ошибки оценки забойного давления
-Private Function calc_well_pwf(ByVal p_wf_atma As Double, _
-                                   CoeffA As Variant) As Double
+' вспомогательная функция для расчета скважины
+' вычисляет невязку по давлению на устье от величины
+' забойного давления
+Private Function calc_well_dpwh_from_pwf(ByVal p_wf_atma As Double, _
+                                         CoeffA As Variant) As Double
     Dim p_wh_atma As Double
     Dim res As Double
-    Dim t_wf_C, feed_json, trajectory_json, diam_tub_mm, diam_cas_mm
-    Dim esp_json, t_model_json, h_perf_m, h_esp_m
+    Dim t_wf_C, feed_json, trajectory, d_tub_mm, d_cas_mm, esp_freq_Hz
+    Dim esp_json, t_model, h_perf_m, h_esp_m
     Dim calibr_grav, calibr_fric, ksep_json, IPR_json, t_crit_C, p_cas_atma, flow_corr, pkv_ratio, d_int_mm
     Dim fast As Boolean
     
     p_wh_atma = CoeffA(0)
     t_wf_C = CoeffA(1)
     feed_json = CoeffA(2)
-    trajectory_json = CoeffA(3)
-    diam_tub_mm = CoeffA(4)
-    diam_cas_mm = CoeffA(5)
-    esp_json = CoeffA(6)
-    t_model_json = CoeffA(7)
-    h_perf_m = CoeffA(8)
-    h_esp_m = CoeffA(9)
-    calibr_grav = CoeffA(10)
-    calibr_fric = CoeffA(11)
+    trajectory = CoeffA(3)
+    d_tub_mm = CoeffA(4)
+    d_cas_mm = CoeffA(5)
+    t_model = CoeffA(6)
+    h_perf_m = CoeffA(7)
+    h_esp_m = CoeffA(8)
+    esp_json = CoeffA(9)
+    esp_freq_Hz = CoeffA(10)
+    pkv_ratio = CoeffA(11)
     ksep_json = CoeffA(12)
-    IPR_json = CoeffA(13)
-    t_crit_C = CoeffA(14)
+    d_int_mm = CoeffA(13)
+    IPR_json = CoeffA(14)
     p_cas_atma = CoeffA(15)
-    flow_corr = CoeffA(16)
+    t_crit_C = CoeffA(16)
+    calibr_grav = CoeffA(17)
+    calibr_fric = CoeffA(18)
+    flow_corr = CoeffA(19)
     fast = True
-    pkv_ratio = CoeffA(17)
-    d_int_mm = CoeffA(18)
     
     res = well_calc_from_pwf(p_wf_atma, _
                              t_wf_C, _
                              feed_json, _
-                             trajectory_json, _
-                             diam_tub_mm, _
-                             diam_cas_mm, _
-                             esp_json, _
-                             t_model_json, _
+                             trajectory, _
+                             d_tub_mm, _
+                             d_cas_mm, _
+                             t_model, _
                              h_perf_m, _
                              h_esp_m, _
+                             esp_json, _
+                             esp_freq_Hz, _
+                             pkv_ratio, _
+                             ksep_json, _
+                             d_int_mm, _
+                             IPR_json, _
+                             p_cas_atma, _
+                             t_crit_C, _
                              calibr_grav, _
-                            calibr_fric, _
-                            ksep_json, _
-                            IPR_json, _
-                            t_crit_C, _
-                            p_cas_atma, _
-                            flow_corr, _
-                            fast, _
-                            pkv_ratio, _
-                            d_int_mm) - p_wh_atma
-    calc_well_pwf = res
+                             calibr_fric, _
+                             flow_corr, _
+                             fast = True)
+    calc_well_dpwh_from_pwf = res - p_wh_atma
 End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
@@ -4283,61 +4297,63 @@ End Function
 Public Function well_calc_from_pwh(ByVal p_wh_atma As Double, _
                                    ByVal t_wf_C, _
                                    ByVal feed_json As String, _
-                                   ByVal trajectory_json As String, _
-                                   ByVal diam_tub_mm As String, _
-                                   ByVal diam_cas_mm As String, _
-                                   ByVal esp_json As String, _
-                                   ByVal t_model_json As String, _
-                                   ByVal h_perf_m As Double, _
-                                   ByVal h_esp_m As Double, _
+                          Optional ByVal trajectory As String = "1500", _
+                          Optional ByVal d_tub_mm As String = "62", _
+                          Optional ByVal d_cas_mm As String = "125", _
+                          Optional ByVal t_model As String = "80", _
+                          Optional ByVal h_perf_m As Double = 1500, _
+                          Optional ByVal h_esp_m As Double = 1200, _
+                          Optional ByVal esp_json As String = "", _
+                          Optional ByVal esp_freq_Hz As Double = 50, _
+                          Optional ByVal pkv_ratio As Double = 0, _
+                          Optional ByVal ksep_json As String = "", _
+                          Optional ByVal d_int_mm As Double = 110, _
+                          Optional ByVal IPR_json As String = "", _
+                          Optional ByVal p_cas_atma As Double = 10, _
+                          Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
-                          Optional ByVal ksep_json As String = "", _
-                          Optional ByVal IPR_json As String = "", _
-                          Optional ByVal t_crit_C As Double = 0, _
-                          Optional ByVal p_cas_atma = 0, _
                           Optional ByVal flow_corr As Integer = 0, _
-                          Optional ByVal fast As Boolean = False, _
-                          Optional ByVal pkv_ratio As Double = 0, _
-                          Optional ByVal d_int_mm As Double = 102)
+                          Optional ByVal fast As Boolean = False)
 'p_wh_atma - устьевое (буферное) давление
 't_wf_C - температура флюида на забое скважины, С
 'feed_json - параметры потока в скважине (с забоя)
-'trajectory_json - json кодирующий траекторию скважины
+'trajectory - json кодирующий траекторию скважины
 '           используйте encode_pipe_trajectory,
 '           или число - глубина вертикальной скважины
-'diam_tub_mm - json кодирующий диаметры скважины,
+'d_tub_mm - json кодирующий диаметры скважины,
 '           используйте encode_pipe_diam,
 '           или число - диаметр НКТ мм
-'diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
+'d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
 '           используйте encode_pipe_diam,
 '           или число - диаметр эксп. колонны мм
-'esp_json - параметры ЭЦН, используйте encode_esp_pump
-'           если не заданы, то скважина фонтанирующая
-'t_model_json - температурная модель, используйте encode_t_model
+'t_model - температурная модель, используйте encode_t_model
 'h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
 '           давления
 'h_esp_m - глубина спуска ЭЦН. верх НКТ
-'calibr_grav - калибровка для гидравлической корреляции по гравитации
-'calibr_fric - калибровка для гидравлической корреляции по трению
+'esp_json - параметры ЭЦН, используйте encode_esp_pump
+'           если не заданы, то скважина фонтанирующая
+'esp_freq_Hz - частота вращения ЭЦН Гц
+'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
 'ksep_json - общий коэффициент сепарации газа на приеме ЭЦН, если задано число
 '           или json - используйте encode_ESP_separation для кодирования
+'d_int_mm - диаметр приемной сетки ЭЦН для расчета сепарации, число мм.
 'IPR_json - параметры пласта, используйте encode_ipr
 '           если не заданы, считается для постоянного дебита из feed_json
+'p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m
 't_crit_C - критическая температура для АСПО
 '          в результатах будет вычислена глубина достижения t_crit_C
-'p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m
+'calibr_grav - калибровка для гидравлической корреляции по гравитации
+'calibr_fric - калибровка для гидравлической корреляции по трению
 'flow_corr - номер гидравлической корреляции, как для трубы
 'fast - флаг, если 1 то будет рассчитано только давление,
 '       если 0 - то результат json с кривыми
-'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
-'d_int_mm - диаметр приемной сетки ЭЦН для расчета сепарации, число мм.
 'description_end
         
 ' расчет сверху вниз по заданному буферному давлению
     Dim p_wf_max As Double
     Dim res As String
-    Dim CoeffA(0 To 18)
+    Dim CoeffA(0 To 19)
     Dim prm As New CSolveParam
     Dim i As Integer
 On Error GoTo er1:
@@ -4349,57 +4365,54 @@ On Error GoTo er1:
         Set d = ParseJson(IPR_json)
         p_wf_max = d("p_res_atma")
     End If
-        
+    
     CoeffA(0) = p_wh_atma
     CoeffA(1) = t_wf_C
     CoeffA(2) = feed_json
-    CoeffA(3) = trajectory_json
-    CoeffA(4) = diam_tub_mm
-    CoeffA(5) = diam_cas_mm
-    CoeffA(6) = esp_json
-    CoeffA(7) = t_model_json
-    CoeffA(8) = h_perf_m
-    CoeffA(9) = h_esp_m
-    CoeffA(10) = calibr_grav
-    CoeffA(11) = calibr_fric
+    CoeffA(3) = trajectory
+    CoeffA(4) = d_tub_mm
+    CoeffA(5) = d_cas_mm
+    CoeffA(6) = t_model
+    CoeffA(7) = h_perf_m
+    CoeffA(8) = h_esp_m
+    CoeffA(9) = esp_json
+    CoeffA(10) = esp_freq_Hz
+    CoeffA(11) = pkv_ratio
     CoeffA(12) = ksep_json
-    CoeffA(13) = IPR_json
-    CoeffA(14) = t_crit_C
+    CoeffA(13) = d_int_mm
+    CoeffA(14) = IPR_json
     CoeffA(15) = p_cas_atma
-    CoeffA(16) = flow_corr
-    CoeffA(17) = pkv_ratio
-    CoeffA(18) = d_int_mm
+    CoeffA(16) = t_crit_C
+    CoeffA(17) = calibr_grav
+    CoeffA(18) = calibr_fric
+    CoeffA(19) = flow_corr
     
     prm.y_tolerance = 0.01
     
-    If solve_equation_bisection("calc_well_pwf", 1, p_wf_max, CoeffA, prm) Then
+    If solve_equation_bisection("calc_well_dpwh_from_pwf", 1, p_wf_max, CoeffA, prm) Then
         res = well_calc_from_pwf(prm.x_solution, _
                                  t_wf_C, _
                                  feed_json, _
-                                 trajectory_json, diam_tub_mm, diam_cas_mm, _
-                                 esp_json, t_model_json, _
-                                 h_perf_m, h_esp_m, _
+                                 trajectory, d_tub_mm, d_cas_mm, _
+                                 t_model, _
+                                 h_perf_m, h_esp_m, esp_json, esp_freq_Hz, pkv_ratio, ksep_json, d_int_mm, _
+                                 IPR_json, p_cas_atma, t_crit_C, _
                                  calibr_grav, calibr_fric, _
-                                 ksep_json, IPR_json, _
-                                 t_crit_C, p_cas_atma, _
-                                 flow_corr, fast, _
-                                 pkv_ratio, d_int_mm)
+                                 flow_corr, fast)
         well_calc_from_pwh = res
     Else
         ' здесь может оказаться, что решениий несколько и надо искать их посреди интервала
         For i = 1 To 10
-            If solve_equation_bisection("calc_well_pwf", 1 + (p_wf_max / 10) * (i - 1), 1 + (p_wf_max / 10) * i, CoeffA, prm) Then
+            If solve_equation_bisection("calc_well_dpwh_from_pwf", 1 + (p_wf_max / 10) * (i - 1), 1 + (p_wf_max / 10) * i, CoeffA, prm) Then
             res = well_calc_from_pwf(prm.x_solution, _
-                                     t_wf_C, _
-                                     feed_json, _
-                                     trajectory_json, diam_tub_mm, diam_cas_mm, _
-                                     esp_json, t_model_json, _
-                                     h_perf_m, h_esp_m, _
-                                     calibr_grav, calibr_fric, _
-                                     ksep_json, IPR_json, _
-                                     t_crit_C, p_cas_atma, _
-                                     flow_corr, fast, _
-                                     pkv_ratio, d_int_mm)
+                                 t_wf_C, _
+                                 feed_json, _
+                                 trajectory, d_tub_mm, d_cas_mm, _
+                                 t_model, _
+                                 h_perf_m, h_esp_m, esp_json, esp_freq_Hz, pkv_ratio, ksep_json, d_int_mm, _
+                                 IPR_json, p_cas_atma, t_crit_C, _
+                                 calibr_grav, calibr_fric, _
+                                 flow_corr, fast)
                 well_calc_from_pwh = res
                 Exit Function
             Else
@@ -4423,121 +4436,131 @@ Private Function update_json(json As String, _
     End If
     update_json = json
 End Function
-              
-              
-' функция расчета ошибки оценки забойного давления
-Private Function calc_well_calibr_esp(ByVal calibr_esp As Double, _
-                                   CoeffA As Variant) As Double
+' вспомогательная функция для расчета скважины
+' вычисляет невязку по давлению на приеме от величины
+' калибровочного множителя на напор ЭЦН
+Private Function calc_well_dpwh_from_calibr_esp(ByVal calibr_esp_new As Double, _
+                                               CoeffA As Variant) As Double
    
     Dim p_wh_atma As Double
     Dim p_wf_atma As Double
     Dim res As Double
-    Dim t_wf_C, feed_json, trajectory_json, diam_tub_mm, diam_cas_mm
-    Dim esp_json As String, t_model_json, h_perf_m, h_esp_m
+    Dim t_wf_C, feed_json, trajectory, d_tub_mm, d_cas_mm
+    Dim esp_json As String, t_model, h_perf_m, h_esp_m, esp_freq_Hz
     Dim calibr_grav, calibr_fric, ksep_json, IPR_json, t_crit_C, p_cas_atma, flow_corr, pkv_ratio, d_int_mm
     Dim fast As Boolean
     
     p_wh_atma = CoeffA(0)
     t_wf_C = CoeffA(1)
     feed_json = CoeffA(2)
-    trajectory_json = CoeffA(3)
-    diam_tub_mm = CoeffA(4)
-    diam_cas_mm = CoeffA(5)
-    esp_json = CoeffA(6)
-    t_model_json = CoeffA(7)
-    h_perf_m = CoeffA(8)
-    h_esp_m = CoeffA(9)
-    calibr_grav = CoeffA(10)
-    calibr_fric = CoeffA(11)
+    trajectory = CoeffA(3)
+    d_tub_mm = CoeffA(4)
+    d_cas_mm = CoeffA(5)
+    t_model = CoeffA(6)
+    h_perf_m = CoeffA(7)
+    h_esp_m = CoeffA(8)
+    esp_json = CoeffA(9)
+    esp_freq_Hz = CoeffA(10)
+    pkv_ratio = CoeffA(11)
     ksep_json = CoeffA(12)
-    IPR_json = CoeffA(13)
-    t_crit_C = CoeffA(14)
+    d_int_mm = CoeffA(13)
+    IPR_json = CoeffA(14)
     p_cas_atma = CoeffA(15)
-    flow_corr = CoeffA(16)
+    t_crit_C = CoeffA(16)
+    calibr_grav = CoeffA(17)
+    calibr_fric = CoeffA(18)
+    flow_corr = CoeffA(19)
+    p_wf_atma = CoeffA(20)
     fast = True
-    pkv_ratio = CoeffA(17)
-    d_int_mm = CoeffA(18)
-    p_wf_atma = CoeffA(19)
     
-    esp_json = update_json(esp_json, "calibr_head", calibr_esp)
-    
+    esp_json = update_json(esp_json, "calibr_head", calibr_esp_new)
     res = well_calc_from_pwf(p_wf_atma, _
                              t_wf_C, _
                              feed_json, _
-                             trajectory_json, _
-                             diam_tub_mm, _
-                             diam_cas_mm, _
-                             esp_json, _
-                             t_model_json, _
+                             trajectory, _
+                             d_tub_mm, _
+                             d_cas_mm, _
+                             t_model, _
                              h_perf_m, _
                              h_esp_m, _
+                             esp_json, _
+                             esp_freq_Hz, _
+                             pkv_ratio, _
+                             ksep_json, _
+                             d_int_mm, _
+                             IPR_json, _
+                             p_cas_atma, _
+                             t_crit_C, _
                              calibr_grav, _
                              calibr_fric, _
-                             ksep_json, _
-                             IPR_json, _
-                             t_crit_C, _
-                             p_cas_atma, _
                              flow_corr, _
-                             fast, _
-                             pkv_ratio, _
-                             d_int_mm)
-    calc_well_calibr_esp = res - p_wh_atma
-    
-'    Dim p_wh_atma As Double
-'
-'    Dim p_wf_atma, t_wf_C, feed_json, construction_json, esp_json As String, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr
-'
-'    p_wh_atma = CoeffA(0)
-'
-'    p_wf_atma = CoeffA(1)
-'    t_wf_C = CoeffA(2)
-'    feed_json = CoeffA(3)
-'    construction_json = CoeffA(4)
-'    esp_json = CoeffA(5)
-'    t_model_json = CoeffA(6)
-'    h_perf_m = CoeffA(7)
-'    h_esp_m = CoeffA(8)
-'    calibr_grav = CoeffA(9)
-'    calibr_fric = CoeffA(10)
-'    ksep = CoeffA(11)
-'    IPR_json = CoeffA(12)
-'    t_crit_C = CoeffA(13)
-'    p_cas_atma = CoeffA(14)
-'    flow_corr = CoeffA(15)
-'
-'    esp_json = update_json(esp_json, "calibr_head", calibr_esp)
-'
-'    calc_well_calibr_esp = well_calc_from_pwf(p_wf_atma, t_wf_C, feed_json, construction_json, esp_json, t_model_json, h_perf_m, h_esp_m, calibr_grav, calibr_fric, ksep, IPR_json, t_crit_C, p_cas_atma, flow_corr, fast:=True) - p_wh_atma
-    
+                             fast = True)
+    calc_well_dpwh_from_calibr_esp = res - p_wh_atma
 End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
-'на основе устьевого (буферного) и забойного давления
-'модель калибруется деградацией ЭЦН
-Public Function well_calc_from_pintake( _
-                                   ByVal p_wh_atma As Double, _
+'на основе устьевого (буферного) и давления на приеме
+'модель калибруется деградацией ЭЦН и забойным давлением
+Public Function well_calc_from_pintake(ByVal p_wh_atma As Double, _
                                    ByVal p_intake_atma As Double, _
                                    ByVal t_wf_C, _
                                    ByVal feed_json As String, _
-                                   ByVal trajectory_json As String, _
-                                   ByVal diam_tub_mm As String, _
-                                   ByVal diam_cas_mm As String, _
-                                   ByVal esp_json As String, _
-                                   ByVal t_model_json As String, _
-                                   ByVal h_perf_m As Double, _
-                                   ByVal h_esp_m As Double, _
+                          Optional ByVal trajectory As String = "1500", _
+                          Optional ByVal d_tub_mm As String = "62", _
+                          Optional ByVal d_cas_mm As String = "125", _
+                          Optional ByVal t_model As String = "80", _
+                          Optional ByVal h_perf_m As Double = 1500, _
+                          Optional ByVal h_esp_m As Double = 1200, _
+                          Optional ByVal esp_json As String = "", _
+                          Optional ByVal esp_freq_Hz As Double = 50, _
+                          Optional ByVal pkv_ratio As Double = 0, _
+                          Optional ByVal ksep_json As String = "", _
+                          Optional ByVal d_int_mm As Double = 110, _
+                          Optional ByVal IPR_json As String = "", _
+                          Optional ByVal p_cas_atma As Double = 10, _
+                          Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
-                          Optional ByVal ksep_json As String = "", _
-                          Optional ByVal IPR_json As String = "", _
-                          Optional ByVal t_crit_C As Double = 0, _
-                          Optional ByVal p_cas_atma = 0, _
                           Optional ByVal flow_corr As Integer = 0, _
-                          Optional ByVal fast As Boolean = False, _
-                          Optional ByVal pkv_ratio As Double = 0, _
-                          Optional ByVal d_int_mm As Double = 110)
+                          Optional ByVal fast As Boolean = False)
+'p_wh_atma - устьевое (буферное) давление
 'p_intake_atma - давление на приеме насоса
+'t_wf_C - температура флюида на забое скважины, С
+'feed_json - параметры потока в скважине (с забоя)
+'trajectory - json кодирующий траекторию скважины
+'           используйте encode_pipe_trajectory,
+'           или число - глубина вертикальной скважины
+'d_tub_mm - json кодирующий диаметры скважины,
+'           используйте encode_pipe_diam,
+'           или число - диаметр НКТ мм
+'d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
+'           используйте encode_pipe_diam,
+'           или число - диаметр эксп. колонны мм
+'t_model - температурная модель, используйте encode_t_model
+'esp_json - параметры ЭЦН, используйте encode_esp_pump
+'           если не заданы, то скважина фонтанирующая
+'esp_freq_Hz - частота вращения ЭЦН Гц
+'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
+'ksep_json - общий коэффициент сепарации газа на приеме ЭЦН, если задано число
+'           или json - используйте encode_ESP_separation для кодирования
+'d_int_mm - диаметр приемной сетки ЭЦН для расчета сепарации, число мм.
+'IPR_json - параметры пласта, используйте encode_ipr
+'           если не заданы, считается для постоянного дебита из feed_json
+'p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m
+'t_crit_C - критическая температура для АСПО
+'          в результатах будет вычислена глубина достижения t_crit_C
+'calibr_grav - калибровка для гидравлической корреляции по гравитации
+'calibr_fric - калибровка для гидравлической корреляции по трению
+'flow_corr - номер гидравлической корреляции, как для трубы
+'fast - флаг, если 1 то будет рассчитано только давление,
+'       если 0 - то результат json с кривыми
 'description_end
+' особенность excel
+'  в описании специально пропущены пара параметров про глубины
+'  если их добавить, то будет глючить генерация описаний - потому что слишком много параметров
+'       описания генерируются в u7_descriptions каждый параметр на отдельной строке, перенос знаком _
+'       но количество переносов в vba ограничено
+'       если тут не делать описание для какого то параметра, то он будет без переносов при генерации
     
     Dim p_wf_max As Double
     Dim p_wf_atma As Double
@@ -4545,7 +4568,7 @@ Public Function well_calc_from_pintake( _
     Dim dres As Dictionary
     Dim CoeffA(0 To 12)
     Dim prm As New CSolveParam
-    Dim CoeffB(0 To 19)
+    Dim CoeffB(0 To 21)
     
 On Error GoTo er1:
     If Len(esp_json) < 2 Then
@@ -4567,10 +4590,10 @@ On Error GoTo er1:
     CoeffA(0) = p_intake_atma
     CoeffA(1) = t_wf_C
     CoeffA(2) = feed_json
-    CoeffA(3) = trajectory_json
-    CoeffA(4) = diam_cas_mm
+    CoeffA(3) = trajectory
+    CoeffA(4) = d_cas_mm
     CoeffA(5) = esp_json
-    CoeffA(6) = t_model_json
+    CoeffA(6) = t_model
     CoeffA(7) = h_perf_m
     CoeffA(8) = h_esp_m
     CoeffA(9) = calibr_grav
@@ -4588,42 +4611,42 @@ On Error GoTo er1:
     End If
 ' 2. Далее оцениваем деградацию ЭЦН в заданном диапазоне от 0.01 до 1.99
 '    исходя из найденного забойного давления и давления на устье
+    
     CoeffB(0) = p_wh_atma
     CoeffB(1) = t_wf_C
     CoeffB(2) = feed_json
-    CoeffB(3) = trajectory_json
-    CoeffB(4) = diam_tub_mm
-    CoeffB(5) = diam_cas_mm
-    CoeffB(6) = esp_json
-    CoeffB(7) = t_model_json
-    CoeffB(8) = h_perf_m
-    CoeffB(9) = h_esp_m
-    CoeffB(10) = calibr_grav
-    CoeffB(11) = calibr_fric
+    CoeffB(3) = trajectory
+    CoeffB(4) = d_tub_mm
+    CoeffB(5) = d_cas_mm
+    CoeffB(6) = t_model
+    CoeffB(7) = h_perf_m
+    CoeffB(8) = h_esp_m
+    CoeffB(9) = esp_json
+    CoeffB(10) = esp_freq_Hz
+    CoeffB(11) = pkv_ratio
     CoeffB(12) = ksep_json
-    CoeffB(13) = IPR_json
-    CoeffB(14) = t_crit_C
+    CoeffB(13) = d_int_mm
+    CoeffB(14) = IPR_json
     CoeffB(15) = p_cas_atma
-    CoeffB(16) = flow_corr
-    CoeffB(17) = pkv_ratio
-    CoeffB(18) = d_int_mm
-    CoeffB(19) = p_wf_atma
+    CoeffB(16) = t_crit_C
+    CoeffB(17) = calibr_grav
+    CoeffB(18) = calibr_fric
+    CoeffB(19) = flow_corr
+    CoeffB(20) = p_wf_atma
     
     prm.y_tolerance = 0.01
     
-    If solve_equation_bisection("calc_well_calibr_esp", 0.01, 1.99, CoeffB, prm) Then
+    If solve_equation_bisection("calc_well_dpwh_from_calibr_esp", 0.01, 1.99, CoeffB, prm) Then
         ' если решение нашлось, пересчитаем распределение давления ради графиков и добавим в выходной json значение деградации
-        esp_json = update_json(esp_json, , prm.x_solution)
+        esp_json = update_json(esp_json, "calibr_head", prm.x_solution)
         res = well_calc_from_pwf(p_wf_atma, t_wf_C, _
                                  feed_json, _
-                                 trajectory_json, _
-                                 diam_tub_mm, diam_cas_mm, _
-                                 esp_json, t_model_json, _
-                                 h_perf_m, h_esp_m, _
+                                 trajectory, d_tub_mm, d_cas_mm, _
+                                 t_model, _
+                                 h_perf_m, h_esp_m, esp_json, esp_freq_Hz, pkv_ratio, ksep_json, d_int_mm, _
+                                 IPR_json, p_cas_atma, t_crit_C, _
                                  calibr_grav, calibr_fric, _
-                                 ksep_json, IPR_json, _
-                                 t_crit_C, p_cas_atma, flow_corr, _
-                                 fast, pkv_ratio, d_int_mm)
+                                 flow_corr, fast)
         Set dres = ParseJson(res)
         dres.Add "calibr_esp_head", prm.x_solution
         res = ConvertToJson(dres)
@@ -4643,55 +4666,57 @@ End Function
 Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
                                    ByVal t_wf_C, _
                                    ByVal feed_json As String, _
-                                   ByVal trajectory_json As String, _
-                                   ByVal diam_tub_mm As String, _
-                                   ByVal diam_cas_mm As String, _
-                                   ByVal esp_json As String, _
-                                   ByVal t_model_json As String, _
-                                   ByVal h_perf_m As Double, _
-                                   ByVal h_esp_m As Double, _
+                          Optional ByVal trajectory As String = "1500", _
+                          Optional ByVal d_tub_mm As String = "62", _
+                          Optional ByVal d_cas_mm As String = "125", _
+                          Optional ByVal t_model As String = "80", _
+                          Optional ByVal h_perf_m As Double = 1500, _
+                          Optional ByVal h_esp_m As Double = 1200, _
+                          Optional ByVal esp_json As String = "", _
+                          Optional ByVal esp_freq_Hz As Double = 50, _
+                          Optional ByVal pkv_ratio As Double = 0, _
+                          Optional ByVal ksep_json As String = "", _
+                          Optional ByVal d_int_mm As Double = 110, _
+                          Optional ByVal IPR_json As String = "", _
+                          Optional ByVal p_cas_atma As Double = 10, _
+                          Optional ByVal t_crit_C As Double = 0, _
                           Optional ByVal calibr_grav As Double = 1, _
                           Optional ByVal calibr_fric As Double = 1, _
-                          Optional ByVal ksep_json As String = "", _
-                          Optional ByVal IPR_json As String = "", _
-                          Optional ByVal t_crit_C As Double = 0, _
-                          Optional ByVal p_cas_atma = 0, _
                           Optional ByVal flow_corr As Integer = 0, _
-                          Optional ByVal fast As Boolean = False, _
-                          Optional ByVal pkv_ratio As Double = 0, _
-                          Optional ByVal d_int_mm As Double = 110)
+                          Optional ByVal fast As Boolean = False)
 'p_wf_atma - забойное давление, атма
 't_wf_C - температура флюида на забое скважины, С
 'feed_json - параметры потока в скважине (с забоя)
-'trajectory_json - json кодирующий траекторию скважины
+'trajectory - json кодирующий траекторию скважины
 '           используйте encode_pipe_trajectory,
 '           или число - глубина вертикальной скважины
-'diam_tub_mm - json кодирующий диаметры скважины,
+'d_tub_mm - json кодирующий диаметры скважины,
 '           используйте encode_pipe_diam,
 '           или число - диаметр НКТ мм
-'diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
+'d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
 '           используйте encode_pipe_diam,
 '           или число - диаметр эксп. колонны мм
-'esp_json - параметры ЭЦН, используйте encode_esp_pump
-'           если не заданы, то скважина фонтанирующая
-'t_model_json - температурная модель, используйте encode_t_model
+'t_model - температурная модель, используйте encode_t_model
 'h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
 '           давления
 'h_esp_m - глубина спуска ЭЦН. верх НКТ
-'calibr_grav - калибровка для гидравлической корреляции по гравитации
-'calibr_fric - калибровка для гидравлической корреляции по трению
+'esp_json - параметры ЭЦН, используйте encode_esp_pump
+'           если не заданы, то скважина фонтанирующая
+'esp_freq_Hz - частота вращения ЭЦН Гц
+'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
 'ksep_json - общий коэффициент сепарации газа на приеме ЭЦН, если задано число
 '           или json - используйте encode_ESP_separation для кодирования
+'d_int_mm - диаметр приемной сетки ЭЦН для расчета сепарации, число мм.
 'IPR_json - параметры пласта, используйте encode_ipr
 '           если не заданы, считается для постоянного дебита из feed_json
+'p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m
 't_crit_C - критическая температура для АСПО
 '          в результатах будет вычислена глубина достижения t_crit_C
-'p_cas_atma - затрубное давление, если задано будет рассчитан h_dyn_m
+'calibr_grav - калибровка для гидравлической корреляции по гравитации
+'calibr_fric - калибровка для гидравлической корреляции по трению
 'flow_corr - номер гидравлической корреляции, как для трубы
 'fast - флаг, если 1 то будет рассчитано только давление,
 '       если 0 - то результат json с кривыми
-'pkv_ratio - отношение ПКВ (работа на цикл). Если больше 0 будет учитываться
-'d_int_mm - диаметр приемной сетки ЭЦН для расчета сепарации, число мм.
 'description_end
 On Error GoTo er1:
     ' настраиваем расчет снизу вверх для добывающей скважины
@@ -4724,7 +4749,6 @@ On Error GoTo er1:
     Dim crv_cas_p As New CInterpolation
     Dim n_sol As Integer
     Dim h_crit
-    Dim construction_json As String
     Dim ksep As Double
     Dim rksep As String
     Dim dcasep As Dictionary
@@ -4749,29 +4773,32 @@ On Error GoTo er1:
         Call ipr_vogel.init_json(IPR_json)
         q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
         feed_json = update_json(feed_json, "q_liq_sm3day", q_liq_sm3day)
+    Else
+         Set f = ParseJson(feed_json)
+         q_liq_sm3day = f("q_liq_sm3day")
     End If
 ' 1. расчет участка э/к от забоя до приема насоса
 ' инициализируем трубу с первым фидом, который всегда есть
-    Set pipe_below_esp = new_pipeline3(trajectory_json, _
-                                       diam_cas_mm, _
-                                       t_model_json, _
+    Set pipe_below_esp = new_pipeline3(trajectory, _
+                                       d_cas_mm, _
+                                       t_model, _
                                        calc_along_coord, _
                                        flow_along_coord, _
                                        flow_corr, _
                                        calibr_grav, _
                                        calibr_fric, _
-                                       h_esp_m + esp_length, h_perf_m)
+                                       h_esp_m + esp_length, h_perf_m, h_esp_m)
     Call pipe_below_esp.init_feed(feed_json)
-    Set pipe_above_esp = new_pipeline3(trajectory_json, _
-                                       diam_tub_mm, _
-                                       t_model_json, _
+    Set pipe_above_esp = new_pipeline3(trajectory, _
+                                       d_tub_mm, _
+                                       t_model, _
                                        calc_along_coord, _
                                        flow_along_coord, _
                                        flow_corr, _
                                        calibr_grav, _
                                        calibr_fric, _
                                        0, _
-                                       h_esp_m)
+                                       h_esp_m, h_esp_m)
     If fast Then
         res1 = pipe_below_esp.calc_dPipe(p_wf_atma, t_wf_C, noCurves)
     Else
@@ -4827,7 +4854,7 @@ On Error GoTo er1:
         qgas_cas_sm3day = feed_q_gas_free_sm3day(p_intake_atma, t_intake_C, feed_json) * ksep
         ' 3. расчет перепада давления в ЭЦН
         Call esp.fluid.init_feed(feed_sep)
-        Call esp.calc_ESP(p_intake_atma, t_intake_C)
+        Call esp.calc_ESP(p_intake_atma, t_intake_C, f_Hz:=esp_freq_Hz)
         p_dis_atma = esp.p_dis_atma
         t_dis_C = esp.t_dis_C
     Else
@@ -4836,15 +4863,6 @@ On Error GoTo er1:
         p_dis_atma = p_intake_atma
         t_dis_C = t_intake_C
     End If
-' 4. расчет распределения давления в НКТ
-    Call pipe_above_esp.init_feed(feed_sep)
-    If fast Then
-        res1 = pipe_above_esp.calc_dPipe(p_dis_atma, t_dis_C, noCurves)
-    Else
-        res1 = pipe_above_esp.calc_dPipe(p_dis_atma, t_dis_C, mainCurves)
-    End If
-    p_buf_atma = res1.p_atma
-    t_buf_C = res1.t_C
     If p_cas_atma < 1 Then p_cas_atma = 1
  ' 5. если задано затрубное давление построим распределение давления в затрубе
     If p_cas_atma > 0 And Not fast Then
@@ -4852,28 +4870,28 @@ On Error GoTo er1:
             Set f = ParseJson(feed_sep)
             f("q_gas_free_sm3day") = qgas_cas_sm3day
             feed_sep = ConvertToJson(f)
-            Set pipe_casing_liq = new_pipeline3(trajectory_json, _
-                                                diam_cas_mm, _
-                                                t_model_json, _
+            Set pipe_casing_liq = new_pipeline3(trajectory, _
+                                                d_cas_mm, _
+                                                t_model, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
                                                 flow_corr, _
                                                 calibr_grav, _
                                                 calibr_fric, _
-                                                0, h_esp_m + esp_length)
+                                                0, h_esp_m + esp_length, h_esp_m)
             Call pipe_casing_liq.init_feed(feed_sep)
             Call pipe_casing_liq.set_ZNLF
             res1 = pipe_casing_liq.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
             'построим распределение давления для газа
-            Set pipe_casing_gas = new_pipeline3(trajectory_json, _
-                                                diam_cas_mm, _
-                                                t_model_json, _
+            Set pipe_casing_gas = new_pipeline3(trajectory, _
+                                                d_cas_mm, _
+                                                t_model, _
                                                 Not calc_along_coord, _
                                                 flow_along_coord, _
                                                 10, _
                                                 calibr_grav, _
                                                 calibr_fric, _
-                                                0, h_esp_m + esp_length)
+                                                0, h_esp_m + esp_length, h_esp_m, h_esp_m)
             Call pipe_casing_gas.init_feed(feed_sep)
             res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
             ' найдем динамический уровень и построим совместное распределения для газа и жидкости
@@ -4893,19 +4911,31 @@ On Error GoTo er1:
         Else
             ' скважина фонтанирует и тогда предполагаем, что в затрубе будет только газ
             ' и расчет газа ведем снизу вверх
-            Set pipe_casing_gas = new_pipeline3(trajectory_json, _
-                                                diam_cas_mm, _
-                                                t_model_json, _
+            Set pipe_casing_gas = new_pipeline3(trajectory, _
+                                                d_cas_mm, _
+                                                t_model, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
                                                 10, _
                                                 calibr_grav, _
                                                 calibr_fric, _
-                                                0, h_esp_m + esp_length)
+                                                0, h_esp_m + esp_length, h_esp_m, h_esp_m)
             Call pipe_casing_gas.init_feed(feed_sep)
             res1 = pipe_casing_gas.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
         End If
     End If
+    
+    
+' 4. расчет распределения давления в НКТ
+    Call pipe_above_esp.init_feed(feed_sep)
+    pipe_above_esp.ambient_formation.h_dyn_m = pipe_above_esp.h_vert_h_mes_m(h_dyn_m)
+    If fast Then
+        res1 = pipe_above_esp.calc_dPipe(p_dis_atma, t_dis_C, noCurves)
+    Else
+        res1 = pipe_above_esp.calc_dPipe(p_dis_atma, t_dis_C, mainCurves)
+    End If
+    p_buf_atma = res1.p_atma
+    t_buf_C = res1.t_C
     ' подготовим кривые для вывода результатов
     If Not fast Then
         Call crv_p.AddPointsCurve(pipe_above_esp.curve("c_P").ClonePointsToNum(25), pipe_below_esp.curve("c_P").ClonePointsToNum(10))
@@ -4945,9 +4975,13 @@ On Error GoTo er1:
         dout.Add "q_liq_esp_sm3day", Round(f("q_liq_sm3day"), 2)
         If Len(esp_json) > 1 Then
             dout.Add "esp_data", ConvertToJson(esp.get_result_dict)
+        Else
+            dout.Add "esp_data", "no"
         End If
         If separ_used Then
             dout.Add "separ_data", ConvertToJson(separ.get_result_dict)
+        Else
+            dout.Add "separ_data", "no"
         End If
         well_calc_from_pwf = ConvertToJson(dout)
     Else
@@ -4957,13 +4991,16 @@ On Error GoTo er1:
 er1:
     well_calc_from_pwf = "error " & Err.Description
 End Function
+'description_to_manual      - для автогенерации
+'расчет распределения давления и температуры в скважине
+'ниже глубины установки ЭЦН
 Public Function well_calc_below_esp(ByVal p_atma As Double, _
                                    ByVal t_C, _
                                    ByVal feed_json As String, _
-                                   ByVal trajectory_json As String, _
-                                   ByVal diam_cas_mm As String, _
+                                   ByVal trajectory As String, _
+                                   ByVal d_cas_mm As String, _
                                    ByVal esp_json As String, _
-                                   ByVal t_model_json As String, _
+                                   ByVal t_model As String, _
                                    ByVal h_perf_m As Double, _
                                    ByVal h_esp_m As Double, _
                           Optional ByVal calibr_grav As Double = 1, _
@@ -4971,18 +5008,18 @@ Public Function well_calc_below_esp(ByVal p_atma As Double, _
                           Optional ByVal IPR_json As String = "", _
                           Optional ByVal flow_corr As Integer = 0, _
                           Optional ByVal calc_along_coord As Boolean = False)
-'p_wf_atma - забойное давление, атма
-'t_wf_C - температура флюида на забое скважины, С
+'p_atma - забойное давление или давление на приеме, атма
+'t_C    - температура флюида на забое или на приеме, С
 'feed_json - параметры потока в скважине (с забоя)
-'trajectory_json - json кодирующий траекторию скважины
+'trajectory - json кодирующий траекторию скважины
 '           используйте encode_pipe_trajectory,
 '           или число - глубина вертикальной скважины
-'diam_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
+'d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
 '           используйте encode_pipe_diam,
 '           или число - диаметр эксп. колонны мм
 'esp_json - параметры ЭЦН, используйте encode_esp_pump
-'           если не заданы, то скважина фонтанирующая
-'t_model_json - температурная модель, используйте encode_t_model
+'           используется тольок для оценки длины ЭЦН
+'t_model - температурная модель, используйте encode_t_model
 'h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
 '           давления
 'h_esp_m - глубина спуска ЭЦН. верх НКТ
@@ -5019,9 +5056,9 @@ On Error GoTo er1:
     End If
 ' 1. расчет участка э/к от забоя до приема насоса
 ' инициализируем трубу с первым фидом, который всегда есть
-    Set pipe_below_esp = new_pipeline3(trajectory_json, _
-                                       diam_cas_mm, _
-                                       t_model_json, _
+    Set pipe_below_esp = new_pipeline3(trajectory, _
+                                       d_cas_mm, _
+                                       t_model, _
                                        calc_along_coord, _
                                        flow_along_coord, _
                                        flow_corr, _
@@ -5035,22 +5072,25 @@ On Error GoTo er1:
 er1:
     well_calc_below_esp = "error " & Err.Description
 End Function
+' вспомогательная функция для расчета скважины от давления на приеме
+' вычисляет невязку по давлению на приеме от величины
+' забойного давления
 Private Function calc_well_dpint_from_pwf(ByVal p_wf_atma As Double, _
                                    CoeffA As Variant) As Double
     Dim p_intake_atma As Double
     Dim res
-    Dim t_wf_C, feed_json, trajectory_json, diam_tub_mm, diam_cas_mm
-    Dim esp_json, t_model_json, h_perf_m, h_esp_m
+    Dim t_wf_C, feed_json, trajectory, d_tub_mm, d_cas_mm
+    Dim esp_json, t_model, h_perf_m, h_esp_m
     Dim calibr_grav, calibr_fric, ksep_json, IPR_json, t_crit_C, p_cas_atma, flow_corr, pkv_ratio, d_int_mm
     Dim fast As Boolean
     
     p_intake_atma = CoeffA(0)
     t_wf_C = CoeffA(1)
     feed_json = CoeffA(2)
-    trajectory_json = CoeffA(3)
-    diam_cas_mm = CoeffA(4)
+    trajectory = CoeffA(3)
+    d_cas_mm = CoeffA(4)
     esp_json = CoeffA(5)
-    t_model_json = CoeffA(6)
+    t_model = CoeffA(6)
     h_perf_m = CoeffA(7)
     h_esp_m = CoeffA(8)
     calibr_grav = CoeffA(9)
@@ -5060,10 +5100,10 @@ Private Function calc_well_dpint_from_pwf(ByVal p_wf_atma As Double, _
     res = well_calc_below_esp(p_wf_atma, _
                              t_wf_C, _
                              feed_json, _
-                             trajectory_json, _
-                             diam_cas_mm, _
+                             trajectory, _
+                             d_cas_mm, _
                              esp_json, _
-                             t_model_json, _
+                             t_model, _
                              h_perf_m, _
                              h_esp_m, _
                              calibr_grav, _
