@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.52  2025.03                                  khabibullinra@gmail.com
+'Unifloc 7.53  2025.04                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -988,6 +988,53 @@ er1:
 er2:
     encode_pipe_construction = "error encode_pipe_construction. zero length"
     Exit Function
+End Function
+Public Function pipe_diam_subtract(pipe_diam_json_1 As String, pipe_diam_json_2 As String, _
+                                   Optional pipe_wall_thickness_mm As Double = 5) As String
+    Dim crv_d_1 As New CInterpolation
+    Dim crv_d_2 As New CInterpolation
+    Dim crv_res As CInterpolation
+    Dim d1 As Dictionary
+    Dim d2 As Dictionary
+    Dim dict As New Dictionary
+    
+    If Mid(pipe_diam_json_1, 1, 1) <> "{" And Mid(pipe_diam_json_2, 1, 1) <> "{" Then
+        pipe_diam_subtract = str(Cdbl_(pipe_diam_json_1) - Cdbl_(pipe_diam_json_2) - pipe_wall_thickness_mm * 2)
+    Else
+        If Mid(pipe_diam_json_1, 1, 1) <> "{" Then pipe_diam_json_1 = encode_pipe_diam(pipe_diam_json_1)
+        If Mid(pipe_diam_json_2, 1, 1) <> "{" Then pipe_diam_json_2 = encode_pipe_diam(pipe_diam_json_2)
+        Set d1 = ParseJson(pipe_diam_json_1)
+        Set d2 = ParseJson(pipe_diam_json_2)
+        
+        If d1.Exists(const_name_diam_list_mm) Then
+            crv_d_1.isStepFunction = True
+            Call crv_d_1.load_from_dictionary(d1(const_name_diam_list_mm), const_name_hmes_m, const_name_diam_int_mm)
+        Else
+            GoTo er1
+        End If
+        
+        If d2.Exists(const_name_diam_list_mm) Then
+            crv_d_2.isStepFunction = True
+            Call crv_d_2.load_from_dictionary(d2(const_name_diam_list_mm), const_name_hmes_m, const_name_diam_int_mm)
+        Else
+            GoTo er1
+        End If
+        Set crv_res = crv_d_1.SubtractCurve(crv_d_2)
+        Call crv_res.AddValueToCurve(-pipe_wall_thickness_mm * 2)
+        crv_res.xName = const_name_hmes_m
+        crv_res.yName = const_name_diam_int_mm
+        dict.Add const_name_diam_list_mm, crv_res.getDictShort
+        dict.Add "roughness_m", (d1("roughness_m") + d2("roughness_m")) / 2
+        pipe_diam_subtract = ConvertToJson(dict)
+    End If
+    Exit Function
+    
+er1:
+    Dim msg As String
+    msg = "error on pipe_diam_subtract"
+    Err.Raise kreadJsonError, , msg
+ 
+    
 End Function
 'description_to_manual      - для автогенерации
 ' задание параметров траектории трубы в json строке

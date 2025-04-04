@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.52  2025.03                             khabibullinra@gmail.com
+'Unifloc 7.53  2025.04                             khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -4291,6 +4291,173 @@ Private Function calc_well_dpwh_from_pwf(ByVal p_wf_atma As Double, _
                              fast = True)
     calc_well_dpwh_from_pwf = res - p_wh_atma
 End Function
+' вспомогательная функция для расчета скважины
+' вычисляет невязку по давлению на устье от величины
+' забойного давления
+Private Function calc_well_gl_dpwh_from_pwf(ByVal p_wf_atma As Double, _
+                                         CoeffA As Variant) As Double
+    Dim p_wh_atma As Double
+    Dim res As Double
+    Dim t_wf_C, feed_json, trajectory, d_tub_mm, d_cas_mm, glv_json
+    Dim q_gas_glv_sm3day, t_model, h_perf_m, h_glv_m
+    Dim calibr_grav, calibr_fric, IPR_json, p_cas_atma, flow_corr
+    Dim fast As Boolean
+    
+    p_wh_atma = CoeffA(0)
+    t_wf_C = CoeffA(1)
+    feed_json = CoeffA(2)
+    trajectory = CoeffA(3)
+    d_tub_mm = CoeffA(4)
+    d_cas_mm = CoeffA(5)
+    t_model = CoeffA(6)
+    h_perf_m = CoeffA(7)
+    h_glv_m = CoeffA(8)
+    q_gas_glv_sm3day = CoeffA(9)
+    glv_json = CoeffA(10)
+    IPR_json = CoeffA(11)
+    p_cas_atma = CoeffA(12)
+    calibr_grav = CoeffA(13)
+    calibr_fric = CoeffA(14)
+    flow_corr = CoeffA(15)
+    fast = True
+    
+    res = well_gl_calc_from_pwf(p_wf_atma, _
+                               t_wf_C, _
+                               feed_json, _
+                               trajectory, _
+                               d_tub_mm, _
+                               d_cas_mm, _
+                               t_model, _
+                               h_perf_m, _
+                               h_glv_m, _
+                               q_gas_glv_sm3day, _
+                               glv_json, _
+                               IPR_json, _
+                               p_cas_atma, _
+                               calibr_grav, _
+                               calibr_fric, _
+                               flow_corr, _
+                               fast = True)
+    calc_well_gl_dpwh_from_pwf = res - p_wh_atma
+End Function
+'description_to_manual      - для автогенерации
+'расчет распределения давления и температуры в скважине
+'на основе устьевого (буферного) давления (расчет  сверху вниз)
+Public Function well_gl_calc_from_pwh(ByVal p_wh_atma As Double, _
+                                   ByVal t_wf_C, _
+                                   ByVal feed_json As String, _
+                          Optional ByVal trajectory As String = "1500", _
+                          Optional ByVal d_tub_mm As String = "62", _
+                          Optional ByVal d_cas_mm As String = "125", _
+                          Optional ByVal t_model As String = "80", _
+                          Optional ByVal h_perf_m As Double = 1500, _
+                          Optional ByVal h_glv_m As Double = 1200, _
+                          Optional ByVal q_gas_glv_sm3day As Double = 5000, _
+                          Optional ByVal glv_json As String = "", _
+                          Optional ByVal IPR_json As String = "", _
+                          Optional ByVal p_cas_atma As Double = 10, _
+                          Optional ByVal calibr_grav As Double = 1, _
+                          Optional ByVal calibr_fric As Double = 1, _
+                          Optional ByVal flow_corr As Integer = 0, _
+                          Optional ByVal fast As Boolean = False)
+'p_wh_atma - устьевое давление, атма
+'t_wf_C - температура флюида на забое скважины, С
+'feed_json - параметры потока в скважине (с забоя)
+'trajectory - json кодирующий траекторию скважины
+'           используйте encode_pipe_trajectory,
+'           или число - глубина вертикальной скважины
+'d_tub_mm - json кодирующий диаметры скважины,
+'           используйте encode_pipe_diam,
+'           или число - диаметр НКТ мм
+'d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
+'           используйте encode_pipe_diam,
+'           или число - диаметр эксп. колонны мм
+'t_model - температурная модель, используйте encode_t_model
+'h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
+'           давления
+'h_glv_m - глубина спуска рабочего газлифтного клапана.
+'q_gas_glv_sm3day - расход газлифтного газа через рабочий клапан
+'glv_json - диаметр порта рабочего газлифтного клапана
+'IPR_json - параметры пласта, используйте encode_ipr
+'           если не заданы, считается для постоянного дебита из feed_json
+'p_cas_atma - затрубное давление, давление закачки газа
+'calibr_grav - калибровка для гидравлической корреляции по гравитации
+'calibr_fric - калибровка для гидравлической корреляции по трению
+'flow_corr - номер гидравлической корреляции, как для трубы
+'fast - флаг, если 1 то будет рассчитано только давление,
+'       если 0 - то результат json с кривыми
+'description_end
+        
+' расчет сверху вниз по заданному буферному давлению
+    Dim p_wf_max As Double
+    Dim res As String
+    Dim CoeffA(0 To 15)
+    Dim prm As New CSolveParam
+    Dim i As Integer
+On Error GoTo er1:
+    p_wf_max = 500
+    
+' 0. если задана IPR  то пытаемся оценить граничное забойное давление
+    If Len(IPR_json) > 0 Then
+        Dim d As Dictionary
+        Set d = ParseJson(IPR_json)
+        p_wf_max = d("p_res_atma")
+    End If
+    
+    CoeffA(0) = p_wh_atma
+    CoeffA(1) = t_wf_C
+    CoeffA(2) = feed_json
+    CoeffA(3) = trajectory
+    CoeffA(4) = d_tub_mm
+    CoeffA(5) = d_cas_mm
+    CoeffA(6) = t_model
+    CoeffA(7) = h_perf_m
+    CoeffA(8) = h_glv_m
+    CoeffA(9) = q_gas_glv_sm3day
+    CoeffA(10) = glv_json
+    CoeffA(11) = IPR_json
+    CoeffA(12) = p_cas_atma
+    CoeffA(13) = calibr_grav
+    CoeffA(14) = calibr_fric
+    CoeffA(15) = flow_corr
+    
+    prm.y_tolerance = 0.01
+    
+    If solve_equation_bisection("calc_well_dpwh_from_pwf", 1, p_wf_max, CoeffA, prm) Then
+        res = well_gl_calc_from_pwf(prm.x_solution, _
+                                    t_wf_C, _
+                                    feed_json, _
+                                    trajectory, d_tub_mm, d_cas_mm, _
+                                    t_model, _
+                                    h_perf_m, h_glv_m, q_gas_glv_sm3day, glv_json, _
+                                    IPR_json, p_cas_atma, _
+                                    calibr_grav, calibr_fric, _
+                                    flow_corr, fast)
+        well_gl_calc_from_pwh = res
+    Else
+        ' здесь может оказаться, что решениий несколько и надо искать их посреди интервала
+        For i = 1 To 50
+            If solve_equation_bisection("calc_well_gl_dpwh_from_pwf", 1 + (p_wf_max / 50) * (i - 1), 1 + (p_wf_max / 50) * i, CoeffA, prm) Then
+            res = well_gl_calc_from_pwf(prm.x_solution, _
+                                        t_wf_C, _
+                                        feed_json, _
+                                        trajectory, d_tub_mm, d_cas_mm, _
+                                        t_model, _
+                                        h_perf_m, h_glv_m, q_gas_glv_sm3day, glv_json, _
+                                        IPR_json, p_cas_atma, _
+                                        calibr_grav, calibr_fric, _
+                                        flow_corr, fast)
+                well_gl_calc_from_pwh = res
+                Exit Function
+            Else
+                well_gl_calc_from_pwh = "not found"
+            End If
+        Next i
+    End If
+    Exit Function
+er1:
+    well_gl_calc_from_pwh = "error" & Err.Description
+End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
 'на основе устьевого (буферного) давления (расчет  сверху вниз)
@@ -4692,10 +4859,10 @@ Public Function well_calc_from_pwf(ByVal p_wf_atma As Double, _
 '           или число - глубина вертикальной скважины
 'd_tub_mm - json кодирующий диаметры скважины,
 '           используйте encode_pipe_diam,
-'           или число - диаметр НКТ мм
+'           или число - диаметр НКТ мм. внутр.
 'd_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
 '           используйте encode_pipe_diam,
-'           или число - диаметр эксп. колонны мм
+'           или число - диаметр эксп. колонны мм. внутр.
 't_model - температурная модель, используйте encode_t_model
 'h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
 '           давления
@@ -4871,7 +5038,7 @@ On Error GoTo er1:
             f("q_gas_free_sm3day") = qgas_cas_sm3day
             feed_sep = ConvertToJson(f)
             Set pipe_casing_liq = new_pipeline3(trajectory, _
-                                                d_cas_mm, _
+                                                pipe_diam_subtract(d_cas_mm, d_tub_mm, 5), _
                                                 t_model, _
                                                 calc_along_coord, _
                                                 flow_along_coord, _
@@ -4884,7 +5051,7 @@ On Error GoTo er1:
             res1 = pipe_casing_liq.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
             'построим распределение давления для газа
             Set pipe_casing_gas = new_pipeline3(trajectory, _
-                                                d_cas_mm, _
+                                                pipe_diam_subtract(d_cas_mm, d_tub_mm, 5), _
                                                 t_model, _
                                                 Not calc_along_coord, _
                                                 flow_along_coord, _
