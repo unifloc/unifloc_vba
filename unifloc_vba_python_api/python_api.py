@@ -2099,7 +2099,7 @@ class API():
         self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
         return self.f_well_calc_from_pintake(p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
+    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False,outval=0):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -2120,11 +2120,7 @@ class API():
 
     t_model - температурная модель, используйте encode_t_model    
 
-    h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
-
-    h_esp_m - глубина спуска эцн. верх нкт    
-
-    esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
+   h_perf_m   ,   h_esp_m   ,    esp_json - параметры эцн, используйте encode_esp_pump  если не заданы, то скважина фонтанирующая    
 
     esp_freq_hz - частота вращения эцн гц    
 
@@ -2146,12 +2142,14 @@ class API():
 
     flow_corr - номер гидравлической корреляции, как для трубы    
 
-    fast - флаг, если 1 то будет рассчитано только давление,   
+    fast - флаг, если 1 то будет рассчитано только давление,    
+
+    outval - что выводить в быстром режиме 0 - р забойное, 1 - затрубное предельное   
 
         """
 
         self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast)
+        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast,outval)
 
     def well_calc_below_esp(self, p_atma,t_C,feed_json,trajectory,d_cas_mm,esp_json,t_model,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,IPR_json="",flow_corr=0,calc_along_coord=False):
         """
@@ -2563,7 +2561,7 @@ class API():
         self.f_encode_ESP_cable = self.book.macro("encode_ESP_cable")
         return self.f_encode_ESP_cable(length_m,cable_R_Omkm,cable_X_Omkm,cable_t_max_C,manufacturer,name,d_mm)
 
-    def encode_ESP_separation(self, calc_mode=0,p_sep_manual_atma="",t_sep_manual_C="",natsep_model="",d_intake_mm="",d_cas_mm="",d_tub_mm="",pkv_period_ratio="",ksep_gassep_man_d="",ksep_nat_man_d="",ksep_liquid_man_d="",h_intake_m="",h_perf_m="",gassep_type="",gassep_qnom_sm3day="",param=""):
+    def encode_ESP_separation(self, calc_mode=0,p_sep_manual_atma=40,t_sep_manual_C=40,natsep_model=0,d_intake_od_mm=92,d_cas_id_mm=125,d_tub_od_mm=72,pkv_period_ratio=0,ksep_gassep_man_d=-1,ksep_nat_man_d=-1,ksep_liquid_man_d=-1,h_intake_m=0,h_perf_m=0,gassep_type=-1,gassep_qnom_sm3day=200,param=""):
         """
  ========== description ============== 
  функция кодирования газосепаратора 
@@ -2576,15 +2574,9 @@ class API():
 
      t_sep_manual_c - температура для расчета  коэффициента сепарации заданного вручную    
 
-     natsep_model - тип модели для естественной сепарации:  0 - упрощенная маркеса для эцн,  1 - механистическая маркеса для эцн,  2 - механистическая с эцн ниже перфорации,    
+     natsep_model - тип модели для естественной сепарации:  0 - упрощенная маркеса для эцн,  1 - механистическая маркеса для эцн,  2 - механистическая с эцн ниже перфорации,  d_in..см.мануал   
 
-     d_intake_mm - диаметр приемной сетки эцн    
-
-     d_cas_mm - диаметр эксплуатационной колонны    
-
-     d_tub_mm - диаметр нкт    
-
-     pkv_period_ratio - для пкв отношение времени работы к времени цикла    
+   d_intake_od_mm   ,   d_cas_id_mm   ,   d_tub_od_mm   ,     pkv_period_ratio - для пкв отношение времени работы к времени цикла    
 
      ksep_gassep_man_d - коэффициент сепарации гс заданный вручную    
 
@@ -2601,7 +2593,7 @@ class API():
         """
 
         self.f_encode_ESP_separation = self.book.macro("encode_ESP_separation")
-        return self.f_encode_ESP_separation(calc_mode,p_sep_manual_atma,t_sep_manual_C,natsep_model,d_intake_mm,d_cas_mm,d_tub_mm,pkv_period_ratio,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,h_intake_m,h_perf_m,gassep_type,gassep_qnom_sm3day,param)
+        return self.f_encode_ESP_separation(calc_mode,p_sep_manual_atma,t_sep_manual_C,natsep_model,d_intake_od_mm,d_cas_id_mm,d_tub_od_mm,pkv_period_ratio,ksep_gassep_man_d,ksep_nat_man_d,ksep_liquid_man_d,h_intake_m,h_perf_m,gassep_type,gassep_qnom_sm3day,param)
 
     def encode_ambient_formation_string(self, therm_cond_form_WmC=2.4252,sp_heat_capacity_form_JkgC=200,therm_cond_cement_WmC=6.965,therm_cond_tubing_WmC=32,therm_cond_casing_WmC=32,heat_transfer_casing_liquid_Wm2C=200,heat_transfer_casing_gas_Wm2C=10,heat_transfer_fluid_convection_Wm2C=200,t_calc_hr=240):
         """
