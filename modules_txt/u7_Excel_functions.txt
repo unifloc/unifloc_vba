@@ -5301,23 +5301,23 @@ On Error GoTo er1:
         If t_crit_C > crv_t.maxy Then h_crit = crv_t.maxx
         ' формируем словарь для вывода результатов
         dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 2)
-        dout.Add "p_wf_atma", Round(p_wf_atma, 2)
-        dout.Add "p_intake_atma", Round(p_intake_atma, 2)
-        dout.Add "p_dis_atma", Round(p_dis_atma, 2)
-        dout.Add "p_buf_atma", Round(p_buf_atma, 2)
+        dout.Add "p_wf_atma", Round(p_wf_atma, 1)
+        dout.Add "p_intake_atma", Round(p_intake_atma, 1)
+        dout.Add "p_dis_atma", Round(p_dis_atma, 1)
+        dout.Add "p_buf_atma", Round(p_buf_atma, 1)
         dout.Add "crv_p", crv_p.getDict
         dout.Add "crv_t", crv_t.getDict
         dout.Add "crv_p_cas", crv_cas_p.ClonePointsToNum(25).getDict
         dout.Add "crv_t_amb", crv_t_amb.getDict
-        dout.Add "h_dyn_m", Round(h_dyn_m, 2)
-        dout.Add "h_crit_m", h_crit
+        dout.Add "h_dyn_m", Round(h_dyn_m, 1)
+        dout.Add "h_crit_m", Round(h_crit, 1)
         dout.Add "gas_fraction at pump", Round(gas_fraction, 4)
-        dout.Add "q_gas_cas_sm3day", Round(qgas_cas_sm3day, 2)
-        dout.Add "ksep", Round(ksep, 2)
-        dout.Add "t_intake_C", Round(t_intake_C, 2)
-        dout.Add "t_dis_C", Round(t_dis_C, 2)
+        dout.Add "q_gas_cas_sm3day", Round(qgas_cas_sm3day, 1)
+        dout.Add "ksep", Round(ksep, 3)
+        dout.Add "t_intake_C", Round(t_intake_C, 1)
+        dout.Add "t_dis_C", Round(t_dis_C, 1)
         Set f = ParseJson(feed_sep)
-        dout.Add "q_liq_esp_sm3day", Round(f("q_liq_sm3day"), 2)
+        dout.Add "q_liq_esp_sm3day", Round(f("q_liq_sm3day"), 1)
         If Len(esp_json) > 1 Then
             dout.Add "esp_data", esp.get_result_dict
         Else
@@ -5328,12 +5328,12 @@ On Error GoTo er1:
         Else
             dout.Add "separ_data", "no"
         End If
-        dout.Add "p_cas_atma", Round(p_cas_atma, 2)
-        dout.Add "p_cas_atma_", Round(p_cas_atma_, 2)
+        dout.Add "p_cas_atma", Round(p_cas_atma, 1)
+        dout.Add "p_cas_atma_", Round(p_cas_atma_, 1)
         If Len(esp_json) > 1 Then
-            dout.Add "esp_efficiency", esp.eff_ESP_d
-            dout.Add "esp_power_W", esp.power_ESP_W
-            dout.Add "calibr_esp_head", esp.calibr_head
+            dout.Add "esp_efficiency", Round(esp.eff_ESP_d, 3)
+            dout.Add "esp_power_kW", Round(esp.power_ESP_W / 1000, 2)
+            dout.Add "calibr_esp_head", Round(esp.calibr_head, 3)
         Else
             dout.Add "esp_efficiency", "no"
             dout.Add "esp_power_W", "no"
@@ -5476,6 +5476,16 @@ End Function
 '==================================================================
 ' расчет газлифтной скважины
 '==================================================================
+' расчет температуры калориметрического смешивания
+Public Function t_mix_C(w1_kgsec As Double, w2_kgsec As Double, c1_JkgC As Double, c2_JkgC As Double, t1_c As Double, t2_c As Double) As Double
+ Dim cp_JkgC As Double
+ Dim wp As Double
+ 
+ wp = w1_kgsec + w2_kgsec
+ cp_JkgC = w1_kgsec / wp * c1_JkgC + w2_kgsec / wp * c2_JkgC
+ 
+ t_mix_C = (w1_kgsec * c1_JkgC * t1_c + w2_kgsec * c2_JkgC * t2_c) / (wp * cp_JkgC)
+End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
 'на основе забойного давления (расчет снизу вверх)
@@ -5536,8 +5546,8 @@ On Error GoTo er1:
     Dim res1 As PTtype
     Dim p_intake_atma As Double
     Dim t_intake_C As Double
-    Dim p_dis_atma As Double
-    Dim t_dis_C As Double
+'    Dim p_dis_atma As Double
+'    Dim t_dis_C As Double
     Dim p_buf_atma As Double
     Dim t_buf_C As Double
     Dim q_liq_sm3day As Double
@@ -5551,6 +5561,7 @@ On Error GoTo er1:
     Dim crv_cas_p As New CInterpolation
     Dim d_cas_mm_ As Double
     Dim d_tub_mm_ As Double
+    Dim d_glv_mm As Double
 ' 0. если задана IPR  то пытаемся оценить дебит
     If Len(IPR_json) > 0 Then
         Call ipr_vogel.init_json(IPR_json)
@@ -5606,8 +5617,6 @@ On Error GoTo er1:
                                         0, h_glv_m, h_glv_m, h_glv_m)
     Call pipe_casing_gas.init_feed(feed_after_glv)
     res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
-    ' найдем динамический уровень и построим совместное распределения для газа и жидкости
-    Dim d_glv_mm As Double
     If glv_json <> "" Then
         If Mid(glv_json, 1, 1) = "{" Then
         Else
@@ -5619,14 +5628,29 @@ On Error GoTo er1:
         feed_after_glv = ConvertToJson(f)
     End If
     
+    ' Оценим температуру флюида с учетом охлаждения газа в газлифтном клапане
+    ' предположим, что температура газа на входе в клапан равна температуре флюида до охлаждения
+    Dim dtgas
+    Dim feed_res  As New CPVT
+    Dim feed_gas As New CPVT
+    Dim tmix As Double
+    Dim p_gas_intake_atma As Double
     
+    p_gas_intake_atma = res1.p_atma
+    Call feed_res.init_feed(feed_json)
+    Call feed_gas.init_feed(feed_json, 0, , , q_gas_glv_sm3day)
+    Call feed_res.calc_PVT(p_intake_atma, t_intake_C)
+    Call feed_gas.calc_PVT(p_intake_atma, t_intake_C)
     
+    dtgas = feed_gas.cJT_Katm * (res1.p_atma - p_intake_atma)
+    tmix = t_mix_C(feed_res.wm_kgsec, feed_gas.wm_kgsec, feed_res.cmix_JkgC, feed_gas.cg_JkgC, t_intake_C, t_intake_C + dtgas)
+     
 ' 4. расчет распределения давления в НКТ
     Call pipe_above_glv.init_feed(feed_after_glv)
     If fast Then
-        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, t_intake_C, noCurves)
+        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, tmix, noCurves)
     Else
-        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
+        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, tmix, mainCurves)
     End If
     p_buf_atma = res1.p_atma
     t_buf_C = res1.t_C
@@ -5646,19 +5670,22 @@ On Error GoTo er1:
         dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 2)
         dout.Add "p_wf_atma", Round(p_wf_atma, 2)
         dout.Add "p_intake_atma", Round(p_intake_atma, 2)
-        dout.Add "p_dis_atma", Round(p_dis_atma, 2)
+        dout.Add "p_gas_intake_atma", Round(p_gas_intake_atma, 2)
         dout.Add "p_buf_atma", Round(p_buf_atma, 2)
         dout.Add "crv_p", crv_p.getDict
         dout.Add "crv_t", crv_t.getDict
         dout.Add "crv_p_cas", pipe_casing_gas.curve("c_P").ClonePointsToNum(25).getDict
- 
         dout.Add "crv_t_amb", crv_t_amb.getDict
-        
         dout.Add "q_gas_cas_sm3day", Round(q_gas_glv_sm3day, 2)
         dout.Add "t_intake_C", Round(t_intake_C, 2)
-        dout.Add "t_dis_C", Round(t_dis_C, 2)
-        Set f = ParseJson(feed_after_glv)
-        dout.Add "q_liq_esp_sm3day", Round(f("q_liq_sm3day"), 2)
+        dout.Add "tmix", Round(tmix, 2)
+        dout.Add "dtgas", Round(dtgas, 2)
+        dout.Add "t_gas_intake", Round(t_intake_C + dtgas, 2)
+        
+        Dim i As Integer
+        For i = 1 To 10
+            dout.Add "v" & str(i), ""
+        Next i
         well_gl_calc_from_pwf = ConvertToJson(dout)
     Else
         well_gl_calc_from_pwf = p_buf_atma
