@@ -4348,6 +4348,137 @@ Private Function calc_well_dpwh_from_pwf(ByVal p_wf_atma As Double, _
                              fast:=True)
     calc_well_dpwh_from_pwf = res - p_wh_atma
 End Function
+' функция для поиска решения по расчету давления в клапане
+Public Function calc_dq_gas_pu_valve(Pu As Double, CoeffA)
+   Dim Q_gas As Double, d_mm As Double, pd As Double, gg As Double, t As Double
+   Dim calibr As Double
+   Q_gas = CoeffA(0)
+   d_mm = CoeffA(1)
+   pd = CoeffA(2)
+   gg = CoeffA(3)
+   t = CoeffA(4)
+   calibr = CoeffA(5)
+   
+   calc_dq_gas_pu_valve = Q_gas - GLV_q_gas_sm3day(d_mm, Pu, pd, gg, t, calibr)(0)(0)
+End Function
+Public Function calc_dq_gas_pd_valve(pd As Double, CoeffA)
+   Dim Q_gas As Double, d_mm As Double, Pu As Double, gg As Double, t As Double
+   Dim calibr As Double
+   Q_gas = CoeffA(0)
+   d_mm = CoeffA(1)
+   Pu = CoeffA(2)
+   gg = CoeffA(3)
+   t = CoeffA(4)
+   calibr = CoeffA(5)
+   
+   calc_dq_gas_pd_valve = Q_gas - GLV_q_gas_sm3day(d_mm, Pu, pd, gg, t, calibr)(0)(0)
+End Function
+' функция расчета ошибки в расходе газа при произвольном давлении внутри клапана
+Public Function calc_dq_gas_pv_vkr_valve(PV As Double, CoeffA)
+   Dim Q_gas As Double, d_mm As Double, Pu As Double, pd As Double, gg As Double, t As Double
+   Dim d_vkr As Double
+   Dim calibr As Double
+   
+   d_mm = CoeffA(0)
+   d_vkr = CoeffA(1)
+   Pu = CoeffA(2)
+   pd = CoeffA(3)
+   gg = CoeffA(4)
+   t = CoeffA(5)
+   calibr = CoeffA(5)
+   
+   calc_dq_gas_pv_vkr_valve = GLV_q_gas_sm3day(d_mm, Pu, PV, gg, t, calibr)(0)(0) - GLV_q_gas_sm3day(d_vkr, PV, pd, gg, t, calibr)(0)(0)
+End Function
+Public Function encode_glv(d_glv_mm As Double, _
+                        Optional d_surf_mm As Double = 0, _
+                        Optional calibr_glv As Double = 1, _
+                        Optional calibr_surf As Double = 1)
+    Dim d As New Dictionary
+    d.Add "d_glv_mm", d_glv_mm
+    d.Add "calibr_glv", calibr_glv
+    If d_surf_mm > 0 Then
+        d.Add "d_surf_mm", d_surf_mm
+        d.Add "calibr_surf", calibr_surf
+    End If
+    encode_glv = ConvertToJson(d)
+End Function
+' функция расчета ошибки в расходе газа при
+' потоке через два клапана при закачке газа
+Public Function calc_dq_gas_two_valves(PV As Double, CoeffA)
+   Dim d_glv_mm As Double
+   Dim p_surf_up_atma As Double, p_glv_down_atma As Double, gg As Double
+   Dim t_surf_C As Double, t_glv_C As Double
+   Dim d_surf_mm As Double
+   Dim pipe As CPipe
+   Dim calibr_surf As Double, calibr_glv As Double
+   Dim pu_glv_atma As Double
+   Dim res As PTtype
+   
+   d_glv_mm = CoeffA(0)
+   d_surf_mm = CoeffA(1)
+   p_surf_up_atma = CoeffA(2)
+   p_glv_down_atma = CoeffA(3)
+   gg = CoeffA(4)
+   t_surf_C = CoeffA(5)
+   t_glv_C = CoeffA(6)
+   Set pipe = CoeffA(7)
+   calibr_surf = CoeffA(8)
+   calibr_glv = CoeffA(9)
+   Dim qg_est_sm3day As Double
+   
+   qg_est_sm3day = GLV_q_gas_sm3day(d_surf_mm, p_surf_up_atma, PV, gg, t_surf_C, calibr_surf)(0)(0)
+   pipe.fluid.q_gas_free_sm3day = qg_est_sm3day
+   res = pipe.calc_dPipe(PV, t_surf_C, mainCurves)
+   pu_glv_atma = res.p_atma
+   calc_dq_gas_two_valves = qg_est_sm3day - GLV_q_gas_sm3day(d_glv_mm, pu_glv_atma, p_glv_down_atma, gg, t_glv_C, calibr_glv)(0)(0)
+End Function
+Private Function GLV_q_gas_two_valves_sm3day(d_glv_mm As Double, d_surf_mm As Double, _
+                                            p_in_atma As Double, _
+                                            p_out_atma As Double, _
+                                            gamma_g As Double, _
+                                            t_surf_C As Double, t_glv_C As Double, _
+                                            pipe As CPipe, _
+                                            calibr_surf As Double, calibr_glv As Double)
+' d_port_mm - диаметр основного порта клапана, мм
+' d_vkr_mm  - эффективный диаметр вкруток на выходе, мм
+' p_in_atma   - давление на входе в клапан (затруб), атма
+' p_out_atma   - давление на выходе клапана (НКТ), атма
+' gamma_g   - удельная плотность газа
+' t_C       - температура клапана, С
+'description_end
+    Dim prm As New CSolveParam
+    Dim CoeffA(0 To 9)
+    Dim Func As String
+    Dim pv_atma As Double
+    Dim q_gas_sm3day As Double
+    Dim res1
+    Dim res2
+    Dim crit1 As Boolean
+    Dim crit2 As Boolean
+    Func = "calc_dq_gas_two_valves"
+    CoeffA(0) = d_glv_mm
+    CoeffA(1) = d_surf_mm
+    CoeffA(2) = p_in_atma
+    CoeffA(3) = p_out_atma
+    CoeffA(4) = gamma_g
+    CoeffA(5) = t_surf_C
+    CoeffA(6) = t_glv_C
+    Set CoeffA(7) = pipe
+    CoeffA(8) = calibr_surf
+    CoeffA(9) = calibr_glv
+    
+    prm.y_tolerance = 0.01
+    Call solve_equation_bisection(Func, p_out_atma, p_in_atma, CoeffA, prm)
+    pv_atma = prm.x_solution
+    res1 = GLV_q_gas_sm3day(d_surf_mm, p_in_atma, pv_atma, gamma_g, t_surf_C)
+'    res2 = GLV_q_gas_sm3day(d_glv_mm, pv_atma, p_out_atma, gamma_g, t_C)
+    q_gas_sm3day = res1(0)(0)
+    GLV_q_gas_two_valves_sm3day = q_gas_sm3day
+'    crit1 = res1(0)(2)
+'    crit2 = res2(0)(2)
+'    GLV_q_gas_vkr_sm3day = Array(Array(q_gas_sm3day, p_in_atma, pv_atma, p_out_atma, q_gas_sm3day, crit1, crit2), _
+'                                 Array("q_gas_sm3day", "p_in_atma", "pv_atma", "p_out_atma", "q_gas_sm3day", "crit1", "crit2"))
+End Function
 ' вспомогательная функция для расчета скважины
 ' вычисляет невязку по давлению на устье от величины
 ' забойного давления
@@ -5616,16 +5747,44 @@ On Error GoTo er1:
                                         calibr_fric, _
                                         0, h_glv_m, h_glv_m, h_glv_m)
     Call pipe_casing_gas.init_feed(feed_after_glv)
-    res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
+    Dim calibr_glv As Double
+    Dim calibr_surf As Double
+    Dim d_surf_mm As Double
+    calibr_glv = 1
+    d_surf_mm = 0
+    calibr_surf = 1
     If glv_json <> "" Then
         If Mid(glv_json, 1, 1) = "{" Then
+            Dim dglv As Dictionary
+            Set dglv = ParseJson(glv_json)
+            d_glv_mm = dglv("d_glv_mm")
+            calibr_glv = 1
+            If dglv.Exists("calibr_glv") Then calibr_glv = dglv("calibr_glv")
+            If dglv.Exists("d_surf_mm") Then
+                d_surf_mm = dglv("d_surf_mm")
+                If dglv.Exists("calibr_surf") Then calibr_surf = dglv("calibr_surf")
+            End If
         Else
             d_glv_mm = Cdbl_(glv_json)
         End If
-        q_gas_glv_sm3day = GLV_q_gas_sm3day(d_glv_mm, res1.p_atma, p_intake_atma, f("gamma_gas"), t_intake_C)(0)(0)
+        If d_surf_mm > 0 Then
+            Dim t_surf_C As Double
+            'res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
+            t_surf_C = pipe_casing_gas.ambient_formation.amb_temp_C(0)
+            q_gas_glv_sm3day = GLV_q_gas_two_valves_sm3day(d_glv_mm, d_surf_mm, p_cas_atma, p_intake_atma, f("gamma_gas"), _
+                                                           t_surf_C, t_intake_C, pipe_casing_gas, calibr_surf, calibr_glv)
+        Else
+            
+            res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
+        
+            q_gas_glv_sm3day = GLV_q_gas_sm3day(d_glv_mm, res1.p_atma, p_intake_atma, f("gamma_gas"), t_intake_C)(0)(0)
+        End If
         Set f = ParseJson(feed_after_glv)
         f("q_gas_free_sm3day") = q_gas_glv_sm3day
         feed_after_glv = ConvertToJson(f)
+    Else
+            res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
+    
     End If
     
     ' Оценим температуру флюида с учетом охлаждения газа в газлифтном клапане
