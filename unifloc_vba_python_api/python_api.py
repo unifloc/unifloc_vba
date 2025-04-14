@@ -1947,7 +1947,7 @@ class API():
         self.f_well_ksep_full_d = self.book.macro("well_ksep_full_d")
         return self.f_well_ksep_full_d(p_sep_atma,t_sep_C,feed,gassep_json,f_Hz,out)
 
-    def well_gl_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_glv_m=1200,q_gas_glv_sm3day=5000,glv_json="",IPR_json="",p_cas_atma=10,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
+    def well_gl_calc_from_pwh(self, 'p_wh_atma,'t_wf_C,'feed_json,'trajectory="1500",'d_tub_mm="62",'d_cas_mm="125",'t_model="80",'h_perf_m=1500,'h_glv_m=1200,'q_gas_glv_sm3day=5000,'glv_json="",'IPR_json="",'p_cas_atma=10,'calibr_grav=1,'calibr_fric=1,'flow_corr=0,'fast=False):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе устьевого (буферного) давления (расчет сверху вниз) 
@@ -1991,7 +1991,7 @@ class API():
         """
 
         self.f_well_gl_calc_from_pwh = self.book.macro("well_gl_calc_from_pwh")
-        return self.f_well_gl_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_glv_m,q_gas_glv_sm3day,glv_json,IPR_json,p_cas_atma,calibr_grav,calibr_fric,flow_corr,fast)
+        return self.f_well_gl_calc_from_pwh('p_wh_atma,'t_wf_C,'feed_json,'trajectory,'d_tub_mm,'d_cas_mm,'t_model,'h_perf_m,'h_glv_m,'q_gas_glv_sm3day,'glv_json,'IPR_json,'p_cas_atma,'calibr_grav,'calibr_fric,'flow_corr,'fast)
 
     def well_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
         """
@@ -2189,7 +2189,7 @@ class API():
         self.f_well_calc_below_esp = self.book.macro("well_calc_below_esp")
         return self.f_well_calc_below_esp(p_atma,t_C,feed_json,trajectory,d_cas_mm,esp_json,t_model,h_perf_m,h_esp_m,calibr_grav,calibr_fric,IPR_json,flow_corr,calc_along_coord)
 
-    def well_gl_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_glv_m=1200,q_gas_glv_sm3day=5000,glv_json="",IPR_json="",p_cas_atma=10,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
+    def well_gl_calc_from_pwf(self, 'p_wf_atma,'t_wf_C,'feed_json,'trajectory="1500",'d_tub_mm="62",'d_cas_mm="125",'t_model="80",'h_perf_m=1500,'h_glv_m=1200,'q_gas_glv_sm3day=5000,'glv_json="",'IPR_json="",'p_cas_atma=10,'calibr_grav=1,'calibr_fric=1,'flow_corr=0,'fast=False):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -2233,7 +2233,99 @@ class API():
         """
 
         self.f_well_gl_calc_from_pwf = self.book.macro("well_gl_calc_from_pwf")
+        return self.f_well_gl_calc_from_pwf('p_wf_atma,'t_wf_C,'feed_json,'trajectory,'d_tub_mm,'d_cas_mm,'t_model,'h_perf_m,'h_glv_m,'q_gas_glv_sm3day,'glv_json,'IPR_json,'p_cas_atma,'calibr_grav,'calibr_fric,'flow_corr,'fast)
+
+    def well_gl_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_glv_m=1200,q_gas_glv_sm3day=5000,glv_json="",IPR_json="",p_cas_atma=10,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
+        """
+ ========== description ============== 
+расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
+        
+ ==========  arguments  ============== 
+
+     p_wf_atma - забойное давление, атма    
+
+    t_wf_c - температура флюида на забое скважины, с    
+
+    feed_json - параметры потока в скважине (с забоя)    
+
+    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
+
+    d_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
+
+    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
+
+    t_model - температурная модель, используйте encode_t_model    
+
+    h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
+
+    h_glv_m - глубина спуска рабочего газлифтного клапана.    
+
+    q_gas_glv_sm3day - расход газлифтного газа через рабочий клапан    
+
+    glv_json - диаметр порта рабочего газлифтного клапана    
+
+    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
+
+    p_cas_atma - затрубное давление, давление закачки газа    
+
+    calibr_grav - калибровка для гидравлической корреляции по гравитации    
+
+    calibr_fric - калибровка для гидравлической корреляции по трению    
+
+    flow_corr - номер гидравлической корреляции, как для трубы    
+
+    fast - флаг, если 1 то будет рассчитано только давление,   
+
+        """
+
+        self.f_well_gl_calc_from_pwf = self.book.macro("well_gl_calc_from_pwf")
         return self.f_well_gl_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_glv_m,q_gas_glv_sm3day,glv_json,IPR_json,p_cas_atma,calibr_grav,calibr_fric,flow_corr,fast)
+
+    def well_gl_calc_from_pwh(self, p_wh_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_glv_m=1200,q_gas_glv_sm3day=5000,glv_json="",IPR_json="",p_cas_atma=10,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
+        """
+ ========== description ============== 
+расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
+        
+ ==========  arguments  ============== 
+
+     p_wh_atma - забойное давление, атма    
+
+    t_wf_c - температура флюида на забое скважины, с    
+
+    feed_json - параметры потока в скважине (с забоя)    
+
+    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
+
+    d_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
+
+    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
+
+    t_model - температурная модель, используйте encode_t_model    
+
+    h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
+
+    h_glv_m - глубина спуска рабочего газлифтного клапана.    
+
+    q_gas_glv_sm3day - расход газлифтного газа через рабочий клапан    
+
+    glv_json - диаметр порта рабочего газлифтного клапана    
+
+    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
+
+    p_cas_atma - затрубное давление, давление закачки газа    
+
+    calibr_grav - калибровка для гидравлической корреляции по гравитации    
+
+    calibr_fric - калибровка для гидравлической корреляции по трению    
+
+    flow_corr - номер гидравлической корреляции, как для трубы    
+
+    fast - флаг, если 1 то будет рассчитано только давление,   
+
+        """
+
+        self.f_well_gl_calc_from_pwh = self.book.macro("well_gl_calc_from_pwh")
+        return self.f_well_gl_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_glv_m,q_gas_glv_sm3day,glv_json,IPR_json,p_cas_atma,calibr_grav,calibr_fric,flow_corr,fast)
 
     def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
         """
