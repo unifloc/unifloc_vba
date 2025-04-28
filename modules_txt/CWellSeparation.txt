@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.54  2025.04                                  khabibullinra@gmail.com
+'Unifloc 7.55  2025.04                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -15,6 +15,7 @@ Public ksep_gassep_fr As Double           ' коэффициент сепарации газосепаратора
 Public ksep_nat_fr As Double              ' коэффициент естественной сепарации, расчетный
 Public ksep_nat_average_fr As Double      ' коэффициент сепарации естественный, осредненный за время работы и простоя
 Public ksep_ann As Double                 ' ПКВ ксеп для потока забираемого из затруба
+Public ksep_liq_d As Double
 Public p_ksep_atma As Double              ' давление сепарации, расчетное
 Public t_ksep_C As Double                 ' температура сепарации расчетная
 ' вручную заданные параметры для соответствующего режима расчета
@@ -22,6 +23,7 @@ Public psep_man_atma As Double
 Public tsep_man_C As Double
 Public ksep_gassep_man_d As Double
 Public ksep_nat_man_d As Double
+Public ksep_liquid_man_d As Double     ' вручную заданный коэффициент сепарации для жидкости для режима фонтана через затруб
 Public q_gas_annulus_after_nat_sep_sm3day As Double
 Public q_gas_annulus_after_full_sep_sm3day As Double
 Public q_cas_rc_m3day As Double     ' оценка баланса газа в затрубе в ПКВ
@@ -87,9 +89,11 @@ Private Sub Class_Initialize()
     natsep.calibr_li = 2
     natsep.calibr_st = 1
     d_tub_m = 0.073
-     
+    ksep_liq_d = 0
+    ksep_liquid_man_d = 0
 End Sub
-Public Function calc_separation(p_atma As Double, t_C As Double)
+Public Function calc_separation(p_atma As Double, t_C As Double, _
+                                Optional p_cas_atma As Double = 10)
 ' расчет сепарации и соответствующих параметров флюидов
 ' для момента работы скважины
 ' должен вызываться незавимо от расчета УЭЦН, так как при расчете сверху вниз
@@ -105,6 +109,7 @@ Public Function calc_separation(p_atma As Double, t_C As Double)
             t_ksep_C = t_C
             'Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
             ksep_nat_fr = estimate_nat_separation_d(p_ksep_atma, t_ksep_C) ' оценим естественную сепарацию
+            ksep_liq_d = 0
         Case "by_correlation_pressure_manual"
             ' берем значение ручное, давления как есть
             p_ksep_atma = psep_man_atma
@@ -112,17 +117,21 @@ Public Function calc_separation(p_atma As Double, t_C As Double)
             'Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
                 ' оценим естественную сепарацию
             ksep_nat_fr = estimate_nat_separation_d(p_ksep_atma, t_ksep_C)
+            ksep_liq_d = 0
         Case "value_manual"
             ' берем и коэффициенты и давления как было задано при установке значений
             p_ksep_atma = p_atma
             t_ksep_C = t_C
             ksep_nat_fr = ksep_nat_man_d
+            ksep_liq_d = ksep_liquid_man_d
         Case "fully_manual"
             ' берем и коэффициенты и давления как было задано при установке значений
             p_ksep_atma = psep_man_atma
             t_ksep_C = tsep_man_C
             ksep_nat_fr = ksep_nat_man_d
+            ksep_liq_d = ksep_liquid_man_d
     End Select
+    
     
     Call estimate_feeds_after_separation_calc(p_ksep_atma, t_ksep_C)
     
@@ -142,37 +151,51 @@ Public Function calc_separation(p_atma As Double, t_C As Double)
     End Select
     
     ksep_gassep_fr = ksep_gassep_fr * ksep_ann
+    ' на этом этапе оценили коэффициенты сепарации
+    ' далее надо посчитать параметры потоков
     
-    Set fluid_tub = fluid_gs.clone()
-    Call fluid_tub.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_gassep_fr, True)
-    Call fluid_tub.calc_PVT(p_atma, t_C)
-    q_gas_annulus_after_full_sep_sm3day = fluid.q_gas_insitu_sm3day - fluid_tub.q_gas_insitu_sm3day
+    If ksep_liq_d <= 0 Or ksep_liq_d > 1 Then
+        ' нормальный режим работы скважины
+        Set fluid_tub = fluid_gs.clone()
+        Call fluid_tub.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_gassep_fr, True)
+        Call fluid_tub.calc_PVT(p_atma, t_C)
+        q_gas_annulus_after_full_sep_sm3day = fluid.q_gas_insitu_sm3day - fluid_tub.q_gas_insitu_sm3day
     
-    Set fluid_cas = fluid.clone() ' тут надо будет доделать чтобы считать затруб с газом
-    fluid_cas.q_gas_free_sm3day = q_gas_annulus_after_full_sep_sm3day
-    fluid_cas.q_liq_sm3day = 0
-    
-    calc_separation = ksep_total_fr
-    
-    If pkv_period_ratio > 0 And pkv_period_ratio < 1 Then
-        Dim ql_from_cas As Double
-        Dim qg_to_cas As Double
+        Set fluid_cas = fluid.clone() ' тут надо будет доделать чтобы считать затруб с газом
+        Call fluid_cas.mod_after_separation(p_cas_atma, t_ksep_C, 0.99, gas_goes_into_solution:=False)
+        fluid_cas.fw_perc = 0
+        fluid_cas.q_gas_free_sm3day = q_gas_annulus_after_full_sep_sm3day
+        fluid_cas.q_liq_sm3day = 0
         
-        Call fluid_from_annular.calc_PVT(p_atma, t_C)
-        Call fluid_cas.calc_PVT(p_atma, t_C)
         
-        If q_gas_annulus_after_full_sep_sm3day > 0 Then
-            ' тут жидкость вниз газ вверх в затрубе
-            ql_from_cas = fluid_from_annular.qliq_rc_m3day  ' дебит жидкости который мы забираем из затруба в момент работы
-            qg_to_cas = fluid_cas.q_gas_rc_m3day
-            q_cas_rc_m3day = qg_to_cas - ql_from_cas
+        If pkv_period_ratio > 0 And pkv_period_ratio < 1 Then
+            Dim ql_from_cas As Double
+            Dim qg_to_cas As Double
+            
+            Call fluid_from_annular.calc_PVT(p_atma, t_C)
+            Call fluid_cas.calc_PVT(p_atma, t_C)
+            
+            If q_gas_annulus_after_full_sep_sm3day > 0 Then
+                ' тут жидкость вниз газ вверх в затрубе
+                ql_from_cas = fluid_from_annular.qliq_rc_m3day  ' дебит жидкости который мы забираем из затруба в момент работы
+                qg_to_cas = fluid_cas.q_gas_rc_m3day
+                q_cas_rc_m3day = qg_to_cas - ql_from_cas
+            Else
+                q_cas_rc_m3day = -fluid_from_annular.q_mix_rc_m3day
+    
+            End If
         Else
-            q_cas_rc_m3day = -fluid_from_annular.q_mix_rc_m3day
+            Call fluid_cas.calc_PVT(p_atma, t_C)
+            q_cas_rc_m3day = q_gas_annulus_after_full_sep_sm3day * fluid_cas.bg_m3m3
         End If
     Else
-        Call fluid_cas.calc_PVT(p_atma, t_C)
-        q_cas_rc_m3day = q_gas_annulus_after_full_sep_sm3day * fluid_cas.bg_m3m3
+        ' фонтан через затруб с разделение потоков
+        Dim dfl As Dictionary
+        Set dfl = fluid.mod_split(ksep_total_fr, ksep_liq_d, ksep_liq_d, p_ksep_atma, t_ksep_C, True)
+        Set fluid_tub = dfl("feed1")
+        Set fluid_cas = dfl("feed2")
     End If
+    calc_separation = ksep_total_fr
 End Function
 Public Sub set_gassep_param(Optional OD_mm As Double = 125, _
                        Optional Qnom_m3day As Double = 250, _
@@ -232,6 +255,7 @@ On Error GoTo err1:
         If .Exists("t_sep_manual_C") Then tsep_man_C = .Item("t_sep_manual_C")
         If .Exists("ksep_gassep_man_d") Then ksep_gassep_man_d = .Item("ksep_gassep_man_d")
         If .Exists("ksep_nat_man_d") Then ksep_nat_man_d = .Item("ksep_nat_man_d")
+        If .Exists("ksep_liquid_man_d") Then ksep_liquid_man_d = .Item("ksep_liquid_man_d")
         If .Exists("d_intake_mm") Then d_od_mm_ = .Item("d_intake_mm")
         If .Exists("d_cas_mm") Then d_cas_m = .Item("d_cas_mm") / 1000
         If .Exists("d_tub_mm") Then d_tub_m = .Item("d_tub_mm") / 1000
@@ -346,7 +370,7 @@ Private Sub estimate_feeds_after_separation_calc(p_atma As Double, t_C As Double
         ' смешаем флюиды из затруба и из пласта в один который пойдет в приемную сетку насоса
         Set fluid_gs = feed_mod_mix_obj(fluid_gs, fluid_from_annular)
     Else
-        ' если ПКВ не то просто учитываем сепарацию
+        ' если ПКВ нет то просто учитываем сепарацию
         Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
         Call fluid.calc_PVT(p_atma, t_C)
         Call fluid_gs.calc_PVT(p_atma, t_C)

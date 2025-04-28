@@ -2,38 +2,54 @@
 ' но постораемся не усложнять
 ' начнем с газлифта
 Option Explicit
-Public fluid As New CPVT
-Private fluid_res_ As CPVT
-Private fluid_al_ As CPVT
-Private fluid_cas_ As CPVT
-Public ipr_vogel As New CReservoirVogel
-Public pipe_below_al As CPipe    ' pipe below artificial lift
-Public pipe_tubing_above_al As CPipe
-Public pipe_casing_gas As CPipe
-Public d_glv_mm As Double  ' диаметр газлифтного клапана
-Public d_gas_surf_mm As Double ' диаметр управляющей линии подачи газа на поверхности
-Public calibr_glv As Double
-Public calibr_surf As Double
+Public fluid As New CPVT                ' базовый флюид - поток из пласта
+Private fluid_res_ As CPVT              ' поток из пласта
+Private fluid_al_ As CPVT               ' поток после сепарации - в насосе и НКТ
+Private fluid_cas_ As CPVT              ' поток в затруб после сепарации или поток закачки газа для гл
+Public ipr_vogel As New CReservoirVogel ' индикаторная кривая - характеристика пласта
+Public pipe_below_al As CPipe           ' труба для э/к ниже системы мех добычи
+Public pipe_tubing_above_al As CPipe    ' труба нкт выше системы мех добычи
+Public pipe_casing_gas As CPipe         ' труба для расчета газа в затрубе
+Public pipe_casing_liq As CPipe         ' труба для расчета ГЖС в затрубе (ЭЦН)
 Public calibr_grav As Double
 Public calibr_fric As Double
+Public d_glv_mm As Double               ' диаметр газлифтного клапана
+Public d_gas_surf_mm As Double          ' диаметр управляющей линии подачи газа на поверхности
+Public calibr_glv As Double
+Public calibr_surf As Double
+Public esp As New CESPpump              ' эцн для скважины
+Public esp_length As Double             ' длина ЭЦН
+Public separ As New CWellSeparation     ' объект для расчета сепарации на приеме ЭЦН
+Public separ_calc As Boolean            ' флаг что расчет сепарации был проведен
+Public ksep_total_d As Double           ' расчетное значение общего коэффициента сепарации для вывода
+Public gas_fraction_pump_d As Double    ' расчетная доля газа в насосе после сепарации для вывода
+Public q_gas_cas_sm3day As Double       ' расчетный расход газа в затруб после сепарации
 Public p_wf_atma As Double
 Public t_wf_C As Double
-Public p_intake_atma As Double  ' давление флюида в нкт за газлифтным клапаном
+Public p_intake_atma As Double          ' давление флюида в нкт за газлифтным клапаном
 Public t_intake_C As Double
-Public p_gas_intake_atma As Double  ' давление газа в затрубе перед газлифтным клапаном
+Public p_gas_intake_atma As Double      ' давление газа в затрубе перед газлифтным клапаном
 Public t_gas_intake_C As Double
-Public dt_gas_glv_C As Double      ' перепад температуры газа на газлифтном клапана за счет эффекта Джоуля Томсона
-Public t_mix_intake_C As Double              ' температура смеси флюида из пласта и газа закачки на гл клапане
+Public dt_gas_glv_C As Double           ' перепад температуры газа на газлифтном клапана за счет эффекта Джоуля Томсона
+Public t_mix_intake_C As Double         ' температура смеси флюида из пласта и газа закачки на гл клапане
 Public p_buf_atma As Double
 Public t_buf_C As Double
+Public p_cas_atma As Double
+Public p_cas_limit_atma As Double    ' предельное затрубное давление
+Public p_dis_atma As Double
+Public t_dis_C As Double
 Public t_surf_C As Double
 Public q_liq_sm3day As Double
 Public q_gas_glv_sm3day As Double
 Public fast As Boolean
-Public crv_p As CInterpolation
-Public crv_t As CInterpolation
-Public crv_t_amb As CInterpolation
-Public crv_cas_p As CInterpolation
+Public h_dyn_m As Double
+Public h_crit_m As Double
+Public t_crit_C As Double
+Public crv_p As CInterpolation              ' расчетное распределение давления в нкт
+Public crv_p_below_al As CInterpolation     ' расчетное распределение давления ниже мех. добычи
+Public crv_t As CInterpolation              ' расчетное распределение давления по всей скважине
+Public crv_t_amb As CInterpolation          ' распределение давления в пласте от вертикальной глубины
+Public crv_cas_p As CInterpolation          ' распределение давления в затрубе выше мех добычи
 Private Sub Class_Initialize()
     fast = False
     d_glv_mm = 0   ' 0 означает расчет выключен
@@ -42,6 +58,7 @@ Private Sub Class_Initialize()
     calibr_surf = 1
     calibr_grav = 1
     calibr_fric = 1
+    separ_calc = False
 End Sub
 Public Property Get fluid_res() As CPVT
     Set fluid_res = fluid_res_
@@ -52,6 +69,87 @@ End Property
 Public Property Get fluid_cas() As CPVT
     Set fluid_cas = fluid_cas_
 End Property
+Public Sub init_esp_well(Optional ByVal trajectory As String = "1500", _
+                         Optional ByVal d_tub_mm As String = "62", _
+                         Optional ByVal d_cas_mm As String = "125", _
+                         Optional ByVal t_model As String = "80", _
+                         Optional ByVal h_perf_m As Double = 1500, _
+                         Optional ByVal h_esp_m As Double = 1200, _
+                         Optional ByVal esp_json As String = "", _
+                         Optional ByVal ksep_json As String = "", _
+                         Optional ByVal d_int_mm As Double = 110, _
+                         Optional ByVal IPR_json As String = "", _
+                         Optional ByVal calibr_grav As Double = 1, _
+                         Optional ByVal calibr_fric As Double = 1, _
+                         Optional ByVal flow_corr As Integer = 0)
+    Dim ksep As Double
+    Dim d_cas_mm_ As Double
+    Dim d_tub_mm_ As Double
+    
+    Dim dsep As Dictionary
+    Call create_ipr(IPR_json)
+    
+    ' оценим длину насоса в самом начале есть насос для расчета подключен
+    ' необходимо, чтобы красиво нарисовать итоговые графики
+    esp_length = 0
+    If Len(esp_json) > 1 Then
+        Call esp.init_json(esp_json)
+        If esp.length_m > 0 Then esp_length = esp.length_m
+        If h_perf_m < h_esp_m + esp_length Then
+            ' заглушка - пока расчет ЭЦН ниже перфорации не поддерживается, хотя
+            ' в перспективе можно реализовать
+            Err.Raise kErrESPcalc, , "error " & "pump intake below perf not supported. " & str(h_perf_m) & " < " & str(h_esp_m + esp_length)
+            Exit Sub
+        End If
+    End If
+    ' создадим основные трубы
+    ' создаются отдельной процедурой общей для скважины с ЭЦН и с газлифтом
+    Call create_main_pipes(trajectory, _
+                           d_tub_mm, d_cas_mm, _
+                           t_model, _
+                           h_perf_m, h_esp_m, _
+                           calibr_grav, _
+                           calibr_fric, _
+                           flow_corr, _
+                           esp_length, wall_thick_mm:=5, esp_calc:=True)
+    ' создадим объекты для сепарации газа на приеме ЭЦН
+    If ksep_json = "" Then
+        separ_calc = False
+    Else
+        separ_calc = True
+        ' есть сепарация газа - пытаемся ее учесть
+        If Mid(ksep_json, 1, 1) <> "{" Then
+            ' если параметры сепарации в виде числа
+            ' то создаем объект сепарации с постоянным значением к-та сепарации
+            ksep = Cdbl_(ksep_json)
+            ' берем диаметры на нужной глубине из заранее созданных труб
+            d_cas_mm_ = pipe_below_al.d_hmes_m(h_esp_m + esp_length) * 1000
+            d_tub_mm_ = pipe_tubing_above_al.d_hmes_m(h_esp_m + esp_length) * 1000
+            ' создаем объект сепарации
+            ' газосепаратора нет, расчет 2 с постоянным значение ксеп
+            ksep_json = encode_ESP_separation( _
+                                    calc_mode:=2, _
+                                    p_sep_manual_atma:=0, _
+                                    t_sep_manual_C:=0, _
+                                    natsep_model:=0, _
+                                    d_intake_od_mm:=d_int_mm, _
+                                    d_cas_id_mm:=d_cas_mm_, _
+                                    d_tub_od_mm:=d_tub_mm_, _
+                                    pkv_period_ratio:=0, _
+                                    ksep_gassep_man_d:=0, _
+                                    ksep_nat_man_d:=ksep, _
+                                    ksep_liquid_man_d:=0, _
+                                    h_intake_m:=0, _
+                                    h_perf_m:=0, _
+                                    gassep_type:=0, _
+                                    gassep_qnom_sm3day:=100, _
+                                    param:="")
+        End If
+        ' по любому здесь уже доступна строка объекта сепарации - парсим ее
+        Set dsep = ParseJson(ksep_json)
+        Call separ.init_dictionary(dsep)
+    End If
+End Sub
 ' инициализация конструкции газлифтной скважины
 Public Sub init_gl_well(Optional ByVal trajectory As String = "1500", _
                         Optional ByVal d_tub_mm As String = "62", _
@@ -64,11 +162,33 @@ Public Sub init_gl_well(Optional ByVal trajectory As String = "1500", _
                         Optional ByVal calibr_grav As Double = 1, _
                         Optional ByVal calibr_fric As Double = 1, _
                         Optional ByVal flow_corr As Integer = 0)
+    Call create_ipr(IPR_json)
+    Call create_main_pipes(trajectory, _
+                           d_tub_mm, d_cas_mm, _
+                           t_model, _
+                           h_perf_m, h_glv_m, _
+                           calibr_grav, _
+                           calibr_fric, _
+                           flow_corr)
+End Sub
+Private Sub create_ipr(ByVal IPR_json As String)
     If Len(IPR_json) > 0 Then
         Call ipr_vogel.init_json(IPR_json)
         Set ipr_vogel.fluid = fluid
     End If
-    
+End Sub
+Private Sub create_main_pipes(trajectory As String, _
+                              d_tub_mm As String, _
+                              d_cas_mm As String, _
+                              t_model As String, _
+                              h_perf_m As Double, _
+                              h_al_m As Double, _
+                              calibr_grav As Double, _
+                              calibr_fric As Double, _
+                              flow_corr As Integer, _
+                     Optional al_length As Double = 0, _
+                     Optional wall_thick_mm As Double = 5, _
+                     Optional esp_calc As Boolean = False)
     ' создаем трубу ниже мех. добычи для расчета снизу вверх
     Set pipe_below_al = new_pipeline4(trajectory, _
                                       d_cas_mm, _
@@ -76,7 +196,7 @@ Public Sub init_gl_well(Optional ByVal trajectory As String = "1500", _
                                       flow_corr, _
                                       calibr_grav, _
                                       calibr_fric, _
-                                      h_glv_m, h_perf_m, h_glv_m, _
+                                      h_al_m + al_length, h_perf_m, h_al_m, _
                                       calc_along_coord:=False, _
                                       flow_along_coord:=False)
     Set pipe_below_al.fluid = fluid
@@ -88,28 +208,204 @@ Public Sub init_gl_well(Optional ByVal trajectory As String = "1500", _
                                              calibr_grav, _
                                              calibr_fric, _
                                              0, _
-                                             h_glv_m, h_glv_m, h_glv_m, _
+                                             h_al_m, h_al_m, h_al_m, _
                                              calc_along_coord:=False, _
                                              flow_along_coord:=False)
     Set pipe_tubing_above_al.fluid = fluid
     'построим распределение давления для газа
     'планируем расчет газа в затрубе сверху вниз
     Set pipe_casing_gas = new_pipeline4(trajectory, _
-                                        pipe_diam_subtract(d_cas_mm, d_tub_mm, 5), _
+                                        pipe_diam_subtract(d_cas_mm, d_tub_mm, wall_thick_mm), _
                                         t_model, _
                                         10, _
                                         calibr_grav, _
                                         calibr_fric, _
-                                        0, h_glv_m, h_glv_m, h_glv_m, _
+                                        0, h_al_m + al_length, h_al_m, h_al_m, _
                                         calc_along_coord:=True, _
                                         flow_along_coord:=False)
     Set pipe_casing_gas.fluid = fluid
+    
+    If esp_calc Then
+    
+        ' если только жидкость в затрубе
+        Set pipe_casing_liq = new_pipeline4(trajectory, _
+                                            pipe_diam_subtract(d_cas_mm, d_tub_mm, wall_thick_mm), _
+                                            t_model, _
+                                            flow_corr, _
+                                            calibr_grav, _
+                                            calibr_fric, _
+                                            0, h_al_m + al_length, h_al_m, 0, _
+                                            calc_along_coord:=False, _
+                                            flow_along_coord:=False)
+    End If
+    
     Me.calibr_grav = calibr_grav
     Me.calibr_fric = calibr_fric
     
     t_surf_C = pipe_casing_gas.ambient_formation.amb_temp_C(0)
-                                             
 End Sub
+Public Function calc_esp_well_from_pwf(ByVal p_wf_atma As Double, _
+                                       ByVal t_wf_C As Double, _
+                              Optional ByVal p_cas_atma As Double = 10, _
+                              Optional ByVal esp_freq_Hz As Double = 50, _
+                              Optional ByVal pkv_ratio As Double = 0, _
+                              Optional ByVal t_crit_C As Double = 0)
+    ' Расчет распределения давления и температуры в скважине с ЭЦН
+    '
+    Dim res1 As PTtype
+    Dim i As Integer
+    Dim prm As PARAMCALC
+    Dim pipe_curves_fast As CALC_RESULTS
+    If fast Then
+        pipe_curves_fast = noCurves
+    Else
+        pipe_curves_fast = mainCurves
+    End If
+    
+    calc_esp_well_from_pwf = False ' перед стартом расчета предполагаем худшее на всякий случай
+        
+    Me.p_wf_atma = p_wf_atma
+    Me.t_wf_C = t_wf_C
+    ' 1. Оценим дебит жидкости
+    '    можем вначале это сделать так как это расчет снизу вверх
+    If ipr_vogel.p_res_atma > 0 Then
+        ' оценим дебит жидкости по IPR если задано
+        q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
+    Else
+        ' довольствуемся дебитом заданном во входном потоке
+        q_liq_sm3day = fluid.q_liq_sm3day
+    End If
+    '2. рассчитаем участок ниже мех добычи (газлифтного клапана или ЭЦН)
+    Set pipe_below_al.fluid = fluid
+    res1 = pipe_below_al.calc_dPipe(p_wf_atma, t_wf_C, pipe_curves_fast)
+    p_intake_atma = res1.p_atma
+    t_intake_C = res1.t_C
+    q_gas_cas_sm3day = 0
+    If pipe_curves_fast = mainCurves Then Set crv_p_below_al = pipe_below_al.curve("c_P")
+    
+    '3. если надо (если установлен ЭЦН) оценим сепарацию газа на приеме насоса
+    If esp.stage_num > 0 Then
+        separ_calc = True
+        Set separ.fluid = fluid
+        If pkv_ratio > 0 And pkv_ratio < 1 Then
+            separ.pkv_period_ratio = pkv_ratio
+        End If
+        Call separ.calc_separation(p_intake_atma, t_intake_C)
+        Set fluid_al_ = separ.fluid_tub
+        Set fluid_cas_ = separ.fluid_cas
+        ksep_total_d = separ.ksep_total_fr
+        q_gas_cas_sm3day = separ.q_gas_annulus_after_full_sep_sm3day
+        ' если ЭЦН есть рассчитаем перепад давления
+        Set esp.fluid = fluid_al_
+        Call fluid_al_.calc_PVT(p_intake_atma, t_intake_C)
+        gas_fraction_pump_d = fluid_al_.gas_fraction_d
+        Call esp.calc_ESP(p_intake_atma, t_intake_C, f_Hz:=esp_freq_Hz)
+        ' вытащим значения давления на выкиде
+        p_dis_atma = esp.p_dis_atma
+        t_dis_C = esp.t_dis_C
+    Else
+        ' если данных по ЭЦН нет - тогда это фонтанирующая скважина
+        separ_calc = False
+        Set fluid_al_ = fluid.clone
+        Set fluid_cas_ = fluid.clone
+        p_dis_atma = p_intake_atma
+        t_dis_C = t_intake_C
+        q_gas_cas_sm3day = 0
+        gas_fraction_pump_d = 0
+        fluid_cas_.q_liq_sm3day = 0
+        fluid_cas_.q_gas_free_sm3day = 0
+    End If
+    
+    ' 4. построим распределение давления в затрубе
+    If p_cas_atma < 1 Then p_cas_atma = 1
+    prm = pipe_casing_gas.param
+    prm.calc_along_coord = False
+    pipe_casing_gas.param = prm
+    Set pipe_casing_gas.fluid = fluid_cas_
+    Set pipe_casing_liq.fluid = fluid_cas_
+    If esp.stage_num > 0 Then
+        res1 = pipe_casing_gas.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
+        ' сохраним предельное затрубное давление
+        ' такое затрубное которое будет при предположении что весь затруб
+        ' заполнен только газом. Его также выведем в результатах
+        ' чтобы обеспечить корректный поиск забойного давления по устьевому
+        p_cas_limit_atma = res1.p_atma
+        If separ.ksep_liq_d <= 0 Or separ.ksep_liq_d > 1 Then
+            Call pipe_casing_liq.set_ZNLF  ' учитываем барботаж для жидкости
+            res1 = pipe_casing_liq.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
+            Set crv_cas_p = pipe_casing_liq.curve("c_P")  ' готовим кривую давлений для вывода результатов
+            ' далее разбираем возможные конфигурации распределения давления в затрубе
+            If res1.p_atma < p_cas_atma Then
+                ' если давление затруба с жидкостью меньше заданного
+                ' то это нормальный вариант когда может существовать динамический уровень или
+                ' затруб полностью заполнен газом
+                '  продолжаем разбор вариантов
+                If p_cas_limit_atma < p_cas_atma Then
+                    ' если предельное затрубное давление меньше фактического значит
+                    ' попали в вариант когда затрубное давление является ограничением для снижения забойного давления
+                    ' как результат покажем заниженное затрубное давление
+                    Set crv_cas_p = pipe_casing_gas.curve("c_P")
+                    p_cas_atma = p_cas_limit_atma
+                Else
+                    ' здесь нормальный вариант когда должен существовать динамический уровень
+                    ' ищем его как пересечение кривых распределения давления в жидкости и газе
+                    ' построенных навстречу друг другу
+                    ' построим распределение давления для газа
+                    prm.calc_along_coord = True
+                    pipe_casing_gas.param = prm
+                    res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
+                    ' найдем динамический уровень и построим совместное распределения для газа и жидкости
+                    h_dyn_m = intersection(pipe_casing_liq.curve("c_P"), pipe_casing_gas.curve("c_P"))(1)
+                    If h_dyn_m < 0 Then h_dyn_m = 0
+                    pipe_casing_liq.curve("c_P").xName = "h_mes,m"
+                    pipe_casing_liq.curve("c_P").yName = "p,atma"
+                    ' сохраним для отчета кривую распределения давления в затрубе с учетом двух участков
+                    For i = 1 To crv_cas_p.num_points
+                        Call crv_cas_p.AddPoint(h_dyn_m, crv_cas_p.getPoint(h_dyn_m), True)
+                        If crv_cas_p.pointX(i) < h_dyn_m Then
+                            Call crv_cas_p.AddPoint(crv_cas_p.pointX(i), pipe_casing_gas.curve("c_P").getPoint(crv_cas_p.pointX(i)))
+                        End If
+                    Next i
+                    Me.p_cas_atma = p_cas_atma
+                End If
+            Else
+                Me.p_cas_atma = res1.p_atma
+            End If
+        Else
+                ' тут может быть фонтан через затруб
+            res1 = pipe_casing_liq.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
+            Set crv_cas_p = pipe_casing_liq.curve("c_P")  ' готовим кривую давлений для вывода результатов
+            Me.p_cas_atma = res1.p_atma
+        End If
+    Else
+        ' скважина фонтанирует и тогда предполагаем, что в затрубе будет только газ
+        ' и расчет газа ведем снизу вверх
+        
+        res1 = pipe_casing_gas.calc_dPipe(p_intake_atma, t_intake_C, mainCurves)
+        Set crv_cas_p = pipe_casing_gas.curve("c_P")  ' готовим кривую давлений для вывода результатов
+        Me.p_cas_atma = res1.p_atma
+        
+    End If
+    
+    ' 5. расчет распределения давления в НКТ
+    '    считаем после затруба, чтобу уже знать динамический уровень
+    '    и учесть влияние динамического уровня на распределение температуры
+    '    для температурной модели с учетом эмиссии тепла в окружающее пространство
+    Set pipe_tubing_above_al.fluid = fluid_al_
+    pipe_tubing_above_al.ambient_formation.h_dyn_m = pipe_tubing_above_al.h_vert_h_mes_m(h_dyn_m)
+    res1 = pipe_tubing_above_al.calc_dPipe(p_dis_atma, t_dis_C, mainCurves)
+    ' сохраним для отчета найденное буферное давление
+    ' найдем глубину на которой достигается критическая температура
+    Call build_crv(True)
+    Dim n_sol As Integer
+    Me.t_crit_C = t_crit_C
+    h_crit_m = 0
+    n_sol = crv_t.FindSolutions(t_crit_C, TS_NO_EXTRPOLATION)
+    If n_sol > 0 Then h_crit_m = crv_t.SolutionPointX(1)
+    If t_crit_C > crv_t.maxy Then h_crit_m = crv_t.maxx
+    p_buf_atma = res1.p_atma
+    t_buf_C = res1.t_C
+End Function
 ' расчет газлифтной скважины снизу вверх по забойному давлению
 Public Function calc_gl_well_from_pwf(ByVal p_wf_atma As Double, _
                                       ByVal t_wf_C As Double, _
@@ -189,7 +485,7 @@ Public Function calc_gl_well_from_pwf(ByVal p_wf_atma As Double, _
     
     calc_gl_well_from_pwf = True
 End Function
-Private Sub build_crv()
+Private Sub build_crv(Optional esp_calc As Boolean = False)
     Set crv_p = New CInterpolation
     Set crv_t = New CInterpolation
     Set crv_t_amb = New CInterpolation
@@ -204,9 +500,66 @@ Private Sub build_crv()
     crv_t.xName = "h_mes,m"
     crv_t.yName = "t_amb,C"
     
-    Set crv_cas_p = pipe_casing_gas.curve("c_P").ClonePointsToNum(25)
+    If esp_calc Then
+        Set crv_cas_p = crv_cas_p.ClonePointsToNum(25)
+    Else
+        Set crv_cas_p = pipe_casing_gas.curve("c_P").ClonePointsToNum(25)
+    End If
 End Sub
-Public Function get_result_dict()
+Public Function get_result_dict_esp()
+    ' формируем результаты расчета для скважины с ЭЦН
+    
+    Dim dout As New Dictionary
+    
+    
+    dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 2)
+    dout.Add "p_wf_atma", Round(p_wf_atma, 2)
+    dout.Add "p_intake_atma", Round(p_intake_atma, 2)
+    dout.Add "p_dis_atma", Round(p_dis_atma, 2)
+    dout.Add "p_buf_atma", Round(p_buf_atma, 2)
+    dout.Add "crv_p", crv_p.getDict
+    dout.Add "crv_t", crv_t.getDict
+    dout.Add "crv_p_cas", crv_cas_p.getDict
+    dout.Add "crv_t_amb", crv_t_amb.getDict
+    dout.Add "h_dyn_m", Round(h_dyn_m, 1)
+    dout.Add "h_crit_m", Round(h_crit_m, 1)
+    dout.Add "gas_fraction at pump", Round(gas_fraction_pump_d, 4)
+    dout.Add "ksep_gas_d", Round(ksep_total_d, 3)
+    dout.Add "ksep_liq_d", Round(separ.ksep_liq_d, 3)
+    dout.Add "t_intake_C", Round(t_intake_C, 2)
+    dout.Add "t_dis_C", Round(t_dis_C, 1)
+    dout.Add "q_liq_tub_sm3day", Round(fluid_al_.q_liq_sm3day, 2)
+    dout.Add "q_gas_tub_sm3day", Round(fluid_al_.q_gas_sm3day, 2)
+    dout.Add "q_liq_cas_sm3day", Round(fluid_cas_.q_liq_sm3day, 2)
+    dout.Add "q_gas_cas_sm3day2", Round(fluid_cas_.q_gas_sm3day, 2)
+    If esp.stage_num > 1 Then
+        dout.Add "esp_data", esp.get_result_dict
+    Else
+        dout.Add "esp_data", "no"
+    End If
+    If separ_calc Then
+        dout.Add "separ_data", separ.get_result_dict
+    Else
+        dout.Add "separ_data", "no"
+    End If
+    dout.Add "p_cas_atma", Round(p_cas_atma, 1)
+    dout.Add "p_cas_limit_atma", Round(p_cas_limit_atma, 1)
+    If esp.stage_num > 1 Then
+        dout.Add "esp_efficiency", Round(esp.eff_ESP_d, 3)
+        dout.Add "esp_power_kW", Round(esp.power_ESP_W / 1000, 2)
+        dout.Add "calibr_esp_head", Round(esp.calibr_head, 3)
+    Else
+        dout.Add "esp_efficiency", "no"
+        dout.Add "esp_power_W", "no"
+        dout.Add "calibr_esp_head", "no"
+    End If
+'    dout.Add "f", fluid.feed
+'    dout.Add "ft", fluid_al_.feed
+'    dout.Add "fc", fluid_cas_.feed
+    
+    Set get_result_dict_esp = dout
+End Function
+Public Function get_result_dict_gl()
         
     Dim dout As New Dictionary
     Call build_crv
@@ -225,10 +578,13 @@ Public Function get_result_dict()
     dout.Add "tmix", Round(t_mix_intake_C, 2)
     dout.Add "dtgas", Round(dt_gas_glv_C, 2)
     dout.Add "t_gas_intake", Round(t_intake_C + dt_gas_glv_C, 2)
-    Set get_result_dict = dout
+    Set get_result_dict_gl = dout
 End Function
-Public Function get_result_json()
-    get_result_json = ConvertToJson(get_result_dict)
+Public Function get_result_json_gl()
+    get_result_json_gl = ConvertToJson(get_result_dict_gl)
+End Function
+Public Function get_result_json_esp()
+    get_result_json_esp = ConvertToJson(get_result_dict_esp)
 End Function
 ' pipe generation function from the standard data set
 ' includes and parameters of the flow in the pipe

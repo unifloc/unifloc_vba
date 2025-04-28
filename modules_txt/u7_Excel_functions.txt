@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.54  2025.04                             khabibullinra@gmail.com
+'Unifloc 7.55  2025.04                             khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -2412,7 +2412,8 @@ Public Function feed_mod_split( _
                ByVal k_sep_wat As Double, _
                ByVal p_atma As Double, _
                ByVal t_C As Double, _
-               ByVal feed As String)
+               ByVal feed As String, _
+      Optional ByVal gas_goes_into_solution As Double = 1)
 ' k_sep_gas - коэффициент разделения газа
 ' k_sep_oil - коэффициент разделения нефти
 ' k_sep_wat - коэффициент разделения воды
@@ -2422,31 +2423,17 @@ Public Function feed_mod_split( _
 '       используйте encode_feed для генерации
 ' description_end
 On Error GoTo er1:
-    Dim feed_sep_gas As String
-    Dim feed1 As New CPVT, feed2 As New CPVT, feed_in As New CPVT
-    Dim qo1 As Double, qw1 As Double
-    Dim d As New Dictionary
-    feed_sep_gas = feed_mod_separate_gas(k_sep_gas, p_atma, t_C, feed)
+    Dim feed_in As New CPVT
+    Dim d As Dictionary
+    Dim dout As New Dictionary
     Call feed_in.init_feed(feed)
-    Call feed_in.calc_PVT(p_atma, t_C)
-    Call feed1.init_feed(feed_sep_gas)
-    Call feed2.init_feed(feed_sep_gas)
-    qo1 = feed1.q_oil_sm3day
-    qw1 = feed1.q_wat_sm3day
-    feed2.q_liq_sm3day = qo1 * k_sep_oil + qw1 * k_sep_wat
-    If (qo1 * k_sep_oil + qw1 * k_sep_wat) > 0 Then
-        feed2.fw_fr = qw1 * k_sep_wat / (qo1 * k_sep_oil + qw1 * k_sep_wat)
-    End If
-    feed1.q_liq_sm3day = qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)
-    If (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)) > 0 Then
-        feed1.fw_fr = qw1 * (1 - k_sep_wat) / (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat))
-    End If
-    ' весь газ после сепарации добавим во второй поток как свободный газ
-    feed2.q_gas_free_sm3day = feed_in.q_gas_free_sm3day - feed1.q_gas_free_sm3day + _
-                              (feed_in.rp_m3m3 - feed1.rp_m3m3) * feed_in.q_oil_sm3day
-    d("feed1") = ParseJson(feed1.feed)
-    d("feed2") = ParseJson(feed2.feed)
-    feed_mod_split = ConvertToJson(d)
+    Set d = feed_in.mod_split(k_sep_gas, k_sep_oil, k_sep_wat, p_atma, t_C, gas_goes_into_solution)
+    
+    Dim feed_sep_gas As String
+    Dim qo1 As Double, qw1 As Double
+    Set dout("feed1") = ParseJson(d("feed1").feed)
+    Set dout("feed2") = ParseJson(d("feed2").feed)
+    feed_mod_split = ConvertToJson(dout)
 Exit Function
 er1:
 On Error GoTo er2:
@@ -2455,6 +2442,61 @@ On Error GoTo er2:
 er2:
     feed_mod_split = "error " & Err.Description
 End Function
+''description_to_manual - for autogeneration
+'' функция разделения потока флюидов на два
+'' с заданными коэффициентами сепарации
+'Public Function feed_mod_split( _
+'               ByVal k_sep_gas As Double, _
+'               ByVal k_sep_oil As Double, _
+'               ByVal k_sep_wat As Double, _
+'               ByVal p_atma As Double, _
+'               ByVal t_C As Double, _
+'               ByVal feed As String)
+'' k_sep_gas - коэффициент разделения газа
+'' k_sep_oil - коэффициент разделения нефти
+'' k_sep_wat - коэффициент разделения воды
+'' p_atma - давление разделения, atm
+'' t_C - температура разделения, C.
+'' feed - json с закодированными параметрами исходного потока,
+''       используйте encode_feed для генерации
+'' description_end
+'
+'On Error GoTo er1:
+'    Dim feed_sep_gas As String
+'    Dim feed1 As New CPVT, feed2 As New CPVT, feed_in As New CPVT
+'    Dim qo1 As Double, qw1 As Double
+'    Dim d As New Dictionary
+'
+'    feed_sep_gas = feed_mod_separate_gas(k_sep_gas, p_atma, t_C, feed)
+'    Call feed_in.init_feed(feed)
+'    Call feed_in.calc_PVT(p_atma, t_C)
+'    Call feed1.init_feed(feed_sep_gas)
+'    Call feed2.init_feed(feed_sep_gas)
+'    qo1 = feed1.q_oil_sm3day
+'    qw1 = feed1.q_wat_sm3day
+'    feed2.q_liq_sm3day = qo1 * k_sep_oil + qw1 * k_sep_wat
+'    If (qo1 * k_sep_oil + qw1 * k_sep_wat) > 0 Then
+'        feed2.fw_fr = qw1 * k_sep_wat / (qo1 * k_sep_oil + qw1 * k_sep_wat)
+'    End If
+'    feed1.q_liq_sm3day = qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)
+'    If (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)) > 0 Then
+'        feed1.fw_fr = qw1 * (1 - k_sep_wat) / (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat))
+'    End If
+'    ' весь газ после сепарации добавим во второй поток как свободный газ
+'    feed2.q_gas_free_sm3day = feed_in.q_gas_free_sm3day - feed1.q_gas_free_sm3day + _
+'                              (feed_in.rp_m3m3 - feed1.rp_m3m3) * feed_in.q_oil_sm3day
+'    d("feed1") = ParseJson(feed1.feed)
+'    d("feed2") = ParseJson(feed2.feed)
+'    feed_mod_split = ConvertToJson(d)
+'Exit Function
+'
+'er1:
+'On Error GoTo er2:
+'    feed_mod_split = Array("error " & Err.Description, feed_in.log_.get_str)
+'    Exit Function
+'er2:
+'    feed_mod_split = "error " & Err.Description
+'End Function
 ' функция смешения потоков
 ' где потоки задаются как объекты CPVT
 ' не предназначена для вызова с листа Excel
@@ -5071,6 +5113,38 @@ er1:
     well_calc_from_pintake = "error " & Err.Description
     
 End Function
+Public Function well_calc_from_pwf_(ByVal p_wf_atma As Double, _
+                                   ByVal t_wf_C, _
+                                   ByVal feed_json As String, _
+                          Optional ByVal trajectory As String = "1500", _
+                          Optional ByVal d_tub_mm As String = "62", _
+                          Optional ByVal d_cas_mm As String = "125", _
+                          Optional ByVal t_model As String = "80", _
+                          Optional ByVal h_perf_m As Double = 1500, _
+                          Optional ByVal h_esp_m As Double = 1200, _
+                          Optional ByVal esp_json As String = "", _
+                          Optional ByVal esp_freq_Hz As Double = 50, _
+                          Optional ByVal pkv_ratio As Double = 0, _
+                          Optional ByVal ksep_json As String = "", _
+                          Optional ByVal d_int_mm As Double = 110, _
+                          Optional ByVal IPR_json As String = "", _
+                          Optional ByVal p_cas_atma As Double = 10, _
+                          Optional ByVal t_crit_C As Double = 0, _
+                          Optional ByVal calibr_grav As Double = 1, _
+                          Optional ByVal calibr_fric As Double = 1, _
+                          Optional ByVal flow_corr As Integer = 0, _
+                          Optional ByVal fast As Boolean = False, _
+                          Optional ByVal outval As Integer = 0)
+    Dim well As New CWell
+    Call well.fluid.init_feed(feed_json)
+    Call well.init_esp_well(trajectory, d_tub_mm, d_cas_mm, t_model, h_perf_m, h_esp_m, _
+                            esp_json, ksep_json, d_int_mm, IPR_json, _
+                            calibr_grav, calibr_fric, flow_corr)
+                            
+    Call well.calc_esp_well_from_pwf(p_wf_atma, t_wf_C, p_cas_atma, esp_freq_Hz, pkv_ratio)
+    well_calc_from_pwf_ = well.get_result_json_esp
+    Exit Function
+End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
 'на основе забойного давления (расчет снизу вверх)
@@ -5412,7 +5486,7 @@ On Error GoTo er1:
     ' сохраним для отчета найденное буферное давление
     p_buf_atma = res1.p_atma
     t_buf_C = res1.t_C
-    ' подготовим кривые для вывода результатов
+    ' подготовим кривые  для вывода результатов
     If Not fast Then
         Call crv_p.AddPointsCurve(pipe_above_esp.curve("c_P").ClonePointsToNum(25), pipe_below_esp.curve("c_P").ClonePointsToNum(10))
         crv_p.xName = "h_mes,m"
@@ -6149,7 +6223,7 @@ Dim well As New CWell
     Call well.init_gl_well(trajectory, d_tub_mm, d_cas_mm, t_model, h_perf_m, h_glv_m, glv_json, _
                            IPR_json, calibr_grav, calibr_fric, flow_corr)
     Call well.calc_gl_well_from_pwf(p_wf_atma, t_wf_C, p_cas_atma, q_gas_glv_sm3day)
-    well_gl_calc_from_pwf = well.get_result_json
+    well_gl_calc_from_pwf = well.get_result_json_gl
     Exit Function
 er1:
     well_gl_calc_from_pwf = "error " & Err.Description
@@ -6210,7 +6284,7 @@ Dim well As New CWell
     Call well.init_gl_well(trajectory, d_tub_mm, d_cas_mm, t_model, h_perf_m, h_glv_m, glv_json, _
                            IPR_json, calibr_grav, calibr_fric, flow_corr)
     Call well.calc_gl_well_from_pwh(p_wh_atma, t_wf_C, p_cas_atma, q_gas_glv_sm3day)
-    Set d = well.get_result_dict
+    Set d = well.get_result_dict_gl
     
     d("run_time") = (Timer - time_run)
     well_gl_calc_from_pwh = ConvertToJson(d)

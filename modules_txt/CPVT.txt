@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.54  2025.04                                  khabibullinra@gmail.com
+'Unifloc 7.55  2025.04                                  khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -1394,6 +1394,44 @@ err1:
     add_log_msg errmsg
     Err.Raise kErrPVTcalc, "CPVT.mod_after_separation", errmsg
 End Sub
+Public Function mod_split( _
+               ByVal k_sep_gas As Double, _
+               ByVal k_sep_oil As Double, _
+               ByVal k_sep_wat As Double, _
+               ByVal p_atma As Double, _
+               ByVal t_C As Double, _
+      Optional ByVal gas_goes_into_solution As Double = 0, _
+      Optional p_cas_atma As Double = 10) As Dictionary
+    
+    Dim feed1 As New CPVT, feed2 As New CPVT, feed_in As CPVT
+    Dim qo1 As Double, qw1 As Double
+    Dim d As New Dictionary
+    'feed_sep_gas = feed_mod_separate_gas(k_sep_gas, p_atma, t_C, feed)
+    
+    Set feed_in = Me.clone
+    Call feed_in.calc_PVT(p_atma, t_C)
+    Set feed1 = Me.clone
+    Call feed1.mod_after_separation(p_atma, t_C, k_sep_gas, 0) 'gas_goes_into_solution)
+    Set feed2 = feed1.clone
+    Call feed2.mod_after_separation(p_cas_atma, t_C, 0.99, 0) 'gas_goes_into_solution)
+    
+    qo1 = feed1.q_oil_sm3day
+    qw1 = feed1.q_wat_sm3day
+    feed2.q_liq_sm3day = qo1 * k_sep_oil + qw1 * k_sep_wat
+    If (qo1 * k_sep_oil + qw1 * k_sep_wat) > 0 Then
+        feed2.fw_fr = qw1 * k_sep_wat / (qo1 * k_sep_oil + qw1 * k_sep_wat)
+    End If
+    feed1.q_liq_sm3day = qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)
+    If (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat)) > 0 Then
+        feed1.fw_fr = qw1 * (1 - k_sep_wat) / (qo1 * (1 - k_sep_oil) + qw1 * (1 - k_sep_wat))
+    End If
+    ' весь газ после сепарации добавим во второй поток как свободный газ
+    feed2.q_gas_free_sm3day = feed_in.q_gas_free_sm3day - feed1.q_gas_free_sm3day + _
+                              (feed_in.rp_m3m3 - feed1.rp_m3m3) * feed_in.q_oil_sm3day
+    Set d("feed1") = feed1
+    Set d("feed2") = feed2
+    Set mod_split = d
+End Function
 '' деление потока на две части по заданным коэффициентам сепарации
 'Public Function divide_flux(psep_atma As Double, _
 '                            tsep_C As Double, _

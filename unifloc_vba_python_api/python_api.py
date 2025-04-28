@@ -1111,7 +1111,7 @@ class API():
         self.f_feed_mod_separate_gas = self.book.macro("feed_mod_separate_gas")
         return self.f_feed_mod_separate_gas(k_sep,p_atma,t_C,feed,sol_factor)
 
-    def feed_mod_split(self, k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed):
+    def feed_mod_split(self, k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed,gas_goes_into_solution=1):
         """
  ========== description ============== 
  функция разделения потока флюидов на два  с заданными коэффициентами сепарации 
@@ -1128,12 +1128,28 @@ class API():
 
      t_c - температура разделения, c.    
 
-     feed - json с закодированными параметрами исходного потока,  используйте encode_feed для генерации   
+     feed - json с закодированными параметрами исходного потока,  используйте encode_feed для генерации    
+
+   gas_goes_into_solution 
 
         """
 
         self.f_feed_mod_split = self.book.macro("feed_mod_split")
-        return self.f_feed_mod_split(k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed)
+        return self.f_feed_mod_split(k_sep_gas,k_sep_oil,k_sep_wat,p_atma,t_C,feed,gas_goes_into_solution)
+
+    def feed_mod_split(self, ''k_sep_gas,'k_sep_oil,'k_sep_wat,'p_atma,'t_C,'feed):
+        """
+ ========== description ============== 
+ функция разделения потока флюидов на два  с заданными коэффициентами сепарации 
+        
+ ==========  arguments  ============== 
+
+   k_sep_gas   ,   k_sep_oil   ,   k_sep_wat   ,   p_atma   ,   t_c   ,   feed 
+
+        """
+
+        self.f_feed_mod_split = self.book.macro("feed_mod_split")
+        return self.f_feed_mod_split(''k_sep_gas,'k_sep_oil,'k_sep_wat,'p_atma,'t_C,'feed)
 
     def feed_mod_mix(self, feed_1,feed_2):
         """
