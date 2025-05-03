@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.55  2025.04                             khabibullinra@gmail.com
+'Unifloc 7.56  2025.05                            khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -7,6 +7,13 @@
 'функции для проведения расчетов из интерфейса Excel
 'многофазный поток в трубах и элементах инфраструктуры
 Option Explicit
+'description_to_manual      - для автогенерации
+' функция возвращает номер версии Унифлок VBA
+Public Function unf_version() As String
+'description_end
+' возвращает актуальный номер версии унифлок в рабочие книги которые это поддерживают
+    unf_version = const_unifloc_version
+End Function
 '========================================================================================
 ' Расчет многофазного потока в трубах
 '
@@ -2877,8 +2884,8 @@ On Error GoTo err1:
         crvt.yName = "t_fluid (IPR)"
     Next i
     Dim d As New Dictionary
-    d.Add "pcrv", crvp.getDict
-    d.Add "tcrv", crvt.getDict
+    d.Add "pcrv", crvp.getDict(decim_out:=1)
+    d.Add "tcrv", crvt.getDict(decim_out:=1)
     IPR_crv = ConvertToJson(d)
     Exit Function
 err1:
@@ -5689,488 +5696,6 @@ Public Function feed_t_mix_C(w1_kgsec As Double, w2_kgsec As Double, c1_JkgC As 
  
  feed_t_mix_C = (w1_kgsec * c1_JkgC * t1_c + w2_kgsec * c2_JkgC * t2_c) / (wp * cp_JkgC)
 End Function
-'
-''description_to_manual      - для автогенерации
-''расчет распределения давления и температуры в скважине
-''на основе забойного давления (расчет снизу вверх)
-'Public Function well_gl_calc_from_pwf(ByVal p_wf_atma As Double, _
-'                                   ByVal t_wf_C, _
-'                                   ByVal feed_json As String, _
-'                          Optional ByVal trajectory As String = "1500", _
-'                          Optional ByVal d_tub_mm As String = "62", _
-'                          Optional ByVal d_cas_mm As String = "125", _
-'                          Optional ByVal t_model As String = "80", _
-'                          Optional ByVal h_perf_m As Double = 1500, _
-'                          Optional ByVal h_glv_m As Double = 1200, _
-'                          Optional ByVal q_gas_glv_sm3day As Double = 5000, _
-'                          Optional ByVal glv_json As String = "", _
-'                          Optional ByVal IPR_json As String = "", _
-'                          Optional ByVal p_cas_atma As Double = 10, _
-'                          Optional ByVal calibr_grav As Double = 1, _
-'                          Optional ByVal calibr_fric As Double = 1, _
-'                          Optional ByVal flow_corr As Integer = 0, _
-'                          Optional ByVal fast As Boolean = False)
-''p_wf_atma - забойное давление, атма
-''t_wf_C - температура флюида на забое скважины, С
-''feed_json - параметры потока в скважине (с забоя)
-''trajectory - json кодирующий траекторию скважины
-''           используйте encode_pipe_trajectory,
-''           или число - глубина вертикальной скважины
-''d_tub_mm - json кодирующий диаметры скважины,
-''           используйте encode_pipe_diam,
-''           или число - диаметр НКТ мм
-''d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
-''           используйте encode_pipe_diam,
-''           или число - диаметр эксп. колонны мм
-''t_model - температурная модель, используйте encode_t_model
-''h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
-''           давления
-''h_glv_m - глубина спуска рабочего газлифтного клапана.
-''q_gas_glv_sm3day - расход газлифтного газа через рабочий клапан
-''glv_json - диаметр порта рабочего газлифтного клапана
-''IPR_json - параметры пласта, используйте encode_ipr
-''           если не заданы, считается для постоянного дебита из feed_json
-''p_cas_atma - затрубное давление, давление закачки газа
-''calibr_grav - калибровка для гидравлической корреляции по гравитации
-''calibr_fric - калибровка для гидравлической корреляции по трению
-''flow_corr - номер гидравлической корреляции, как для трубы
-''fast - флаг, если 1 то будет рассчитано только давление,
-''       если 0 - то результат json с кривыми
-''description_end
-'On Error GoTo er1:
-'    ' настраиваем расчет снизу вверх для добывающей скважины
-'    Const calc_along_coord = False
-'    Const flow_along_coord = False
-'    ' создаем основные объекты описывающие скважину с ЭЦН
-'    Dim esp As New CESPpump
-'    Dim pipe_below_glv As New CPipe
-'    Dim pipe_above_glv As New CPipe
-'    Dim pipe_casing_gas As New CPipe
-'    Dim ipr_vogel As New CReservoirVogel
-'    Dim res1 As PTtype
-'    Dim p_intake_atma As Double
-'    Dim t_intake_C As Double
-'    Dim p_buf_atma As Double
-'    Dim t_buf_C As Double
-'    Dim q_liq_sm3day As Double
-'    Dim feed_after_glv As String
-'    Dim f As Dictionary
-'    Dim fluid As New CPVT
-'    Dim dout As New Dictionary
-'    Dim crv_p As New CInterpolation
-'    Dim crv_t As New CInterpolation
-'    Dim crv_t_amb As New CInterpolation
-'    Dim crv_cas_p As New CInterpolation
-'    Dim d_cas_mm_ As Double
-'    Dim d_tub_mm_ As Double
-'    Dim d_glv_mm As Double
-'    Dim calibr_glv As Double
-'    Dim calibr_surf As Double
-'    Dim d_surf_mm As Double
-'    Dim dglv As Dictionary
-'    Dim dtgas As Double
-'    Dim feed_res  As New CPVT
-'    Dim feed_gas As New CPVT
-'    Dim tmix As Double
-'    Dim p_gas_intake_atma As Double
-'    Dim t_surf_C As Double
-'
-'            Dim ttt As Double
-'            ttt = Timer
-'' 0. если задана IPR  то пытаемся оценить дебит
-'    If Len(IPR_json) > 0 Then
-'        Call ipr_vogel.init_json(IPR_json)
-'        q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
-'        feed_json = update_json(feed_json, "q_liq_sm3day", q_liq_sm3day)
-'    Else
-'         Set f = ParseJson(feed_json)
-'         q_liq_sm3day = f("q_liq_sm3day")
-'    End If
-'' 1. расчет участка э/к от забоя до приема насоса
-'' инициализируем трубу с первым фидом, который всегда есть
-'    Set pipe_below_glv = new_pipeline3(trajectory, _
-'                                       d_cas_mm, _
-'                                       t_model, _
-'                                       calc_along_coord, _
-'                                       flow_along_coord, _
-'                                       flow_corr, _
-'                                       calibr_grav, _
-'                                       calibr_fric, _
-'                                       h_glv_m, h_perf_m, h_glv_m)
-'    Call pipe_below_glv.init_feed(feed_json)
-'    Set pipe_above_glv = new_pipeline3(trajectory, _
-'                                       d_tub_mm, _
-'                                       t_model, _
-'                                       calc_along_coord, _
-'                                       flow_along_coord, _
-'                                       flow_corr, _
-'                                       calibr_grav, _
-'                                       calibr_fric, _
-'                                       0, _
-'                                       h_glv_m, h_glv_m, h_glv_m)
-'    If fast Then
-'        res1 = pipe_below_glv.calc_dPipe(p_wf_atma, t_wf_C, noCurves)
-'    Else
-'        res1 = pipe_below_glv.calc_dPipe(p_wf_atma, t_wf_C, mainCurves)
-'    End If
-'    p_intake_atma = res1.p_atma
-'    t_intake_C = res1.t_C
-'
-'    feed_after_glv = feed_json
-' ' 5. если задано затрубное давление построим распределение давления в затрубе
-'    Set f = ParseJson(feed_after_glv)
-'    f("q_gas_free_sm3day") = q_gas_glv_sm3day
-'    feed_after_glv = ConvertToJson(f)
-'
-'    'построим распределение давления для газа
-'    Set pipe_casing_gas = new_pipeline3(trajectory, _
-'                                        pipe_diam_subtract(d_cas_mm, d_tub_mm, 5), _
-'                                        t_model, _
-'                                        Not calc_along_coord, _
-'                                        flow_along_coord, _
-'                                        10, _
-'                                        calibr_grav, _
-'                                        calibr_fric, _
-'                                        0, h_glv_m, h_glv_m, h_glv_m)
-'    Call pipe_casing_gas.init_feed(feed_after_glv)
-'    calibr_glv = 1
-'    d_surf_mm = 0
-'    calibr_surf = 1
-'    If glv_json <> "" Then
-'        If Mid(glv_json, 1, 1) = "{" Then
-'            Set dglv = ParseJson(glv_json)
-'            d_glv_mm = dglv("d_glv_mm")
-'            calibr_glv = 1
-'            If dglv.Exists("calibr_glv") Then calibr_glv = dglv("calibr_glv")
-'            If dglv.Exists("d_surf_mm") Then
-'                d_surf_mm = dglv("d_surf_mm")
-'                If dglv.Exists("calibr_surf") Then calibr_surf = dglv("calibr_surf")
-'            End If
-'        Else
-'            d_glv_mm = Cdbl_(glv_json)
-'        End If
-'        If d_surf_mm > 0 Then
-'            Dim tt As Double
-'            tt = Timer
-'            t_surf_C = pipe_casing_gas.ambient_formation.amb_temp_C(0)
-'            q_gas_glv_sm3day = GLV_q_gas_two_valves_sm3day(d_glv_mm, d_surf_mm, p_cas_atma, p_intake_atma, f("gamma_gas"), _
-'                                                           t_surf_C, t_intake_C, pipe_casing_gas, calibr_surf, calibr_glv)
-'            Debug.Print Timer - tt
-'        Else
-'
-'            res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
-'
-'            q_gas_glv_sm3day = GLV_q_gas_sm3day(d_glv_mm, res1.p_atma, p_intake_atma, f("gamma_gas"), t_intake_C)(0)(0)
-'        End If
-'        Set f = ParseJson(feed_after_glv)
-'        f("q_gas_free_sm3day") = q_gas_glv_sm3day
-'        feed_after_glv = ConvertToJson(f)
-'    Else
-'
-'            res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
-'
-'    End If
-'
-'    ' Оценим температуру флюида с учетом охлаждения газа в газлифтном клапане
-'    ' предположим, что температура газа на входе в клапан равна температуре флюида до охлаждения
-'
-'    p_gas_intake_atma = res1.p_atma
-'    Call feed_res.init_feed(feed_json)
-'    Call feed_gas.init_feed(feed_json, 0, , , q_gas_glv_sm3day)
-'    Call feed_res.calc_PVT(p_intake_atma, t_intake_C)
-'    Call feed_gas.calc_PVT(p_intake_atma, t_intake_C)
-'
-'    dtgas = feed_gas.cJT_Katm * (res1.p_atma - p_intake_atma)
-'    tmix = t_mix_C(feed_res.wm_kgsec, feed_gas.wm_kgsec, feed_res.cmix_JkgC, feed_gas.cg_JkgC, t_intake_C, t_intake_C + dtgas)
-'
-'' 4. расчет распределения давления в НКТ
-'    Call pipe_above_glv.init_feed(feed_after_glv)
-'    If fast Then
-'        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, tmix, noCurves)
-'    Else
-'        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, tmix, mainCurves)
-'    End If
-'    p_buf_atma = res1.p_atma
-'    t_buf_C = res1.t_C
-'
-'    ' подготовим кривые для вывода результатов
-'    If Not fast Then
-'        Call crv_p.AddPointsCurve(pipe_above_glv.curve("c_P").ClonePointsToNum(25), pipe_below_glv.curve("c_P").ClonePointsToNum(10))
-'        crv_p.xName = "h_mes,m"
-'        crv_p.yName = "p,atma"
-'        Call crv_t.AddPointsCurve(pipe_above_glv.curve("c_T").ClonePointsToNum(25), pipe_below_glv.curve("c_T").ClonePointsToNum(10))
-'        crv_t.xName = "h_mes,m"
-'        crv_t.yName = "t,C"
-'        Call crv_t_amb.AddPointsCurve(pipe_above_glv.curve("c_Tamb").ClonePointsToNum(25), pipe_below_glv.curve("c_Tamb").ClonePointsToNum(10))
-'        crv_t.xName = "h_mes,m"
-'        crv_t.yName = "t_amb,C"
-'
-'        dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 2)
-'        dout.Add "p_wf_atma", Round(p_wf_atma, 2)
-'        dout.Add "p_intake_atma", Round(p_intake_atma, 2)
-'        dout.Add "p_gas_intake_atma", Round(p_gas_intake_atma, 2)
-'        dout.Add "p_buf_atma", Round(p_buf_atma, 2)
-'        dout.Add "crv_p", crv_p.getDict
-'        dout.Add "crv_t", crv_t.getDict
-'        dout.Add "crv_p_cas", pipe_casing_gas.curve("c_P").ClonePointsToNum(25).getDict
-'        dout.Add "crv_t_amb", crv_t_amb.getDict
-'        dout.Add "q_gas_cas_sm3day", Round(q_gas_glv_sm3day, 2)
-'        dout.Add "t_intake_C", Round(t_intake_C, 2)
-'        dout.Add "tmix", Round(tmix, 2)
-'        dout.Add "dtgas", Round(dtgas, 2)
-'        dout.Add "t_gas_intake", Round(t_intake_C + dtgas, 2)
-'
-'        well_gl_calc_from_pwf = ConvertToJson(dout)
-'    Else
-'        well_gl_calc_from_pwf = p_buf_atma
-'    End If
-'            Debug.Print "gl_pwf" & Timer - ttt
-'    Exit Function
-'er1:
-'    well_gl_calc_from_pwf = "error " & Err.Description
-'End Function
-'
-'
-'Private Function well__gl_calc_from_pwf(ByVal p_wf_atma As Double, _
-'                                   ByVal t_wf_C As Double, _
-'                                   ByVal fluid As CPVT, _
-'                                   ByVal pipe_below_glv As CPipe, _
-'                                   ByVal pipe_above_glv As CPipe, _
-'                                   ByVal pipe_casing_gas As CPipe, _
-'                          Optional ByVal ipr_vogel As CReservoirVogel, _
-'                          Optional ByVal q_gas_glv_sm3day As Double = 5000, _
-'                          Optional ByVal glv_json As String = "", _
-'                          Optional ByVal p_cas_atma As Double = 10, _
-'                          Optional ByVal calibr_grav As Double = 1, _
-'                          Optional ByVal calibr_fric As Double = 1, _
-'                          Optional ByVal flow_corr As Integer = 0, _
-'                          Optional ByVal fast As Boolean = False)
-''p_wf_atma - забойное давление, атма
-''t_wf_C - температура флюида на забое скважины, С
-''feed_json - параметры потока в скважине (с забоя)
-''trajectory - json кодирующий траекторию скважины
-''           используйте encode_pipe_trajectory,
-''           или число - глубина вертикальной скважины
-''d_tub_mm - json кодирующий диаметры скважины,
-''           используйте encode_pipe_diam,
-''           или число - диаметр НКТ мм
-''d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,
-''           используйте encode_pipe_diam,
-''           или число - диаметр эксп. колонны мм
-''t_model - температурная модель, используйте encode_t_model
-''h_perf_m - глубина верхних дыр перфорации, точка расчета забойного
-''           давления
-''h_glv_m - глубина спуска рабочего газлифтного клапана.
-''q_gas_glv_sm3day - расход газлифтного газа через рабочий клапан
-''glv_json - диаметр порта рабочего газлифтного клапана
-''IPR_json - параметры пласта, используйте encode_ipr
-''           если не заданы, считается для постоянного дебита из feed_json
-''p_cas_atma - затрубное давление, давление закачки газа
-''calibr_grav - калибровка для гидравлической корреляции по гравитации
-''calibr_fric - калибровка для гидравлической корреляции по трению
-''flow_corr - номер гидравлической корреляции, как для трубы
-''fast - флаг, если 1 то будет рассчитано только давление,
-''       если 0 - то результат json с кривыми
-'
-'On Error GoTo er1:
-'    ' настраиваем расчет снизу вверх для добывающей скважины
-'    Const calc_along_coord = False
-'    Const flow_along_coord = False
-'    ' создаем основные объекты описывающие скважину с ЭЦН
-'
-''    Dim pipe_below_glv As New CPipe
-''    Dim pipe_above_glv As New CPipe
-''    Dim pipe_casing_gas As New CPipe
-''    Dim ipr_vogel As New CReservoirVogel
-'    Dim res1 As PTtype
-'    Dim p_intake_atma As Double
-'    Dim t_intake_C As Double
-'    Dim p_buf_atma As Double
-'    Dim t_buf_C As Double
-'    Dim q_liq_sm3day As Double
-'    Dim fluid_after_glv As CPVT
-''    Dim f As Dictionary
-''    Dim fluid As New CPVT
-'    Dim dout As New Dictionary
-'    Dim crv_p As New CInterpolation
-'    Dim crv_t As New CInterpolation
-'    Dim crv_t_amb As New CInterpolation
-'    Dim crv_cas_p As New CInterpolation
-''    Dim d_cas_mm_ As Double
-''    Dim d_tub_mm_ As Double
-'    Dim d_glv_mm As Double
-'    Dim calibr_glv As Double
-'    Dim calibr_surf As Double
-'    Dim d_surf_mm As Double
-'    Dim dglv As Dictionary
-'    Dim dtgas As Double
-''    Dim feed_res  As New CPVT
-'    Dim fluid_gas As New CPVT
-'    Dim tmix As Double
-'    Dim p_gas_intake_atma As Double
-'    Dim t_surf_C As Double
-'
-'            Dim ttt As Double
-'            ttt = Timer
-'' 0. если задана IPR  то пытаемся оценить дебит
-'    If IsObject(ipr_vogel) Then
-''        Call ipr_vogel.init_json(IPR_json)
-'        q_liq_sm3day = ipr_vogel.calc_q_liq_sm3day(p_wf_atma)
-'        fluid.q_liq_sm3day = q_liq_sm3day
-''        feed_json = update_json(feed_json, "q_liq_sm3day", q_liq_sm3day)
-'    Else
-''         Set f = ParseJson(feed_json)
-'         q_liq_sm3day = fluid.q_liq_sm3day
-'    End If
-'
-'' 1. расчет участка э/к от забоя до приема насоса
-'' инициализируем трубу с первым фидом, который всегда есть
-''    Set pipe_below_glv = new_pipeline3(trajectory, _
-''                                       d_cas_mm, _
-''                                       t_model, _
-''                                       calc_along_coord, _
-''                                       flow_along_coord, _
-''                                       flow_corr, _
-''                                       calibr_grav, _
-''                                       calibr_fric, _
-''                                       h_glv_m, h_perf_m, h_glv_m)
-'    Set pipe_below_glv.fluid = fluid
-''    Set pipe_above_glv = new_pipeline3(trajectory, _
-''                                       d_tub_mm, _
-''                                       t_model, _
-''                                       calc_along_coord, _
-''                                       flow_along_coord, _
-''                                       flow_corr, _
-''                                       calibr_grav, _
-''                                       calibr_fric, _
-''                                       0, _
-''                                       h_glv_m, h_glv_m, h_glv_m)
-'    If fast Then
-'        res1 = pipe_below_glv.calc_dPipe(p_wf_atma, t_wf_C, noCurves)
-'    Else
-'        res1 = pipe_below_glv.calc_dPipe(p_wf_atma, t_wf_C, mainCurves)
-'    End If
-'    p_intake_atma = res1.p_atma
-'    t_intake_C = res1.t_C
-'
-'    Set fluid_after_glv = fluid.clone
-' ' 5. если задано затрубное давление построим распределение давления в затрубе
-''    Set f = ParseJson(feed_after_glv)
-''    f("q_gas_free_sm3day") = q_gas_glv_sm3day
-''    feed_after_glv = ConvertToJson(f)
-'    fluid_after_glv.q_gas_free_sm3day = q_gas_glv_sm3day
-'
-'    'построим распределение давления для газа
-''    Set pipe_casing_gas = new_pipeline3(trajectory, _
-''                                        pipe_diam_subtract(d_cas_mm, d_tub_mm, 5), _
-''                                        t_model, _
-''                                        Not calc_along_coord, _
-''                                        flow_along_coord, _
-''                                        10, _
-''                                        calibr_grav, _
-''                                        calibr_fric, _
-''                                        0, h_glv_m, h_glv_m, h_glv_m)
-'    Set pipe_casing_gas.fluid = fluid_after_glv
-'    calibr_glv = 1
-'    d_surf_mm = 0
-'    calibr_surf = 1
-'
-'    If glv_json <> "" Then
-'        If Mid(glv_json, 1, 1) = "{" Then
-'            Set dglv = ParseJson(glv_json)
-'            d_glv_mm = dglv("d_glv_mm")
-'            calibr_glv = 1
-'            If dglv.Exists("calibr_glv") Then calibr_glv = dglv("calibr_glv")
-'            If dglv.Exists("d_surf_mm") Then
-'                d_surf_mm = dglv("d_surf_mm")
-'                If dglv.Exists("calibr_surf") Then calibr_surf = dglv("calibr_surf")
-'            End If
-'        Else
-'            d_glv_mm = Cdbl_(glv_json)
-'        End If
-'        If d_surf_mm > 0 Then
-'            Dim tt As Double
-'            tt = Timer
-'            t_surf_C = pipe_casing_gas.ambient_formation.amb_temp_C(0)
-'            q_gas_glv_sm3day = GLV_q_gas_two_valves_sm3day(d_glv_mm, d_surf_mm, p_cas_atma, p_intake_atma, fluid.gamma_g, _
-'                                                           t_surf_C, t_intake_C, pipe_casing_gas, calibr_surf, calibr_glv)
-'            Debug.Print Timer - tt
-'        Else
-'
-'            res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
-'
-'            q_gas_glv_sm3day = GLV_q_gas_sm3day(d_glv_mm, res1.p_atma, p_intake_atma, fluid.gamma_g, t_intake_C)(0)(0)
-'        End If
-''        Set f = ParseJson(feed_after_glv)
-''        f("q_gas_free_sm3day") = q_gas_glv_sm3day
-''        feed_after_glv = ConvertToJson(f)
-'        fluid_after_glv.q_gas_free_sm3day = q_gas_glv_sm3day
-'    Else
-'
-'            res1 = pipe_casing_gas.calc_dPipe(p_cas_atma, t_intake_C, mainCurves)
-'
-'    End If
-'
-'    ' Оценим температуру флюида с учетом охлаждения газа в газлифтном клапане
-'    ' предположим, что температура газа на входе в клапан равна температуре флюида до охлаждения
-'
-'    p_gas_intake_atma = res1.p_atma
-''    Call feed_res.init_feed(feed_json)
-'    Set fluid_gas = fluid.clone  '.init_feed(feed_json, 0, , , q_gas_glv_sm3day)
-'    fluid_gas.q_liq_sm3day = 0
-'    fluid_gas.q_gas_free_sm3day = q_gas_glv_sm3day
-'    Call fluid.calc_PVT(p_intake_atma, t_intake_C)
-'    Call fluid_gas.calc_PVT(p_intake_atma, t_intake_C)
-'
-'    dtgas = fluid_gas.cJT_Katm * (res1.p_atma - p_intake_atma)
-'    tmix = feed_t_mix_C(fluid.wm_kgsec, fluid_gas.wm_kgsec, fluid.cmix_JkgC, fluid_gas.cg_JkgC, t_intake_C, t_intake_C + dtgas)
-'
-'' 4. расчет распределения давления в НКТ
-'    Set pipe_above_glv.fluid = fluid_after_glv
-'    If fast Then
-'        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, tmix, noCurves)
-'    Else
-'        res1 = pipe_above_glv.calc_dPipe(p_intake_atma, tmix, mainCurves)
-'    End If
-'    p_buf_atma = res1.p_atma
-'    t_buf_C = res1.t_C
-'
-'    ' подготовим кривые для вывода результатов
-'    If Not fast Then
-'        Call crv_p.AddPointsCurve(pipe_above_glv.curve("c_P").ClonePointsToNum(25), pipe_below_glv.curve("c_P").ClonePointsToNum(10))
-'        crv_p.xName = "h_mes,m"
-'        crv_p.yName = "p,atma"
-'        Call crv_t.AddPointsCurve(pipe_above_glv.curve("c_T").ClonePointsToNum(25), pipe_below_glv.curve("c_T").ClonePointsToNum(10))
-'        crv_t.xName = "h_mes,m"
-'        crv_t.yName = "t,C"
-'        Call crv_t_amb.AddPointsCurve(pipe_above_glv.curve("c_Tamb").ClonePointsToNum(25), pipe_below_glv.curve("c_Tamb").ClonePointsToNum(10))
-'        crv_t.xName = "h_mes,m"
-'        crv_t.yName = "t_amb,C"
-'
-'        dout.Add "q_liq_sm3day", Round(q_liq_sm3day, 2)
-'        dout.Add "p_wf_atma", Round(p_wf_atma, 2)
-'        dout.Add "p_intake_atma", Round(p_intake_atma, 2)
-'        dout.Add "p_gas_intake_atma", Round(p_gas_intake_atma, 2)
-'        dout.Add "p_buf_atma", Round(p_buf_atma, 2)
-'        dout.Add "crv_p", crv_p.getDict
-'        dout.Add "crv_t", crv_t.getDict
-'        dout.Add "crv_p_cas", pipe_casing_gas.curve("c_P").ClonePointsToNum(25).getDict
-'        dout.Add "crv_t_amb", crv_t_amb.getDict
-'        dout.Add "q_gas_cas_sm3day", Round(q_gas_glv_sm3day, 2)
-'        dout.Add "t_intake_C", Round(t_intake_C, 2)
-'        dout.Add "tmix", Round(tmix, 2)
-'        dout.Add "dtgas", Round(dtgas, 2)
-'        dout.Add "t_gas_intake", Round(t_intake_C + dtgas, 2)
-'
-'        well__gl_calc_from_pwf = ConvertToJson(dout)
-'    Else
-'        well__gl_calc_from_pwf = p_buf_atma
-'    End If
-'            Debug.Print "gl__pwf" & Timer - ttt
-'    Exit Function
-'er1:
-'    well__gl_calc_from_pwf = "error " & Err.Description
-'End Function
 'description_to_manual      - для автогенерации
 'расчет распределения давления и температуры в скважине
 'на основе забойного давления (расчет снизу вверх)
@@ -6291,5 +5816,325 @@ Dim well As New CWell
     Exit Function
 er1:
     well_gl_calc_from_pwh = "error " & Err.Description
+End Function
+'==================================================================
+' кодирование и декодирование
+'==================================================================
+'description_to_manual      - для автогенерации
+' Функция декодирования json строки,
+' позволяет вывести содержимое json строки в таблицу
+Public Function decode_json(json, _
+                          Optional transpose As Boolean = False, _
+                          Optional keys_filter = "", _
+                          Optional only_values As Boolean = False, _
+                          Optional safe_out As Boolean = False, _
+                          Optional null_val As String = "")
+' json   - строка содержащая результаты расчета
+' transpose - выбор вывода в строки или в столбцы
+' keys_filter - строка с ключами, которые надо вывести
+' only_values - если = 1 подписи выводиться не будут
+' safe_out - флаг заставляет выводить массив сторок,
+'            что может работать лучше в офисе 2016 и ранее
+' null_val - символ для нулевого значения
+' результат - закодированная строка
+'description_end
+    Dim d As Dictionary
+    Dim c As Collection
+    Dim p
+    Dim i As Integer, j As Integer
+    ' замечено, в 2016 версии не получается выводить на лист массив variant который содержит строки длиннее 256 строк
+    ' чтобы это побороть предусмотрен safe вывод массива строк - так вывод работает вроде корректно
+    ' но при выводе массива строк не всегда удобно работать с таблицами - например могут быть проблемы
+    ' с построением графиков для решения которых требуется явное приведение типов - поэтому базовый вариант вывода
+    ' массивов variant оставлен как основной
+    ' в качестве рекомендации
+    ' следует избегать вывода словарей в которых смешаны числовые значения и длинные строки json
+    ' лучше делать словари с длинными json которые можно по отдельности вывести как таблицы чисел
+    Dim outarr()
+    Dim outarr_safe()  As String
+    
+    Dim V
+    Dim k
+    Dim keylist As Dictionary
+    Dim arrkeys As Variant
+    Dim keystr As String
+    Dim safe_out2 As Boolean
+    
+    safe_out2 = False
+    
+    On Error GoTo err1:
+    
+    JsonConverter.JsonOptions.UseDoubleForLargeNumbers = True
+    If TypeName(json) = "Variant()" Then
+        On Error GoTo er1:
+        json = json(1, 1)
+        GoTo go:
+er1:
+        On Error GoTo err1:
+        json = json(1)
+go:
+        On Error GoTo err1:
+    End If
+    If VarType(json) = vbDouble Then
+        ' если прилетело одно число то вернем его не раскодируя
+        decode_json = json
+        Exit Function
+    End If
+    ' далее пытаемся раскодировать
+    Set p = ParseJson(json)
+    If TypeName(p) = "Dictionary" Then
+        Set d = p
+        If keys_filter <> "" Then
+            arrkeys = Split(keys_filter, ",")
+            Set keylist = New Dictionary
+            For i = LBound(arrkeys) To UBound(arrkeys)
+                keystr = Trim(arrkeys(i))
+                If d.Exists(keystr) Then
+                    keylist(keystr) = d(keystr)
+                Else
+                    decode_json = "No key " & keystr & " found"
+                    Exit Function
+                End If
+            Next i
+            If keylist.Count > 0 Then
+                Set d = keylist
+            Else
+                decode_json = "No keys found"
+                Exit Function
+            End If
+        End If
+        If transpose Then
+            If only_values Then
+                ReDim outarr(1 To 1, 1 To d.Count)
+            Else
+                ReDim outarr(1 To 2, 1 To d.Count)
+            End If
+            For i = 1 To d.Count
+                k = d.keys(i - 1)
+                outarr(1, i) = k
+                If IsObject(d.Items(i - 1)) Then
+                    Set V = d.Items(i - 1)
+                Else
+                    V = d.Items(i - 1)
+                End If
+                Select Case TypeName(V)
+                    Case "Collection", "Dictionary"
+                        If only_values Then
+                            outarr(1, i) = ConvertToJson(V)
+                            If Len(outarr(1, i)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Else
+                            outarr(2, i) = ConvertToJson(V)
+                            If Len(outarr(2, i)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        End If
+                    Case "Null"
+                        If only_values Then
+                            outarr(1, i) = null_val
+                        Else
+                            outarr(2, i) = null_val
+                        End If
+                    Case Else
+                        If only_values Then
+                            outarr(1, i) = V
+                        Else
+                            outarr(2, i) = V
+                        End If
+                End Select
+            Next
+        Else
+            If only_values Then
+                ReDim outarr(1 To d.Count, 1 To 1)
+            Else
+                ReDim outarr(1 To d.Count, 1 To 2)
+            End If
+            For i = 1 To d.Count
+                k = d.keys(i - 1)
+                outarr(i, 1) = d.keys(i - 1)
+                If IsObject(d.Items(i - 1)) Then
+                    Set V = d.Items(i - 1)
+                Else
+                    V = d.Items(i - 1)
+                End If
+                Select Case TypeName(V)
+                    Case "Collection", "Dictionary"
+                        If only_values Then
+                            outarr(i, 1) = ConvertToJson(V)
+                            If Len(outarr(i, 1)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Else
+                            outarr(i, 2) = ConvertToJson(V)
+                            If Len(outarr(i, 2)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        End If
+                    Case "Null"
+                        If only_values Then
+                            outarr(i, 1) = null_val
+                        Else
+                            outarr(i, 2) = null_val
+                        End If
+                    Case Else
+                        If only_values Then
+                            outarr(i, 1) = V
+                        Else
+                            outarr(i, 2) = V
+                        End If
+                End Select
+            Next i
+        End If
+    Else  ' expect collection here
+        If Not (keys_filter = "") Then
+            decode_json = "No keys in collection"
+            Exit Function
+        End If
+        
+        Set c = p
+        If c.Count = 1 Then
+            If TypeName(c.Item(1)) = "Collection" Then
+                outarr = collection_to_array_2d(c.Item(1), Not transpose)
+            ElseIf TypeName(c.Item(1)) = "Dictionary" Then
+                ReDim outarr(1 To 1, 1 To c.Count)
+                outarr(1, 1) = ConvertToJson(c.Item(1))
+            Else
+                ReDim outarr(1 To 1, 1 To c.Count)
+                outarr(1, 1) = c.Item(1)
+            End If
+        Else
+            i = 1
+            If transpose Then
+                ReDim outarr(1 To 1, 1 To c.Count)
+                For Each V In c
+                    
+                    Select Case TypeName(V)
+                        Case "Collection", "Dictionary"
+                            outarr(1, i) = ConvertToJson(V)
+                            If Len(outarr(1, i)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Case "Null"
+                            outarr(1, i) = null_val
+                        Case Else
+                            outarr(1, i) = V
+                    End Select
+                    i = i + 1
+                Next
+            Else
+                ReDim outarr(1 To c.Count, 1 To 1)
+                For Each V In c
+                    Select Case TypeName(V)
+                        Case "Collection", "Dictionary"
+                            outarr(i, 1) = ConvertToJson(V)
+                            If Len(outarr(i, 1)) > 255 Then safe_out2 = True   ' prevent excel 2016- output error
+                        Case "Null"
+                            outarr(i, 1) = null_val
+                        Case Else
+                            outarr(i, 1) = V
+                    End Select
+                    i = i + 1
+                Next
+            End If
+        End If
+    End If
+    If safe_out Or safe_out2 Then
+        ReDim outarr_safe(LBound(outarr, 1) To UBound(outarr, 1), LBound(outarr, 2) To UBound(outarr, 2))
+        For i = LBound(outarr, 1) To UBound(outarr, 1)
+            For j = LBound(outarr, 2) To UBound(outarr, 2)
+                If Not IsNull(outarr(i, j)) Then
+                    If Len(CStr(outarr(i, j))) < 100000000 Then   ' for debug
+                        If Len(CStr(outarr(i, j))) > 255 Then
+                            outarr_safe(i, j) = CStr(outarr(i, j))
+                        Else
+                            outarr_safe(i, j) = outarr(i, j)
+                        End If
+                    Else
+                        outarr_safe(i, j) = "---"
+                    End If
+                Else
+                    outarr_safe(i, j) = null_val
+                End If
+            Next j
+        Next i
+        'outarr_safe = outarr
+        decode_json = outarr_safe
+    Else
+        decode_json = outarr
+    End If
+    Exit Function
+err1:
+    decode_json = "error"
+End Function
+'description_to_manual      - для автогенерации
+' Функция извлекает список давлений из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_p_atma(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_p_atma = decode_json(json, _
+                                    keys_filter:="p_atma", _
+                                    only_values:=True)
+End Function
+'description_to_manual      - для автогенерации
+' Функция извлекает список температур из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_t_C(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_t_C = decode_json(json, _
+                                    keys_filter:="t_C", _
+                                    only_values:=True)
+End Function
+'description_to_manual      - для автогенерации
+' Функция извлекает списки давлений и температур из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_pt(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_pt = decode_json(json, _
+                                 transpose:=True, _
+                                 keys_filter:="p_atma,t_C", _
+                                 only_values:=True)
+End Function
+'description_to_manual      - для автогенерации
+' Функция извлекает список дебитов из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_q_liq_sm3day(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    Dim d As Dictionary
+    On Error GoTo er1:
+    Set d = ParseJson(json)
+    If d.Exists("q_liq_sm3day") Then
+        decode_json_q_liq_sm3day = decode_json(json, _
+                                    keys_filter:="q_liq_sm3day", _
+                                    only_values:=True)
+    ElseIf d.Exists("feed") Then
+        Dim f
+        Set f = d("feed")
+        If TypeName(f) = "Collection" Then
+            Dim c
+            Dim c_out As New Collection
+            For Each c In f
+                Dim a As Double
+                a = c("q_liq_sm3day")
+                c_out.Add a
+            Next
+            decode_json_q_liq_sm3day = ConvertToJson(c_out)
+        Else
+            decode_json_q_liq_sm3day = f("q_liq_sm3day")
+        End If
+    End If
+    Exit Function
+er1:
+    decode_json_q_liq_sm3day = "error:decode_json_q_liq_sm3day: " & Err.Description
+End Function
+'description_to_manual      - для автогенерации
+' Функция извлекает список значений коэффициентов сепарации
+' из json строки
+' нужна для удобства векторных расчетов
+Public Function decode_json_k_sep(json)
+' json   - строка содержащая результаты расчета
+' результат - закодированная строка
+'description_end
+    decode_json_k_sep = decode_json(json, _
+                                    keys_filter:="k_sep", _
+                                    only_values:=True)
 End Function
 
