@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.56  2025.05                                 khabibullinra@gmail.com
+'Unifloc 7.57  2025.05                                 khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '                                                                      good (11/21/2019)
@@ -15,8 +15,6 @@
 ' 2. Vogel, J.V. 1968. Inflow Performance Relationships for Solution-Gas Drive Wells.
 '    J Pet Technol 20 (1): 83–92. SPE 1476-PA. http://dx.doi.org/10.2118/1476-PA
 Option Explicit
-'Implements IReservoir
- 
 Public pi_sm3dayatm As Double
 Public p_res_atma As Double
 Public fluid As CPVT    ' take bubble point pressure and watercut from fluid
@@ -33,24 +31,6 @@ End Property
 Public Property Get IPRCurve() As CInterpolation
     IPRCurve = IPR_curve_
 End Property
- 
-' ==================================================================
-' main calculation functions and subroutines
-' ==================================================================
-' initialisation sub - set IPR properties from minimal data set
-'Public Sub InitProp(p_res_atma, pb_atma, fw_perc, _
-'                    Optional rp_m3m3 As Double = -1, _
-'                    Optional t_res_C As Double = 90)
-'' p_res_atma - reservoir pressure
-'' pb_atma   - bubble point pressure
-'' fw_perc   - fraction of water in flow (watercut)
-'
-'    Me.p_res_atma = p_res_atma
-'    fluid.pb_atma = pb_atma
-'    fluid.fw_perc = fw_perc
-'    fluid.t_res_C = t_res_C
-'    If rp_m3m3 > 0 Then fluid.rp_m3m3 = rp_m3m3
-'End Sub
 ' initialisation sub - set IPR properties from minimal data set
 Public Sub init_from_feed(ByVal p_res_atma As Double, _
                          ByVal feed_json As String, _
@@ -62,18 +42,13 @@ Public Sub init_from_feed(ByVal p_res_atma As Double, _
     Me.p_res_atma = p_res_atma
     Me.pi_sm3dayatm = pi_sm3dayatm
     fluid.init_feed feed_json
-    
 End Sub
 Public Sub init_json(json As String)
     Dim d As Dictionary
     Set d = ParseJson(json)
-         
-    'Call InitProp(d("p_res_atma"), d("pb_atma"), d("fw_perc"), d("rp_m3m3"), d("t_res_C"))
-    
     Me.p_res_atma = d("p_res_atma")
     Me.pi_sm3dayatm = d("pi_sm3dayatm")
     fluid.init_feed ConvertToJson(d("feed"))
-    
 End Sub
 Public Function calc_t_fluid_C(ByVal pwf_atma As Double)
     Dim dt As Double
@@ -96,9 +71,6 @@ Public Function calc_q_liq_sm3day(ByVal p_wf_atma As Double)
     
     calc_q_liq_sm3day = calc_Q_IPR_m3Day(p_wf_atma, p_res_atma, pb_atma, pi_sm3dayatm, fw_perc)
 End Function
-'Public Function calc_pwf_json(q) As Double
-'    calc_pwf_json = calc_pwf_Ip_res_atma(q, p_res_atma, fluid.pb_atma, pi_sm3dayatm, fluid.fw_perc)
-'End Function
 ' calculate BHP  from liquid rate with IPR given
 Public Function calc_p_wf_atma(ByVal qtest As Double)
 ' qtest - liquid rate
@@ -147,49 +119,12 @@ Public Function get_dict()
     dict.Add "p_res_atma", Round(p_res_atma, 5)
     dict.Add "t_res_C", Round(fluid.t_res_C, 5)
     dict.Add "pi_sm3dayatm", Round(pi_sm3dayatm, 5)
-'    dict.Add "pb_atma", Round(fluid.pb_atma, 5)
-'    dict.Add "fw_perc", Round(fluid.fw_perc, 5)
-'    dict.Add "rp_m3m3", Round(fluid.rp_m3m3, 5)
-    ' will save feed in IPR
     dict.Add "feed", ParseJson(fluid.feed)
-    
     Set get_dict = dict
 End Function
 Public Function get_json()
     get_json = ConvertToJson(get_dict)
 End Function
-'' ==============================================================================
-'' interface properties and functions implementation
-'' ==============================================================================
-'
-'Private Function IReservoir_CalcPI(ByVal qtest As Double, ByVal Ptest As Double) As Variant
-'    IReservoir_CalcPI = calc_pi_sm3dayatm(qtest, Ptest)
-'End Function
-'
-'Private Function IReservoir_CalcPwf(ByVal qtest As Double) As Variant
-'    IReservoir_CalcPwf = calc_p_wf_atma(qtest)
-'End Function
-'
-'
-'Private Function IReservoir_CalcQliq(ByVal Ptest_atma As Double) As Variant
-'    IReservoir_CalcQliq = calc_q_liq_sm3day(Ptest_atma)
-'End Function
-'
-'Private Property Let IReservoir_pi(RHS As Double)
-'    pi_sm3dayatm = RHS
-'End Property
-'
-'Private Property Get IReservoir_pi() As Double
-'    IReservoir_pi = pi_sm3dayatm
-'End Property
-'
-'Private Property Let IReservoir_Pres(RHS As Double)
-'    p_res_atma = RHS
-'End Property
-'
-'Private Property Get IReservoir_Pres() As Double
-'    IReservoir_Pres = p_res_atma
-'End Property
 ' =======================================================================
 ' private vogel's correlation functions
 ' =======================================================================
@@ -282,9 +217,7 @@ Private Function calc_QliqVogel_m3Day(ByVal P_test As Double, ByVal Pr As Double
       fo = 1 - fw
       ' максимальный дебит чистой нефти
       qo_max = qb + (pi * pb) / 1.8
-    '  Dim pwf_g As Double
       p_wfg = fw * (Pr - qo_max / pi)
-      
       If P_test > p_wfg Then
         Dim a As Double: Dim B As Double: Dim c As Double: Dim d As Double
         a = 1 + (P_test - (fw * Pr)) / (0.125 * fo * pb)
@@ -296,14 +229,12 @@ Private Function calc_QliqVogel_m3Day(ByVal P_test As Double, ByVal Pr As Double
         Else
           calc_QliqVogel_m3Day = (-c + ((c * c - 4 * B * B * d) ^ 0.5)) / (2 * B ^ 2)
         End If
-        
       Else
          CG = 0.001 * qo_max
          cd = fw * (CG / pi) + _
               fo * 0.125 * pb * (-1 + (1 + 80 * ((0.001 * qo_max) / (qo_max - qb))) ^ 0.5)
          calc_QliqVogel_m3Day = (p_wfg - P_test) / (cd / CG) + qo_max
       End If
-      
     End If
 End Function
 ' Расчет забойного давления по Вогелю с учетом поправки на обводненность
@@ -356,20 +287,15 @@ Private Function calc_p_wfVogel_atma(ByVal Q_test As Double, ByVal Pr As Double,
       Wc = 0
      End If
      If (Wc = 100) Or (Q_test <= qb) Or (pb = 0) Then
-     
        calc_p_wfVogel_atma = (Pr - Q_test / pi)
-       
      Else
        fw = Wc / 100
        fo = 1 - fw
        ' максимальный дебит чистой нефти
        qo_max = qb + (pi * pb) / 1.8
-       
        If Q_test < qo_max Then
-         
          calc_p_wfVogel_atma = fw * (Pr - Q_test / pi) + _
                      fo * 0.125 * pb * (-1 + (1 - 80 * ((Q_test - qo_max) / (qo_max - qb))) ^ 0.5)
-    
        Else
           CG = 0.001 * qo_max
           cd = fw * (CG / pi) + _
@@ -427,9 +353,13 @@ Private Function calc_PIVogel_m3DayAtm(ByVal Q_test As Double, ByVal P_test As D
     Q_calibr = calc_QliqVogel_m3Day(P_test, pres, pb, j, Wc)
     If Abs(Q_calibr - Q_test) > 0.001 Then Debug.Assert False   ' если сработало, то алгоритм сломался
     calc_PIVogel_m3DayAtm = j
-  
 End Function
 Private Sub Class_Initialize()
     Set fluid = New CPVT
+    Set IPR_curve_ = Nothing
+    p_res_atma = 0
+End Sub
+Private Sub Class_Terminate()
+    Set IPR_curve_ = Nothing
 End Sub
 

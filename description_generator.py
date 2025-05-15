@@ -21,7 +21,6 @@ import re
 
 file_name = ["u7_Excel_functions.txt",
              "u7_Excel_functions_Jet.txt",
-             "u7_Excel_functions_service.txt",
              "u7_Excel_functions_crv.txt",
              "u7_Excel_functions_transient.txt"]
 

@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.56  2025.05                                 khabibullinra@gmail.com
+'Unifloc 7.57  2025.05                                 khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -93,20 +93,35 @@ Private Sub Class_Initialize()
     ksep_liquid_man_d = 0
 End Sub
 Public Function calc_separation(p_atma As Double, t_C As Double, _
-                                Optional p_cas_atma As Double = 10)
+                                Optional p_cas_atma As Double = 10, _
+                                Optional p_gs_atma As Double = 0, _
+                                Optional t_gs_atma As Double = 0)
 ' расчет сепарации и соответствующих параметров флюидов
 ' для момента работы скважины
 ' должен вызываться незавимо от расчета УЭЦН, так как при расчете сверху вниз
 '   необходимо заранее рассчитать параметры флюида выше насоса, чтобы правильно посчитать НКТ
-' p_atma  - давление при которой идет сепарация
-' T_C - температура при которой идет сепарация
-    
+' p_atma  - давление при которой идет естественная сепарация
+' T_C - температура при которой идет естественная сепарация
+' p_cas_atma - затрубное давление
+'              необходимо для формирования флюида с дегазированной нефтью в затрубе
+'              такой вариант вообще говоря спорный. С одной стороны весь газ из неподвижной
+'              нефти в затрубе уйдет и нефть должна быть дегазирована
+'              с другой стороны неподвижная нефть в затрубе будет всегда в контакте с газом
+'              который барботирует через нее и таким образом она всегда будет насыщенной
+'              какой вариант корректнее не понятно
+' p_gs_atma  - давление сепарации для газосепаратора, может пригодится для
+'              эцн ниже перфорации, когда естественная сепарация проходит при одном давлении
+'              а газосепаратор может работать при другом давлении
+' t_gs_atma  - аналогично для температуры
     
     Select Case separation_mode
         Case "by_correlation"
             ' все по сепарации по корреляциям
             p_ksep_atma = p_atma
             t_ksep_C = t_C
+            ' если условия газосепаратора явно не заданы, то берем их таким же как для натуральной сепарации
+            If p_gs_atma = 0 Then p_gs_atma = p_atma
+            If t_gs_atma = 0 Then t_gs_atma = t_C
             'Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
             ksep_nat_fr = estimate_nat_separation_d(p_ksep_atma, t_ksep_C) ' оценим естественную сепарацию
             ksep_liq_d = 0
@@ -114,6 +129,8 @@ Public Function calc_separation(p_atma As Double, t_C As Double, _
             ' берем значение ручное, давления как есть
             p_ksep_atma = psep_man_atma
             t_ksep_C = tsep_man_C
+            p_gs_atma = p_ksep_atma
+            t_gs_atma = t_ksep_C
             'Call fluid_.calc_PVT(p_ksep_atma, t_ksep_C)
                 ' оценим естественную сепарацию
             ksep_nat_fr = estimate_nat_separation_d(p_ksep_atma, t_ksep_C)
@@ -122,26 +139,30 @@ Public Function calc_separation(p_atma As Double, t_C As Double, _
             ' берем и коэффициенты и давления как было задано при установке значений
             p_ksep_atma = p_atma
             t_ksep_C = t_C
+            ' если условия газосепаратора явно не заданы, то берем их таким же как для натуральной сепарации
+            If p_gs_atma = 0 Then p_gs_atma = p_atma
+            If t_gs_atma = 0 Then t_gs_atma = t_C
             ksep_nat_fr = ksep_nat_man_d
             ksep_liq_d = ksep_liquid_man_d
         Case "fully_manual"
             ' берем и коэффициенты и давления как было задано при установке значений
             p_ksep_atma = psep_man_atma
             t_ksep_C = tsep_man_C
+            p_gs_atma = p_ksep_atma
+            t_gs_atma = t_ksep_C
             ksep_nat_fr = ksep_nat_man_d
             ksep_liq_d = ksep_liquid_man_d
     End Select
-    
     
     Call estimate_feeds_after_separation_calc(p_ksep_atma, t_ksep_C)
     
     Select Case separation_mode
         Case "by_correlation"
-            ksep_gassep_fr = estimate_GS_separation_d(p_ksep_atma, t_ksep_C)
+            ksep_gassep_fr = estimate_GS_separation_d(p_gs_atma, t_gs_atma)
         Case "by_correlation_pressure_manual"
                 ' берем значение ручное, давления как есть
                 ' оценим коэффициент сепарации газосепаратора
-                ksep_gassep_fr = estimate_GS_separation_d(p_ksep_atma, t_ksep_C)
+                ksep_gassep_fr = estimate_GS_separation_d(p_gs_atma, t_gs_atma)
         Case "value_manual"
                 ' берем и коэффициенты и давления как было задано при установке значений
             ksep_gassep_fr = ksep_gassep_man_d
@@ -157,13 +178,13 @@ Public Function calc_separation(p_atma As Double, t_C As Double, _
     If ksep_liq_d <= 0 Or ksep_liq_d > 1 Then
         ' нормальный режим работы скважины
         Set fluid_tub = fluid_gs.clone()
-        Call fluid_tub.mod_after_separation(p_ksep_atma, t_ksep_C, ksep_gassep_fr, True)
+        Call fluid_tub.mod_after_separation(p_gs_atma, t_gs_atma, ksep_gassep_fr, True)
         Call fluid_tub.calc_PVT(p_atma, t_C)
         q_gas_annulus_after_full_sep_sm3day = fluid.q_gas_insitu_sm3day - fluid_tub.q_gas_insitu_sm3day
     
         Set fluid_cas = fluid.clone() ' тут надо будет доделать чтобы считать затруб с газом
         Call fluid_cas.mod_after_separation(p_cas_atma, t_ksep_C, 0.99, gas_goes_into_solution:=False)
-        fluid_cas.fw_perc = 0
+        fluid_cas.fw_perc = 0  ' считаем, что при барботировании в затрубе будет только нефть
         fluid_cas.q_gas_free_sm3day = q_gas_annulus_after_full_sep_sm3day
         fluid_cas.q_liq_sm3day = 0
         
@@ -365,10 +386,12 @@ Private Sub estimate_feeds_after_separation_calc(p_atma As Double, t_C As Double
         ' поправим ранее рассчитанный коэффициент натуральной сепарации
         ' используем оценку сепарации нисходящего потока как множитель для естественной сепарации
         ' помним, что если в противотоке газ всплыть не может, то натуральной сепарации не будет
-        ksep_nat_fr = ksep_nat_fr * ksep_ann
+       ' ksep_nat_fr = ksep_nat_fr * ksep_ann
         Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
         ' смешаем флюиды из затруба и из пласта в один который пойдет в приемную сетку насоса
         Set fluid_gs = feed_mod_mix_obj(fluid_gs, fluid_from_annular)
+        Call fluid.calc_PVT(p_atma, t_C)
+        Call fluid_gs.calc_PVT(p_atma, t_C)
     Else
         ' если ПКВ нет то просто учитываем сепарацию
         Call fluid_gs.mod_after_separation(p_atma, t_C, ksep_nat_fr, gas_goes_into_solution)
@@ -379,7 +402,6 @@ Private Sub estimate_feeds_after_separation_calc(p_atma As Double, t_C As Double
         fluid_from_annular.q_liq_sm3day = 0
         fluid_from_annular.q_gas_free_sm3day = 0
     End If
-    
     q_gas_annulus_after_nat_sep_sm3day = fluid.q_gas_insitu_sm3day - fluid_gs.q_gas_insitu_sm3day
 End Sub
 Private Function estimate_GS_separation_d(p_atma As Double, t_C As Double, Optional f_Hz As Double = 50)

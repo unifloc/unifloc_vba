@@ -1,29 +1,24 @@
 '=======================================================================================
-'Unifloc 7.56  2025.05                                 khabibullinra@gmail.com
+'Unifloc 7.57  2025.05                                 khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
-'
 '=======================================================================================
-'
+' Класс для описания свойств пород окружающих скважину на всем протяжении скважины.
+' Задает геотермальный градиент в скважине,
+' в том числе с учетом зависимости от глубины и например наличия вечной мерзлоты.
+' Позволяет рассчитать общие коэффициент теплопроводности для различных условий.
+' Необходим для корректного расчета распределения температуры в скважине
 Option Explicit
-' класс для описания свойств пород окружающих скважину на всем протяжении скважины
-' задает геотермальный градиент в скважине  (в том числе с учетом зависимости от глубины и например наличия вечной мерзлоты)
-' позволяет рассчитать общие коэффициент теплопроводности для различных условий
-' необходим для корректного расчета распределения температуры в скважине
-'
-'
-' пока положим эти параметры не зависящими от глубины, хотя потом можно будет поменять
-Public therm_cond_form_WmC As Double      ' теплопроводность породы Дж/сек/м/С
-Public sp_heat_capacity_form_JkgC As Double        ' удельная теплоемкость породы  specific heat capacity
-Public density_formation_kgm3 As Double       ' плотность породы вокруг скважины
-' termal conductivity теплопроводность
-Public therm_cond_cement_WmC  As Double          ' теплопроводность цемента вокруг скважины
-Public therm_cond_tubing_WmC  As Double          ' теплопроводность металла НКТ
-Public therm_cond_casing_WmC  As Double          ' теплопроводность металла эксплуатационной колонны
-' convective heat transfer coeficients
-Public heat_transfer_casing_liquid_Wm2C As Double       ' конвективная теплопередача через затруб с жидкостью  Дж/м2/сек/С
+Public therm_cond_form_WmC As Double                 ' теплопроводность породы Дж/сек/м/С
+Public sp_heat_capacity_form_JkgC As Double          ' удельная теплоемкость породы  specific heat capacity
+Public density_formation_kgm3 As Double              ' плотность породы вокруг скважины
+Public therm_cond_cement_WmC  As Double              ' теплопроводность цемента вокруг скважины termal conductivity
+Public therm_cond_tubing_WmC  As Double              ' теплопроводность металла НКТ
+Public therm_cond_casing_WmC  As Double              ' теплопроводность металла эксплуатационной колонны
+                                                     ' convective heat transfer coeficients
+Public heat_transfer_casing_liquid_Wm2C As Double    ' конвективная теплопередача через затруб с жидкостью  Дж/м2/сек/С
 Public heat_transfer_casing_gas_Wm2C As Double       ' теплопередача через затруб с газом (радиационная)
-Public heat_transfer_fluid_convection_Wm2C As Double       ' теплопередача конвективная в потоке жидкости
+Public heat_transfer_fluid_convection_Wm2C As Double ' теплопередача конвективная в потоке жидкости
 ' радиусы для проведения расчета по температуре
 ' хотя это больше относится к конструкции скважины, но тут удобнее это разместить, тем более что значительного влияния на расчет нет
 ' в перспективе можно будет перевести в массивы и формировать снаружи
@@ -33,23 +28,19 @@ Public rci_m As Double           ' Эксп колонна внутренний
 Public rco_m As Double           ' Эксп колонна наружный
 Public rcem_m As Double          ' Радиус цементного кольца вокруг скважины
 Public rwb_m As Double           ' Радиус цементного кольца вокруг скважины
-Public t_calc_hr As Double               ' время на которое вычисляется распределение давления
-'Private td_d_ As Double                ' безразмерное время расчета
-'Private TD_ As Double                  ' безразмерное температура
-Public amb_temp_curve As New CInterpolation
+Public t_calc_hr As Double       ' время на которое вычисляется распределение давления
 Public TGeoGrad_C100m_ As Double
 Public h_vert_data_m As Double
 Public reservoir_temp_data_C As Double
 Public surf_temp_data_C As Double
 Public h_dyn_m As Double
 Public h_pump_m As Double
+Public amb_temp_curve As New CInterpolation
 Private Sub Class_Initialize()
     ' Зададим параметры по умолчанию
      therm_cond_form_WmC = 2.4252        ' теплопроводность породы Дж/сек/м/С
      sp_heat_capacity_form_JkgC = 200    ' теплоемкость породы
-     
      density_formation_kgm3 = 4000       ' плотность породы вокруг скважины
-     
      therm_cond_cement_WmC = 6.965       ' теплопроводность цемента вокруг скважины
      therm_cond_tubing_WmC = 32          ' теплопроводность металла НКТ
      therm_cond_casing_WmC = 32          ' теплопроводность металла эксплуатационной колонны
@@ -59,9 +50,9 @@ Private Sub Class_Initialize()
      heat_transfer_fluid_convection_Wm2C = 200     ' теплопередача конвективная в потоке жидкости
      ' радиусы для проведения расчета
      rti_m = 0.06           ' НКТ внутренний
-     rto_m = rti_m + 0.01 ' НКТ наружный
+     rto_m = rti_m + 0.01   ' НКТ наружный
      rci_m = 0.124          ' Эксп колонна внутренний
-     rco_m = rci_m + 0.01 ' Эксп колонна наружный
+     rco_m = rci_m + 0.01   ' Эксп колонна наружный
      rcem_m = 0.3           ' Радиус цементного кольца вокруг скважины
      rwb_m = 0.3
     
@@ -79,6 +70,9 @@ Private Sub Class_Initialize()
      TGeoGrad_C100m_ = h_vert_data_m / 100 / (reservoir_temp_data_C - surf_temp_data_C)
      ' не все параметры передаются для изменений снаружи
      ' наверное это имеет смысл поправить
+End Sub
+Private Sub Class_Terminate()
+    Set amb_temp_curve = Nothing
 End Sub
 ' градиент давления от температуры
 Public Function amb_temp_grad_Cm(h_vert_m As Double) As Double

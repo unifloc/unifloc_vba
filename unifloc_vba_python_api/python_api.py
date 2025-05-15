@@ -25,6 +25,20 @@ addin_name_str = "UniflocVBA_7.xlam"
 class API():
     def __init__(self, addin_name_str):
         self.book = xw.Book(addin_name_str)
+    def unf_version(self, ):
+        """
+ ========== description ============== 
+ функция возвращает номер версии Унифлок VBA 
+        
+ ==========  arguments  ============== 
+
+    
+
+        """
+
+        self.f_unf_version = self.book.macro("unf_version")
+        return self.f_unf_version()
+
     def encode_pipe_object(self, trajectory="",diam_json="",t_model="",flow_correlation=0,flow_along_coord=True,calibr_grav=1,calibr_fric=1,h_start_m=-10000000000.1,h_end_m=10000000000.1,znlf=False):
         """
  ========== description ============== 
@@ -2115,7 +2129,7 @@ class API():
         self.f_well_calc_from_pintake = self.book.macro("well_calc_from_pintake")
         return self.f_well_calc_from_pintake(p_wh_atma,p_intake_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast)
 
-    def well_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False,outval=0):
+    def well_calc_from_pwf_(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",esp_freq_Hz=50,pkv_ratio=0,ksep_json="",d_int_mm=110,IPR_json="",p_cas_atma=10,t_crit_C=0,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False,outval=0):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
@@ -2164,27 +2178,21 @@ class API():
 
         """
 
-        self.f_well_calc_from_pwf = self.book.macro("well_calc_from_pwf")
-        return self.f_well_calc_from_pwf(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast,outval)
+        self.f_well_calc_from_pwf_ = self.book.macro("well_calc_from_pwf_")
+        return self.f_well_calc_from_pwf_(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,esp_freq_Hz,pkv_ratio,ksep_json,d_int_mm,IPR_json,p_cas_atma,t_crit_C,calibr_grav,calibr_fric,flow_corr,fast,outval)
 
-    def well_calc_below_esp(self, p_atma,t_C,feed_json,trajectory,d_cas_mm,esp_json,t_model,h_perf_m,h_esp_m,calibr_grav=1,calibr_fric=1,IPR_json="",flow_corr=0,calc_along_coord=False):
+    def well_calc_from_pwf_below_esp(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_esp_m=1200,esp_json="",ksep_json="",d_int_mm=110,IPR_json="",calibr_grav=1,calibr_fric=1,flow_corr=0):
         """
  ========== description ============== 
 расчет распределения давления и температуры в скважине ниже глубины установки ЭЦН 
         
  ==========  arguments  ============== 
 
-    p_atma - забойное давление или давление на приеме, атма    
-
-    t_c - температура флюида на забое или на приеме, с    
-
-    feed_json - параметры потока в скважине (с забоя)    
+   p_wf_atma   ,   t_wf_c   ,    feed_json - параметры потока в скважине (с забоя)    
 
     trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
 
-    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
-
-    esp_json - параметры эцн, используйте encode_esp_pump  используется тольок для оценки длины эцн    
+   d_tub_mm   ,    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
 
     t_model - температурная модель, используйте encode_t_model    
 
@@ -2192,64 +2200,18 @@ class API():
 
     h_esp_m - глубина спуска эцн. верх нкт    
 
-    calibr_grav - калибровка для гидравлической корреляции по гравитации    
+    esp_json - параметры эцн, используйте encode_esp_pump  используется тольок для оценки длины эцн t_model - температурная модель, используйте encode_t_model h_perf_m - глубина ве..см.мануал   
+
+   ksep_json   ,   d_int_mm   ,   ipr_json   ,    calibr_grav - калибровка для гидравлической корреляции по гравитации    
 
     calibr_fric - калибровка для гидравлической корреляции по трению    
 
-   ipr_json   ,    flow_corr - номер гидравлической корреляции, как для трубы    
-
-    calc_along_coord - направление расчета   
+    flow_corr - номер гидравлической корреляции, как для трубы calc_along_coord - направление расчета   
 
         """
 
-        self.f_well_calc_below_esp = self.book.macro("well_calc_below_esp")
-        return self.f_well_calc_below_esp(p_atma,t_C,feed_json,trajectory,d_cas_mm,esp_json,t_model,h_perf_m,h_esp_m,calibr_grav,calibr_fric,IPR_json,flow_corr,calc_along_coord)
-
-    def well_gl_calc_from_pwf(self, 'p_wf_atma,'t_wf_C,'feed_json,'trajectory="1500",'d_tub_mm="62",'d_cas_mm="125",'t_model="80",'h_perf_m=1500,'h_glv_m=1200,'q_gas_glv_sm3day=5000,'glv_json="",'IPR_json="",'p_cas_atma=10,'calibr_grav=1,'calibr_fric=1,'flow_corr=0,'fast=False):
-        """
- ========== description ============== 
-расчет распределения давления и температуры в скважине на основе забойного давления (расчет снизу вверх) 
-        
- ==========  arguments  ============== 
-
-    p_wf_atma - забойное давление, атма    
-
-    t_wf_c - температура флюида на забое скважины, с    
-
-    feed_json - параметры потока в скважине (с забоя)    
-
-    trajectory - json кодирующий траекторию скважины  используйте encode_pipe_trajectory,  или число - глубина вертикальной скважины    
-
-    d_tub_mm - json кодирующий диаметры скважины,  используйте encode_pipe_diam,  или число - диаметр нкт мм    
-
-    d_cas_mm - json кодирующий диаметры скважины encode_pipe_diam,  используйте encode_pipe_diam,  или число - диаметр эксп. колонны мм    
-
-    t_model - температурная модель, используйте encode_t_model    
-
-    h_perf_m - глубина верхних дыр перфорации, точка расчета забойного  давления    
-
-    h_glv_m - глубина спуска рабочего газлифтного клапана.    
-
-    q_gas_glv_sm3day - расход газлифтного газа через рабочий клапан    
-
-    glv_json - диаметр порта рабочего газлифтного клапана    
-
-    ipr_json - параметры пласта, используйте encode_ipr  если не заданы, считается для постоянного дебита из feed_json    
-
-    p_cas_atma - затрубное давление, давление закачки газа    
-
-    calibr_grav - калибровка для гидравлической корреляции по гравитации    
-
-    calibr_fric - калибровка для гидравлической корреляции по трению    
-
-    flow_corr - номер гидравлической корреляции, как для трубы    
-
-    fast - флаг, если 1 то будет рассчитано только давление,   
-
-        """
-
-        self.f_well_gl_calc_from_pwf = self.book.macro("well_gl_calc_from_pwf")
-        return self.f_well_gl_calc_from_pwf('p_wf_atma,'t_wf_C,'feed_json,'trajectory,'d_tub_mm,'d_cas_mm,'t_model,'h_perf_m,'h_glv_m,'q_gas_glv_sm3day,'glv_json,'IPR_json,'p_cas_atma,'calibr_grav,'calibr_fric,'flow_corr,'fast)
+        self.f_well_calc_from_pwf_below_esp = self.book.macro("well_calc_from_pwf_below_esp")
+        return self.f_well_calc_from_pwf_below_esp(p_wf_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_esp_m,esp_json,ksep_json,d_int_mm,IPR_json,calibr_grav,calibr_fric,flow_corr)
 
     def well_gl_calc_from_pwf(self, p_wf_atma,t_wf_C,feed_json,trajectory="1500",d_tub_mm="62",d_cas_mm="125",t_model="80",h_perf_m=1500,h_glv_m=1200,q_gas_glv_sm3day=5000,glv_json="",IPR_json="",p_cas_atma=10,calibr_grav=1,calibr_fric=1,flow_corr=0,fast=False):
         """
@@ -2342,102 +2304,6 @@ class API():
 
         self.f_well_gl_calc_from_pwh = self.book.macro("well_gl_calc_from_pwh")
         return self.f_well_gl_calc_from_pwh(p_wh_atma,t_wf_C,feed_json,trajectory,d_tub_mm,d_cas_mm,t_model,h_perf_m,h_glv_m,q_gas_glv_sm3day,glv_json,IPR_json,p_cas_atma,calibr_grav,calibr_fric,flow_corr,fast)
-
-    def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
-        """
- ========== description ============== 
- оценка расхода жидкости через сопло  от перепада давления 
-        
- ==========  arguments  ============== 
-
-     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
-
-     d_nozzle_mm - диаметр сопла, мм    
-
-     p_act_atma - давление активного потока, высокое, атм    
-
-     p_in_atma - давление входного потока, низкое, атм    
-
-     t_c - температура потоков в струйном насосе, с.    
-
-     param - дополнительные параметры расчета    
-
-   type_q   ,   kchoke   ,   d_throat_mm 
-
-        """
-
-        self.f_Jet_q_nozzle_sm3day = self.book.macro("Jet_q_nozzle_sm3day")
-        return self.f_Jet_q_nozzle_sm3day(feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C,param,type_q,kchoke,d_throat_mm)
-
-    def Jet_p_out_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,model=0,k_n=0.2,k_td=0.5,kchoke=0.8):
-        """
- ========== description ============== 
-Расчет давления на выкиде струйного насоса 
-        
- ==========  arguments  ============== 
-
-     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
-
-     feed_in - поток перекачиваемый (низкого давления), строка    
-
-     d_nozzle_mm - диаметр сопла, мм    
-
-     d_throat_mm - диаметр камеры смешения, мм    
-
-     p_act_atma - давление активного потока, высокое, атм    
-
-     p_in_atma - давление входного потока, низкое, атм    
-
-     t_c - температура потоков в струйном насосе, с.    
-
-     param - дополнительные параметры расчета    
-
-   type_q   ,   model   ,   k_n   ,   k_td   ,   kchoke 
-
-        """
-
-        self.f_Jet_p_out_atma = self.book.macro("Jet_p_out_atma")
-        return self.f_Jet_p_out_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C,param,type_q,model,k_n,k_td,kchoke)
-
-    def Jet_p_in_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C=30,param="",type_q=1,model=0):
-        """
- ========== description ============== 
-Расчет давления на выкиде струйного насоса 
-        
- ==========  arguments  ============== 
-
-     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
-
-     feed_in - поток перекачиваемый (низкого давления), строка    
-
-     d_nozzle_mm - диаметр сопла, мм    
-
-     d_throat_mm - диаметр камеры смешения, мм  p_act_atma - давление активного потока, высокое, атм  p_in_atma - давление входного потока, низкое, атм    
-
-   p_out_atma   ,     t_c - температура потоков в струйном насосе, с.    
-
-     param - дополнительные параметры расчета    
-
-   type_q   ,   model 
-
-        """
-
-        self.f_Jet_p_in_atma = self.book.macro("Jet_p_in_atma")
-        return self.f_Jet_p_in_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C,param,type_q,model)
-
-    def unf_version(self, ):
-        """
- ========== description ============== 
- функция возвращает номер версии Унифлок VBA 
-        
- ==========  arguments  ============== 
-
-    
-
-        """
-
-        self.f_unf_version = self.book.macro("unf_version")
-        return self.f_unf_version()
 
     def decode_json(self, json,transpose=False,keys_filter="",only_values=False,safe_out=False,null_val=""):
         """
@@ -2573,7 +2439,7 @@ class API():
         self.f_encode_feed_list = self.book.macro("encode_feed_list")
         return self.f_encode_feed_list(q_liq_sm3day,fw_perc,rp_m3m3,q_gas_free_sm3day,fluid)
 
-    def encode_ESP_pump(self, q_nom_sm3day=50,head_nom_m=2000,freq_nom_Hz=50,ESP_ID=-1,num_stages=-1,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,dnum_stages_integrate=1):
+    def encode_ESP_pump(self, q_nom_sm3day=50,head_nom_m=2000,freq_nom_Hz=50,ESP_ID=-1,num_stages=-1,calibr_head=1,calibr_rate=1,calibr_power=1,gas_correct_model=0,gas_correct_stage_by_stage=0,dnum_stages_integrate=10):
         """
  ========== description ============== 
  функция кодирования параметров работы УЭЦН в строку 
@@ -2965,6 +2831,88 @@ class API():
         self.f_list_concatenate = self.book.macro("list_concatenate")
         return self.f_list_concatenate(ParamArrayvar)
 
+    def Jet_q_nozzle_sm3day(self, feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,kchoke=0.8,d_throat_mm=-1):
+        """
+ ========== description ============== 
+ оценка расхода жидкости через сопло  от перепада давления 
+        
+ ==========  arguments  ============== 
+
+     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
+
+     d_nozzle_mm - диаметр сопла, мм    
+
+     p_act_atma - давление активного потока, высокое, атм    
+
+     p_in_atma - давление входного потока, низкое, атм    
+
+     t_c - температура потоков в струйном насосе, с.    
+
+     param - дополнительные параметры расчета    
+
+   type_q   ,   kchoke   ,   d_throat_mm 
+
+        """
+
+        self.f_Jet_q_nozzle_sm3day = self.book.macro("Jet_q_nozzle_sm3day")
+        return self.f_Jet_q_nozzle_sm3day(feed_act,d_nozzle_mm,p_act_atma,p_in_atma,t_C,param,type_q,kchoke,d_throat_mm)
+
+    def Jet_p_out_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C=30,param="",type_q=1,model=0,k_n=0.2,k_td=0.5,kchoke=0.8):
+        """
+ ========== description ============== 
+Расчет давления на выкиде струйного насоса 
+        
+ ==========  arguments  ============== 
+
+     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
+
+     feed_in - поток перекачиваемый (низкого давления), строка    
+
+     d_nozzle_mm - диаметр сопла, мм    
+
+     d_throat_mm - диаметр камеры смешения, мм    
+
+     p_act_atma - давление активного потока, высокое, атм    
+
+     p_in_atma - давление входного потока, низкое, атм    
+
+     t_c - температура потоков в струйном насосе, с.    
+
+     param - дополнительные параметры расчета    
+
+   type_q   ,   model   ,   k_n   ,   k_td   ,   kchoke 
+
+        """
+
+        self.f_Jet_p_out_atma = self.book.macro("Jet_p_out_atma")
+        return self.f_Jet_p_out_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_act_atma,p_in_atma,t_C,param,type_q,model,k_n,k_td,kchoke)
+
+    def Jet_p_in_atma(self, feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C=30,param="",type_q=1,model=0):
+        """
+ ========== description ============== 
+Расчет давления на выкиде струйного насоса 
+        
+ ==========  arguments  ============== 
+
+     feed_act - поток рабочий (высокого давления), строка  расход игнорируется - будет расчтан    
+
+     feed_in - поток перекачиваемый (низкого давления), строка    
+
+     d_nozzle_mm - диаметр сопла, мм    
+
+     d_throat_mm - диаметр камеры смешения, мм  p_act_atma - давление активного потока, высокое, атм  p_in_atma - давление входного потока, низкое, атм    
+
+   p_out_atma   ,     t_c - температура потоков в струйном насосе, с.    
+
+     param - дополнительные параметры расчета    
+
+   type_q   ,   model 
+
+        """
+
+        self.f_Jet_p_in_atma = self.book.macro("Jet_p_in_atma")
+        return self.f_Jet_p_in_atma(feed_act,feed_in,d_nozzle_mm,d_throat_mm,p_out_atma,t_C,param,type_q,model)
+
     def crv_interpolation(self, x_points,y_points,x_val,type_interpolation=0):
         """
  ========== description ============== 
@@ -3088,7 +3036,7 @@ class API():
 
      xa - x матрица исходных данных [0..n-1, 0..d-1]  (таблица или массив)    
 
-     out - тип вывода,  out=0 (по умолчанию) коэффициенты аппроксимации [0..d-1],  out=1 код ошибки подбора аппроксимации  out=2 отчет по подбору аппроксимации,  avgerror, avgrele..см.мануал   
+     out - тип вывода,  0 (по умолчанию) коэффициенты аппроксимации [0..d-1],  1 код ошибки подбора аппроксимации,  2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxer..см.мануал   
 
      weight - вектор весов [0..n-1] для каждого параметра    
 
@@ -3112,9 +3060,9 @@ class API():
 
      m - степень полинома для аппроксимации    
 
-     out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxerror, rmse..см.мануал   
+     out - тип вывода: 0 (по умолчанию) значения полинома для xia,  1 код ошибки аппроксимации,  2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxerror, rmserror, taskr..см.мануал   
 
-     out - тип вывода, out=0 (по умолчанию) значения полинома для xia,  out=1 код ошибки аппроксимации  out=2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxerror, rmse..см.мануал   
+     out - тип вывода: 0 (по умолчанию) значения полинома для xia,  1 код ошибки аппроксимации,  2 отчет по подбору аппроксимации,  avgerror, avgrelerror, maxerror, rmserror, taskr..см.мануал   
 
      weight - вектор весов [0..n-1] для каждого параметра    
 
