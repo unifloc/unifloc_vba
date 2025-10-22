@@ -1,0 +1,541 @@
+'
+' расчеты нестационарного притока от kva
+'
+Option Explicit
+Public Const number_of_lapl_coeff = 10
+Public Const pi_ = 3.14159265358979
+'Number of reflections on each side of rectangle used in calculations for a well in a rectngle
+Const m_rect As Integer = 10
+'Number of image wells used in calculations for a well in a band
+Const m_band As Integer = 20
+Public Function PD_QD_QTD(ByVal mode As Integer, _
+                       td As Double, _
+                       cd As Double, _
+                       skin As Double, _
+                       Optional ByVal wellModel = 2, _
+                       Optional ByVal ReservoirShape = 1, _
+                       Optional ByVal boundaryType = 1, _
+                       Optional ByVal D_d = 1000, _
+                       Optional ByVal D1_d = 1000, _
+                       Optional ByVal D2_d = 1000, _
+                       Optional ByVal Db_d = 5000, _
+                       Optional ByVal Dbf = 0.5, _
+                       Optional ByVal W_d = 5000, _
+                       Optional ByVal L_d = 5000, _
+                       Optional ByVal Wf = 0.5, _
+                       Optional ByVal lf = 0.5, _
+                       Optional ByVal Re_d = 10000, _
+                       Optional ByVal Dw_d = 5000, _
+                       Optional ByVal R_d = 1) As Double
+'Mode - what to calculate: 1 - well flowing pressure, 2 - well flow rate, 3 - qumulative liquid produced
+'Returns dimensionless pressure, flow rate, or cumulative production
+'Td - dimensionless time
+'Cd - dimensionless wellbore storage constant
+'Skin - skin-factor
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+' ReservoirShape -
+        ' 1 - infinite plain (default)
+        ' 2 - infinite half plane
+        ' 3 - infinite quater plane
+        ' 4 - infinite band (channel)
+        ' 5 - Rectangle
+        ' 6 - Circle
+        ' 7 - producing well 5 spot pattern
+'BoundaryType -
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+'_______________________________________
+'Boundary parameters - different should be used for different reservoir shapes
+' D_d  - dimensionless distance to boundary, (in half plane reservoir)
+' D1_d - dimensionless distanse to 1st boundary, (in quater plane reservoir)
+' D2_d - dimensionless distanse to 2d boundary, (in quater plane reservoir)
+' Db_d - dimensionless band width (for band reservoir)
+' Dbf - relative distanse from one side of band to well, fraction of band width (for band reservoir)
+' W_d - dimensionless rectangle width (for rectangular reservoir)
+' L_d - dimensionless rectangle length (for rectangular reservoir)
+' Wf - relative distanse from long side of rectangle to well, fraction of rectangle width (for rectangular reservoir)
+' Lf - relative distanse from short side of rectangle to well, fraction of rectangle length (for rectangular reservoir)
+' Re_d - dimensionless circle radius (for circular reservoir)
+' Dw_d - dimensionless  well spacing (for 5 spot pattern)
+' r_d - dimensionless distance from center of wellbore
+'Stehfest inverse Laplace transform
+   Dim SumR As Double, DlogTW As Double, z As Double, q_d As Double, p_d As Double, add As Double
+   Dim j As Integer
+   Dim v()
+   
+   If td = 0 Then
+    PD_QD_QTD = 0
+    Exit Function
+   End If
+   
+   SumR = 0#
+   'call calculation of steffest coefficients
+   Call Coef(number_of_lapl_coeff, v())
+   DlogTW = Log(2#)
+   For j = 1 To number_of_lapl_coeff
+      
+      z = j * DlogTW / td
+      
+      q_d = (2 * pi_) / z
+      
+      p_d = pd_lapl(z, skin, wellModel, ReservoirShape, boundaryType, D_d, D1_d, D2_d, Db_d, Dbf, _
+            W_d, L_d, Wf, lf, Re_d, Dw_d, R_d)
+      
+        If mode = 1 Then
+            'Calculate pressure
+            'add wellbore storage
+            
+            p_d = pd_with_WBS(z, p_d, cd)
+            
+            add = (v(j) / j) * (p_d * q_d * z)
+      
+        ElseIf mode = 2 Then
+        'Calculate flow rate
+            
+            add = (v(j) / j) / (p_d * q_d * z)
+        
+        Else
+            
+            add = (v(j) / j) / (p_d * q_d * z ^ 2)
+        
+        End If
+        
+        SumR = SumR + add
+   
+   Next j
+   If SumR < 0 Then SumR = 0
+   PD_QD_QTD = SumR
+End Function
+Private Sub Coef(n As Integer, v())
+   ReDim v(n)
+   Dim m As Integer
+   Dim g(160) As Double, h(80) As Double
+   Dim NH As Integer, SN As Double
+   Dim k As Integer, K1 As Integer, K2 As Integer
+   Dim i As Integer, fi As Double
+      If m <> n Then
+        m = n
+        g(1) = 1#
+        NH = n / 2
+        For i = 2 To n
+          g(i) = g(i - 1) * i
+        Next i
+        h(1) = 2# / g(NH - 1)
+        For i = 2 To NH
+          fi = i
+          If i <> NH Then
+            h(i) = (fi ^ NH) * g(2 * i) / (g(NH - i) * g(i) * g(i - 1))
+          Else
+            h(i) = (fi ^ NH) * g(2 * i) / (g(i) * g(i - 1))
+          End If
+        Next i
+        SN = 2 * (NH - (NH \ 2) * 2) - 1
+        For i = 1 To n
+          v(i) = 0#
+          K1 = (i + 1) \ 2
+          K2 = i
+          If K2 > NH Then K2 = NH
+          For k = K1 To K2
+            If 2 * k - i = 0 Then
+               v(i) = v(i) + h(k) / (g(i - k))
+               GoTo 40
+            End If
+            If i = k Then
+              v(i) = v(i) + h(k) / g(2 * k - i)
+              GoTo 40
+            End If
+            v(i) = v(i) + h(k) / (g(i - k) * g(2 * k - i))
+40        Next k
+          v(i) = SN * v(i)
+          SN = -SN
+        Next i
+      End If
+End Sub
+Function pd_lapl(z As Double, _
+                 skin As Double, _
+                 Optional ByVal wellModel = 2, _
+                 Optional ByVal ReservoirShape = 1, _
+                 Optional ByVal boundaryType = 1, _
+                 Optional ByVal D_d = 1000, _
+                 Optional ByVal D1_d = 1000, _
+                 Optional ByVal D2_d = 1000, _
+                 Optional ByVal Db_d = 5000, _
+                 Optional ByVal Dbf = 0.5, _
+                 Optional ByVal W_d = 5000, _
+                 Optional ByVal L_d = 5000, _
+                 Optional ByVal Wf = 0.5, _
+                 Optional ByVal lf = 0.5, _
+                 Optional ByVal Re_d = 10000, _
+                 Optional ByVal Dw_d = 5000, _
+                 Optional ByVal R_d = 1) As Double
+                 
+'Returns dimensionless pressure for unit laplace rate
+'Note that unit rate in real space corresponds to 2 * pi_/ S in laplace space
+'Td - dimensionless time
+'Cd - dimensionless wellbore storage constant
+'Skin - skin-factor
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+' ReservoirShape -
+        ' 1 - infinite plain (default)
+        ' 2 - infinite half plane
+        ' 3 - infinite quater plane
+        ' 4 - infinite band (channel)
+        ' 5 - Rectangle
+        ' 6 - Circle
+        ' 7 - producing well 5 spot pattern
+'BoundaryType -
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+'_______________________________________
+'Boundary parameters - different should be used for different reservoir shapes
+' D_d  - dimensionless distance to boundary, (in half plane reservoir)
+' D1_d - dimensionless distanse to 1st boundary, (in quater plane reservoir)
+' D2_d - dimensionless distanse to 2d boundary, (in quater plane reservoir)
+' Db_d - dimensionless band width (for band reservoir)
+' Dbf - relative distanse from one side of band to well, fraction of band width (for band reservoir)
+' W_d - dimensionless rectangle width (for rectangular reservoir)
+' L_d - dimensionless rectangle length (for rectangular reservoir)
+' Wf - relative distanse from long side of rectangle to well, fraction of rectangle width (for rectangular reservoir)
+' Lf - relative distanse from short side of rectangle to well, fraction of rectangle length (for rectangular reservoir)
+' Re_d - dimensionless circle radius (for circular reservoir)
+' Dw_d - dimensionless  well spacing (for 5 spot pattern)
+' r_d - dimensionless distance from center of wellbore
+   
+   Dim pd As Double
+   
+   
+   Select Case ReservoirShape
+   Case 1
+    pd = pd_lapl_plane(z, wellModel, boundaryType, R_d)
+   Case 2
+    pd = pd_lapl_half_plane(z, D_d, wellModel, boundaryType)
+   Case 3
+    pd = pd_lapl_quater_plane(z, D1_d, D2_d, wellModel, boundaryType)
+   Case 4
+    pd = pd_lapl_band(z, Db_d, Dbf, wellModel, boundaryType)
+   Case 5
+    pd = pd_lapl_rectangle(z, W_d, L_d, Wf, lf, wellModel, boundaryType)
+   Case 6
+    pd = pd_lapl_circle(z, R_d, Re_d, wellModel, boundaryType)
+   Case 7
+    pd = 1
+   End Select
+    
+   
+   'Add skin
+   
+   pd = (pd + skin / (2 * pi_))
+   
+   'Wellbore storage is transferred to upper level
+   'Pd_lapl = pd / (1 + cd * z ^ 2 * pd)
+   'This should be corrected - mind q_d
+   'Pd_lapl = (z * pd + Skin) / (z + Cd * z * z * (z * pd + Skin))
+   pd_lapl = pd
+   
+End Function
+Function pd_with_WBS(S, pd, cd)
+  'adds wellbore stroage
+  'Note that dimensionlaess pressure put here should correspond
+  'to unit Laplace pressure, not unit pressure in real space
+  'If laplace transform of flow rate is not unit function (1) then
+  'to get laplace transform of pressure, corresponding to ANY flow rate
+  'pd_with_WBS should be multiplied by laplace transform of flow rate
+  'For example, for unit real space flow rate laplace transform of flow rate is
+  'qdL = 2 * pi_ / S
+  'Note, that formula below works for ANY flow rate
+  pd_with_WBS = pd / (1 + (2 * pi_) * cd * S * pd)
+  
+End Function
+'Infinite plane transient pressure solution
+Function pd_lapl_plane(z As Double, _
+                           Optional ByVal wellModel = 2, _
+                           Optional ByVal boundaryType = 1, _
+                           Optional ByVal R_d = 1) As Double
+'z - laplace space variable
+'r_d - dimensionless distance from center of wellbore
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+'BoundaryType - (not used in this subroutine)
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+   
+   pd_lapl_plane = pd_lapl_source(z, R_d, wellModel)
+   
+End Function
+' Radial source solution
+Function pd_lapl_source(z As Double, ByVal R_d As Double, _
+                        Optional ByVal wellModel = 2) As Double
+'z - laplace space variable
+'r_d - dimensionless distance from center of wellbore
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+   Dim pd As Double
+   If Sqr(z) * R_d > 700 Then
+        pd_lapl_source = 0
+   Else
+        Select Case wellModel
+        Case 1
+            pd = 1 / (2 * pi_) * BesselK(Sqr(z) * R_d, 0)
+        Case 2
+            pd = 1 / (2 * pi_) * BesselK(Sqr(z) * R_d, 0) / Sqr(z) / BesselK(Sqr(z), 1)
+        End Select
+        
+        pd_lapl_source = pd
+    
+   End If
+End Function
+'Half plane transient pressure solution
+Function pd_lapl_half_plane(z As Double, _
+                           Optional ByVal D_d As Double = 1000, _
+                           Optional ByVal wellModel = 2, _
+                           Optional ByVal boundaryType = 1) As Double
+'z - laplace space variable
+'D_d - dimensionless distance to boundary
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+'BoundaryType - (not used in this subroutine)
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+ Dim sign As Double
+ 
+ If boundaryType = 1 Then
+    sign = 1
+ Else
+    sign = -1
+ End If
+   
+ pd_lapl_half_plane = pd_lapl_source(z, 1, wellModel) + sign * pd_lapl_source(z, 2 * D_d, wellModel)
+End Function
+'Quater plane transient pressure solution
+Function pd_lapl_quater_plane(z As Double, _
+                           Optional ByVal D1_d As Double = 1000, _
+                           Optional ByVal D2_d As Double = 1000, _
+                           Optional ByVal wellModel = 2, _
+                           Optional ByVal boundaryType = 1) As Double
+'z - laplace space variable
+'D1_d - dimensionless distance to 1st boundary
+'D2_d - dimensionless distance to 2d boundary
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+'BoundaryType - (not used in this subroutine)
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+ Dim sign As Double
+ 
+ If boundaryType = 1 Then
+    sign = 1
+ Else
+    sign = -1
+ End If
+   
+ pd_lapl_quater_plane = pd_lapl_source(z, 1, wellModel) + sign * pd_lapl_source(z, 2 * D1_d, wellModel) _
+                      + sign * pd_lapl_source(z, 2 * D2_d, wellModel) + pd_lapl_source(z, 2 * Sqr(D1_d ^ 2 + D2_d ^ 2), wellModel)
+End Function
+'Infinite band transient pressure solution
+Function pd_lapl_band(z As Double, _
+                           Optional ByVal Db_d As Double = 5000, _
+                           Optional ByVal Dbf As Double = 0.5, _
+                           Optional ByVal wellModel = 2, _
+                           Optional ByVal boundaryType = 1) As Double
+'z - laplace space variable
+'Db_d - dimensionless band width
+'Dbf - distance to side of band in fraction of band width
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+'BoundaryType - (not used in this subroutine)
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+ Dim p_d As Double
+ Dim sign As Double
+ 
+ If boundaryType = 1 Then
+    sign = 1
+ Else
+    sign = -1
+ End If
+ p_d = pd_lapl_source(z, 1, wellModel)
+ 
+ Dim i As Integer
+ Dim x_r As Double
+ Dim x_l As Double
+ 
+ Dim a As Double
+ Dim b As Double
+ 
+ a = Db_d * Dbf
+ b = Db_d - a
+ 
+ For i = 1 To m_band
+   x_r = a + (i - 1) * Db_d + (1 + (-1) ^ (i - 1)) / 2 * a + (1 + (-1) ^ (i)) / 2 * b
+   x_l = b + (i - 1) * Db_d + (1 + (-1) ^ (i - 1)) / 2 * b + (1 + (-1) ^ (i)) / 2 * a
+   
+   p_d = p_d + (sign) ^ (i) * (pd_lapl_source(z, x_r, wellModel) _
+                      + pd_lapl_source(z, x_l, wellModel))
+ Next i
+ 
+ pd_lapl_band = p_d
+End Function
+'transient pressure solution for well in rectangular reservoir
+Function pd_lapl_rectangle(z As Double, _
+                           Optional ByVal W_d As Double = 10000, _
+                           Optional ByVal L_d As Double = 10000, _
+                           Optional ByVal Wf As Double = 0.5, _
+                           Optional ByVal lf As Double = 0.5, _
+                           Optional ByVal wellModel = 2, _
+                           Optional ByVal boundaryType = 1) As Double
+'z - laplace space variable
+'W_d - dimensionless  width of rectangle
+'L_d - dimensionless  length of rectangle
+'Wf - distance to long side of rectangle in fraction of  width
+'Lf - distance to short side of rectangle in fraction of  length
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+'BoundaryType - (not used in this subroutine)
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+ Dim p_d As Double
+ 
+ Dim sign As Double
+ 
+ If boundaryType = 1 Then
+    sign = 1
+ Else
+    sign = -1
+ End If
+ 
+ 
+ Dim i As Integer
+ Dim j As Integer
+ 
+ Dim x_r As Double
+ Dim x_l As Double
+ Dim y_u As Double
+ Dim y_l As Double
+ Dim l1 As Double
+ Dim l2 As Double
+ Dim l3 As Double
+ Dim l4 As Double
+ Dim xt As Double
+ Dim yt As Double
+ 
+ Dim a As Double
+ Dim b As Double
+ Dim c As Double
+ Dim d As Double
+ Dim m_w%, m_l%, delta_pd
+ Dim coeff As Double
+ 
+ a = W_d * Wf
+ b = W_d - a
+ c = L_d * lf
+ d = L_d - c
+ 
+ 'set number of images for different directions according to aspect ratio
+ 'as pressure propagates isotroply we need a square covered with images to
+ 'get propper solution
+ 
+ If W_d > L_d Then
+   m_w = m_rect
+   m_l = W_d / L_d * m_rect
+ Else
+   m_l = m_rect
+   m_w = L_d / W_d * m_rect
+ End If
+ 
+ 'coordinates of test point - set to(0,0), if at tested well
+ xt = 0
+ yt = 0
+ p_d = pd_lapl_source(z, 1, wellModel)
+ For i = 0 To m_w
+   x_r = a + (i - 1) * W_d + (1 + (-1) ^ (i - 1)) / 2 * a + (1 + (-1) ^ (i)) / 2 * b
+   x_l = b + (i - 1) * W_d + (1 + (-1) ^ (i - 1)) / 2 * b + (1 + (-1) ^ (i)) / 2 * a
+   For j = 0 To m_l
+     y_u = c + (j - 1) * L_d + (1 + (-1) ^ (j - 1)) / 2 * c + (1 + (-1) ^ (j)) / 2 * d
+     y_l = d + (j - 1) * L_d + (1 + (-1) ^ (j - 1)) / 2 * d + (1 + (-1) ^ (j)) / 2 * c
+     
+     l1 = Sqr((x_r - xt) ^ 2 + (y_u - yt) ^ 2)
+     l2 = Sqr((x_r - xt) ^ 2 + (y_l - yt) ^ 2)
+     l3 = Sqr((x_l - xt) ^ 2 + (y_u - yt) ^ 2)
+     l4 = Sqr((x_l - xt) ^ 2 + (y_l - yt) ^ 2)
+        
+     If (i > 0 Or j > 0) Then
+       If (i = 0 Or j = 0) Then
+         coeff = 0.5
+       Else
+         coeff = 1
+       End If
+       'delta_pd = 1
+       delta_pd = pd_lapl_source(z, l1, wellModel) _
+                      + pd_lapl_source(z, l2, wellModel) _
+                      + pd_lapl_source(z, l3, wellModel) _
+                      + pd_lapl_source(z, l4, wellModel)
+       p_d = p_d + coeff * (sign) ^ (i + j) * delta_pd
+       'If Abs(delta_pd) / (Abs(p_d) + tiny) < tiny Then Exit For
+     End If
+   Next j
+   If j = 0 Then Exit For
+ Next i
+ pd_lapl_rectangle = p_d
+End Function
+Function pd_lapl_circle(z As Double, _
+                        Optional ByVal R_d = 1, _
+                        Optional Re_d = 5000, _
+                        Optional ByVal wellModel = 2, _
+                        Optional ByVal boundaryType = 1) As Double
+'z - laplace space variable
+'Re_d - dimensionless circle radius
+' WellModel - well model
+        ' 1 - line source solution (default)
+        ' 2 - finite well radius solution
+'BoundaryType - (not used in this subroutine)
+        '1 - no flow boundary
+        '2 - constant pressure boundary
+   
+   Dim pd, K0, zK1, I0, zI1, K1r, I1r, K0r, I0r As Double
+   
+  
+   'to avoid division by zero set limit values of normalizing coefficients
+   If Sqr(z) * Re_d > 700 Then
+        'Short time - apply infinit acting solution
+        pd = pd_lapl_source(z, R_d, wellModel)
+   Else
+        'Select values of derivative normalizing coefficients z * K1(sqrt(z)) and -z * I1(sqrt(z))
+        'in accordance with model - line source of finite radius
+        Select Case wellModel
+        Case 1
+         zK1 = 1
+         zI1 = 0
+        Case 2
+         zK1 = (z) ^ 0.5 * BesselK(Sqr(z), 1)
+         zI1 = (z) ^ 0.5 * BesselI(Sqr(z), 1)
+        End Select
+        K1r = BesselK(Sqr(z) * Re_d, 1)
+        I1r = BesselI(Sqr(z) * Re_d, 1)
+        K0r = BesselK(Sqr(z) * Re_d, 0)
+        I0r = BesselI(Sqr(z) * Re_d, 0)
+        K0 = BesselK(Sqr(z) * R_d, 0)
+        I0 = BesselI(Sqr(z) * R_d, 0)
+        
+        If boundaryType = 1 Then
+          'no flow
+           pd = 1 / (2 * pi_) * (I1r * K0 + K1r * I0) / (I1r * zK1 - K1r * zI1)
+        Else
+          'constant pressure
+           pd = 1 / (2 * pi_) * (I0r * K0 - K0r * I0) / (I0r * zK1 + K0r * zI1)
+        End If
+   
+   End If
+   
+   pd_lapl_circle = pd
+End Function
+

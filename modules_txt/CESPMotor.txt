@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.57  2025.05                                 khabibullinra@gmail.com
+'Unifloc 7.58  2025.09                                 khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -142,11 +142,11 @@ Public Property Get Ix_A() As Double
     UUn_fnf = data_.U_phase_V / nom_data_.U_phase_V * nom_data_.f_Hz / data_.f_Hz
     Kn = 1.2786 * UUn_fnf - 0.2689   ' поправка по Гридину для учета намагничивающего тока
     Kn = 1.2786 * UUn_fnf - 0.2786   ' поправка по Гридину для учета намагничивающего тока
-    Dim a#, B#, g#
+    Dim a#, b#, g#
     a = 0.229
-    B = 0.988
+    b = 0.988
     g = 0.242
-    Kn = (B - (B ^ 2 - 4 * a * (UUn_fnf - g)) ^ 0.5) / 2 / a
+    Kn = (b - (b ^ 2 - 4 * a * (UUn_fnf - g)) ^ 0.5) / 2 / a
     Dim CR As Double
     If Kn < 1 Then   ' после экспериемнтов осталось деление на два участка, если потребуется можно использовать
         CR = Ix_cf
@@ -233,8 +233,8 @@ Private Sub set_motor_Gridin( _
 ' инициализация двигателя на основе схемы замещения по Гридину
      Dim Inomlin_A As Double
      Dim a As Double
-     Dim B As Double
-     Dim Rm As Double
+     Dim b As Double
+     Dim RM As Double
      Dim g As Double
      Dim P1n_W As Double  ' потребляемая мощность двигателя
      Dim I1n_A As Double  ' фазный ток
@@ -255,14 +255,14 @@ On Error GoTo er1:
          With nom_data_
                 ' расчитываем показатели схемы замещения. Сначала вспомогательные переменные
                 a = alpha0 / xi_ * (1 - .eff_d) / .eff_d * (1 - .s_d) / .s_d - 1
-                Rm = 3 * .U_phase_V ^ 2 * (1 - .s_d) / (2 * .Pshaft_kW * 1000 * (lambda_d_ + xi_ - 1))
+                RM = 3 * .U_phase_V ^ 2 * (1 - .s_d) / (2 * .Pshaft_kW * 1000 * (lambda_d_ + xi_ - 1))
                 g = 1 / .s_d ^ 2 + 2 * a / .s_d + a ^ 2
-                B = (lambda_d_ + xi_ - 1) / xi_
+                b = (lambda_d_ + xi_ - 1) / xi_
                 ' далее считаем сопротивления статора и ротора и индуктивность
-                R2__ = Rm / g * (B / .s_d + a + ((B / .s_d + a) ^ 2 - g) ^ 0.5)
+                R2__ = RM / g * (b / .s_d + a + ((b / .s_d + a) ^ 2 - g) ^ 0.5)
                 R2s_ = R2__ / .s_d
                 R1_ = a * R2__
-                xk_ = (Rm ^ 2 - 2 * Rm * R1_) ^ 0.5
+                xk_ = (RM ^ 2 - 2 * RM * R1_) ^ 0.5
                 ' теперь считаем показатели холостого хода при номинальной частоте вращения
                 P1n_W = .Pshaft_kW * 1000 / .eff_d
                 I1n_A = P1n_W / (3 * .U_phase_V * .cosphi)    ' оценили номинальный ток, хотя он может быть и задан
@@ -282,7 +282,7 @@ er1:
     add_log_msg msg
     Err.Raise kErrESPcalc, , msg
 End Sub
-Public Sub calc_motor_slip(s As Double, _
+Public Sub calc_motor_slip(S As Double, _
                       Optional freq_Hz As Double = 50, _
                       Optional Ulin_V As Double = 1000)
     ' Расчет по схеме замещения в зависимости от проскальзывания
@@ -296,13 +296,13 @@ Public Sub calc_motor_slip(s As Double, _
         add_log_msg "Warning: CESPMotor.calc_motor_slip: Ulin_V / nom_data_.U_lin_V out of range " + CStr(Uf)
     End If
     
-    If s = 0 Then
-        s = 0.00015
+    If S = 0 Then
+        S = 0.00015
     End If
     data_.U_lin_V = Ulin_V
     data_.U_phase_V = Ulin_V / root3
     If ID = 2 Then
-        Call set_motor_data_Gridin_(s, data_.U_phase_V, freq_Hz)
+        Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
     End If
 End Sub
 ' расчет работы мотора по параметрам напряжения и частоты на поверхности и известному моменту на валу
@@ -385,7 +385,7 @@ Private Sub estimate_motor_mom_Nm(Mshaft_Nm As Double, _
                       Optional Ulin_V As Double = 1000)
 ' расчет параметров двигателя при заданном моменте на валу
     Dim load As Double
-    Dim s As Double, s1 As Double, s2 As Double
+    Dim S As Double, s1 As Double, s2 As Double
     Dim i As Integer
     Dim pow_mech_kW As Double
     Dim iter_max As Long
@@ -415,19 +415,19 @@ Private Sub estimate_motor_mom_Nm(Mshaft_Nm As Double, _
         ' можно и быстрее сделать, но потом
         If Mshaft_Nm > 0 And Mshaft_Nm < mmax Then
             Do
-                s = (s1 + s2) / 2
-                Call set_motor_data_Gridin_(s, data_.U_phase_V, freq_Hz)
+                S = (s1 + s2) / 2
+                Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
                 If Mshaft_Nm > data_.Mshaft_Nm Then
-                    s1 = s
+                    s1 = S
                 Else
-                    s2 = s
+                    s2 = S
                 End If
                 i = i + 1
             Loop Until Abs(Mshaft_Nm - data_.Mshaft_Nm) < 0.01 Or i > iter_max
         Else
             If Mshaft_Nm <= 0 Then
-                s = 0
-                Call set_motor_data_Gridin_(s, data_.U_phase_V, freq_Hz)
+                S = 0
+                Call set_motor_data_Gridin_(S, data_.U_phase_V, freq_Hz)
             Else
                 msg = "CESPMotor.calc_motor_mom_Nm: method Gridin. torque too high " + CStr(Mshaft_Nm) + " > " + CStr(mmax) + ", probably voltage too low, Uphase = " + CStr(data_.U_phase_V)
                 log_.add_msg msg
@@ -647,7 +647,7 @@ Private Function motor_eff_default0_d(load)
 End Function
 ' ====== расчет по Гридину по П образной схеме замещения
 ' расчет текущих параметров работы двигателя при заданных частоте и напряжении и при вращении
-Private Sub set_motor_data_Gridin_(ByVal s As Double, _
+Private Sub set_motor_data_Gridin_(ByVal S As Double, _
                          ByVal Uph_V As Double, _
                          ByVal Fw_Hz As Double)
      Dim R2_s As Double
@@ -655,14 +655,14 @@ Private Sub set_motor_data_Gridin_(ByVal s As Double, _
      Dim phi2 As Double
      
      With data_
-        .s_d = s     ' сохраняем скольжение
+        .s_d = S     ' сохраняем скольжение
         .f_Hz = Fw_Hz
         .U_phase_V = Uph_V
         .U_lin_V = Uph_V * 3 ^ 0.5
-        If s < 0.00015 Then
-            s = 0.00015
+        If S < 0.00015 Then
+            S = 0.00015
         End If
-        R2_s = R2__ / s     ' вычисляем вспомогательный параметр - активное сопротивление обмотки ротора деленное на скольжение
+        R2_s = R2__ / S     ' вычисляем вспомогательный параметр - активное сопротивление обмотки ротора деленное на скольжение
         .Mshaft_Nm = 3 * Uph_V ^ 2 * R2_s / (Fw_Hz * (2 * const_Pi) * ((R1_ + R2_s) ^ 2 + XK ^ 2)) - M0_Nm
         I2_ = Uph_V / ((R1 + R2_s) ^ 2 + XK ^ 2) ^ 0.5
         phi2 = Atn(XK / (R1 + R2_s))
@@ -670,7 +670,7 @@ Private Sub set_motor_data_Gridin_(ByVal s As Double, _
         .I_lin_A = data_.I_phase_A
         .cosphi = (Ix_A * Cos(phix_d_) + I2_ * Cos(phi2)) / .I_phase_A
         .Pelectr_kW = 3 * .U_phase_V * .I_phase_A * .cosphi / 1000
-        .Pshaft_kW = .Mshaft_Nm * Fw_Hz * (1 - s) * (2 * const_Pi) / 1000
+        .Pshaft_kW = .Mshaft_Nm * Fw_Hz * (1 - S) * (2 * const_Pi) / 1000
         .eff_d = .Pshaft_kW / .Pelectr_kW
         .load_d = .Mshaft_Nm / nom_data_.Mshaft_Nm '* 100
     End With
@@ -679,12 +679,12 @@ End Sub
 ' функция расчета s для проверки - нигде не используется
 Private Function calc_s_d(m_Nm As Double, Uphase_V As Double, f_Hz As Double) As Double
     Dim rs As Double
-    Dim s As Double
+    Dim S As Double
     
     rs = 3 * (Uphase_V ^ 2) / (2 * (m_Nm + M0_Nm) * f_Hz * 2 * const_Pi) - R1
-    s = R2_ / (rs + (rs ^ 2 - (R1 ^ 2 + XK ^ 2)) ^ 0.5)
-    Call set_motor_data_Gridin_(s, Uphase_V, f_Hz)
-    calc_s_d = s
+    S = R2_ / (rs + (rs ^ 2 - (R1 ^ 2 + XK ^ 2)) ^ 0.5)
+    Call set_motor_data_Gridin_(S, Uphase_V, f_Hz)
+    calc_s_d = S
 End Function
 Public Function calc_s_M_krit(ByVal Ulin_V As Double, _
                              ByVal f_Hz As Double)
