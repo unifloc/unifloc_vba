@@ -1435,7 +1435,7 @@ class API():
         self.f_ESP_optRate_m3day = self.book.macro("ESP_optRate_m3day")
         return self.f_ESP_optRate_m3day(esp_json,freq_Hz,mu_cSt)
 
-    def ESP_id_by_rate(self, q,size5=True):
+    def ESP_id_by_rate(self, q,size="5A"):
         """
  ========== description ============== 
  функция возвращает идентификатор типового насоса по значению  номинального дебита 
@@ -1449,7 +1449,7 @@ class API():
         """
 
         self.f_ESP_id_by_rate = self.book.macro("ESP_id_by_rate")
-        return self.f_ESP_id_by_rate(q,size5)
+        return self.f_ESP_id_by_rate(q,size)
 
     def ESP_p_atma(self, p_calc_atma,t_intake_C=50,t_dis_C=50,feed="",esp_json="",freq_Hz=50,calc_along_flow=True,param="",h_mes_top=1000,q_liq_sm3day=-1,fw_perc=-1,rp_m3m3=-1,q_gas_free_sm3day=-1):
         """
@@ -1533,7 +1533,7 @@ class API():
         self.f_ESP_motor_nameplate = self.book.macro("ESP_motor_nameplate")
         return self.f_ESP_motor_nameplate(motor_json,cable_json,freq_Hz,param)
 
-    def ESP_motor_calc_slip(self, s,freq_Hz=50,U_V=-1,motor_json="",cable_json="",param=""):
+    def ESP_motor_calc_slip(self, S,freq_Hz=50,U_V=-1,motor_json="",cable_json="",param=""):
         """
  ========== description ============== 
  расчет полной характеристики двигателя от проскальзования  по заданной величине скольжения (на основе схемы замещения) 
@@ -1555,7 +1555,7 @@ class API():
         """
 
         self.f_ESP_motor_calc_slip = self.book.macro("ESP_motor_calc_slip")
-        return self.f_ESP_motor_calc_slip(s,freq_Hz,U_V,motor_json,cable_json,param)
+        return self.f_ESP_motor_calc_slip(S,freq_Hz,U_V,motor_json,cable_json,param)
 
     def ESP_gassep_name(self, gsep_type_TYPE):
         """
@@ -2935,7 +2935,7 @@ class API():
         self.f_crv_intersection = self.book.macro("crv_intersection")
         return self.f_crv_intersection(x1_points,y1_points,x2_points,y2_points)
 
-    def crv_fit_spline_1D(self, XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite=False):
+    def crv_fit_spline_1D(self, XA,YA,m,XIA,WA,XCA,YCA,DCA,hermite=False):
         """
  ========== description ============== 
 Поиск пересечений для кривых заданных таблицами. Используется линейная интерполяция. Возможно несколько решений. 
@@ -2963,7 +2963,7 @@ class API():
         """
 
         self.f_crv_fit_spline_1D = self.book.macro("crv_fit_spline_1D")
-        return self.f_crv_fit_spline_1D(XA,YA,M,XIA,WA,XCA,YCA,DCA,hermite)
+        return self.f_crv_fit_spline_1D(XA,YA,m,XIA,WA,XCA,YCA,DCA,hermite)
 
     def crv_fit_linear(self, YA,XA,out,weight,cnstraints):
         """
@@ -2987,7 +2987,7 @@ class API():
         self.f_crv_fit_linear = self.book.macro("crv_fit_linear")
         return self.f_crv_fit_linear(YA,XA,out,weight,cnstraints)
 
-    def crv_fit_poly(self, YA,XA,M,out,XIA,weight,cnstraints):
+    def crv_fit_poly(self, YA,XA,m,out,XIA,weight,cnstraints):
         """
  ========== description ============== 
 Аппроксимация данных полиномом функцией. Решается задача min|XM-Y| ищется вектор M 
@@ -3011,7 +3011,7 @@ class API():
         """
 
         self.f_crv_fit_poly = self.book.macro("crv_fit_poly")
-        return self.f_crv_fit_poly(YA,XA,M,out,XIA,weight,cnstraints)
+        return self.f_crv_fit_poly(YA,XA,m,out,XIA,weight,cnstraints)
 
     def crv_parametric_interpolation(self, x_points,y_points,x_val,type_interpolation=0,param_points=-1):
         """
@@ -3035,55 +3035,7 @@ class API():
         self.f_crv_parametric_interpolation = self.book.macro("crv_parametric_interpolation")
         return self.f_crv_parametric_interpolation(x_points,y_points,x_val,type_interpolation,param_points)
 
-    def Ei(self, X):
-        """
- ========== description ============== 
- Расчет интегральной показательной функции Ei(x) 
-        
- ==========  arguments  ============== 
-
-     x - агрумент функции, может быть и положительным и отрицательным   
-
-        """
-
-        self.f_Ei = self.book.macro("Ei")
-        return self.f_Ei(X)
-
-    def E_1(self, X):
-        """
- ========== description ============== 
- Расчет интегральной показательной функции $E_1(x)$  для вещественных положительных x, x>0 верно E_1(x)=- Ei(-x) 
-        
- ==========  arguments  ============== 
-
-     x - агрумент функции, может быть и положительным и отрицательным   
-
-        """
-
-        self.f_E_1 = self.book.macro("E_1")
-        return self.f_E_1(X)
-
-    def transient_pd_radial(self, td,cd=0,skin=0,rd=1,model=0):
-        """
- ========== description ============== 
- Расчет неустановившегося решения уравнения фильтрации  для различных моделей радиального притока к вертикльной скважине  основано не решениях в пространстве Лапласа и преобразовании Стефеста 
-        
- ==========  arguments  ============== 
-
-     td - безразмерное время для которого проводится расчет  сd - безразмерный коэффициент влияния ствола скважины    
-
-   cd   ,     skin - скин-фактор, безразмерный skin>0.  для skin<0 используйте эффективный радиус скважины    
-
-     rd - безразмерное расстояние для которого проводится расчет  rd=1 соответвует забою скважины    
-
-     model - модель проведения расчета. 0 - модель линейного стока ei  1 - модель линейного стока через преобразование стефеста  2 - конечный радиус скважины  3 - линейный сток со ..см.мануал  
-
-        """
-
-        self.f_transient_pd_radial = self.book.macro("transient_pd_radial")
-        return self.f_transient_pd_radial(td,cd,skin,rd,model)
-
-    def transient_pwf_radial_atma(self, t_hr,q_liq_sm3day,pi_atma=250,skin=0,cs_1atm=0,r_m=0.1,rw_m=0.1,k_mD=100,h_m=10,porosity=0.2,mu_cP=1,b_m3m3=1.2,ct_1atm=0.00001,model=0):
+    def transient_pwf_radial_atma_(self, t_hr,q_liq_sm3day,pi_atma=250,skin=0,cs_1atm=0,r_m=0.1,rw_m=0.1,k_mD=100,h_m=10,porosity=0.2,mu_cP=1,b_m3m3=1.2,ct_1atm=0.00001,model=0):
         """
  ========== description ============== 
  расчет изменения забойного давления после запуска скважины  с постоянным дебитом (terminal rate solution) 
@@ -3120,10 +3072,10 @@ class API():
 
         """
 
-        self.f_transient_pwf_radial_atma = self.book.macro("transient_pwf_radial_atma")
-        return self.f_transient_pwf_radial_atma(t_hr,q_liq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,model)
+        self.f_transient_pwf_radial_atma_ = self.book.macro("transient_pwf_radial_atma_")
+        return self.f_transient_pwf_radial_atma_(t_hr,q_liq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,model)
 
-    def transient_cd_from_cs(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+    def trdef_cd_from_cs(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет безразмерного коэффициента влияния ствола скважины (определение) 
@@ -3142,10 +3094,32 @@ class API():
 
         """
 
-        self.f_transient_cd_from_cs = self.book.macro("transient_cd_from_cs")
-        return self.f_transient_cd_from_cs(cs_1atm,rw_m,h_m,porosity,ct_1atm)
+        self.f_trdef_cd_from_cs = self.book.macro("trdef_cd_from_cs")
+        return self.f_trdef_cd_from_cs(cs_1atm,rw_m,h_m,porosity,ct_1atm)
 
-    def transient_cs_from_cd_1atm(self, cd,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+    def trdef_cd_arr_from_cs(self, cs_1atm,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+        """
+ ========== description ============== 
+ расчет безразмерного коэффициента влияния ствола скважины (определение) 
+        
+ ==========  arguments  ============== 
+
+     cs_1atm - коэффициент влияния ствола скважины, число или json список 1/атм    
+
+     rw_m - радиус скважины, м    
+
+     h_m - толщина пласта, м    
+
+     porosity - пористость    
+
+     ct_1atm - общая сжимаемость системы в пласте, 1/атм   
+
+        """
+
+        self.f_trdef_cd_arr_from_cs = self.book.macro("trdef_cd_arr_from_cs")
+        return self.f_trdef_cd_arr_from_cs(cs_1atm,rw_m,h_m,porosity,ct_1atm)
+
+    def trdef_cs_from_cd_1atm(self, cd,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет коэффициента влияния ствола скважины (определение) 
@@ -3164,10 +3138,32 @@ class API():
 
         """
 
-        self.f_transient_cs_from_cd_1atm = self.book.macro("transient_cs_from_cd_1atm")
-        return self.f_transient_cs_from_cd_1atm(cd,rw_m,h_m,porosity,ct_1atm)
+        self.f_trdef_cs_from_cd_1atm = self.book.macro("trdef_cs_from_cd_1atm")
+        return self.f_trdef_cs_from_cd_1atm(cd,rw_m,h_m,porosity,ct_1atm)
 
-    def transient_td_from_t(self, t_hr,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+    def trdef_cs_arr_from_cd_1atm(self, cd,rw_m=0.1,h_m=10,porosity=0.2,ct_1atm=0.00001):
+        """
+ ========== description ============== 
+ расчет коэффициента влияния ствола скважины (определение) 
+        
+ ==========  arguments  ============== 
+
+     cd - коэффициент влияния ствола скважины, безразмерный, число или json список    
+
+     rw_m - радиус скважины, м    
+
+     h_m - толщина пласта, м    
+
+     porosity - пористость    
+
+     ct_1atm - общая сжимаемость системы в пласте, 1/атм   
+
+        """
+
+        self.f_trdef_cs_arr_from_cd_1atm = self.book.macro("trdef_cs_arr_from_cd_1atm")
+        return self.f_trdef_cs_arr_from_cd_1atm(cd,rw_m,h_m,porosity,ct_1atm)
+
+    def trdef_td_from_t(self, t_hr,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет безразмерного времени (определение) 
@@ -3188,10 +3184,34 @@ class API():
 
         """
 
-        self.f_transient_td_from_t = self.book.macro("transient_td_from_t")
-        return self.f_transient_td_from_t(t_hr,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+        self.f_trdef_td_from_t = self.book.macro("trdef_td_from_t")
+        return self.f_trdef_td_from_t(t_hr,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-    def transient_t_from_td_hr(self, td,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+    def trdef_td_arr_from_t(self, t_hr,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+        """
+ ========== description ============== 
+ расчет безразмерного времени (определение) 
+        
+ ==========  arguments  ============== 
+
+     t_hr - время для которого проводится расчет, час    
+
+     rw_m - радиус скважины, м    
+
+     k_md - проницаемость пласта, мд    
+
+     porosity - пористость    
+
+     mu_cp - вязкость флюида в пласте, сп    
+
+     ct_1atm - общая сжимаемость системы в пласте, 1/атм   
+
+        """
+
+        self.f_trdef_td_arr_from_t = self.book.macro("trdef_td_arr_from_t")
+        return self.f_trdef_td_arr_from_t(t_hr,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+
+    def trdef_t_from_td_hr(self, td,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
         """
  ========== description ============== 
  расчет времени по безразмерному времени (определение) 
@@ -3212,10 +3232,34 @@ class API():
 
         """
 
-        self.f_transient_t_from_td_hr = self.book.macro("transient_t_from_td_hr")
-        return self.f_transient_t_from_td_hr(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+        self.f_trdef_t_from_td_hr = self.book.macro("trdef_t_from_td_hr")
+        return self.f_trdef_t_from_td_hr(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
 
-    def transient_pd_from_p(self, p_wf_atma,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+    def trdef_t_arr_from_td_hr(self, td,rw_m=0.1,k_mD=100,porosity=0.2,mu_cP=1,ct_1atm=0.00001):
+        """
+ ========== description ============== 
+ расчет времени по безразмерному времени (определение) 
+        
+ ==========  arguments  ============== 
+
+     td - время для которого проводится расчет, безразмерное    
+
+     rw_m - радиус скважины, м    
+
+     k_md - проницаемость пласта, мд    
+
+     porosity - пористость    
+
+     mu_cp - вязкость флюида в пласте, сп    
+
+     ct_1atm - общая сжимаемость системы в пласте, 1/атм   
+
+        """
+
+        self.f_trdef_t_arr_from_td_hr = self.book.macro("trdef_t_arr_from_td_hr")
+        return self.f_trdef_t_arr_from_td_hr(td,rw_m,k_mD,porosity,mu_cP,ct_1atm)
+
+    def trdef_pd_from_p(self, p_wf_atma,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """
  ========== description ============== 
  расчет безразмерного давления (определение) 
@@ -3238,10 +3282,36 @@ class API():
 
         """
 
-        self.f_transient_pd_from_p = self.book.macro("transient_pd_from_p")
-        return self.f_transient_pd_from_p(p_wf_atma,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+        self.f_trdef_pd_from_p = self.book.macro("trdef_pd_from_p")
+        return self.f_trdef_pd_from_p(p_wf_atma,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
 
-    def transient_p_from_pd_atma(self, pd,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+    def trdef_pd_arr_from_p(self, p_wf_atma,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+        """
+ ========== description ============== 
+ расчет безразмерного давления (определение) 
+        
+ ==========  arguments  ============== 
+
+     p_wf_atma - забойное давление, атма    
+
+     q_liq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+
+     pi_atma - начальное пластовое давление, атма    
+
+     k_md - проницаемость пласта, мд    
+
+     h_m - толщина пласта, м    
+
+     mu_cp - вязкость флюида в пласте, сп    
+
+     b_m3m3 - объемный коэффициент нефти, м3/м3   
+
+        """
+
+        self.f_trdef_pd_arr_from_p = self.book.macro("trdef_pd_arr_from_p")
+        return self.f_trdef_pd_arr_from_p(p_wf_atma,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+
+    def trdef_p_from_pd_atma(self, pd,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
         """
  ========== description ============== 
  расчет безразмерного давления (определение) 
@@ -3262,7 +3332,121 @@ class API():
 
         """
 
-        self.f_transient_p_from_pd_atma = self.book.macro("transient_p_from_pd_atma")
-        return self.f_transient_p_from_pd_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+        self.f_trdef_p_from_pd_atma = self.book.macro("trdef_p_from_pd_atma")
+        return self.f_trdef_p_from_pd_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+
+    def trdef_p_arr_from_pd_atma(self, pd,q_liq_sm3day,pi_atma=250,k_mD=100,h_m=10,mu_cP=1,b_m3m3=1.2):
+        """
+ ========== description ============== 
+ расчет безразмерного давления (определение) 
+        
+ ==========  arguments  ============== 
+
+   pd   ,     q_liq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+
+     pi_atma - начальное пластовое давление, атма    
+
+     k_md - проницаемость пласта, мд    
+
+     h_m - толщина пласта, м    
+
+     mu_cp - вязкость флюида в пласте, сп    
+
+     b_m3m3 - объемный коэффициент нефти, м3/м3   
+
+        """
+
+        self.f_trdef_p_arr_from_pd_atma = self.book.macro("trdef_p_arr_from_pd_atma")
+        return self.f_trdef_p_arr_from_pd_atma(pd,q_liq_sm3day,pi_atma,k_mD,h_m,mu_cP,b_m3m3)
+
+    def trdef_q_from_qd_sm3day(self, qd,q_ref_sm3day=1):
+        """
+ ========== description ============== 
+ расчет безразмерного давления (определение) 
+        
+ ==========  arguments  ============== 
+
+     qd - безразмерный дебит скважины    
+
+     q_ref_sm3day - дебит обезразмеривания, м3/сут в стандартных условиях   
+
+        """
+
+        self.f_trdef_q_from_qd_sm3day = self.book.macro("trdef_q_from_qd_sm3day")
+        return self.f_trdef_q_from_qd_sm3day(qd,q_ref_sm3day)
+
+    def trdef_qd_from_q(self, q,q_ref_sm3day=1):
+        """
+ ========== description ============== 
+ расчет безразмерного давления (определение) 
+        
+ ==========  arguments  ============== 
+
+     qd - безразмерный дебит скважины    
+
+     q_ref_sm3day - дебит обезразмеривания, м3/сут в стандартных условиях   
+
+        """
+
+        self.f_trdef_qd_from_q = self.book.macro("trdef_qd_from_q")
+        return self.f_trdef_qd_from_q(q,q_ref_sm3day)
+
+    def transient_pwf_radial_kva_atma(self, t_hr,q_liq_sm3day,pi_atma=250,skin=0,cs_1atm=0,r_m=0.1,rw_m=0.1,k_mD=100,h_m=10,porosity=0.2,mu_cP=1,b_m3m3=1.2,ct_1atm=0.00001,wellModel=2,ReservoirShape=1,boundaryType=1,d_m=100,d1_m=100,d2_m=100,db_m=500,d_band_f=0.5,w_m=500,l_m=500,w_f=0.5,l_f=0.5,r_ext_m=1000,d_well_m=500):
+        """
+ ========== description ============== 
+ расчет изменения забойного давления после запуска скважины  с постоянным дебитом (terminal rate solution) 
+        
+ ==========  arguments  ============== 
+
+     t_hr - время для которого проводится расчет, час    
+
+     q_liq_sm3day - дебит запуска скважины, м3/сут в стандартных условиях    
+
+     pi_atma - начальное пластовое давление, атма    
+
+     skin - скин - фактор, может быть отрицательным    
+
+     cs_1atm - коэффициент влияния ствола скважины, 1/атм    
+
+     r_m - расстояние от скважины для которого проводится расчет, м    
+
+     rw_m - радиус скважины, м    
+
+     k_md - проницаемость пласта, мд    
+
+     h_m - толщина пласта, м    
+
+     porosity - пористость    
+
+     mu_cp - вязкость флюида в пласте, сп    
+
+     b_m3m3 - объемный коэффициент нефти, м3/м3    
+
+     ct_1atm - общая сжимаемость системы в пласте, 1/атм  model - модель проведения расчета. 0 - модель линейного стока ei  1 - модель линейного стока через преобразование стефеста ..см.мануал   
+
+   wellmodel   ,   reservoirshape   ,   boundarytype   ,     d_m - distance to boundary, (in half plane reservoir)    
+
+     d1_m - distanse to 1st boundary, (in quater plane reservoir)    
+
+     d2_m - distanse to 2d boundary, (in quater plane reservoir)  db_d - band width (for band reservoir)    
+
+   db_m   ,     d_band_f - relative distanse from one side of band to well, fraction of band width (for band reservoir)    
+
+     rw_m - радиус скважины, м  k_md - проницаемость пласта, мд  h_m - толщина пласта, м  porosity - пористость  mu_cp - вязкость флюида в пласте, сп  b_m3m3 - объемный коэффицие..см.мануал   
+
+     l_m - rectangle length (for rectangular reservoir)    
+
+     w_f - relative distanse from long side of rectangle to well, fraction of rectangle width (for rectangular reservoir)    
+
+     l_f - relative distanse from short side of rectangle to well, fraction of rectangle length (for rectangular reservoir)    
+
+     r_ext_m - circle radius (for circular reservoir)    
+
+     d_well_m - well spacing (for 5 spot pattern)  r_m - distance from center of wellbore   
+
+        """
+
+        self.f_transient_pwf_radial_kva_atma = self.book.macro("transient_pwf_radial_kva_atma")
+        return self.f_transient_pwf_radial_kva_atma(t_hr,q_liq_sm3day,pi_atma,skin,cs_1atm,r_m,rw_m,k_mD,h_m,porosity,mu_cP,b_m3m3,ct_1atm,wellModel,ReservoirShape,boundaryType,d_m,d1_m,d2_m,db_m,d_band_f,w_m,l_m,w_f,l_f,r_ext_m,d_well_m)
 
 #UniflocVBA = API(addin_name_str)

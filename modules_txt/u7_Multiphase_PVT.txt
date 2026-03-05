@@ -1,5 +1,5 @@
 '=======================================================================================
-'Unifloc 7.58  2025.09                                 khabibullinra@gmail.com
+'Unifloc 7.59  2026.02                                 khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -3716,7 +3716,7 @@ unf_Saharov_Mokhov_Gradient = Array(dPdLg_out_atmm * calibr_grav + dPdLf_out_atm
                             fpat_out_num)
 End Function
 '=======================================================================================
-'Unifloc 7.58  2025.09                                 khabibullinra@gmail.com
+'Unifloc 7.59  2026.02                                 khabibullinra@gmail.com
 'Petroleum engineering calculations modules (macroses)
 '2000 - 2025
 '
@@ -4683,15 +4683,19 @@ co2_fug = Exp((0.1 + 0.12 * (0.205 + 0.0115 * t_C) ^ (0.5) - 4.576 / 10000 * t_C
 co2_mol_pt = CO2_mol / (1 + (p_psi * co2_fug * (0.5 * qw_bpd + 10 * qo_bpd) * 0.00001) / (qg_mscfd * (t_F + 460)))
 ' парциальное давление CO2
 co2_pp = P_atm * co2_fug * co2_mol_pt
-' определяем мольную концентрацию растворенной в воде CO2 г-ион/л
-pw = 10 ^ (Log(co2_pp * 14.224) / (Log(10)) - _
-           2.212 - _
-           6.51 * 0.001 * t_F + _
-           1.019 * 0.00001 * t_F * t_F - _
-           1.29 * 0.00001 * p_psi - _
-           7.7 * 0.01 * mu ^ 0.5 - _
-           5.9 * 0.01 * mu)
-co2_wat = 44 * 1000# * pw
+If CO2_mol > 0 Then
+    ' определяем мольную концентрацию растворенной в воде CO2 г-ион/л
+    pw = 10 ^ (Log(co2_pp * 14.224) / (Log(10)) - _
+               2.212 - _
+               6.51 * 0.001 * t_F + _
+               1.019 * 0.00001 * t_F * t_F - _
+               1.29 * 0.00001 * p_psi - _
+               7.7 * 0.01 * mu ^ 0.5 - _
+               5.9 * 0.01 * mu)
+    co2_wat = 44 * 1000# * pw
+Else
+    co2_wat = 0
+End If
 ' дальше в зависимости от типа соли определяем индекс насыщения SI
 ' при SI > 0 возможно выпадение соли, при SI < 0 оно маловероятно
 ' SI = 0 раствор соли в равновесии, при SI < 0 - дефицит насыщения
@@ -4734,7 +4738,183 @@ Select Case mode
         f = 0.0524
         g = 0.0852
         h = -0.00209
-        unf_fa_scale_SI = Log(Ca2 / 40.08 / 1000 * (SO4 / 96.06 / 1000) / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
+        ' обновлено 11.11.2025 убрали влияние co2 на сульфаты, согласно оригинальной статьи Оддо Томсона
+        ' Why scale forms and how to predict it
+        ' эмпирические коэффициенты оставили из книги Мищенко Кащавцев
+        unf_fa_scale_SI = Log(Ca2 / 40.08 / 1000 * (SO4 / 96.06 / 1000)) / Log(10) _
+                  + a _
+                  + b * t_F _
+                  + c * t_F ^ 2 _
+                  + d * p_psi _
+                  + e * mu ^ 0.5 _
+                  + f * mu _
+                  + g * mu ^ 1.5 _
+                  + h * t_F * Sqr(mu)
+     Case 4
+        ' обновлено 11.11.2025 убрали влияние co2 на сульфаты, согласно оригинальной статьи Оддо Томсона
+        ' Why scale forms and how to predict it
+        ' эмпирические коэффициенты оставили из книги Мищенко Кащавцев
+                ' сульфат бария BaSO4
+        a = 10.147
+        b = -0.004946
+        c = 0.00001165
+        d = -0.00005315
+        e = -4.003
+        f = 2.787
+        g = -0.619
+        h = 0.00185
+        unf_fa_scale_SI = Log(Ba2 / 137.86 / 1000 * (SO4 / 96.06 / 1000)) / Log(10) _
+                  + a _
+                  + b * t_F _
+                  + c * t_F ^ 2 _
+                  + d * p_psi _
+                  + e * mu ^ 0.5 _
+                  + f * mu _
+                  + g * mu ^ 1.5 _
+                  + h * t_F * Sqr(mu)
+     Case 5
+        ' обновлено 11.11.2025 убрали влияние co2 на сульфаты, согласно оригинальной статьи Оддо Томсона
+        ' Why scale forms and how to predict it
+        ' эмпирические коэффициенты оставили из книги Мищенко Кащавцев
+                ' сульфат магния MgSO4
+        a = 2.301
+        b = 0.00174
+        c = 0.000004553
+        d = -0.000007801
+        e = -3.969
+        f = 2.28
+        g = -0.459
+        h = -0.0006037
+        unf_fa_scale_SI = Log(Mg2 / 24.32 / 1000 * (SO4 / 96.06 / 1000)) / Log(10) _
+                  + a _
+                  + b * t_F _
+                  + c * t_F ^ 2 _
+                  + d * p_psi _
+                  + e * mu ^ 0.5 _
+                  + f * mu _
+                  + g * mu ^ 1.5 _
+                  + h * t_F * Sqr(mu)
+End Select
+End Function
+'расчет индекса насыщения по Oddo Tomson
+Function unf_fa_scale_SI_old(P_atm As Double, _
+            t_C As Double, _
+            q_liq_sm3day As Double, _
+            fw As Double, _
+            rp_m3m3 As Double, _
+            NaK As Double, _
+            Ca2 As Double, _
+            Mg2 As Double, _
+            Ba2 As Double, _
+            Sr2 As Double, _
+            cl As Double, _
+            SO4 As Double, _
+            HCO3 As Double, _
+            CO2_mol As Double, _
+            Optional mode As Integer = 0) As Double
+' P_atm  - давление
+' T_C    - температура
+' q_liq  - liquid production rate
+' fw     - water fraction
+' rp_m3m3 - GOR - gas oil ratio
+' NaK  - натирий и калий Na+ + K+  массовая концентрация мг/л
+' Ca2 - кальций Ca2+  массовая концентрация мг/л
+' Mg2 - магний Mg2+  массовая концентрация мг/л
+' Ba2 - барий Ba2   массовая концентрация мг/л
+' Sr2 - стронций Sr2+  массовая концентрация мг/л
+' Cl - хлор Cl- массовая концентрация мг/л
+' SO4-  сульфат SO42-  массовая концентрация мг/л
+' HCO3 - гидрокарбонат HCO3-  массовая концентрация мг/л
+' CO2_mol - мольная доля в газе
+Dim mu As Double
+Dim p_psi
+Dim t_F As Double
+Dim qo_bpd As Double
+Dim qw_bpd As Double
+Dim qg_mscfd As Double
+Dim co2_fug As Double
+Dim c02_pp As Double
+Dim co2_mol_pt As Double
+Dim co2_pp As Double
+Dim co2_wat As Double
+Dim a As Double
+Dim b As Double
+Dim c As Double
+Dim d As Double
+Dim e As Double
+Dim f As Double
+Dim g As Double
+Dim h As Double
+Dim pw As Double
+' ионная сила раствора
+mu = (cl / 35.45 + HCO3 / 61 + NaK / 23 + 2 * (Ca2 / 20.04 + Mg2 / 12.15 + Ba2 / 68.5 + Sr2 / 44 + SO4 / 48)) / 2000
+' перевод в field units чтобы использовать коэффициенты из Оддо Томсона
+p_psi = P_atm * 14.224
+t_F = 9 / 5 * t_C + 32
+' пересчет расходных параметров
+qo_bpd = q_liq_sm3day * (1 - fw / 100) * 1000 / 158.99
+qw_bpd = (q_liq_sm3day * fw / 100) * 1000 / 158.99
+qg_mscfd = q_liq_sm3day * (1 - fw / 100) * rp_m3m3 * 1000 / (1000000 * 28.3168)
+' летучесть газообразной CO2 при соответствующем давлении и температуре
+co2_fug = Exp((0.1 + 0.12 * (0.205 + 0.0115 * t_C) ^ (0.5) - 4.576 / 10000 * t_C) * (P_atm / 10) ^ (0.5) - _
+              (8.63 / 100 - 1.45 / 100 * (4.43 + 2.25 * t_C) ^ 0.5 + 3.77 / 10000 * t_C) * P_atm / 10 + _
+              (7.86 / 1000 - 1.747 / 1000 * (2.804 + 0.158 * t_C) ^ 0.5 + 0.17 / 10000 * t_C) * (P_atm / 10) ^ 1.5)
+' мольная доля CO2 в газовой фазе
+co2_mol_pt = CO2_mol / (1 + (p_psi * co2_fug * (0.5 * qw_bpd + 10 * qo_bpd) * 0.00001) / (qg_mscfd * (t_F + 460)))
+' парциальное давление CO2
+co2_pp = P_atm * co2_fug * co2_mol_pt
+' определяем мольную концентрацию растворенной в воде CO2 г-ион/л
+pw = 10 ^ (Log(co2_pp * 14.224) / (Log(10)) - _
+           2.212 - _
+           6.51 * 0.001 * t_F + _
+           1.019 * 0.00001 * t_F * t_F - _
+           1.29 * 0.00001 * p_psi - _
+           7.7 * 0.01 * mu ^ 0.5 - _
+           5.9 * 0.01 * mu)
+co2_wat = 44 * 1000# * pw
+' дальше в зависимости от типа соли определяем индекс насыщения SI
+' при SI > 0 возможно выпадение соли, при SI < 0 оно маловероятно
+' SI = 0 раствор соли в равновесии, при SI < 0 - дефицит насыщения
+' при SI > 0 раствор насыщенный, чем больш величина - тем больше риск отложения
+'
+' при подготовке использованы коэффициенты из книги
+' Кащавцев В.Е, Мищенко И.Т. Солеобразование при добыче нефти, 2004
+Select Case mode
+' расчет для карбоната кальция
+     Case 1:
+        ' карбонат кальция CaCo3 без газовой фазы
+        unf_fa_scale_SI_old = Log(Ca2 / 40.08 / 1000 * (HCO3 / 61 / 1000) ^ 2 / (co2_wat / 44 / 1000)) / Log(10) _
+                  + 3.801 _
+                  + 0.008115 * t_F _
+                  + 0.000009028 * t_F ^ 2 _
+                  - 0.00007419 * p_psi _
+                  - 1.966 * mu ^ 0.5 _
+                  + 0.695 * mu _
+                  - 0.01136 * mu ^ 1.5 _
+                  - 0.0001604 * t_F * Sqr(mu)
+        
+     Case 2
+         'карбонат кальция CaCo3  с учетом наличия газовой фазы
+        unf_fa_scale_SI_old = Log(Ca2 / 40.08 / 1000 * (HCO3 / 61 / 1000) ^ 2 / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
+                  + 6.039 _
+                  + 0.014462 * t_F _
+                  - 0.000000944 * t_F ^ 2 _
+                  - 0.00006185 * p_psi _
+                  - 1.895 * mu ^ 0.5 _
+                  + 0.662 * mu _
+                  + 0.03654 * mu ^ 1.5 _
+                  - 0.0000008 * t_F * Sqr(mu)
+     Case 3
+                ' сульфат кальция гипс  CaSO4*2H2O
+        a = 3.559
+        b = -0.000266
+        c = 0.000009029
+        d = -0.00005586
+        e = -0.847
+        f = 0.0524
+        g = 0.0852
+        h = -0.00209
+        unf_fa_scale_SI_old = Log(Ca2 / 40.08 / 1000 * (SO4 / 96.06 / 1000) / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
                   + a _
                   + b * t_F _
                   + c * t_F ^ 2 _
@@ -4753,7 +4933,7 @@ Select Case mode
         f = 2.787
         g = -0.619
         h = 0.00185
-        unf_fa_scale_SI = Log(Ba2 / 137.86 / 1000 * (SO4 / 96.06 / 1000) / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
+        unf_fa_scale_SI_old = Log(Ba2 / 137.86 / 1000 * (SO4 / 96.06 / 1000) / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
                   + a _
                   + b * t_F _
                   + c * t_F ^ 2 _
@@ -4772,7 +4952,7 @@ Select Case mode
         f = 2.28
         g = -0.459
         h = -0.0006037
-        unf_fa_scale_SI = Log(Mg2 / 24.32 / 1000 * (SO4 / 96.06 / 1000) / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
+        unf_fa_scale_SI_old = Log(Mg2 / 24.32 / 1000 * (SO4 / 96.06 / 1000) / (p_psi * co2_mol_pt * co2_fug)) / Log(10) _
                   + a _
                   + b * t_F _
                   + c * t_F ^ 2 _
